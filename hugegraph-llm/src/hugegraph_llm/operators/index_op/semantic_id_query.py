@@ -17,28 +17,32 @@
 
 
 import os
-from typing import Dict, Any, Literal, List, Tuple
+from typing import Any, Dict, List, Literal, Tuple
 
-from hugegraph_llm.config import resource_path, huge_settings
-from hugegraph_llm.indices.vector_index import VectorIndex
+from pyhugegraph.client import PyHugeClient
+
+from hugegraph_llm.config import huge_settings, resource_path
+from hugegraph_llm.indices.vector_index.base import VectorStoreBase
 from hugegraph_llm.models.embeddings.base import BaseEmbedding
 from hugegraph_llm.utils.log import log
-from pyhugegraph.client import PyHugeClient
 
 
 class SemanticIdQuery:
     ID_QUERY_TEMPL = "g.V({vids_str}).limit(8)"
 
     def __init__(
-            self,
-            embedding: BaseEmbedding,
-            by: Literal["query", "keywords"] = "keywords",
-            topk_per_query: int = 10,
-            topk_per_keyword: int = huge_settings.topk_per_keyword,
-            vector_dis_threshold: float = huge_settings.vector_dis_threshold,
+        self,
+        embedding: BaseEmbedding,
+        vector_index: type[VectorStoreBase],
+        by: Literal["query", "keywords"] = "keywords",
+        topk_per_query: int = 10,
+        topk_per_keyword: int = huge_settings.topk_per_keyword,
+        vector_dis_threshold: float = huge_settings.vector_dis_threshold,
     ):
         self.index_dir = str(os.path.join(resource_path, huge_settings.graph_name, "graph_vids"))
-        self.vector_index = VectorIndex.from_index_file(self.index_dir)
+        self.vector_index = vector_index.from_name(
+            embedding.get_embedding_dim(), huge_settings.graph_name, "graph_vids"
+        )
         self.embedding = embedding
         self.by = by
         self.topk_per_query = topk_per_query
@@ -76,10 +80,11 @@ class SemanticIdQuery:
         fuzzy_match_result = []
         for keyword in keywords:
             keyword_vector = self.embedding.get_text_embedding(keyword)
-            results = self.vector_index.search(keyword_vector, top_k=self.topk_per_keyword,
-                                               dis_threshold=float(self.vector_dis_threshold))
+            results = self.vector_index.search(
+                keyword_vector, top_k=self.topk_per_keyword, dis_threshold=float(self.vector_dis_threshold)
+            )
             if results:
-                fuzzy_match_result.extend(results[:self.topk_per_keyword])
+                fuzzy_match_result.extend(results[: self.topk_per_keyword])
         return fuzzy_match_result
 
     def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -89,7 +94,7 @@ class SemanticIdQuery:
             query_vector = self.embedding.get_text_embedding(query)
             results = self.vector_index.search(query_vector, top_k=self.topk_per_query)
             if results:
-                graph_query_list.update(results[:self.topk_per_query])
+                graph_query_list.update(results[: self.topk_per_query])
         else:  # by keywords
             keywords = context.get("keywords", [])
             if not keywords:

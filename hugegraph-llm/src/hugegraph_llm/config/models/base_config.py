@@ -96,8 +96,12 @@ class BaseConfig(BaseSettings):
                 obj_value_str = str(obj_value) if obj_value is not None else ""
 
                 if env_value != obj_value_str:
-                    log.info("Update configuration from the file: %s=%s (Original value: %s)",
-                             env_key, env_value, obj_value_str)
+                    log.info(
+                        "Update configuration from the file: %s=%s (Original value: %s)",
+                        env_key,
+                        env_value,
+                        obj_value_str,
+                    )
                     # Update the object attribute (using lowercase key)
                     setattr(self, env_key.lower(), env_value)
 
@@ -106,8 +110,7 @@ class BaseConfig(BaseSettings):
         for obj_key, obj_value in config_dict.items():
             if obj_key not in env_config:
                 obj_value_str = str(obj_value) if obj_value is not None else ""
-                log.info("Add configuration items to the environment variable file: %s=%s",
-                         obj_key, obj_value)
+                log.info("Add configuration items to the environment variable file: %s=%s", obj_key, obj_value)
                 # Add to .env
                 set_key(env_path, obj_key, obj_value_str, quote_mode="never")
 

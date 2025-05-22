@@ -55,13 +55,16 @@ dependencies = [
     "rich~=13.9.4",
     "apscheduler~=3.10.4",
     "litellm~=1.61.13",
-    "hugegraph-python"
+    "hugegraph-python",
+    "pymilvus==2.5.9",
+    "qdrant-client==1.14.2",
 ]
 [project.urls]
 homepage = "https://hugegraph.apache.org/"
 repository = "https://github.com/apache/incubator-hugegraph-ai"
 documentation = "https://hugegraph.apache.org/docs/quickstart/hugegraph-ai/"
 "Bug Tracker" = "https://github.com/apache/incubator-hugegraph-ai/issues"
+
 
 [build-system]
 requires = ["hatchling"]
@@ -76,16 +79,27 @@ default = true
 packages = ["src/hugegraph_llm"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-    "src/hugegraph_llm",
-    "README.md",
-    "LICENSE",
-    "NOTICE",
-    "MANIFEST.in"
-]
+include = ["src/hugegraph_llm", "README.md", "LICENSE", "NOTICE", "MANIFEST.in"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.mypy]
+disable_error_code = ["import-untyped"]
+check_untyped_defs = true
+disallow_untyped_defs = false
+
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+extend-exclude = []
+extend-select = ["I"]
+
+[tool.ruff.format]
+quote-style = "preserve"
+indent-style = "space"
+line-ending = "auto"
 
 [tool.uv.sources]
 hugegraph-python = { path = "../hugegraph-python-client/", editable = true }
