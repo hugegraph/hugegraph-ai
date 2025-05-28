@@ -58,6 +58,8 @@ graph systems and large language models.
    
 7. After running the web demo, the config file `.env` will be automatically generated at the path `hugegraph-llm/.env`.    Additionally, a prompt-related configuration file `config_prompt.yaml` will also be generated at the path `hugegraph-llm/src/hugegraph_llm/resources/demo/config_prompt.yaml`.
     You can modify the content on the web page, and it will be automatically saved to the configuration file after the corresponding feature is triggered.  You can also modify the file directly without restarting the web application; refresh the page to load your latest changes.  
+    The `.env` file is used for setting various environment variables. One such variable is:
+    - `RAG_QUERY_MAX_LENGTH`: Sets the maximum character length for user queries in GraphRAG. Queries longer than this value will be rejected. Defaults to 50 if not set.
     (Optional)To regenerate the config file, you can use `config.generate` with `-u` or `--update`.  
     ```bash
     python -m hugegraph_llm.config.generate --update

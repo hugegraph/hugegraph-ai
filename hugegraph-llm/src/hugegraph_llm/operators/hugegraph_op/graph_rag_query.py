@@ -18,7 +18,7 @@
 import json
 from typing import Any, Dict, Optional, List, Set, Tuple
 
-from hugegraph_llm.config import huge_settings, prompt
+from hugegraph_llm.config import huge_settings, prompt, LLMConfig
 from hugegraph_llm.models.embeddings.base import BaseEmbedding
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.operators.gremlin_generate_task import GremlinGenerator
@@ -109,6 +109,16 @@ class GraphRAGQuery:
         self._gremlin_prompt = gremlin_prompt or prompt.gremlin_generate_prompt
 
     def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        llm_config = LLMConfig()
+        query = context["query"]
+        max_len = int(llm_config.rag_query_max_length)
+
+        if len(query) > max_len:
+            log.error(f"Query exceeds maximum length of {max_len} characters.")
+            raise ValueError(
+                f"Error: Query is too long. Maximum allowed length is {max_len} characters."
+            )
+
         self.init_client(context)
 
         # initial flag: -1 means no result, 0 means subgraph query, 1 means gremlin query
