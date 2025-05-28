@@ -22,7 +22,7 @@ from typing import Any, Tuple, Dict, Union, Literal
 import gradio as gr
 import pandas as pd
 
-from hugegraph_llm.config import prompt, resource_path, huge_settings
+from hugegraph_llm.config import prompt, resource_path, huge_settings, LLMConfig
 from hugegraph_llm.models.embeddings.init_embedding import Embeddings
 from hugegraph_llm.models.llms.init_llm import LLMs
 from hugegraph_llm.operators.graph_rag_task import RAGPipeline
@@ -194,6 +194,14 @@ def graph_rag_recall(
     topk_per_keyword: int,
     get_vertex_only: bool = False,
 ) -> dict:
+    llm_config = LLMConfig()
+    max_len = int(llm_config.rag_query_max_length)
+    if len(query) > max_len:
+        log.warning(
+            f"Input query for graph_rag_recall exceeds maximum length of {max_len} characters. Query: '{query[:100]}...'"
+        )
+        return {"error": f"Query is too long! Maximum allowed length is {max_len} characters.", "graph_result": []}
+
     store_schema(prompt.text2gql_graph_schema, query, gremlin_prompt)
     rag = RAGPipeline()
     rag.extract_keywords().keywords_to_vid(
