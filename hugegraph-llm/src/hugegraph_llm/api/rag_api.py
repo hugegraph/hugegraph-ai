@@ -27,7 +27,7 @@ from hugegraph_llm.api.models.rag_requests import (
     RerankerConfigRequest,
     GraphRAGRequest,
 )
-from hugegraph_llm.config import huge_settings, LLMConfig
+from hugegraph_llm.config import huge_settings
 from hugegraph_llm.api.models.rag_response import RAGResponse
 from hugegraph_llm.config import llm_settings, prompt
 from hugegraph_llm.utils.log import log
@@ -44,17 +44,6 @@ def rag_http_api(
 ):
     @router.post("/rag", status_code=status.HTTP_200_OK)
     def rag_answer_api(req: RAGRequest):
-        llm_config = LLMConfig()
-        max_len = int(llm_config.rag_query_max_length)
-        if len(req.query) > max_len:
-            log.warning(
-                f"API query for /rag exceeds maximum length of {max_len} characters. Query: '{req.query[:100]}...'"
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Query is too long. Maximum allowed length is {max_len} characters.",
-            )
-
         set_graph_config(req)
 
         result = rag_answer_func(
@@ -97,17 +86,6 @@ def rag_http_api(
 
     @router.post("/rag/graph", status_code=status.HTTP_200_OK)
     def graph_rag_recall_api(req: GraphRAGRequest):
-        llm_config = LLMConfig()
-        max_len = int(llm_config.rag_query_max_length)
-        if len(req.query) > max_len:
-            log.warning(
-                f"API query for /rag/graph exceeds maximum length of {max_len} characters. Query: '{req.query[:100]}...'"
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Query is too long. Maximum allowed length is {max_len} characters.",
-            )
-
         try:
             set_graph_config(req)
 
