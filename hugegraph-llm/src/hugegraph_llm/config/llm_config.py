@@ -30,7 +30,7 @@ class LLMConfig(BaseConfig):
     text2gql_llm_type: Literal["openai", "litellm", "ollama/local", "qianfan_wenxin"] = "openai"
     embedding_type: Optional[Literal["openai", "litellm", "ollama/local", "qianfan_wenxin"]] = "openai"
     reranker_type: Optional[Literal["cohere", "siliconflow"]] = None
-    rag_query_max_length: int = os.environ.get("RAG_QUERY_MAX_LENGTH", 50)
+    rag_query_max_length: int = int(os.environ.get("RAG_QUERY_MAX_LENGTH", "50"))
     # 1. OpenAI settings
     openai_chat_api_base: Optional[str] = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
     openai_chat_api_key: Optional[str] = os.environ.get("OPENAI_API_KEY")
