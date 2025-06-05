@@ -24,7 +24,7 @@ import gradio as gr
 import pandas as pd
 from gradio.utils import NamedString
 
-from hugegraph_llm.config import resource_path, prompt, huge_settings, llm_settings
+from hugegraph_llm.config import resource_path, prompt, huge_settings, llm_settings, LLMConfig
 from hugegraph_llm.operators.graph_rag_task import RAGPipeline
 from hugegraph_llm.utils.decorators import with_task_id
 from hugegraph_llm.operators.llm_op.answer_synthesize import AnswerSynthesize
@@ -49,6 +49,16 @@ def rag_answer(
     vector_dis_threshold=0.9,
     topk_per_keyword=1,
 ) -> Tuple:
+    llm_config = LLMConfig()
+    max_len = int(llm_config.rag_query_max_length)
+    query_text = text
+    if len(query_text) > max_len:
+        log.warning(
+            f"Input query exceeds maximum length of {max_len} characters. Query: '{query_text[:100]}...'"
+        )
+        gr.Warning(f"Query is too long! Maximum allowed length is {max_len} characters.")
+        return "", "", "", ""
+
     """
     Generate an answer using the RAG (Retrieval-Augmented Generation) pipeline.
     1. Initialize the RAGPipeline.
@@ -160,6 +170,17 @@ async def rag_answer_streaming(
     gremlin_tmpl_num: Optional[int] = -1,
     gremlin_prompt: Optional[str] = None,
 ) -> AsyncGenerator[Tuple[str, str, str, str], None]:
+    llm_config = LLMConfig()
+    max_len = int(llm_config.rag_query_max_length)
+    query_text = text
+    if len(query_text) > max_len:
+        log.warning(
+            f"Input query exceeds maximum length of {max_len} characters. Query: '{query_text[:100]}...'"
+        )
+        gr.Warning(f"Query is too long! Maximum allowed length is {max_len} characters.")
+        yield "", "", "", ""
+        return
+
     """
     Generate an answer using the RAG (Retrieval-Augmented Generation) pipeline.
     1. Initialize the RAGPipeline.
