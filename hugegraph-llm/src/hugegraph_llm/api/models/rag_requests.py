@@ -18,9 +18,9 @@
 from typing import Optional, Literal
 
 from fastapi import Query
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
-from hugegraph_llm.config import prompt
+from hugegraph_llm.config import prompt, LLMConfig
 
 
 class GraphConfigRequest(BaseModel):
@@ -62,6 +62,14 @@ class RAGRequest(BaseModel):
         description="Prompt for the Text2Gremlin query.",
     )
 
+    @validator('query')
+    def check_query_length(cls, value):
+        llm_config = LLMConfig()
+        max_len = int(llm_config.rag_query_max_length)
+        if len(value) > max_len:
+            raise ValueError(f"Query exceeds maximum allowed length of {max_len} characters.")
+        return value
+
 
 # TODO: import the default value of prompt.* dynamically
 class GraphRAGRequest(BaseModel):
@@ -87,6 +95,14 @@ class GraphRAGRequest(BaseModel):
         prompt.gremlin_generate_prompt,
         description="Prompt for the Text2Gremlin query.",
     )
+
+    @validator('query')
+    def check_query_length(cls, value):
+        llm_config = LLMConfig()
+        max_len = int(llm_config.rag_query_max_length)
+        if len(value) > max_len:
+            raise ValueError(f"Query exceeds maximum allowed length of {max_len} characters.")
+        return value
 
 
 class LLMConfigRequest(BaseModel):
