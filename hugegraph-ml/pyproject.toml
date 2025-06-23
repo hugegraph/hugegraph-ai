@@ -43,18 +43,13 @@ dependencies = [
     "packaging~=24.1",
     "torchdata~=0.7.0",
     "PyYAML~=6.0.2",
-    "pydantic~=2.9.2",
+    "pydantic~=2.10.6",
     "hugegraph-python-client"
 ]
 
 [project.urls]
 homepage = "https://hugegraph.apache.org/"
 repository = "https://github.com/apache/incubator-hugegraph-ai"
-
-# If you want to modify the network configuration file of the project, then you can modify this part
-[[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-default = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hugegraph_ml"]
@@ -71,4 +66,4 @@ include = [
 allow-direct-references = true
 
 [tool.uv.sources]
-hugegraph-python-client = { path = "../hugegraph-python-client/", editable = true }
+hugegraph-python-client = { workspace = true }
