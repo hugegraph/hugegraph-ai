@@ -16,97 +16,90 @@ For detailed source code doc, visit our [DeepWiki](https://deepwiki.com/apache/i
 ## 📋 Prerequisites
 
 > [!IMPORTANT]
-> - **Python**: 3.10+ (not tested on 3.12)
-> - **HugeGraph Server**: 1.3+ (recommended: 1.5+)
-> - **UV Package Manager**: 0.7+
+> - python 3.10+ (not tested in 3.12)
+> - hugegraph-server 1.3+ (better to use 1.5+)
+> - uv 0.7+
 
-## 🚀 Quick Start
+## 3. Deployment Options
 
-Choose your preferred deployment method:
+You can choose one of the following two deployment methods:
 
-### Option 1: Docker Compose (Recommended)
+### 3.1 Docker Deployment
 
-The fastest way to get started with both HugeGraph Server and RAG Service:
+**Docker Deployment**  
+   Deploy HugeGraph-AI using Docker for quick setup:
+   - Ensure Docker is installed
+   - We provide two container images to choose from:
+     - **Image 1**: [hugegraph/rag](https://hub.docker.com/r/hugegraph/rag/tags)  
+       For building and running RAG functionality for rapid deployment and direct source code modification
+     - **Image 2**: [hugegraph/rag-bin](https://hub.docker.com/r/hugegraph/rag-bin/tags)  
+       A binary translation of C compiled with Nuitka, for better performance and efficiency.
+   - Pull one of the Docker images:
+     ```bash
+     docker pull hugegraph/rag:latest     # Pull Image 1
+     docker pull hugegraph/rag-bin:latest # Pull Image 2
+     ```
+   - Start one of the Docker containers:
+     ```bash
+     # Replace '/path/to/.env' with your actual .env file path
+     docker run -itd --name rag -v /path/to/.env:/home/work/hugegraph-llm/.env -p 8001:8001 hugegraph/rag
+     # or
+     docker run -itd --name rag-bin -v /path/to/.env:/home/work/hugegraph-llm/.env -p 8001:8001 hugegraph/rag-bin
+     ```
+   - Access the interface at http://localhost:8001
 
-```bash
-# 1. Set up environment
-cp docker/env.template docker/.env
-# Edit docker/.env and set PROJECT_PATH to your actual project path
+### 3.2 Build from Source
 
-# 2. Deploy services
-cd docker
-docker-compose -f docker-compose-network.yml up -d
+1. Start the HugeGraph database, you can run it via [Docker](https://hub.docker.com/r/hugegraph/hugegraph)/[Binary Package](https://hugegraph.apache.org/docs/download/download/)
+    There is a simple method by docker:  
+    ```bash
+   docker run -itd --name=server -p 8080:8080 hugegraph/hugegraph
+    ```  
+   You can refer to the detailed documents [doc](/docs/quickstart/hugegraph/hugegraph-server/#31-use-docker-container-convenient-for-testdev) for more guidance.
 
-# 3. Verify deployment
-docker-compose -f docker-compose-network.yml ps
+2. Configure the uv environment by using the official installer to install uv. See the [uv documentation](https://docs.astral.sh/uv/configuration/installer/) for other installation methods
+    ```bash
+    # You could try pipx or pip to install uv when meet network issues, refer the uv doc for more details
+    curl -LsSf https://astral.sh/uv/install.sh | sh  - # install the latest version like 0.7.3+
+    ```
 
-# 4. Access services
-# HugeGraph Server: http://localhost:8080
-# RAG Service: http://localhost:8001
-```
+3. Clone this project
+    ```bash
+    git clone https://github.com/apache/incubator-hugegraph-ai.git
+    ```
+4. Configure dependency environment.(For workspace projects, all uv commands should be run in the project root directory.)
+    ```bash
+    cd incubator-hugegraph-ai/
+    uv venv && source .venv/bin/activate
+    uv sync --extra all # You can also choose to install only specific dependencies here
+    cd hugegraph-llm/
+    ```  
+    If dependency download fails or too slow due to network issues, it is recommended to modify `hugegraph-llm/pyproject.toml`.
 
-### Option 2: Individual Docker Containers
-
-For more control over individual components:
-
-#### Available Images
-- **`hugegraph/rag`** - Development image with source code access
-- **`hugegraph/rag-bin`** - Production-optimized binary (compiled with Nuitka)
-
-```bash
-# 1. Create network
-docker network create -d bridge hugegraph-net
-
-# 2. Start HugeGraph Server
-docker run -itd --name=server -p 8080:8080 --network hugegraph-net hugegraph/hugegraph
-
-# 3. Start RAG Service
-docker pull hugegraph/rag:latest
-docker run -itd --name rag \
-  -v /path/to/your/hugegraph-llm/.env:/home/work/hugegraph-llm/.env \
-  -p 8001:8001 --network hugegraph-net hugegraph/rag
-
-# 4. Monitor logs
-docker logs -f rag
-```
-
-### Option 3: Build from Source
-
-For development and customization:
-
-```bash
-# 1. Start HugeGraph Server
-docker run -itd --name=server -p 8080:8080 hugegraph/hugegraph
-
-# 2. Install UV package manager
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 3. Clone and setup project
-git clone https://github.com/apache/incubator-hugegraph-ai.git
-cd incubator-hugegraph-ai/hugegraph-llm
-
-# 4. Create virtual environment and install dependencies
-uv venv && source .venv/bin/activate
-uv pip install -e .
-
-# 5. Launch RAG demo
-python -m hugegraph_llm.demo.rag_demo.app
-# Access at: http://127.0.0.1:8001
-
-# 6. (Optional) Custom host/port
-python -m hugegraph_llm.demo.rag_demo.app --host 127.0.0.1 --port 18001
-```
-
-#### Additional Setup (Optional)
-
-```bash
-# Download NLTK stopwords for better text processing
-python ./hugegraph_llm/operators/common_op/nltk_helper.py
-
-# Update configuration files
-python -m hugegraph_llm.config.generate --update
-```
-
+5. To start the Gradio interactive demo for **Graph RAG**, run the following command, then open http://127.0.0.1:8001 in your browser.
+    ```bash
+    python -m hugegraph_llm.demo.rag_demo.app  # same as "uv run xxx"
+    ```
+    The default host is `0.0.0.0` and the port is `8001`. You can change them by passing command line arguments`--host` and `--port`.  
+    ```bash
+    python -m hugegraph_llm.demo.rag_demo.app --host 127.0.0.1 --port 18001
+    ```
+   
+6. After running the web demo, the config file `.env` will be automatically generated at the path `hugegraph-llm/.env`. Additionally, a prompt-related configuration file `config_prompt.yaml` will also be generated at the path `hugegraph-llm/src/hugegraph_llm/resources/demo/config_prompt.yaml`.
+    You can modify the content on the web page, and it will be automatically saved to the configuration file after the corresponding feature is triggered.  You can also modify the file directly without restarting the web application; refresh the page to load your latest changes.  
+    (Optional)To regenerate the config file, you can use `config.generate` with `-u` or `--update`.  
+    ```bash
+    python -m hugegraph_llm.config.generate --update
+    ```
+    Note: `Litellm` support multi-LLM provider, refer [litellm.ai](https://docs.litellm.ai/docs/providers) to config it
+7. (__Optional__) You could use 
+    [hugegraph-hubble](/docs/quickstart/toolchain/hugegraph-hubble/#21-use-docker-convenient-for-testdev) 
+    to visit the graph data, could run it via [Docker/Docker-Compose](https://hub.docker.com/r/hugegraph/hubble) 
+    for guidance. (Hubble is a graph-analysis dashboard that includes data loading/schema management/graph traverser/display).
+8. (__Optional__) offline download NLTK stopwords  
+    ```bash
+    python ./hugegraph_llm/operators/common_op/nltk_helper.py
+    ```   
 > [!TIP]
 > Check our [Quick Start Guide](https://github.com/apache/incubator-hugegraph-ai/blob/main/hugegraph-llm/quick_start.md) for detailed usage examples and query logic explanations.
 
