@@ -19,3 +19,4 @@ jobs:
           base: main
           head: action_test
           merge_method: rebase
+          auto_merge: false
