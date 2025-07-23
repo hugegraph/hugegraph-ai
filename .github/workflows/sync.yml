@@ -15,6 +15,5 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           owner: hugegraph
-          repo: hugegraph-ai
           base: main
           head: action_test
