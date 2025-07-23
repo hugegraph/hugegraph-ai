@@ -15,6 +15,7 @@ jobs:
         with:
           token: ${{ secrets.PERSONAL_TOKEN }}
           owner: hugegraph
+          repo: hugegraph-ai
           base: main
           head: action_test
           merge_method: rebase
