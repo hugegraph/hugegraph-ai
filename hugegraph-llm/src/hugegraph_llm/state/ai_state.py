@@ -25,6 +25,7 @@ class WkFlowInput(GParam):
     example_prompt: str = None  # need by graph information extract
     schema: str = None  # Schema information requeired by SchemaNode
     graph_name: str = None
+    data_json = None
 
     def reset(self, _: CStatus) -> None:
         self.texts = None
@@ -33,6 +34,7 @@ class WkFlowInput(GParam):
         self.example_prompt = None
         self.schema = None
         self.graph_name = None
+        self.data_json = None
 
 
 class WkFlowState(GParam):
@@ -79,3 +81,11 @@ class WkFlowState(GParam):
             for k, v in self.__dict__.items()
             if not k.startswith("_") and v is not None
         }
+
+    # Implement a method that assigns keys from data_json as WkFlowState member variables
+    def assign_from_json(self, data_json: dict):
+        """
+        Assigns each key in the input json object as a member variable of WkFlowState.
+        """
+        for k, v in data_json.items():
+            setattr(self, k, v)

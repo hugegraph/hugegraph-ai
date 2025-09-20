@@ -15,7 +15,7 @@
 
 import threading
 from typing import Dict, Any
-from PyCGraph import GPipelineManager
+from PyCGraph import GPipeline, GPipelineManager
 from hugegraph_llm.flows.build_vector_index import BuildVectorIndexFlow
 from hugegraph_llm.flows.common import BaseFlow
 from hugegraph_llm.flows.graph_extract import GraphExtractFlow
@@ -46,9 +46,9 @@ class Scheduler:
     def schedule_flow(self, flow: str, *args, **kwargs):
         if flow not in self.pipeline_pool:
             raise ValueError(f"Unsupported workflow {flow}")
-        manager = self.pipeline_pool[flow]["manager"]
+        manager: GPipelineManager = self.pipeline_pool[flow]["manager"]
         flow: BaseFlow = self.pipeline_pool[flow]["flow"]
-        pipeline = manager.fetch()
+        pipeline: GPipeline = manager.fetch()
         if pipeline is None:
             # call coresponding flow_func to create new workflow
             pipeline = flow.build_flow(*args, **kwargs)

@@ -16,6 +16,7 @@
 import json
 from PyCGraph import GPipeline
 from hugegraph_llm.flows.common import BaseFlow
+from hugegraph_llm.flows.utils import get_schema_node, prepare_schema
 from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.operators.common_op.check_schema import CheckSchemaNode
 from hugegraph_llm.operators.document_op.chunk_split import ChunkSplitNode
@@ -55,17 +56,7 @@ class GraphExtractFlow(BaseFlow):
         prepared_input.split_type = "document"
         prepared_input.example_prompt = example_prompt
         prepared_input.schema = schema
-        schema = schema.strip()
-        if schema.startswith("{"):
-            try:
-                schema = json.loads(schema)
-                prepared_input.schema = schema
-            except json.JSONDecodeError as exc:
-                log.error("Invalid JSON format in schema. Please check it again.")
-                raise ValueError("Invalid JSON format in schema.") from exc
-        else:
-            log.info("Get schema '%s' from graphdb.", schema)
-            prepared_input.graph_name = schema
+        prepare_schema(prepared_input, schema)
         return
 
     def build_flow(self, schema, texts, example_prompt, extract_type):
@@ -76,18 +67,7 @@ class GraphExtractFlow(BaseFlow):
 
         pipeline.createGParam(prepared_input, "wkflow_input")
         pipeline.createGParam(WkFlowState(), "wkflow_state")
-        schema = schema.strip()
-        schema_node = None
-        if schema.startswith("{"):
-            try:
-                schema = json.loads(schema)
-                schema_node = self._import_schema(from_user_defined=schema)
-            except json.JSONDecodeError as exc:
-                log.error("Invalid JSON format in schema. Please check it again.")
-                raise ValueError("Invalid JSON format in schema.") from exc
-        else:
-            log.info("Get schema '%s' from graphdb.", schema)
-            schema_node = self._import_schema(from_hugegraph=schema)
+        schema_node = get_schema_node(schema)
 
         chunk_split_node = ChunkSplitNode()
         graph_extract_node = None

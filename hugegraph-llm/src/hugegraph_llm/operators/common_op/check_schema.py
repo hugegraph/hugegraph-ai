@@ -324,9 +324,3 @@ class CheckSchemaNode(GNode):
                     }
                 )
                 property_label_set.add(prop)
-
-    def get_result(self):
-        self.context.lock()
-        res = self.context.to_json()
-        self.context.unlock()
-        return res

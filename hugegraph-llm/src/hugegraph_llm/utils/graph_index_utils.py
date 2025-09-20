@@ -172,7 +172,9 @@ def import_graph_data(data: str, schema: str) -> Union[str, Dict[str, Any]]:
         builder = KgBuilder(
             LLMs().get_chat_llm(), Embeddings().get_embedding(), get_hg_client()
         )
+        print(f"schema is {schema}")
         if schema:
+            print("hitt")
             error_message = parse_schema(schema, builder)
             if error_message:
                 return error_message

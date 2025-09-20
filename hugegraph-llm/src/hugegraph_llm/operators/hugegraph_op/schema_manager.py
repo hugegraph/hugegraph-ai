@@ -139,9 +139,3 @@ class SchemaManagerNode(GNode):
         self.context.simple_schema = self.simple_schema(schema)
         self.context.unlock()
         return CStatus()
-
-    def get_result(self):
-        self.context.lock()
-        res = self.context.to_json()
-        self.context.unlock()
-        return res
