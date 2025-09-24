@@ -20,29 +20,12 @@ from hugegraph_llm.nodes.document_node.chunk_split import ChunkSplitNode
 from hugegraph_llm.nodes.hugegraph_node.schema import SchemaNode
 from hugegraph_llm.nodes.llm_node.extract_info import ExtractNode
 from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
-from hugegraph_llm.operators.common_op.check_schema import CheckSchemaNode
-from hugegraph_llm.operators.hugegraph_op.schema_manager import SchemaManagerNode
 from hugegraph_llm.utils.log import log
 
 
 class GraphExtractFlow(BaseFlow):
     def __init__(self):
         pass
-
-    def _import_schema(
-        self,
-        from_hugegraph=None,
-        from_extraction=None,
-        from_user_defined=None,
-    ):
-        if from_hugegraph:
-            return SchemaManagerNode()
-        elif from_user_defined:
-            return CheckSchemaNode()
-        elif from_extraction:
-            raise NotImplementedError("Not implemented yet")
-        else:
-            raise ValueError("No input data / invalid schema type")
 
     def prepare(
         self, prepared_input: WkFlowInput, schema, texts, example_prompt, extract_type

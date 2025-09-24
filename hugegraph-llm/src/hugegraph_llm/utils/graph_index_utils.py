@@ -36,6 +36,15 @@ from ..operators.kg_construction_task import KgBuilder
 
 
 def get_graph_index_info():
+    try:
+        scheduler = SchedulerSingleton.get_instance()
+        return scheduler.schedule_flow("get_graph_index_info")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        log.error(e)
+        raise gr.Error(str(e))
+
+
+def get_graph_index_info_old():
     builder = KgBuilder(
         LLMs().get_chat_llm(), Embeddings().get_embedding(), get_hg_client()
     )
