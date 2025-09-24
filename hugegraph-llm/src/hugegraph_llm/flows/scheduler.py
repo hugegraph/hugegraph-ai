@@ -19,6 +19,8 @@ from PyCGraph import GPipeline, GPipelineManager
 from hugegraph_llm.flows.build_vector_index import BuildVectorIndexFlow
 from hugegraph_llm.flows.common import BaseFlow
 from hugegraph_llm.flows.graph_extract import GraphExtractFlow
+from hugegraph_llm.flows.import_graph_data import ImportGraphDataFlow
+from hugegraph_llm.flows.update_vid_embeddings import UpdateVidEmbeddingsFlows
 from hugegraph_llm.utils.log import log
 
 
@@ -36,6 +38,14 @@ class Scheduler:
         self.pipeline_pool["graph_extract"] = {
             "manager": GPipelineManager(),
             "flow": GraphExtractFlow(),
+        }
+        self.pipeline_pool["import_graph_data"] = {
+            "manager": GPipelineManager(),
+            "flow": ImportGraphDataFlow(),
+        }
+        self.pipeline_pool["update_vid_embeddings"] = {
+            "manager": GPipelineManager(),
+            "flow": UpdateVidEmbeddingsFlows(),
         }
         self.max_pipeline = max_pipeline
 

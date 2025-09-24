@@ -14,13 +14,13 @@
 #  limitations under the License.
 
 from hugegraph_llm.flows.common import BaseFlow
+from hugegraph_llm.nodes.document_node.chunk_split import ChunkSplitNode
+from hugegraph_llm.nodes.index_node.build_vector_index import BuildVectorIndexNode
 from hugegraph_llm.state.ai_state import WkFlowInput
 
 import json
 from PyCGraph import GPipeline
 
-from hugegraph_llm.operators.document_op.chunk_split import ChunkSplitNode
-from hugegraph_llm.operators.index_op.build_vector_index import BuildVectorIndexNode
 from hugegraph_llm.state.ai_state import WkFlowState
 
 

@@ -15,9 +15,12 @@
 
 import json
 
+import gradio as gr
+from PyCGraph import GPipeline
 from hugegraph_llm.flows.common import BaseFlow
-from hugegraph_llm.flows.utils import prepare_schema
-from hugegraph_llm.state.ai_state import WkFlowInput
+from hugegraph_llm.nodes.hugegraph_node.commit_to_hugegraph import Commit2GraphNode
+from hugegraph_llm.nodes.hugegraph_node.schema import SchemaNode
+from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.utils.log import log
 
 
@@ -29,11 +32,26 @@ class ImportGraphDataFlow(BaseFlow):
         data_json = json.loads(data.strip())
         log.debug("Import graph data: %s", data)
         prepared_input.data_json = data_json
-        if schema:
-            error_message = prepare_schema(prepared_input, schema)
-            if error_message:
-                return error_message
+        prepared_input.schema = schema
         return
 
     def build_flow(self, data, schema):
-        pass
+        pipeline = GPipeline()
+        prepared_input = WkFlowInput()
+        # prepare input data
+        self.prepare(prepared_input, data, schema)
+
+        pipeline.createGParam(prepared_input, "wkflow_input")
+        pipeline.createGParam(WkFlowState(), "wkflow_state")
+
+        schema_node = SchemaNode()
+        commit_node = Commit2GraphNode()
+        pipeline.registerGElement(schema_node, set(), "schema_node")
+        pipeline.registerGElement(commit_node, {schema_node}, "commit_node")
+
+        return pipeline
+
+    def post_deal(self, pipeline=None):
+        res = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
+        gr.Info("Import graph data successfully!")
+        return json.dumps(res, ensure_ascii=False, indent=2)

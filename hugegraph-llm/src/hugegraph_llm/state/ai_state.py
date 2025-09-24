@@ -26,6 +26,7 @@ class WkFlowInput(GParam):
     schema: str = None  # Schema information requeired by SchemaNode
     graph_name: str = None
     data_json = None
+    extract_type = None
 
     def reset(self, _: CStatus) -> None:
         self.texts = None
@@ -35,6 +36,7 @@ class WkFlowInput(GParam):
         self.schema = None
         self.graph_name = None
         self.data_json = None
+        self.extract_type = None
 
 
 class WkFlowState(GParam):
