@@ -44,7 +44,6 @@ class GetGraphIndexInfoFlow(BaseFlow):
         pipeline.createGParam(WkFlowState(), "wkflow_state")
         fetch_node = FetchGraphDataNode()
         pipeline.registerGElement(fetch_node, set(), "fetch_node")
-        # 直接在post_deal中处理，无需注册节点
         return pipeline
 
     def post_deal(self, pipeline=None):

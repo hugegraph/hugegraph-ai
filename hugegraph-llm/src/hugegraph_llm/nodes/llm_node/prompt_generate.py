@@ -28,7 +28,7 @@ class PromptGenerateNode(BaseNode):
 
     def node_init(self):
         """
-        节点初始化方法，初始化 PromptGenerate 算子
+        Node initialization method, initialize PromptGenerate operator
         """
         llm = get_chat_llm(llm_settings)
         if not all(
@@ -54,6 +54,6 @@ class PromptGenerateNode(BaseNode):
 
     def operator_schedule(self, data_json):
         """
-        调度 PromptGenerate 算子执行
+        Schedule the execution of PromptGenerate operator
         """
         return self.prompt_generate.run(data_json)

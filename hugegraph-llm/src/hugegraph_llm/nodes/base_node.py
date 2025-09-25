@@ -27,15 +27,15 @@ class BaseNode(GNode):
 
     def node_init(self):
         """
-        节点初始化方法，子类可重写。
-        返回CStatus对象，表示初始化是否成功。
+        Node initialization method, can be overridden by subclasses.
+        Returns a CStatus object indicating whether initialization succeeded.
         """
         return CStatus()
 
     def run(self):
         """
-        节点运行主逻辑，子类可重写。
-        返回CStatus对象，表示运行是否成功。
+        Main logic for node execution, can be overridden by subclasses.
+        Returns a CStatus object indicating whether execution succeeded.
         """
         sts = self.node_init()
         if sts.isErr():
@@ -51,7 +51,7 @@ class BaseNode(GNode):
         except Exception as exc:
             import traceback
 
-            node_info = f"节点类型: {type(self).__name__}, 节点对象: {self}"
+            node_info = f"Node type: {type(self).__name__}, Node object: {self}"
             err_msg = f"Node failed: {exc}\n{node_info}\n{traceback.format_exc()}"
             return CStatus(-1, err_msg)
 
@@ -65,7 +65,7 @@ class BaseNode(GNode):
 
     def operator_schedule(self, data_json):
         """
-        节点调度operator的接口，子类可重写。
-        返回CStatus对象，表示调度是否成功。
+        Interface for scheduling the operator, can be overridden by subclasses.
+        Returns a CStatus object indicating whether scheduling succeeded.
         """
         pass

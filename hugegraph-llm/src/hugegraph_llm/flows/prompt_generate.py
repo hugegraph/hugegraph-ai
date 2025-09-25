@@ -28,7 +28,7 @@ class PromptGenerateFlow(BaseFlow):
 
     def prepare(self, prepared_input: WkFlowInput, source_text, scenario, example_name):
         """
-        准备 PromptGenerate 工作流的输入数据
+        Prepare input data for PromptGenerate workflow
         """
         prepared_input.source_text = source_text
         prepared_input.scenario = scenario
@@ -37,17 +37,17 @@ class PromptGenerateFlow(BaseFlow):
 
     def build_flow(self, source_text, scenario, example_name):
         """
-        构建 PromptGenerate 工作流
+        Build the PromptGenerate workflow
         """
         pipeline = GPipeline()
-        # prepare for workflow input
+        # Prepare workflow input
         prepared_input = WkFlowInput()
         self.prepare(prepared_input, source_text, scenario, example_name)
 
         pipeline.createGParam(prepared_input, "wkflow_input")
         pipeline.createGParam(WkFlowState(), "wkflow_state")
 
-        # 创建 PromptGenerate 节点
+        # Create PromptGenerate node
         prompt_generate_node = PromptGenerateNode()
         pipeline.registerGElement(prompt_generate_node, set(), "prompt_generate")
 
@@ -55,7 +55,7 @@ class PromptGenerateFlow(BaseFlow):
 
     def post_deal(self, pipeline=None):
         """
-        处理 PromptGenerate 工作流的执行结果
+        Process the execution result of PromptGenerate workflow
         """
         res = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
         return res.get(

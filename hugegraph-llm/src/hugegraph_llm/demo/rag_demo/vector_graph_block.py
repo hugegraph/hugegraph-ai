@@ -68,7 +68,7 @@ def generate_prompt_for_ui(source_text, scenario, example_name):
         )
         return gr.update()
     try:
-        # 使用新的工作流架构
+        # using new architecture
         scheduler = SchedulerSingleton.get_instance()
         result = scheduler.schedule_flow(
             "prompt_generate", source_text, scenario, example_name
