@@ -28,13 +28,10 @@ class BaseNode(GNode):
         self.context.lock()
         data_json = self.context.to_json()
         self.context.unlock()
-        print(f"running Node {__class__.__name__}")
         res = self.operator_schedule(data_json)
-        print(f"finish Node {__class__.__name__}")
         self.context.lock()
         self.context.assign_from_json(res)
         self.context.unlock()
-        print("can reach here?")
         return CStatus()
 
     def operator_schedule(self, data_json):

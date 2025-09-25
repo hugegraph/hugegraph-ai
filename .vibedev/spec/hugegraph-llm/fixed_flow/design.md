@@ -32,10 +32,19 @@ hugegraph-llm/
         │   ├── common.py          # BaseFlow抽象基类
         │   ├── scheduler.py       # 调度器核心实现
         │   ├── build_vector_index.py  # 向量索引构建工作流
-        │   └── graph_extract.py   # 图抽取工作流
+        │   ├── graph_extract.py   # 图抽取工作流
+        │   ├── import_graph_data.py   # 图数据导入工作流
+        │   └── update_vid_embeddings.py # 向量更新工作流
         ├── indices/       # 各类索引实现（向量、图、关键词等）
         ├── middleware/    # 中间件与请求处理
         ├── models/        # LLM、Embedding、Reranker 等模型相关
+        ├── nodes/         # Node调度层，负责Operator生命周期和上下文管理
+        │   ├── base_node.py
+        │   ├── document_node/
+        │   ├── hugegraph_node/
+        │   ├── index_node/
+        │   ├── llm_node/
+        │   └── util.py
         ├── operators/     # 主要算子与任务（如 KG 构建、GraphRAG、Text2Gremlin 等）
         ├── resources/     # 资源文件（Prompt、示例、Gremlin 模板等）
         ├── state/         # 状态管理
@@ -47,7 +56,7 @@ hugegraph-llm/
 
 ### 整体架构
 
-我们设计了一个基于PyCGraph的Scheduler调度系统，用来接受用户的请求并调度对应的Pipeline处理对应的workflow，并将请求返回给用户。
+> 新架构在Flow与Operator之间引入Node层，Node负责Operator的生命周期管理、上下文绑定、参数区解耦和并发安全，所有Flow均通过Node组装，Operator只关注业务实现。
 
 #### 架构图
 
@@ -79,8 +88,10 @@ graph TB
         ChunkSplit["ChunkSplitNode<br/>文档分块"]
         BuildVector["BuildVectorIndexNode<br/>向量索引构建"]
         SchemaNode["SchemaNode<br/>模式管理"]
-        InfoExtract["InfoExtractNode<br/>信息抽取"]
-        PropGraph["PropertyGraphExtractNode<br/>属性图抽取"]
+        InfoExtract["ExtractNode<br/>信息抽取"]
+        PropGraph["Commit2GraphNode<br/>图数据导入"]
+        FetchNode["FetchGraphDataNode<br/>图数据拉取"]
+        SemanticIndex["BuildSemanticIndexNode<br/>语义索引构建"]
     end
 
     subgraph StateLayer["状态层"]
@@ -165,7 +176,7 @@ flowchart TD
 #### 1. Scheduler（调度器）
 - **职责**：调度中心，维护 `pipeline_pool`，提供统一的工作流调度接口
 - **特性**：
-  - 支持多种工作流类型（build_vector_index、graph_extract等）
+  - 支持多种工作流类型（build_vector_index、graph_extract、import_graph_data、update_vid_embeddings等）
   - 流水线池化管理，支持复用
   - 线程安全的单例模式
   - 可配置的最大流水线数量
@@ -182,15 +193,31 @@ flowchart TD
 - **职责**：工作流构建与前后处理抽象
 - **接口**：
   - `prepare()`: 预处理接口，准备输入数据
-  - `build_flow()`: 构建流水线接口
+  - `build_flow()`: 组装Node并注册依赖关系
   - `post_deal()`: 后处理接口，处理执行结果
 - **实现**：
   - `BuildVectorIndexFlow`: 向量索引构建工作流
   - `GraphExtractFlow`: 图抽取工作流
+  - `ImportGraphDataFlow`: 图数据导入工作流
+  - `UpdateVidEmbeddingsFlows`: 向量更新工作流
 
-#### 4. GPipeline（流水线实例）
+#### 4. Node（节点调度器）
+- **职责**：作为Operator的生命周期管理者，负责参数区绑定、上下文初始化、并发安全、异常处理等。
+- **特性**：
+  - 统一生命周期接口（init、node_init、run、operator_schedule）
+  - 通过参数区（wkflow_input/wkflow_state）与Flow/Operator解耦
+  - Operator只需实现run(data_json)方法，Node负责调度和结果写回
+  - 典型Node如：ChunkSplitNode、BuildVectorIndexNode、SchemaNode、ExtractNode、Commit2GraphNode、FetchGraphDataNode、BuildSemanticIndexNode等
+
+#### 5. Operator（算子）
+- **职责**：实现具体的业务原子操作
+- **特性**：
+  - 只需关注自身业务逻辑实现
+  - 由Node统一调度
+
+#### 6. GPipeline（流水线实例）
 - **来源**：PyCGraph框架提供
-- **职责**：具体流水线实例，包含参数区与算子节点的DAG拓扑
+- **职责**：具体流水线实例，包含参数区与节点DAG拓扑
 - **参数区**：
   - `wkflow_input`: 流水线运行输入
   - `wkflow_state`: 流水线运行状态与中间结果
@@ -268,10 +295,11 @@ Scheduler.pipeline_pool: Dict[str, Any] = {
 
 ### 扩展指引
 
-#### 新增工作流步骤
-1. **实现Flow类**：在 `flows/` 下实现新的 `Flow`（继承 `BaseFlow`，实现 `prepare/build_flow/post_deal`）
-2. **注册工作流**：在 `Scheduler.__init__` 中为该 `flow` 注册 `{"manager": GPipelineManager(), "flow": NewFlow()}`
-3. **对外调度**：通过 `schedule_flow("new_flow", *args, **kwargs)` 对外调度
+#### 新增Node/Operator/Flow步骤
+1. 实现Operator业务逻辑（如ChunkSplit/BuildVectorIndex/InfoExtract等）
+2. 实现对应Node（继承BaseNode，负责参数区绑定和调度Operator）
+3. 在Flow中组装Node，注册依赖关系
+4. 在Scheduler注册新的Flow
 
 #### 输入输出约定
 - 统一使用 `wkflow_input` 作为输入载体
@@ -383,16 +411,10 @@ class GraphExtractFlow(BaseFlow):
 
         pipeline.createGParam(prepared_input, "wkflow_input")
         pipeline.createGParam(WkFlowState(), "wkflow_state")
-        schema_node = get_schema_node(schema)
+        schema_node = SchemaNode()
 
         chunk_split_node = ChunkSplitNode()
-        graph_extract_node = None
-        if extract_type == "triples":
-            graph_extract_node = InfoExtractNode()
-        elif extract_type == "property_graph":
-            graph_extract_node = PropertyGraphExtractNode()
-        else:
-            raise ValueError(f"Unsupported extract_type: {extract_type}")
+        graph_extract_node = ExtractNode()
 
         pipeline.registerGElement(schema_node, set(), "schema_node")
         pipeline.registerGElement(chunk_split_node, set(), "chunk_split")

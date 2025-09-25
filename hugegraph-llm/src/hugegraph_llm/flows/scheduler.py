@@ -22,6 +22,8 @@ from hugegraph_llm.flows.graph_extract import GraphExtractFlow
 from hugegraph_llm.flows.import_graph_data import ImportGraphDataFlow
 from hugegraph_llm.flows.update_vid_embeddings import UpdateVidEmbeddingsFlows
 from hugegraph_llm.flows.get_graph_index_info import GetGraphIndexInfoFlow
+from hugegraph_llm.flows.build_schema import BuildSchemaFlow
+from hugegraph_llm.flows.prompt_generate import PromptGenerateFlow
 from hugegraph_llm.utils.log import log
 
 
@@ -51,6 +53,14 @@ class Scheduler:
         self.pipeline_pool["get_graph_index_info"] = {
             "manager": GPipelineManager(),
             "flow": GetGraphIndexInfoFlow(),
+        }
+        self.pipeline_pool["build_schema"] = {
+            "manager": GPipelineManager(),
+            "flow": BuildSchemaFlow(),
+        }
+        self.pipeline_pool["prompt_generate"] = {
+            "manager": GPipelineManager(),
+            "flow": PromptGenerateFlow(),
         }
         self.max_pipeline = max_pipeline
 

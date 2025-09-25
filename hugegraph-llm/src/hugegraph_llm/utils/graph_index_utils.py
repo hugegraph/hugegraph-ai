@@ -220,6 +220,16 @@ def import_graph_data_old(data: str, schema: str) -> Union[str, Dict[str, Any]]:
 
 
 def build_schema(input_text, query_example, few_shot):
+    scheduler = SchedulerSingleton.get_instance()
+    try:
+        return scheduler.schedule_flow(
+            "build_schema", input_text, query_example, few_shot
+        )
+    except (TypeError, ValueError) as e:
+        log.error("Failed to format schema: %s", e)
+
+
+def build_schema_old(input_text, query_example, few_shot):
     context = {
         "raw_texts": [input_text] if input_text else [],
         "query_examples": [],

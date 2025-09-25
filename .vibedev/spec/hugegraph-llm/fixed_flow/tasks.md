@@ -12,12 +12,21 @@
 - [ ] **1.2 优化Scheduler框架资源配置**
     -   支持用户配置底层线程池参数
     -   现有的workflow可能会根据输入有细小的变化，导致相同的用例得到不同的workflow，怎么解决这个问题呢？
+    -   Node/Operator解耦，Node负责生命周期和上下文，Operator只关注业务逻辑
+    -   Flow只负责组装Node，所有业务逻辑下沉到Node/Operator
+    -   Scheduler支持多类型Flow注册，注册方式更灵活
 
 - [ ] **1.3 优化Scheduler框架资源使用**
     -   根据负载控制每个PipelineManager管理的Pipeline数量，实现动态扩缩容
+    -   Node层支持参数区自动绑定和并发安全
+    -   Operator只需实现run(data_json)方法，Node负责调度和结果写回
 
 ## 2. 固定工作流用例移植
 
 - [x] **2.1 build_vector_index workflow移植**
 - [x] **2.2 graph_extract workflow移植**
-- [ ] **2.3 load_into_graphdb workflow移植**
+- [x] **2.3 import_graph_data workflow移植**
+    -   基于Node/Operator机制实现import_graph_data工作流
+- [x] **2.4 update_vid_embeddings workflow移植**
+    -   基于Node/Operator机制实现update_vid_embeddings工作流
+- [x] **2.5 get_graph_index_info workflow移植**

@@ -27,6 +27,12 @@ class WkFlowInput(GParam):
     graph_name: str = None
     data_json = None
     extract_type = None
+    query_examples = None
+    few_shot_schema = None
+    # Fields related to PromptGenerate
+    source_text: str = None  # Original text
+    scenario: str = None  # Scenario description
+    example_name: str = None  # Example name
 
     def reset(self, _: CStatus) -> None:
         self.texts = None
@@ -37,6 +43,12 @@ class WkFlowInput(GParam):
         self.graph_name = None
         self.data_json = None
         self.extract_type = None
+        self.query_examples = None
+        self.few_shot_schema = None
+        # PromptGenerate related configuration
+        self.source_text = None
+        self.scenario = None
+        self.example_name = None
 
 
 class WkFlowState(GParam):
@@ -53,6 +65,8 @@ class WkFlowState(GParam):
     graph_result = None
     keywords_embeddings = None
 
+    generated_extract_prompt: Optional[str] = None
+
     def setup(self):
         self.schema = None
         self.simple_schema = None
@@ -66,6 +80,8 @@ class WkFlowState(GParam):
         self.vector_result = None
         self.graph_result = None
         self.keywords_embeddings = None
+
+        self.generated_extract_prompt = None
 
         return CStatus()
 
