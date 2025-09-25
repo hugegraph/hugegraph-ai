@@ -226,7 +226,7 @@ def build_schema(input_text, query_example, few_shot):
             "build_schema", input_text, query_example, few_shot
         )
     except (TypeError, ValueError) as e:
-        log.error("Failed to format schema: %s", e)
+        raise gr.Error(f"Schema generation failed: {e}")
 
 
 def build_schema_old(input_text, query_example, few_shot):

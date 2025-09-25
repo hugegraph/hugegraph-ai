@@ -42,7 +42,7 @@ class ExtractNode(BaseNode):
         elif extract_type == "property_graph":
             self.property_graph_extract = PropertyGraphExtract(llm, example_prompt)
         else:
-            raise ValueError(f"Unsupported extract_type: {extract_type}")
+            return CStatus(-1, f"Unsupported extract_type: {extract_type}")
         return CStatus()
 
     def operator_schedule(self, data_json):

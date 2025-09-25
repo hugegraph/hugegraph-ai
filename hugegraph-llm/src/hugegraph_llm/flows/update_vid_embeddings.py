@@ -42,6 +42,6 @@ class UpdateVidEmbeddingsFlows(BaseFlow):
 
     def post_deal(self, pipeline):
         res = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
-        removed_num = res["removed_vid_vector_num"]
-        added_num = res["added_vid_vector_num"]
+        removed_num = res.get("removed_vid_vector_num", 0)
+        added_num = res.get("added_vid_vector_num", 0)
         return f"Removed {removed_num} vectors, added {added_num} vectors."

@@ -57,7 +57,10 @@ class GetGraphIndexInfoFlow(BaseFlow):
             llm_settings.embedding_type,
             model_map.get(llm_settings.embedding_type, None),
         )
-        vector_index = VectorIndex.from_index_file(index_dir, filename_prefix)
+        try:
+            vector_index = VectorIndex.from_index_file(index_dir, filename_prefix)
+        except FileNotFoundError:
+            return json.dumps(graph_summary_info, ensure_ascii=False, indent=2)
         graph_summary_info["vid_index"] = {
             "embed_dim": vector_index.index.d,
             "num_vectors": vector_index.index.ntotal,

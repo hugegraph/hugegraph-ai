@@ -59,7 +59,10 @@ class BuildSchemaFlow(BaseFlow):
         return pipeline
 
     def post_deal(self, pipeline=None):
-        res = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()["schema"]
+        state_json = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
+        if "schema" not in state_json:
+            return ""
+        res = state_json["schema"]
         try:
             formatted_schema = json.dumps(res, ensure_ascii=False, indent=2)
             return formatted_schema

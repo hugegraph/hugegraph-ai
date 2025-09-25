@@ -14,7 +14,6 @@
 #  limitations under the License.
 
 import json
-import gradio as gr
 
 from PyCGraph import CStatus
 from hugegraph_llm.nodes.base_node import BaseNode
@@ -58,9 +57,7 @@ class SchemaBuildNode(BaseNode):
                     if isinstance(ex, dict) and "description" in ex and "gremlin" in ex
                 ]
             except json.JSONDecodeError as e:
-                raise gr.Error(
-                    f"Query Examples is not in a valid JSON format: {e}"
-                ) from e
+                return CStatus(-1, f"Query Examples is not in a valid JSON format: {e}")
 
         # few_shot_schema: already parsed dict or raw JSON string
         few_shot_schema = {}
@@ -71,9 +68,9 @@ class SchemaBuildNode(BaseNode):
             try:
                 few_shot_schema = json.loads(fss_src)
             except json.JSONDecodeError as e:
-                raise gr.Error(
-                    f"Few Shot Schema is not in a valid JSON format: {e}"
-                ) from e
+                return CStatus(
+                    -1, f"Few Shot Schema is not in a valid JSON format: {e}"
+                )
 
         _context_payload = {
             "raw_texts": raw_texts,

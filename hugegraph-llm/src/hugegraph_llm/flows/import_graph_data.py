@@ -29,8 +29,16 @@ class ImportGraphDataFlow(BaseFlow):
         pass
 
     def prepare(self, prepared_input: WkFlowInput, data, schema):
-        data_json = json.loads(data.strip())
-        log.debug("Import graph data: %s", data)
+        try:
+            data_json = json.loads(data.strip()) if isinstance(data, str) else data
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON for 'data': {e.msg}") from e
+        log.debug(
+            "Import graph data (truncated): %s",
+            (data[:512] + "...")
+            if isinstance(data, str) and len(data) > 512
+            else (data if isinstance(data, str) else "<obj>"),
+        )
         prepared_input.data_json = data_json
         prepared_input.schema = schema
         return
