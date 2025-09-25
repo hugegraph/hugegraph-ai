@@ -41,12 +41,26 @@ class BaseNode(GNode):
         if sts.isErr():
             return sts
         self.context.lock()
-        data_json = self.context.to_json()
-        self.context.unlock()
-        res = self.operator_schedule(data_json)
+        try:
+            data_json = self.context.to_json()
+        finally:
+            self.context.unlock()
+
+        try:
+            res = self.operator_schedule(data_json)
+        except Exception as exc:
+            import traceback
+
+            node_info = f"节点类型: {type(self).__name__}, 节点对象: {self}"
+            err_msg = f"Node failed: {exc}\n{node_info}\n{traceback.format_exc()}"
+            return CStatus(-1, err_msg)
+
         self.context.lock()
-        self.context.assign_from_json(res)
-        self.context.unlock()
+        try:
+            if isinstance(res, dict):
+                self.context.assign_from_json(res)
+        finally:
+            self.context.unlock()
         return CStatus()
 
     def operator_schedule(self, data_json):
