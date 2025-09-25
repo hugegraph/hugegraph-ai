@@ -30,3 +30,7 @@
 - [x] **2.4 update_vid_embeddings workflow移植**
     -   基于Node/Operator机制实现update_vid_embeddings工作流
 - [x] **2.5 get_graph_index_info workflow移植**
+- [x] **2.6 build_schema workflow移植**
+    -   基于Node/Operator机制实现build_schema工作流
+- [x] **2.7 prompt_generate workflow移植**
+    -   基于Node/Operator机制实现prompt_generate工作流

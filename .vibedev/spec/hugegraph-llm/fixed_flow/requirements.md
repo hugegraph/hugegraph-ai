@@ -13,3 +13,12 @@
 
 **核心**：移植Web Demo中的所有用例
 2.1. 保证使用核心框架移植后的工作流的程序行为和移植之前保持一致即可
+
+**已完成的工作流类型**：
+- build_vector_index: 向量索引构建工作流
+- graph_extract: 图抽取工作流
+- import_graph_data: 图数据导入工作流
+- update_vid_embeddings: 向量更新工作流
+- get_graph_index_info: 图索引信息获取工作流
+- build_schema: 模式构建工作流
+- prompt_generate: 提示词生成工作流

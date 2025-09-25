@@ -34,7 +34,10 @@ hugegraph-llm/
         │   ├── build_vector_index.py  # 向量索引构建工作流
         │   ├── graph_extract.py   # 图抽取工作流
         │   ├── import_graph_data.py   # 图数据导入工作流
-        │   └── update_vid_embeddings.py # 向量更新工作流
+        │   ├── update_vid_embeddings.py # 向量更新工作流
+        │   ├── get_graph_index_info.py # 图索引信息获取工作流
+        │   ├── build_schema.py # 模式构建工作流
+        │   └── prompt_generate.py # 提示词生成工作流
         ├── indices/       # 各类索引实现（向量、图、关键词等）
         ├── middleware/    # 中间件与请求处理
         ├── models/        # LLM、Embedding、Reranker 等模型相关
@@ -176,7 +179,7 @@ flowchart TD
 #### 1. Scheduler（调度器）
 - **职责**：调度中心，维护 `pipeline_pool`，提供统一的工作流调度接口
 - **特性**：
-  - 支持多种工作流类型（build_vector_index、graph_extract、import_graph_data、update_vid_embeddings等）
+  - 支持多种工作流类型（build_vector_index、graph_extract、import_graph_data、update_vid_embeddings、get_graph_index_info、build_schema、prompt_generate等）
   - 流水线池化管理，支持复用
   - 线程安全的单例模式
   - 可配置的最大流水线数量
@@ -200,6 +203,9 @@ flowchart TD
   - `GraphExtractFlow`: 图抽取工作流
   - `ImportGraphDataFlow`: 图数据导入工作流
   - `UpdateVidEmbeddingsFlows`: 向量更新工作流
+  - `GetGraphIndexInfoFlow`: 图索引信息获取工作流
+  - `BuildSchemaFlow`: 模式构建工作流
+  - `PromptGenerateFlow`: 提示词生成工作流
 
 #### 4. Node（节点调度器）
 - **职责**：作为Operator的生命周期管理者，负责参数区绑定、上下文初始化、并发安全、异常处理等。
@@ -207,7 +213,7 @@ flowchart TD
   - 统一生命周期接口（init、node_init、run、operator_schedule）
   - 通过参数区（wkflow_input/wkflow_state）与Flow/Operator解耦
   - Operator只需实现run(data_json)方法，Node负责调度和结果写回
-  - 典型Node如：ChunkSplitNode、BuildVectorIndexNode、SchemaNode、ExtractNode、Commit2GraphNode、FetchGraphDataNode、BuildSemanticIndexNode等
+  - 典型Node如：ChunkSplitNode、BuildVectorIndexNode、SchemaNode、ExtractNode、Commit2GraphNode、FetchGraphDataNode、BuildSemanticIndexNode、SchemaBuildNode、PromptGenerateNode等
 
 #### 5. Operator（算子）
 - **职责**：实现具体的业务原子操作
@@ -526,6 +532,18 @@ class GraphExtractFlow(BaseFlow):
   - 功能：从文档中抽取属性图结构
   - 输入：文档分块和模式定义
   - 输出：抽取的顶点和边数据
+
+#### 模式构建节点
+- **SchemaBuildNode**: 模式构建节点
+  - 功能：基于文档和查询示例构建图模式
+  - 输入：文档文本、查询示例、少样本模式
+  - 输出：构建的图模式定义
+
+#### 提示词生成节点
+- **PromptGenerateNode**: 提示词生成节点
+  - 功能：基于源文本、场景和示例名称生成提示词
+  - 输入：源文本、场景、示例名称
+  - 输出：生成的提示词
 
 
 ## 测试策略
