@@ -87,7 +87,7 @@ class Text2GremlinFlow(BaseFlow):
 
     def post_deal(self, pipeline=None) -> Dict[str, Any]:
         state = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
-        # 始终返回 5 个标准键，避免前端因过滤异常看不到字段
+        # Always return 5 standard keys to ensure the frontend does not miss fields due to filtering errors
         return {
             "match_result": state.get("match_result", []),
             "template_gremlin": state.get("result", ""),
