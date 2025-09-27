@@ -32,6 +32,7 @@ from hugegraph_llm.config import huge_settings
 from hugegraph_llm.api.models.rag_response import RAGResponse
 from hugegraph_llm.config import llm_settings, prompt
 from hugegraph_llm.utils.log import log
+from hugegraph_llm.flows.scheduler import SchedulerSingleton
 
 # pylint: disable=too-many-statements
 def rag_http_api(
@@ -181,16 +182,21 @@ def rag_http_api(
         try:
             set_graph_config(req)
 
+            # Basic parameter validation: empty query => 400
+            if not req.query or not str(req.query).strip():
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Query must not be empty.")
+
             output_types_str_list = None
             if req.output_types:
                 output_types_str_list = [ot.value for ot in req.output_types]
 
-            response_dict = gremlin_generate_selective_func(
-                inp=req.query,
-                example_num=req.example_num,
-                schema_input=huge_settings.graph_name,
-                gremlin_prompt_input=req.gremlin_prompt,
-                requested_outputs=output_types_str_list,
+            response_dict = SchedulerSingleton.get_instance().schedule_flow(
+                "text2gremlin",
+                req.query,
+                req.example_num,
+                huge_settings.graph_name,
+                req.gremlin_prompt,
+                output_types_str_list,
             )
             return response_dict
         except HTTPException as e:
