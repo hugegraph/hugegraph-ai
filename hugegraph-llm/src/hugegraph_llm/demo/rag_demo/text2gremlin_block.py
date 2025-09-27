@@ -39,6 +39,7 @@ from hugegraph_llm.flows.scheduler import SchedulerSingleton
 @dataclass
 class GremlinResult:
     """Standardized result class for gremlin_generate function"""
+
     success: bool
     match_result: str
     template_gremlin: Optional[str] = None
@@ -48,13 +49,19 @@ class GremlinResult:
     error_message: Optional[str] = None
 
     @classmethod
-    def error(cls, message: str) -> 'GremlinResult':
+    def error(cls, message: str) -> "GremlinResult":
         """Create an error result"""
         return cls(success=False, match_result=message, error_message=message)
 
     @classmethod
-    def success_result(cls, match_result: str, template_gremlin: str,
-                      raw_gremlin: str, template_exec: str, raw_exec: str) -> 'GremlinResult':
+    def success_result(
+        cls,
+        match_result: str,
+        template_gremlin: str,
+        raw_gremlin: str,
+        template_exec: str,
+        raw_exec: str,
+    ) -> "GremlinResult":
         """Create a successful result"""
         return cls(
             success=True,
@@ -62,7 +69,7 @@ class GremlinResult:
             template_gremlin=template_gremlin,
             raw_gremlin=raw_gremlin,
             template_exec_result=template_exec,
-            raw_exec_result=raw_exec
+            raw_exec_result=raw_exec,
         )
 
 
@@ -94,6 +101,7 @@ def build_example_vector_index(temp_file) -> dict:
         target_file = os.path.join(resource_path, folder_name, "gremlin_examples", file_name)
         try:
             import shutil
+
             shutil.copy2(full_path, target_file)
             log.info("Successfully copied file to: %s", target_file)
         except (OSError, IOError) as e:
@@ -144,7 +152,7 @@ def _configure_output_types(requested_outputs):
         "template_gremlin": True,
         "raw_gremlin": True,
         "template_execution_result": True,
-        "raw_execution_result": True
+        "raw_execution_result": True,
     }
     if requested_outputs:
         for key in output_types:
@@ -177,7 +185,9 @@ def _execute_queries(context, output_types):
 def gremlin_generate(
     inp, example_num, schema, gremlin_prompt, requested_outputs: Optional[List[str]] = None
 ) -> GremlinResult:
-    generator = GremlinGenerator(llm=LLMs().get_text2gql_llm(), embedding=Embeddings().get_embedding())
+    generator = GremlinGenerator(
+        llm=LLMs().get_text2gql_llm(), embedding=Embeddings().get_embedding()
+    )
     sm = SchemaManager(graph_name=schema)
 
     processed_schema, short_schema = _process_schema(schema, generator, sm)
@@ -197,7 +207,9 @@ def gremlin_generate(
 
     _execute_queries(context, output_types)
 
-    match_result = json.dumps(context.get("match_result", "No Results"), ensure_ascii=False, indent=2)
+    match_result = json.dumps(
+        context.get("match_result", "No Results"), ensure_ascii=False, indent=2
+    )
     return GremlinResult.success_result(
         match_result=match_result,
         template_gremlin=context["result"],
@@ -221,7 +233,11 @@ def simple_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     if "edgelabels" in schema:
         mini_schema["edgelabels"] = []
         for edge in schema["edgelabels"]:
-            new_edge = {key: edge[key] for key in ["name", "source_label", "target_label", "properties"] if key in edge}
+            new_edge = {
+                key: edge[key]
+                for key in ["name", "source_label", "target_label", "properties"]
+                if key in edge
+            }
             mini_schema["edgelabels"].append(new_edge)
 
     return mini_schema
@@ -251,7 +267,11 @@ def gremlin_generate_for_ui(inp, example_num, schema, gremlin_prompt):
 
     # Backward-compatible mapping for outputs
     match_result = res.get("match_result", [])
-    match_result_str = json.dumps(match_result, ensure_ascii=False, indent=2) if isinstance(match_result, (list, dict)) else str(match_result)
+    match_result_str = (
+        json.dumps(match_result, ensure_ascii=False, indent=2)
+        if isinstance(match_result, (list, dict))
+        else str(match_result)
+    )
 
     return (
         match_result_str,
@@ -273,7 +293,8 @@ def create_text2gremlin_block() -> Tuple:
     )
     with gr.Row():
         file = gr.File(
-            value=os.path.join(resource_path, "demo", "text2gremlin.csv"), label="Upload Text-Gremlin Pairs File"
+            value=os.path.join(resource_path, "demo", "text2gremlin.csv"),
+            label="Upload Text-Gremlin Pairs File",
         )
         out = gr.Textbox(label="Result Message")
     with gr.Row():
@@ -283,22 +304,39 @@ def create_text2gremlin_block() -> Tuple:
 
     with gr.Row():
         with gr.Column(scale=1):
-            input_box = gr.Textbox(value=prompt.default_question, label="Nature Language Query", show_copy_button=True)
-            match = gr.Code(label="Similar Template (TopN)", language="javascript", elem_classes="code-container-show")
+            input_box = gr.Textbox(
+                value=prompt.default_question, label="Nature Language Query", show_copy_button=True
+            )
+            match = gr.Code(
+                label="Similar Template (TopN)",
+                language="javascript",
+                elem_classes="code-container-show",
+            )
             initialized_out = gr.Textbox(label="Gremlin With Template", show_copy_button=True)
             raw_out = gr.Textbox(label="Gremlin Without Template", show_copy_button=True)
             tmpl_exec_out = gr.Code(
-                label="Query With Template Output", language="json", elem_classes="code-container-show"
+                label="Query With Template Output",
+                language="json",
+                elem_classes="code-container-show",
             )
             raw_exec_out = gr.Code(
-                label="Query Without Template Output", language="json", elem_classes="code-container-show"
+                label="Query Without Template Output",
+                language="json",
+                elem_classes="code-container-show",
             )
 
         with gr.Column(scale=1):
-            example_num_slider = gr.Slider(minimum=0, maximum=10, step=1, value=2, label="Number of refer examples")
-            schema_box = gr.Textbox(value=prompt.text2gql_graph_schema, label="Schema", lines=2, show_copy_button=True)
+            example_num_slider = gr.Slider(
+                minimum=0, maximum=10, step=1, value=2, label="Number of refer examples"
+            )
+            schema_box = gr.Textbox(
+                value=prompt.text2gql_graph_schema, label="Schema", lines=2, show_copy_button=True
+            )
             prompt_box = gr.Textbox(
-                value=prompt.gremlin_generate_prompt, label="Prompt", lines=20, show_copy_button=True
+                value=prompt.gremlin_generate_prompt,
+                label="Prompt",
+                lines=20,
+                show_copy_button=True,
             )
             btn = gr.Button("Text2Gremlin", variant="primary")
     btn.click(  # pylint: disable=no-member
@@ -343,6 +381,7 @@ def graph_rag_recall(
         )
     context = rag.run(verbose=True, query=query, graph_search=True)
     return context
+
 
 def gremlin_generate_selective(
     inp: str,

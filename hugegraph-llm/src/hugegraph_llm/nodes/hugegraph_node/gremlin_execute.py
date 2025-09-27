@@ -15,7 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import re
 from typing import Any, Dict
 
 from PyCGraph import CStatus
@@ -66,4 +65,4 @@ class GremlinExecuteNode(BaseNode):
         else:
             data_json["raw_exec_res"] = ""
 
-        return data_json 
+        return data_json

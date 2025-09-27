@@ -46,4 +46,4 @@ class GremlinExampleIndexQueryNode(BaseNode):
             data_json["match_result"] = []
             return data_json
         # Operator.run writes match_result into context
-        return self.operator.run(data_json) 
+        return self.operator.run(data_json)

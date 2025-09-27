@@ -67,4 +67,4 @@ class Text2GremlinNode(BaseNode):
         # increase call count for observability
         prev = data_json.get("call_count", 0) or 0
         data_json["call_count"] = prev + 1
-        return self.operator.run(data_json) 
+        return self.operator.run(data_json)
