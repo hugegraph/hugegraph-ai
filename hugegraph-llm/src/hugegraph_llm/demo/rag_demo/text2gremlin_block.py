@@ -33,6 +33,7 @@ from hugegraph_llm.operators.hugegraph_op.schema_manager import SchemaManager
 from hugegraph_llm.utils.embedding_utils import get_index_folder_name
 from hugegraph_llm.utils.hugegraph_utils import run_gremlin_query
 from hugegraph_llm.utils.log import log
+from hugegraph_llm.flows.scheduler import SchedulerSingleton
 
 
 @dataclass
@@ -228,17 +229,36 @@ def simple_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
 
 def gremlin_generate_for_ui(inp, example_num, schema, gremlin_prompt):
     """UI wrapper for gremlin_generate that returns tuple for Gradio compatibility"""
-    result = gremlin_generate(inp, example_num, schema, gremlin_prompt)
+    # Execute via scheduler
+    try:
+        res = SchedulerSingleton.get_instance().schedule_flow(
+            "text2gremlin",
+            inp,
+            int(example_num) if isinstance(example_num, (int, float, str)) else 2,
+            schema,
+            gremlin_prompt,
+            [
+                "match_result",
+                "template_gremlin",
+                "raw_gremlin",
+                "template_execution_result",
+                "raw_execution_result",
+            ],
+        )
+    except Exception as e:  # pylint: disable=broad-except
+        log.error("UI text2gremlin error: %s", e)
+        return json.dumps({"error": str(e)}, ensure_ascii=False), "", "", "", ""
 
-    if not result.success:
-        return result.match_result, "", "", "", ""
+    # Backward-compatible mapping for outputs
+    match_result = res.get("match_result", [])
+    match_result_str = json.dumps(match_result, ensure_ascii=False, indent=2) if isinstance(match_result, (list, dict)) else str(match_result)
 
     return (
-        result.match_result,
-        result.template_gremlin or "",
-        result.raw_gremlin or "",
-        result.template_exec_result or "",
-        result.raw_exec_result or ""
+        match_result_str,
+        res.get("template_gremlin", "") or "",
+        res.get("raw_gremlin", "") or "",
+        res.get("template_execution_result", "") or "",
+        res.get("raw_execution_result", "") or "",
     )
 
 
