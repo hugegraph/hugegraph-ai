@@ -143,6 +143,19 @@ class WkFlowState(GParam):
     template_exec_res: Optional[Any] = None
     raw_exec_res: Optional[Any] = None
 
+    match_vids = None
+    vector_result = None
+    graph_result = None
+
+    raw_answer: str = None
+    vector_only_answer: str = None
+    graph_only_answer: str = None
+    graph_vector_answer: str = None
+
+    vector_result = None
+    graph_result = None
+    merged_result = None
+
     def setup(self):
         self.schema = None
         self.simple_schema = None
@@ -165,6 +178,14 @@ class WkFlowState(GParam):
         self.template_exec_res = ""
         self.raw_exec_res = ""
 
+        self.raw_answer = None
+        self.vector_only_answer = None
+        self.graph_only_answer = None
+        self.graph_vector_answer = None
+
+        self.vector_result = None
+        self.graph_result = None
+        self.merged_result = None
         return CStatus()
 
     def to_json(self):

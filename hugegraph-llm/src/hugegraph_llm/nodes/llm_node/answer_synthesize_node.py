@@ -37,7 +37,7 @@ class AnswerSynthesizeNode(BaseNode):
         try:
             prompt_template = self.wk_input.answer_prompt
             raw_answer = self.wk_input.raw_answer or False
-            vector_only_answer = self.wk_input.vector_only_answer or True
+            vector_only_answer = self.wk_input.vector_only_answer or False
             graph_only_answer = self.wk_input.graph_only_answer or False
             graph_vector_answer = self.wk_input.graph_vector_answer or False
 
@@ -76,6 +76,19 @@ class AnswerSynthesizeNode(BaseNode):
 
             log.info(f"Answer synthesis completed for types: {', '.join(answer_types)}")
 
+            # 根据self.wk_input中的对应配置打印answer type
+            wk_input_types = []
+            if getattr(self.wk_input, "raw_answer", False):
+                wk_input_types.append("raw")
+            if getattr(self.wk_input, "vector_only_answer", False):
+                wk_input_types.append("vector_only")
+            if getattr(self.wk_input, "graph_only_answer", False):
+                wk_input_types.append("graph_only")
+            if getattr(self.wk_input, "graph_vector_answer", False):
+                wk_input_types.append("graph_vector")
+            log.info(
+                f"根据wk_input配置，启用的answer type有: {', '.join(wk_input_types)}"
+            )
             return result
 
         except Exception as e:

@@ -66,8 +66,6 @@ class KeywordExtractNode(BaseNode):
         Execute the keyword extraction operation.
         """
         try:
-            # Get the query text from input
-            print("debugdd")
             # Perform keyword extraction
             result = self.operator.run(data_json)
 
