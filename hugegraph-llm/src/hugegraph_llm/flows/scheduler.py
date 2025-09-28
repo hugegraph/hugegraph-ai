@@ -24,6 +24,7 @@ from hugegraph_llm.flows.update_vid_embeddings import UpdateVidEmbeddingsFlows
 from hugegraph_llm.flows.get_graph_index_info import GetGraphIndexInfoFlow
 from hugegraph_llm.flows.build_schema import BuildSchemaFlow
 from hugegraph_llm.flows.prompt_generate import PromptGenerateFlow
+from hugegraph_llm.flows.rag_flow import RAGFlow
 from hugegraph_llm.utils.log import log
 from hugegraph_llm.flows.text2gremlin import Text2GremlinFlow
 
@@ -66,6 +67,10 @@ class Scheduler:
         self.pipeline_pool["text2gremlin"] = {
             "manager": GPipelineManager(),
             "flow": Text2GremlinFlow(),
+        }
+        self.pipeline_pool["rag"] = {
+            "manager": GPipelineManager(),
+            "flow": RAGFlow(),
         }
         self.max_pipeline = max_pipeline
 
