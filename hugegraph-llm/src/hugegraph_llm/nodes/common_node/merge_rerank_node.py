@@ -28,10 +28,6 @@ class MergeRerankNode(BaseNode):
 
     operator: MergeDedupRerank
 
-    def __init__(self):
-        super().__init__()
-        self.operator = None
-
     def node_init(self):
         """
         初始化合并重排序算子

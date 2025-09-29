@@ -25,9 +25,7 @@ class GraphQueryNode(BaseNode):
     图查询节点，负责从图数据库中检索相关信息
     """
 
-    def __init__(self):
-        super().__init__()
-        self.graph_rag_query = None
+    graph_rag_query: GraphRAGQuery
 
     def node_init(self):
         """

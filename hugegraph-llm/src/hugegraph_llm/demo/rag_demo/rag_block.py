@@ -169,8 +169,20 @@ def rag_answer(
 
     scheduler = SchedulerSingleton.get_instance()
     try:
+        # 根据模式选择具体 workflow，避免从池中取错 pipeline
+        if graph_vector_answer or (graph_only_answer and vector_only_answer):
+            flow_key = "rag_graph_vector"
+        elif vector_only_answer:
+            flow_key = "rag_vector_only"
+        elif graph_only_answer:
+            flow_key = "rag_graph_only"
+        elif raw_answer:
+            flow_key = "rag_raw"
+        else:
+            raise RuntimeError("Unsupported flow type")
+
         res = scheduler.schedule_flow(
-            "rag",
+            flow_key,
             query=text,
             vector_search=vector_search,
             graph_search=graph_search,

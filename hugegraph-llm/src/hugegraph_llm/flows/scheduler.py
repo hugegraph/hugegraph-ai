@@ -25,6 +25,10 @@ from hugegraph_llm.flows.get_graph_index_info import GetGraphIndexInfoFlow
 from hugegraph_llm.flows.build_schema import BuildSchemaFlow
 from hugegraph_llm.flows.prompt_generate import PromptGenerateFlow
 from hugegraph_llm.flows.rag_flow import RAGFlow
+from hugegraph_llm.flows.rag_flow_raw import RAGRawFlow
+from hugegraph_llm.flows.rag_flow_vector_only import RAGVectorOnlyFlow
+from hugegraph_llm.flows.rag_flow_graph_only import RAGGraphOnlyFlow
+from hugegraph_llm.flows.rag_flow_graph_vector import RAGGraphVectorFlow
 from hugegraph_llm.utils.log import log
 from hugegraph_llm.flows.text2gremlin import Text2GremlinFlow
 
@@ -71,6 +75,23 @@ class Scheduler:
         self.pipeline_pool["rag"] = {
             "manager": GPipelineManager(),
             "flow": RAGFlow(),
+        }
+        # New split rag pipelines
+        self.pipeline_pool["rag_raw"] = {
+            "manager": GPipelineManager(),
+            "flow": RAGRawFlow(),
+        }
+        self.pipeline_pool["rag_vector_only"] = {
+            "manager": GPipelineManager(),
+            "flow": RAGVectorOnlyFlow(),
+        }
+        self.pipeline_pool["rag_graph_only"] = {
+            "manager": GPipelineManager(),
+            "flow": RAGGraphOnlyFlow(),
+        }
+        self.pipeline_pool["rag_graph_vector"] = {
+            "manager": GPipelineManager(),
+            "flow": RAGGraphVectorFlow(),
         }
         self.max_pipeline = max_pipeline
 

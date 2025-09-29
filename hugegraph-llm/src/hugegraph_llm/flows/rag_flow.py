@@ -27,7 +27,24 @@ from hugegraph_llm.config import huge_settings, prompt
 from hugegraph_llm.utils.log import log
 
 import json
-from PyCGraph import GPipeline
+from PyCGraph import GCondition, GPipeline
+
+
+class RAGCondition(GCondition):
+    def choose(self):
+        print("deeebug2")
+        wk_input: WkFlowInput = self.getGParamWithNoEmpty("wkflow_input")
+
+        if wk_input.graph_vector_answer or (
+            wk_input.graph_only_answer and wk_input.vector_only_answer
+        ):
+            return 0
+        elif wk_input.graph_only_answer:
+            return 1
+        elif wk_input.vector_only_answer:
+            return 2
+        else:
+            return 3
 
 
 class RAGFlow(BaseFlow):
@@ -155,13 +172,11 @@ class RAGFlow(BaseFlow):
 
         # 创建节点
         keyword_extract_node = KeywordExtractNode()
-
         vector_query_node = VectorQueryNode()
 
         # 新增的独立节点
         schema_node = SchemaNode()
         semantic_id_query_node = SemanticIdQueryNode()
-
         graph_query_node = GraphQueryNode()
 
         merge_rerank_node = MergeRerankNode()

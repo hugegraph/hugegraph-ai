@@ -26,9 +26,7 @@ class VectorQueryNode(BaseNode):
     Vector query node, responsible for retrieving relevant documents from the vector index
     """
 
-    def __init__(self):
-        super().__init__()
-        self.operator = None
+    operator: VectorIndexQuery
 
     def node_init(self):
         """

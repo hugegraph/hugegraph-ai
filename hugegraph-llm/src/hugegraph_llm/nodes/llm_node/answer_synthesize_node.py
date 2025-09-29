@@ -26,10 +26,6 @@ class AnswerSynthesizeNode(BaseNode):
 
     operator: AnswerSynthesize
 
-    def __init__(self):
-        super().__init__()
-        self.operator = None
-
     def node_init(self):
         """
         初始化答案合成算子

@@ -26,9 +26,7 @@ class SemanticIdQueryNode(BaseNode):
     语义ID查询节点，负责根据关键词进行语义匹配
     """
 
-    def __init__(self):
-        super().__init__()
-        self.semantic_id_query = None
+    semantic_id_query: SemanticIdQuery
 
     def node_init(self):
         """

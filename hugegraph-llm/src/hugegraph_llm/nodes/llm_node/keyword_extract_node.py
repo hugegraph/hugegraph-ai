@@ -28,10 +28,6 @@ class KeywordExtractNode(BaseNode):
     Keyword extraction node, responsible for extracting keywords from query text.
     """
 
-    def __init__(self):
-        super().__init__()
-        self.operator = None
-
     def node_init(self):
         """
         Initialize the keyword extraction operator.
