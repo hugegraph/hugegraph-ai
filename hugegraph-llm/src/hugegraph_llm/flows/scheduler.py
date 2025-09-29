@@ -99,9 +99,6 @@ class Scheduler:
             # fetch pipeline & prepare input for flow
             prepared_input = pipeline.getGParamWithNoEmpty("wkflow_input")
             flow.prepare(prepared_input, *args, **kwargs)
-            # reset state to avoid leakage across reuse
-            prepared_state = pipeline.getGParamWithNoEmpty("wkflow_state")
-            prepared_state.setup()
             status = pipeline.run()
             if status.isErr():
                 error_msg = f"Error in flow execution {status.getInfo()}"
