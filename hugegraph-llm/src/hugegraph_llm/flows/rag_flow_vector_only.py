@@ -13,7 +13,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from typing import Optional, Literal
+import json
+
+from typing import Any, AsyncGenerator, Dict, Optional, Literal
 
 from PyCGraph import GPipeline
 
@@ -25,12 +27,10 @@ from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.config import huge_settings, prompt
 from hugegraph_llm.utils.log import log
 
-import json
-
 
 class RAGVectorOnlyFlow(BaseFlow):
     """
-    仅向量检索回答（vector_only_answer）的工作流
+    Workflow for vector-only answering (vector_only_answer)
     """
 
     def prepare(
@@ -91,12 +91,12 @@ class RAGVectorOnlyFlow(BaseFlow):
         pipeline.createGParam(prepared_input, "wkflow_input")
         pipeline.createGParam(WkFlowState(), "wkflow_state")
 
-        # 创建节点（不使用 GRegion，统一使用 registerGElement 注册）
+        # Create nodes (do not use GRegion, use registerGElement for all nodes)
         only_vector_query_node = VectorQueryNode()
         merge_rerank_node = MergeRerankNode()
         answer_synthesize_node = AnswerSynthesizeNode()
 
-        # 注册节点与依赖，命名与原来保持一致
+        # Register nodes and dependencies, keep naming consistent with original
         pipeline.registerGElement(only_vector_query_node, set(), "only_vector")
         pipeline.registerGElement(
             merge_rerank_node, {only_vector_query_node}, "merge_two"
@@ -126,3 +126,23 @@ class RAGVectorOnlyFlow(BaseFlow):
                 ensure_ascii=False,
                 indent=2,
             )
+
+    async def post_deal_stream(
+        self, pipeline=None
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        if pipeline is None:
+            yield {"error": "No pipeline provided"}
+            return
+        try:
+            state_json = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
+            log.info("RAGVectorOnlyFlow post processing success")
+            stream_flow = state_json.get("stream_generator")
+            if stream_flow is None:
+                yield {"error": "No stream_generator found in workflow state"}
+                return
+            async for chunk in stream_flow:
+                yield chunk
+        except Exception as e:
+            log.error(f"RAGVectorOnlyFlow post processing failed: {e}")
+            yield {"error": f"Post processing failed: {str(e)}"}
+            return

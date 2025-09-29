@@ -22,14 +22,14 @@ from hugegraph_llm.utils.log import log
 
 class GraphQueryNode(BaseNode):
     """
-    图查询节点，负责从图数据库中检索相关信息
+    Graph query node, responsible for retrieving relevant information from the graph database.
     """
 
     graph_rag_query: GraphRAGQuery
 
     def node_init(self):
         """
-        初始化图查询相关算子
+        Initialize the graph query operator.
         """
         try:
             graph_name = huge_settings.graph_name
@@ -48,7 +48,7 @@ class GraphQueryNode(BaseNode):
                 self.wk_input.gremlin_prompt or prompt.gremlin_generate_prompt
             )
 
-            # 初始化图RAG查询
+            # Initialize GraphRAGQuery operator
             self.graph_rag_query = GraphRAGQuery(
                 max_deep=max_deep,
                 max_graph_items=max_graph_items,
@@ -68,17 +68,17 @@ class GraphQueryNode(BaseNode):
 
     def operator_schedule(self, data_json: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行图查询操作
+        Execute the graph query operation.
         """
         try:
-            # 从输入中获取查询文本
+            # Get the query text from input
             query = data_json.get("query", "")
 
             if not query:
                 log.warning("No query text provided for graph query")
                 return data_json
 
-            # 执行图查询（假设schema和语义查询已经在之前的节点中完成）
+            # Execute the graph query (assuming schema and semantic query have been completed in previous nodes)
             graph_result = self.graph_rag_query.run(data_json)
             data_json.update(graph_result)
 

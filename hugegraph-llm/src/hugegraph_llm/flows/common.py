@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 from abc import ABC, abstractmethod
+from typing import Dict, Any, AsyncGenerator
 
 from hugegraph_llm.state.ai_state import WkFlowInput
 
@@ -43,3 +44,12 @@ class BaseFlow(ABC):
         Post-processing interface.
         """
         pass
+
+    async def post_deal_stream(
+        self, *args, **kwargs
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Streaming post-processing interface.
+        Subclasses can override this method as needed.
+        """
+        raise NotImplementedError("post_deal_stream is not implemented for this flow")

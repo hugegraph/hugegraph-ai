@@ -70,6 +70,8 @@ class WkFlowInput(GParam):
     max_e_prop_len: int = None  # Maximum edge property length
     prop_to_match: str = None  # Property to match
 
+    stream: bool = None  # used for recognize stream mode
+
     def reset(self, _: CStatus) -> None:
         self.texts = None
         self.language = None
@@ -119,6 +121,7 @@ class WkFlowInput(GParam):
         self.max_v_prop_len = None
         self.max_e_prop_len = None
         self.prop_to_match = None
+        self.stream = None
 
 
 class WkFlowState(GParam):

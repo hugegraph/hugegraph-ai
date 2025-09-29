@@ -21,14 +21,14 @@ from hugegraph_llm.utils.log import log
 
 class AnswerSynthesizeNode(BaseNode):
     """
-    答案合成节点，负责基于检索结果生成最终答案
+    Answer synthesis node, responsible for generating the final answer based on retrieval results.
     """
 
     operator: AnswerSynthesize
 
     def node_init(self):
         """
-        初始化答案合成算子
+        Initialize the answer synthesis operator.
         """
         try:
             prompt_template = self.wk_input.answer_prompt
@@ -53,39 +53,46 @@ class AnswerSynthesizeNode(BaseNode):
 
     def operator_schedule(self, data_json: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行答案合成操作
+        Execute the answer synthesis operation.
         """
         try:
-            # 执行答案合成
-            result = self.operator.run(data_json)
+            if self.getGParamWithNoEmpty("wkflow_input").stream:
+                # Streaming mode: return a generator for streaming output
+                data_json["stream_generator"] = self.operator.run_streaming(data_json)
+                return data_json
+            else:
+                # Non-streaming mode: execute answer synthesis
+                result = self.operator.run(data_json)
 
-            # 记录生成的答案类型
-            answer_types = []
-            if result.get("raw_answer"):
-                answer_types.append("raw")
-            if result.get("vector_only_answer"):
-                answer_types.append("vector_only")
-            if result.get("graph_only_answer"):
-                answer_types.append("graph_only")
-            if result.get("graph_vector_answer"):
-                answer_types.append("graph_vector")
+                # Record the types of answers generated
+                answer_types = []
+                if result.get("raw_answer"):
+                    answer_types.append("raw")
+                if result.get("vector_only_answer"):
+                    answer_types.append("vector_only")
+                if result.get("graph_only_answer"):
+                    answer_types.append("graph_only")
+                if result.get("graph_vector_answer"):
+                    answer_types.append("graph_vector")
 
-            log.info(f"Answer synthesis completed for types: {', '.join(answer_types)}")
+                log.info(
+                    f"Answer synthesis completed for types: {', '.join(answer_types)}"
+                )
 
-            # 根据self.wk_input中的对应配置打印answer type
-            wk_input_types = []
-            if getattr(self.wk_input, "raw_answer", False):
-                wk_input_types.append("raw")
-            if getattr(self.wk_input, "vector_only_answer", False):
-                wk_input_types.append("vector_only")
-            if getattr(self.wk_input, "graph_only_answer", False):
-                wk_input_types.append("graph_only")
-            if getattr(self.wk_input, "graph_vector_answer", False):
-                wk_input_types.append("graph_vector")
-            log.info(
-                f"根据wk_input配置，启用的answer type有: {', '.join(wk_input_types)}"
-            )
-            return result
+                # Print enabled answer types according to self.wk_input configuration
+                wk_input_types = []
+                if getattr(self.wk_input, "raw_answer", False):
+                    wk_input_types.append("raw")
+                if getattr(self.wk_input, "vector_only_answer", False):
+                    wk_input_types.append("vector_only")
+                if getattr(self.wk_input, "graph_only_answer", False):
+                    wk_input_types.append("graph_only")
+                if getattr(self.wk_input, "graph_vector_answer", False):
+                    wk_input_types.append("graph_vector")
+                log.info(
+                    f"Enabled answer types according to wk_input config: {', '.join(wk_input_types)}"
+                )
+                return result
 
         except Exception as e:
             log.error(f"Answer synthesis failed: {e}")

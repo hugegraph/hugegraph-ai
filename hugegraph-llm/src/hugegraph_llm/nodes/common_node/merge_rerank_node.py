@@ -23,17 +23,17 @@ from hugegraph_llm.utils.log import log
 
 class MergeRerankNode(BaseNode):
     """
-    合并重排序节点，负责合并向量和图查询结果，去重并重新排序
+    Merge and rerank node, responsible for merging vector and graph query results, deduplication and reranking.
     """
 
     operator: MergeDedupRerank
 
     def node_init(self):
         """
-        初始化合并重排序算子
+        Initialize the merge and rerank operator.
         """
         try:
-            # 从 wk_input 中读取用户配置参数
+            # Read user configuration parameters from wk_input
             embedding = get_embedding(llm_settings)
             graph_ratio = self.wk_input.graph_ratio or 0.5
             rerank_method = self.wk_input.rerank_method or "bleu"
@@ -60,13 +60,13 @@ class MergeRerankNode(BaseNode):
 
     def operator_schedule(self, data_json: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行合并重排序操作
+        Execute the merge and rerank operation.
         """
         try:
-            # 执行合并去重重排序
+            # Perform merge, deduplication, and rerank
             result = self.operator.run(data_json)
 
-            # 记录结果统计
+            # Log result statistics
             vector_count = len(result.get("vector_result", []))
             graph_count = len(result.get("graph_result", []))
             merged_count = len(result.get("merged_result", []))

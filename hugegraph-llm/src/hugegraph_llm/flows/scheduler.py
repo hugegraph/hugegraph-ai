@@ -24,11 +24,11 @@ from hugegraph_llm.flows.update_vid_embeddings import UpdateVidEmbeddingsFlows
 from hugegraph_llm.flows.get_graph_index_info import GetGraphIndexInfoFlow
 from hugegraph_llm.flows.build_schema import BuildSchemaFlow
 from hugegraph_llm.flows.prompt_generate import PromptGenerateFlow
-from hugegraph_llm.flows.rag_flow import RAGFlow
 from hugegraph_llm.flows.rag_flow_raw import RAGRawFlow
 from hugegraph_llm.flows.rag_flow_vector_only import RAGVectorOnlyFlow
 from hugegraph_llm.flows.rag_flow_graph_only import RAGGraphOnlyFlow
 from hugegraph_llm.flows.rag_flow_graph_vector import RAGGraphVectorFlow
+from hugegraph_llm.state.ai_state import WkFlowInput
 from hugegraph_llm.utils.log import log
 from hugegraph_llm.flows.text2gremlin import Text2GremlinFlow
 
@@ -71,10 +71,6 @@ class Scheduler:
         self.pipeline_pool["text2gremlin"] = {
             "manager": GPipelineManager(),
             "flow": Text2GremlinFlow(),
-        }
-        self.pipeline_pool["rag"] = {
-            "manager": GPipelineManager(),
-            "flow": RAGFlow(),
         }
         # New split rag pipelines
         self.pipeline_pool["rag_raw"] = {
@@ -133,6 +129,41 @@ class Scheduler:
             res = flow.post_deal(pipeline)
             manager.release(pipeline)
             return res
+
+    async def schedule_stream_flow(self, flow: str, *args, **kwargs):
+        if flow not in self.pipeline_pool:
+            raise ValueError(f"Unsupported workflow {flow}")
+        manager: GPipelineManager = self.pipeline_pool[flow]["manager"]
+        flow: BaseFlow = self.pipeline_pool[flow]["flow"]
+        pipeline: GPipeline = manager.fetch()
+        if pipeline is None:
+            # call coresponding flow_func to create new workflow
+            pipeline = flow.build_flow(*args, **kwargs)
+            pipeline.getGParamWithNoEmpty("wkflow_input").stream = True
+            status = pipeline.init()
+            if status.isErr():
+                error_msg = f"Error in flow init: {status.getInfo()}"
+                log.error(error_msg)
+                raise RuntimeError(error_msg)
+            status = pipeline.run()
+            if status.isErr():
+                error_msg = f"Error in flow execution: {status.getInfo()}"
+                log.error(error_msg)
+                raise RuntimeError(error_msg)
+            async for res in flow.post_deal_stream(pipeline):
+                yield res
+            manager.add(pipeline)
+        else:
+            # fetch pipeline & prepare input for flow
+            prepared_input: WkFlowInput = pipeline.getGParamWithNoEmpty("wkflow_input")
+            prepared_input.stream = True
+            flow.prepare(prepared_input, *args, **kwargs)
+            status = pipeline.run()
+            if status.isErr():
+                raise RuntimeError(f"Error in flow execution {status.getInfo()}")
+            async for res in flow.post_deal_stream(pipeline):
+                yield res
+            manager.release(pipeline)
 
 
 class SchedulerSingleton:

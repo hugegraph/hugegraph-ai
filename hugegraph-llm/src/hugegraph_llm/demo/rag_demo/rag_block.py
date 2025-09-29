@@ -169,7 +169,7 @@ def rag_answer(
 
     scheduler = SchedulerSingleton.get_instance()
     try:
-        # 根据模式选择具体 workflow，避免从池中取错 pipeline
+        # Select workflow by mode to avoid fetching the wrong pipeline from the pool
         if graph_vector_answer or (graph_only_answer and vector_only_answer):
             flow_key = "rag_graph_vector"
         elif vector_only_answer:
@@ -251,7 +251,7 @@ def update_ui_configs(
     return graph_search, gremlin_prompt, vector_search
 
 
-async def rag_answer_streaming(
+async def rag_answer_streaming_old(
     text: str,
     raw_answer: bool,
     vector_only_answer: bool,
@@ -334,6 +334,94 @@ async def rag_answer_streaming(
                 context.get("vector_only_answer", ""),
                 context.get("graph_only_answer", ""),
                 context.get("graph_vector_answer", ""),
+            )
+    except ValueError as e:
+        log.critical(e)
+        raise gr.Error(str(e))
+    except Exception as e:
+        log.critical(e)
+        raise gr.Error(f"An unexpected error occurred: {str(e)}")
+
+
+async def rag_answer_streaming(
+    text: str,
+    raw_answer: bool,
+    vector_only_answer: bool,
+    graph_only_answer: bool,
+    graph_vector_answer: bool,
+    graph_ratio: float,
+    rerank_method: Literal["bleu", "reranker"],
+    near_neighbor_first: bool,
+    custom_related_information: str,
+    answer_prompt: str,
+    keywords_extract_prompt: str,
+    gremlin_tmpl_num: Optional[int] = -1,
+    gremlin_prompt: Optional[str] = None,
+) -> AsyncGenerator[Tuple[str, str, str, str], None]:
+    """
+    Generate an answer using the RAG (Retrieval-Augmented Generation) pipeline.
+    1. Initialize the RAGPipeline.
+    2. Select vector search or graph search based on parameters.
+    3. Merge, deduplicate, and rerank the results.
+    4. Synthesize the final answer.
+    5. Run the pipeline and return the results.
+    """
+    graph_search, gremlin_prompt, vector_search = update_ui_configs(
+        answer_prompt,
+        custom_related_information,
+        graph_only_answer,
+        graph_vector_answer,
+        gremlin_prompt,
+        keywords_extract_prompt,
+        text,
+        vector_only_answer,
+    )
+    if raw_answer is False and not vector_search and not graph_search:
+        gr.Warning("Please select at least one generate mode.")
+        yield "", "", "", ""
+        return
+
+    try:
+        # Select the specific streaming workflow
+        scheduler = SchedulerSingleton.get_instance()
+        if graph_vector_answer or (graph_only_answer and vector_only_answer):
+            flow_key = "rag_graph_vector"
+        elif vector_only_answer:
+            flow_key = "rag_vector_only"
+        elif graph_only_answer:
+            flow_key = "rag_graph_only"
+        elif raw_answer:
+            flow_key = "rag_raw"
+        else:
+            raise RuntimeError("Unsupported flow type")
+
+        async for res in scheduler.schedule_stream_flow(
+            flow_key,
+            query=text,
+            vector_search=vector_search,
+            graph_search=graph_search,
+            raw_answer=raw_answer,
+            vector_only_answer=vector_only_answer,
+            graph_only_answer=graph_only_answer,
+            graph_vector_answer=graph_vector_answer,
+            graph_ratio=graph_ratio,
+            rerank_method=rerank_method,
+            near_neighbor_first=near_neighbor_first,
+            custom_related_information=custom_related_information,
+            answer_prompt=answer_prompt,
+            keywords_extract_prompt=keywords_extract_prompt,
+            gremlin_tmpl_num=gremlin_tmpl_num,
+            gremlin_prompt=gremlin_prompt,
+        ):
+            if res.get("switch_to_bleu"):
+                gr.Warning(
+                    "Online reranker fails, automatically switches to local bleu rerank."
+                )
+            yield (
+                res.get("raw_answer", ""),
+                res.get("vector_only_answer", ""),
+                res.get("graph_only_answer", ""),
+                res.get("graph_vector_answer", ""),
             )
     except ValueError as e:
         log.critical(e)
@@ -447,8 +535,7 @@ def create_rag_block():
                 btn = gr.Button("Answer Question", variant="primary")
 
     btn.click(  # pylint: disable=no-member
-        # fn=rag_answer_streaming,
-        fn=rag_answer,
+        fn=rag_answer_streaming,
         inputs=[
             inp,
             raw_radio,

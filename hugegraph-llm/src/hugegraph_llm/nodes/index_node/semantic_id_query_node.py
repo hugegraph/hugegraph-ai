@@ -23,14 +23,14 @@ from hugegraph_llm.utils.log import log
 
 class SemanticIdQueryNode(BaseNode):
     """
-    语义ID查询节点，负责根据关键词进行语义匹配
+    Semantic ID query node, responsible for semantic matching based on keywords.
     """
 
     semantic_id_query: SemanticIdQuery
 
     def node_init(self):
         """
-        初始化语义ID查询算子
+        Initialize the semantic ID query operator.
         """
         try:
             graph_name = huge_settings.graph_name
@@ -47,7 +47,7 @@ class SemanticIdQueryNode(BaseNode):
                 self.wk_input.vector_dis_threshold or huge_settings.vector_dis_threshold
             )
 
-            # 初始化语义ID查询
+            # Initialize the semantic ID query operator
             self.semantic_id_query = SemanticIdQuery(
                 embedding=embedding,
                 by=by,
@@ -65,10 +65,10 @@ class SemanticIdQueryNode(BaseNode):
 
     def operator_schedule(self, data_json: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行语义ID查询操作
+        Execute the semantic ID query operation.
         """
         try:
-            # 从输入中获取查询文本和关键词
+            # Get the query text and keywords from input
             query = data_json.get("query", "")
             keywords = data_json.get("keywords", [])
 
@@ -76,7 +76,7 @@ class SemanticIdQueryNode(BaseNode):
                 log.warning("No query text or keywords provided for semantic query")
                 return data_json
 
-            # 执行语义查询
+            # Perform the semantic query
             semantic_result = self.semantic_id_query.run(data_json)
 
             match_vids = semantic_result.get("match_vids", [])

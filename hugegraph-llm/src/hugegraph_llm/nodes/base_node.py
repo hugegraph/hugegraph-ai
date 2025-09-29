@@ -50,10 +50,7 @@ class BaseNode(GNode):
             self.context.unlock()
 
         try:
-            node_info = f"Node type: {type(self).__name__}, Node object: {self}"
-            print(f"f{node_info} Begin")
             res = self.operator_schedule(data_json)
-            print(f"f{node_info} Finish")
         except Exception as exc:
             import traceback
 
