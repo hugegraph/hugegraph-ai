@@ -43,18 +43,13 @@ class RAGVectorOnlyFlow(BaseFlow):
         vector_only_answer: bool = None,
         graph_only_answer: bool = None,
         graph_vector_answer: bool = None,
-        graph_ratio: float = 0.5,
         rerank_method: Literal["bleu", "reranker"] = "bleu",
         near_neighbor_first: bool = False,
         custom_related_information: str = "",
         answer_prompt: Optional[str] = None,
-        keywords_extract_prompt: Optional[str] = None,
-        gremlin_tmpl_num: Optional[int] = -1,
-        gremlin_prompt: Optional[str] = None,
         max_graph_items: int = None,
         topk_return_results: int = None,
         vector_dis_threshold: float = None,
-        topk_per_keyword: int = None,
         **_: dict,
     ):
         prepared_input.query = query
