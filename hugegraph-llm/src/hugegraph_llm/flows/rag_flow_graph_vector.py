@@ -15,7 +15,7 @@
 
 import json
 
-from typing import Any, AsyncGenerator, Dict, Optional, Literal
+from typing import Optional, Literal
 
 from PyCGraph import GPipeline
 
@@ -126,7 +126,9 @@ class RAGGraphVectorFlow(BaseFlow):
         pipeline.registerGElement(
             graph_query_node, {schema_node, semantic_id_query_node}, "graph"
         )
-        pipeline.registerGElement(merge_rerank_node, {graph_query_node}, "merge_three")
+        pipeline.registerGElement(
+            merge_rerank_node, {graph_query_node, vector_query_node}, "merge"
+        )
         pipeline.registerGElement(
             answer_synthesize_node, {merge_rerank_node}, "graph_vector"
         )
@@ -154,23 +156,3 @@ class RAGGraphVectorFlow(BaseFlow):
                 ensure_ascii=False,
                 indent=2,
             )
-
-    async def post_deal_stream(
-        self, pipeline=None
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        if pipeline is None:
-            yield {"error": "No pipeline provided"}
-            return
-        try:
-            state_json = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
-            log.info("RAGGraphVectorFlow post processing success")
-            stream_flow = state_json.get("stream_generator")
-            if stream_flow is None:
-                yield {"error": "No stream_generator found in workflow state"}
-                return
-            async for chunk in stream_flow:
-                yield chunk
-        except Exception as e:
-            log.error(f"RAGGraphVectorFlow post processing failed: {e}")
-            yield {"error": f"Post processing failed: {str(e)}"}
-            return

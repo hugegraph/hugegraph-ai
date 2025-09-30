@@ -15,7 +15,7 @@
 
 import json
 
-from typing import Any, AsyncGenerator, Dict, Optional, Literal
+from typing import Optional, Literal
 
 from PyCGraph import GPipeline
 
@@ -74,6 +74,9 @@ class RAGGraphOnlyFlow(BaseFlow):
         )
         prepared_input.topk_per_keyword = (
             topk_per_keyword or huge_settings.topk_per_keyword
+        )
+        prepared_input.topk_return_results = (
+            topk_return_results or huge_settings.topk_return_results
         )
         prepared_input.rerank_method = rerank_method
         prepared_input.near_neighbor_first = near_neighbor_first
@@ -148,23 +151,3 @@ class RAGGraphOnlyFlow(BaseFlow):
                 ensure_ascii=False,
                 indent=2,
             )
-
-    async def post_deal_stream(
-        self, pipeline=None
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        if pipeline is None:
-            yield {"error": "No pipeline provided"}
-            return
-        try:
-            state_json = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
-            log.info("RAGGraphOnlyFlow post processing success")
-            stream_flow = state_json.get("stream_generator")
-            if stream_flow is None:
-                yield {"error": "No stream_generator found in workflow state"}
-                return
-            async for chunk in stream_flow:
-                yield chunk
-        except Exception as e:
-            log.error(f"RAGGraphOnlyFlow post processing failed: {e}")
-            yield {"error": f"Post processing failed: {str(e)}"}
-            return

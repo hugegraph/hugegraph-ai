@@ -15,7 +15,7 @@
 
 import json
 
-from typing import Any, AsyncGenerator, Dict, Optional, Literal
+from typing import Optional
 
 from PyCGraph import GPipeline
 
@@ -41,18 +41,9 @@ class RAGRawFlow(BaseFlow):
         vector_only_answer: bool = None,
         graph_only_answer: bool = None,
         graph_vector_answer: bool = None,
-        graph_ratio: float = 0.5,
-        rerank_method: Literal["bleu", "reranker"] = "bleu",
-        near_neighbor_first: bool = False,
         custom_related_information: str = "",
         answer_prompt: Optional[str] = None,
-        keywords_extract_prompt: Optional[str] = None,
-        gremlin_tmpl_num: Optional[int] = -1,
-        gremlin_prompt: Optional[str] = None,
         max_graph_items: int = None,
-        topk_return_results: int = None,
-        vector_dis_threshold: float = None,
-        topk_per_keyword: int = None,
         **_: dict,
     ):
         prepared_input.query = query
@@ -106,23 +97,3 @@ class RAGRawFlow(BaseFlow):
                 ensure_ascii=False,
                 indent=2,
             )
-
-    async def post_deal_stream(
-        self, pipeline=None
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        if pipeline is None:
-            yield {"error": "No pipeline provided"}
-            return
-        try:
-            state_json = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
-            log.info("RAGRawFlow post processing success")
-            stream_flow = state_json.get("stream_generator")
-            if stream_flow is None:
-                yield {"error": "No stream_generator found in workflow state"}
-                return
-            async for chunk in stream_flow:
-                yield chunk
-        except Exception as e:
-            log.error(f"RAGRawFlow post processing failed: {e}")
-            yield {"error": f"Post processing failed: {str(e)}"}
-            return

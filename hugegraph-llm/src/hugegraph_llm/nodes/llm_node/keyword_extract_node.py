@@ -46,7 +46,6 @@ class KeywordExtractNode(BaseNode):
             extract_template = self.wk_input.keywords_extract_prompt
 
             self.operator = KeywordExtract(
-                # Check if self.wk_input.texts is a list[str], if not, convert to list[str]
                 text=self.wk_input.query,
                 max_keywords=max_keywords,
                 language=language,
@@ -64,6 +63,9 @@ class KeywordExtractNode(BaseNode):
         try:
             # Perform keyword extraction
             result = self.operator.run(data_json)
+            if "keywords" not in result:
+                log.warning("Keyword extraction result missing 'keywords' field")
+                result["keywords"] = []
 
             log.info(f"Extracted keywords: {result.get('keywords', [])}")
 
@@ -71,4 +73,8 @@ class KeywordExtractNode(BaseNode):
 
         except Exception as e:
             log.error(f"Keyword extraction failed: {e}")
-            return data_json
+            # Add error flag to indicate failure
+            error_result = data_json.copy()
+            error_result["error"] = str(e)
+            error_result["keywords"] = []
+            return error_result

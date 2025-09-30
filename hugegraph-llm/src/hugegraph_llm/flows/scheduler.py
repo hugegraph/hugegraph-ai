@@ -139,31 +139,37 @@ class Scheduler:
         if pipeline is None:
             # call coresponding flow_func to create new workflow
             pipeline = flow.build_flow(*args, **kwargs)
-            pipeline.getGParamWithNoEmpty("wkflow_input").stream = True
-            status = pipeline.init()
-            if status.isErr():
-                error_msg = f"Error in flow init: {status.getInfo()}"
-                log.error(error_msg)
-                raise RuntimeError(error_msg)
-            status = pipeline.run()
-            if status.isErr():
-                error_msg = f"Error in flow execution: {status.getInfo()}"
-                log.error(error_msg)
-                raise RuntimeError(error_msg)
-            async for res in flow.post_deal_stream(pipeline):
-                yield res
-            manager.add(pipeline)
+            try:
+                pipeline.getGParamWithNoEmpty("wkflow_input").stream = True
+                status = pipeline.init()
+                if status.isErr():
+                    error_msg = f"Error in flow init: {status.getInfo()}"
+                    log.error(error_msg)
+                    raise RuntimeError(error_msg)
+                status = pipeline.run()
+                if status.isErr():
+                    error_msg = f"Error in flow execution: {status.getInfo()}"
+                    log.error(error_msg)
+                    raise RuntimeError(error_msg)
+                async for res in flow.post_deal_stream(pipeline):
+                    yield res
+            finally:
+                manager.add(pipeline)
         else:
-            # fetch pipeline & prepare input for flow
-            prepared_input: WkFlowInput = pipeline.getGParamWithNoEmpty("wkflow_input")
-            prepared_input.stream = True
-            flow.prepare(prepared_input, *args, **kwargs)
-            status = pipeline.run()
-            if status.isErr():
-                raise RuntimeError(f"Error in flow execution {status.getInfo()}")
-            async for res in flow.post_deal_stream(pipeline):
-                yield res
-            manager.release(pipeline)
+            try:
+                # fetch pipeline & prepare input for flow
+                prepared_input: WkFlowInput = pipeline.getGParamWithNoEmpty(
+                    "wkflow_input"
+                )
+                prepared_input.stream = True
+                flow.prepare(prepared_input, *args, **kwargs)
+                status = pipeline.run()
+                if status.isErr():
+                    raise RuntimeError(f"Error in flow execution {status.getInfo()}")
+                async for res in flow.post_deal_stream(pipeline):
+                    yield res
+            finally:
+                manager.release(pipeline)
 
 
 class SchedulerSingleton:

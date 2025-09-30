@@ -155,8 +155,6 @@ class WkFlowState(GParam):
     graph_only_answer: str = None
     graph_vector_answer: str = None
 
-    vector_result = None
-    graph_result = None
     merged_result = None
 
     def setup(self):

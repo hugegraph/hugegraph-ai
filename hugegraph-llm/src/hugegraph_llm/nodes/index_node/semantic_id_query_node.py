@@ -13,6 +13,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+from PyCGraph import CStatus
 from typing import Dict, Any
 from hugegraph_llm.nodes.base_node import BaseNode
 from hugegraph_llm.operators.index_op.semantic_id_query import SemanticIdQuery
@@ -35,7 +36,7 @@ class SemanticIdQueryNode(BaseNode):
         try:
             graph_name = huge_settings.graph_name
             if not graph_name:
-                raise ValueError("graph_name is required in wk_input")
+                return CStatus(-1, "graph_name is required in wk_input")
 
             embedding = get_embedding(llm_settings)
             by = self.wk_input.semantic_by or "keywords"
@@ -59,7 +60,6 @@ class SemanticIdQueryNode(BaseNode):
             return super().node_init()
         except Exception as e:
             log.error(f"Failed to initialize SemanticIdQueryNode: {e}")
-            from PyCGraph import CStatus
 
             return CStatus(-1, f"SemanticIdQueryNode initialization failed: {e}")
 
