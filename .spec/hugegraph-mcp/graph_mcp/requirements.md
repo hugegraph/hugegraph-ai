@@ -84,17 +84,17 @@ HugeGraph MCP Server 是一个基于 Model Context Protocol (MCP) 的服务实�
 4. WHEN 获取统计信息 THEN 系统应返回最多 200 个边 ID 的样本列表
 5. WHEN 返回样本数据时数据量超过限制 THEN 系统应在返回结果中包含说明信息,告知这只是部分数据
 
-### 需求 6: 自然语言转 Gremlin 查询
+### 需求 6: 自然语言转 Gremlin 查询支持
 
-**用户故事:** 作为 LLM 用户,我希望能够使用自然语言描述查询需求,系统自动生成对应的 Gremlin 查询,以便更便捷地操作图数据库。
+**用户故事:** 作为 LLM 用户,我希望能够获取 text2gremlin 的 prompt 模板,以便 LLM 能够基于这些信息将自然语言转换为 Gremlin 查询。
 
 #### 验收标准
 
-1. WHEN LLM 调用 `text_to_gremlin` 工具并提供自然语言查询 THEN 系统应调用现有的 text2gremlin flow 生成 Gremlin 查询
-2. WHEN 生成 Gremlin 查询 THEN 系统应同时返回模板化的查询和原始查询
+1. WHEN LLM 通过 MCP Resource 访问 `hugegraph://text2gremlin-prompt` THEN 系统应返回 text2gremlin 的 prompt 模板(包含 Gremlin 语法说明和示例)
+2. WHEN LLM 调用 `get_text2gremlin_prompt` 工具 THEN 系统应返回完整的 text2gremlin prompt 模板
 3. WHEN LLM 通过 MCP Resource 访问 `hugegraph://gremlin-examples` THEN 系统应返回预定义的 Gremlin 查询示例
-4. WHEN 自然语言查询模糊或无法转换 THEN 系统应返回可能的查询建议或要求用户澄清
-5. WHEN 生成的 Gremlin 查询可能修改数据 THEN 系统应在返回结果中添加警告信息
+4. WHEN 调用 `get_text2gremlin_prompt` 工具时 THEN 系统不应调用任何外部 LLM API,仅返回 prompt 文本
+5. WHEN 返回 text2gremlin prompt THEN 系统应提供通用的 Gremlin 语法说明和查询示例,不包含特定图的 schema 信息
 
 ### 需求 7: 图算法支持
 
@@ -131,7 +131,7 @@ HugeGraph MCP Server 是一个基于 Model Context Protocol (MCP) 的服务实�
 
 1. WHEN MCP 客户端发送 `initialize` 请求 THEN 服务器应返回服务器信息和支持的协议版本
 2. WHEN MCP 客户端请求 `tools/list` THEN 服务器应返回所有可用的工具列表及其描述
-3. WHEN MCP 客户端请求 `resources/list` THEN 服务器应返回所有可用的资源列表(schema, statistics, gremlin-examples)
+3. WHEN MCP 客户端请求 `resources/list` THEN 服务器应返回所有可用的资源列表(schema, statistics, gremlin-examples, text2gremlin-prompt)
 4. WHEN MCP 客户端调用 `tools/call` 并提供工具名称和参数 THEN 服务器应执行工具并返回结构化结果
 5. WHEN MCP 客户端请求 `resources/read` 并提供资源 URI THEN 服务器应返回对应的资源内容
 6. WHEN 工具调用失败 THEN 服务器应返回符合 MCP 规范的错误响应
