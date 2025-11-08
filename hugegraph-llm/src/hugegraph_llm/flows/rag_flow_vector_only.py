@@ -26,27 +26,20 @@ from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.config import huge_settings, prompt
 from hugegraph_llm.utils.log import log
 
-RAGVECTORONLY_FLOW_PROMPT = """
+RAGVECTORONLY_FLOW_DESC = """
 {
   "name": "rag_vector_only",
-  "desc": "Vector-only retrieval augmented generation workflow. Answers are generated based solely on vector search results, without graph-based augmentation.",
-  "required_params": [
-    {"name": "query", "type": "str", "desc": "User question"},
-    {"name": "vector_only_answer", "type": "bool", "desc": "Return only the vector-based answer"},
-    {"name": "vector_search", "type": "bool", "desc": "Enable or disable vector search"},
-    {"name": "graph_search", "type": "bool", "desc": "Enable or disable graph search"},
-  ],
-  "optional_params": [
-    {"name": "custom_related_information", "type": "str", "desc": "Custom supplementary information"},
-    {"name": "answer_prompt", "type": "str", "desc": "Custom LLM prompt"},
-    {"name": "rerank_method", "type": "str", "desc": "Reranking method, e.g., 'bleu' or 'reranker'"},
-    {"name": "near_neighbor_first", "type": "bool", "desc": "Prioritize nearest neighbors in retrieval"},
-    {"name": "topk_return_results", "type": "int", "desc": "Number of top results to return"},
-    {"name": "vector_dis_threshold", "type": "float", "desc": "Vector distance threshold for filtering"}
-  ]
+  "desc": "Vector-only retrieval augmented generation workflow. Answers are generated based solely on vector search results, without graph-based augmentation."
 }
 """
 
+RAGVECTORONLY_FLOW_DETAIL = """
+{
+  "required_params": [
+    {"name": "query", "type": "str", "desc": "User question"},
+  ]
+}
+"""
 
 # pylint: disable=arguments-differ,keyword-arg-before-vararg
 class RAGVectorOnlyFlow(BaseFlow):

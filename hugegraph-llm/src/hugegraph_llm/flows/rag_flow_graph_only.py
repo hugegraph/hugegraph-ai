@@ -29,32 +29,21 @@ from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.config import huge_settings, prompt
 from hugegraph_llm.utils.log import log
 
-RAGGRAPHONLY_FLOW_PROMPT = """
+RAGGRAPHONLY_FLOW_DESC = """
 {
   "name": "rag_graph_only",
   "desc": "Graph-only retrieval augmented generation workflow. Answers are generated based solely on graph search results, without vector-based augmentation.",
-  "required_params": [
-    {"name": "query", "type": "str", "desc": "User question"},
-    {"name": "graph_only_answer", "type": "bool", "desc": "Return only the graph-based answer"},
-    {"name": "vector_search", "type": "bool", "desc": "Enable or disable vector search"},
-    {"name": "graph_search", "type": "bool", "desc": "Enable or disable graph search"},
-  ],
-  "optional_params": [
-    {"name": "graph_ratio", "type": "float", "desc": "Ratio of graph to vector results in merging"},
-    {"name": "rerank_method", "type": "str", "desc": "Reranking method, e.g., 'bleu' or 'reranker'"},
-    {"name": "near_neighbor_first", "type": "bool", "desc": "Prioritize nearest neighbors in retrieval"},
-    {"name": "custom_related_information", "type": "str", "desc": "Custom supplementary information"},
-    {"name": "answer_prompt", "type": "str", "desc": "Custom LLM prompt"},
-    {"name": "keywords_extract_prompt", "type": "str", "desc": "Custom prompt for keyword extraction"},
-    {"name": "gremlin_tmpl_num", "type": "int", "desc": "Number of Gremlin templates to use"},
-    {"name": "gremlin_prompt", "type": "str", "desc": "Custom Gremlin generation prompt"},
-    {"name": "max_graph_items", "type": "int", "desc": "Maximum number of graph items to retrieve"},
-    {"name": "topk_return_results", "type": "int", "desc": "Number of top results to return"},
-    {"name": "topk_per_keyword", "type": "int", "desc": "Number of top results per keyword"}
-  ]
 }
 """
 
+RAGGRAPHONLY_FLOW_DETAIL = """
+{
+  "required_params": [
+    {"name": "query", "type": "str", "desc": "User question"},
+    {"name": "gremlin_tmpl_num", "type": "int", "desc": "Number of Gremlin templates to use. Set to 3 if the query contains clear graph query semantics that can be translated to Gremlin (such as finding relationships, paths, nodes, or graph traversal patterns). Set to -1 if the query semantics are ambiguous or cannot be clearly mapped to graph operations"},
+  ]
+}
+"""
 
 class GraphRecallCondition(GCondition):
     def choose(self):

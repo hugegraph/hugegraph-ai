@@ -202,13 +202,6 @@ async def rag_answer_streaming(
                 text,
                 [FlowName.RAG_RAW, FlowName.RAG_VECTOR_ONLY, FlowName.RAG_GRAPH_ONLY, FlowName.RAG_GRAPH_VECTOR],
             )
-            print(f"{type(result)}")
-            print(result)
-            result = re.sub(
-                r"```(?:json)?\n?(.+?)\n?```", r"\1", result, flags=re.DOTALL
-            )
-            result = result.strip()
-            result = json.loads(result)
             if result["tool_name"] is None or result["tool_name"] == "none":
                 raise RuntimeError("No suitable flow found")
             elif result["tool_name"] in [

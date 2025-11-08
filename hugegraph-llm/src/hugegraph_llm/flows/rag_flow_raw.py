@@ -24,20 +24,20 @@ from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.config import huge_settings, prompt
 from hugegraph_llm.utils.log import log
 
-RAGRAW_FLOW_PROMPT = """
+RAGRAW_FLOW_DESC = """
 {
   "name": "rag_raw",
-  "desc": "Direct LLM-based question answering without external knowledge augmentation. Suitable for pure LLM scenarios.",
-  "required_params": [
-    {"name": "query", "type": "str", "desc": "User question"},
-    {"name": "raw_answer", "type": "bool", "desc": "Return only the raw LLM answer"},
-    {"name": "vector_search", "type": "bool", "desc": "Enable or disable vector search"},
-    {"name": "graph_search", "type": "bool", "desc": "Enable or disable graph search"},
-  ],
-  "optional_params": []
+  "desc": "Direct LLM-based question answering without external knowledge augmentation. Suitable for pure LLM scenarios."
 }
 """
 
+RAGRAW_FLOW_DETAIL = """
+{
+  "required_params": [
+    {"name": "query", "type": "str", "desc": "User question"},
+  ]
+}
+"""
 
 # pylint: disable=arguments-differ,keyword-arg-before-vararg
 class RAGRawFlow(BaseFlow):
