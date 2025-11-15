@@ -26,6 +26,20 @@ from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.config import huge_settings, prompt
 from hugegraph_llm.utils.log import log
 
+RAGVECTORONLY_FLOW_DESC = """
+{
+  "name": "rag_vector_only",
+  "desc": "Vector-only retrieval augmented generation workflow. Answers are generated based solely on vector search results, without graph-based augmentation."
+}
+"""
+
+RAGVECTORONLY_FLOW_DETAIL = """
+{
+  "required_params": [
+    {"name": "query", "type": "str", "desc": "User question"},
+  ]
+}
+"""
 
 # pylint: disable=arguments-differ,keyword-arg-before-vararg
 class RAGVectorOnlyFlow(BaseFlow):

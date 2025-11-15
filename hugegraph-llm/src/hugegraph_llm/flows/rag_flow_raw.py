@@ -24,6 +24,20 @@ from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.config import huge_settings, prompt
 from hugegraph_llm.utils.log import log
 
+RAGRAW_FLOW_DESC = """
+{
+  "name": "rag_raw",
+  "desc": "Direct LLM-based question answering without external knowledge augmentation. Suitable for pure LLM scenarios."
+}
+"""
+
+RAGRAW_FLOW_DETAIL = """
+{
+  "required_params": [
+    {"name": "query", "type": "str", "desc": "User question"},
+  ]
+}
+"""
 
 # pylint: disable=arguments-differ,keyword-arg-before-vararg
 class RAGRawFlow(BaseFlow):

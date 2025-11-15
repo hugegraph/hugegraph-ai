@@ -29,6 +29,21 @@ from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.config import huge_settings, prompt
 from hugegraph_llm.utils.log import log
 
+RAGGRAPHONLY_FLOW_DESC = """
+{
+  "name": "rag_graph_only",
+  "desc": "Graph-only retrieval augmented generation workflow. Answers are generated based solely on graph search results, without vector-based augmentation.",
+}
+"""
+
+RAGGRAPHONLY_FLOW_DETAIL = """
+{
+  "required_params": [
+    {"name": "query", "type": "str", "desc": "User question"},
+    {"name": "gremlin_tmpl_num", "type": "int", "desc": "Number of Gremlin templates to use. Set to 3 if the query contains clear graph query semantics that can be translated to Gremlin (such as finding relationships, paths, nodes, or graph traversal patterns). Set to -1 if the query semantics are ambiguous or cannot be clearly mapped to graph operations"},
+  ]
+}
+"""
 
 class GraphRecallCondition(GCondition):
     def choose(self):

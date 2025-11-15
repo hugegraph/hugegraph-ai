@@ -17,8 +17,14 @@
 
 # pylint: disable=E1101
 
+import json
 import os
-from typing import AsyncGenerator, Literal, Optional, Tuple
+import re
+from typing import AsyncGenerator, Tuple, Literal, Optional
+
+import gradio as gr
+from hugegraph_llm.flows.scheduler import SchedulerSingleton
+from hugegraph_llm.flows.intent_detector import IntentDetectorSingleton
 import pandas as pd
 import gradio as gr
 from gradio.utils import NamedString
@@ -153,6 +159,7 @@ def update_ui_configs(
 
 async def rag_answer_streaming(
     text: str,
+    auto_mode: bool,
     raw_answer: bool,
     vector_only_answer: bool,
     graph_only_answer: bool,
@@ -188,45 +195,132 @@ async def rag_answer_streaming(
     try:
         # Select the specific streaming workflow
         scheduler = SchedulerSingleton.get_instance()
-        if graph_vector_answer or (graph_only_answer and vector_only_answer):
-            flow_key = FlowName.RAG_GRAPH_VECTOR
-        elif vector_only_answer:
-            flow_key = FlowName.RAG_VECTOR_ONLY
-        elif graph_only_answer:
-            flow_key = FlowName.RAG_GRAPH_ONLY
-        elif raw_answer:
-            flow_key = FlowName.RAG_RAW
-        else:
-            raise RuntimeError("Unsupported flow type")
 
-        async for res in scheduler.schedule_stream_flow(
-            flow_key,
-            query=text,
-            vector_search=vector_search,
-            graph_search=graph_search,
-            raw_answer=raw_answer,
-            vector_only_answer=vector_only_answer,
-            graph_only_answer=graph_only_answer,
-            graph_vector_answer=graph_vector_answer,
-            graph_ratio=graph_ratio,
-            rerank_method=rerank_method,
-            near_neighbor_first=near_neighbor_first,
-            custom_related_information=custom_related_information,
-            answer_prompt=answer_prompt,
-            keywords_extract_prompt=keywords_extract_prompt,
-            gremlin_tmpl_num=gremlin_tmpl_num,
-            gremlin_prompt=gremlin_prompt,
-        ):
-            if res.get("switch_to_bleu"):
-                gr.Warning(
-                    "Online reranker fails, automatically switches to local bleu rerank."
-                )
-            yield (
-                res.get("raw_answer", ""),
-                res.get("vector_only_answer", ""),
-                res.get("graph_only_answer", ""),
-                res.get("graph_vector_answer", ""),
+        if auto_mode:
+            intent_detector = IntentDetectorSingleton.get_instance()
+            result = await intent_detector.detect(
+                text,
+                [FlowName.RAG_RAW, FlowName.RAG_VECTOR_ONLY, FlowName.RAG_GRAPH_ONLY, FlowName.RAG_GRAPH_VECTOR],
             )
+            if result["tool_name"] is None or result["tool_name"] == "none":
+                raise RuntimeError("No suitable flow found")
+            elif result["tool_name"] in [
+                FlowName.RAG_RAW,
+                FlowName.RAG_VECTOR_ONLY,
+                FlowName.RAG_GRAPH_ONLY,
+                FlowName.RAG_GRAPH_VECTOR
+            ]:
+                flow_key = result["tool_name"]
+            else:
+                raise RuntimeError("Unsupported flow type")
+            async for res in scheduler.schedule_stream_flow(
+                flow_key,
+                query=text,
+                vector_search=result["parameters"].get("vector_search", vector_search)
+                if "parameters" in result
+                else vector_search,
+                graph_search=result["parameters"].get("graph_search", graph_search)
+                if "parameters" in result
+                else graph_search,
+                raw_answer=result["parameters"].get("raw_answer", False)
+                if "parameters" in result
+                else False,
+                vector_only_answer=result["parameters"].get("vector_only_answer", False)
+                if "parameters" in result
+                else False,
+                graph_only_answer=result["parameters"].get("graph_only_answer", False)
+                if "parameters" in result
+                else False,
+                graph_vector_answer=result["parameters"].get(
+                    "graph_vector_answer", False
+                )
+                if "parameters" in result
+                else False,
+                graph_ratio=result["parameters"].get("graph_ratio", graph_ratio)
+                if "parameters" in result
+                else graph_ratio,
+                rerank_method=result["parameters"].get("rerank_method", rerank_method)
+                if "parameters" in result
+                else rerank_method,
+                near_neighbor_first=result["parameters"].get(
+                    "near_neighbor_first", near_neighbor_first
+                )
+                if "parameters" in result
+                else near_neighbor_first,
+                custom_related_information=result["parameters"].get(
+                    "custom_related_information", custom_related_information
+                )
+                if "parameters" in result
+                else custom_related_information,
+                answer_prompt=result["parameters"].get("answer_prompt", answer_prompt)
+                if "parameters" in result
+                else answer_prompt,
+                keywords_extract_prompt=result["parameters"].get(
+                    "keywords_extract_prompt", keywords_extract_prompt
+                )
+                if "parameters" in result
+                else keywords_extract_prompt,
+                gremlin_tmpl_num=result["parameters"].get(
+                    "gremlin_tmpl_num", gremlin_tmpl_num
+                )
+                if "parameters" in result
+                else gremlin_tmpl_num,
+                gremlin_prompt=result["parameters"].get(
+                    "gremlin_prompt", gremlin_prompt
+                )
+                if "parameters" in result
+                else gremlin_prompt,
+            ):
+                if res.get("switch_to_bleu"):
+                    gr.Warning(
+                        "Online reranker fails, automatically switches to local bleu rerank."
+                    )
+                yield (
+                    res.get("raw_answer", ""),
+                    res.get("vector_only_answer", ""),
+                    res.get("graph_only_answer", ""),
+                    res.get("graph_vector_answer", ""),
+                )
+        else:
+            if graph_vector_answer or (graph_only_answer and vector_only_answer):
+                flow_key = FlowName.RAG_GRAPH_VECTOR
+            elif vector_only_answer:
+                flow_key = FlowName.RAG_VECTOR_ONLY
+            elif graph_only_answer:
+                flow_key = FlowName.RAG_GRAPH_ONLY
+            elif raw_answer:
+                flow_key = FlowName.RAG_RAW
+            else:
+                raise RuntimeError("Unsupported flow type")
+
+            async for res in scheduler.schedule_stream_flow(
+                flow_key,
+                query=text,
+                vector_search=vector_search,
+                graph_search=graph_search,
+                raw_answer=raw_answer,
+                vector_only_answer=vector_only_answer,
+                graph_only_answer=graph_only_answer,
+                graph_vector_answer=graph_vector_answer,
+                graph_ratio=graph_ratio,
+                rerank_method=rerank_method,
+                near_neighbor_first=near_neighbor_first,
+                custom_related_information=custom_related_information,
+                answer_prompt=answer_prompt,
+                keywords_extract_prompt=keywords_extract_prompt,
+                gremlin_tmpl_num=gremlin_tmpl_num,
+                gremlin_prompt=gremlin_prompt,
+            ):
+                if res.get("switch_to_bleu"):
+                    gr.Warning(
+                        "Online reranker fails, automatically switches to local bleu rerank."
+                    )
+                yield (
+                    res.get("raw_answer", ""),
+                    res.get("vector_only_answer", ""),
+                    res.get("graph_only_answer", ""),
+                    res.get("graph_vector_answer", ""),
+                )
     except ValueError as e:
         log.critical(e)
         raise gr.Error(str(e))
@@ -302,9 +396,17 @@ def create_rag_block():
                 graph_vector_radio = gr.Radio(
                     choices=[True, False], value=False, label="Graph-Vector Answer"
                 )
+            with gr.Row():
+                auto_mode = gr.Radio(
+                    choices=[True, False], value=False, label="Auto Mode"
+                )
 
             def toggle_slider(enable):
                 return gr.update(interactive=enable)
+
+            def toggle_manual_options(auto_enabled):
+                interactive = not auto_enabled
+                return [gr.update(interactive=interactive) for _ in range(4)]
 
             with gr.Column():
                 with gr.Row():
@@ -326,6 +428,16 @@ def create_rag_block():
                 graph_vector_radio.change(
                     toggle_slider, inputs=graph_vector_radio, outputs=graph_ratio
                 )  # pylint: disable=no-member
+                auto_mode.change(
+                    toggle_manual_options,
+                    inputs=auto_mode,
+                    outputs=[
+                        graph_vector_radio,
+                        graph_only_radio,
+                        raw_radio,
+                        vector_only_radio,
+                    ],
+                )  # pylint: disable=no-member
                 near_neighbor_first = gr.Checkbox(
                     value=False,
                     label="Near neighbor first(Optional)",
@@ -341,6 +453,7 @@ def create_rag_block():
         fn=rag_answer_streaming,
         inputs=[
             inp,
+            auto_mode,
             raw_radio,
             vector_only_radio,
             graph_only_radio,
