@@ -45,7 +45,7 @@ class GraphspaceManager(HugeParamsBase):
         )
 
     @router.http("GET", "/graphspaces/{name}")
-    def get(self, name: str) -> dict:
+    def get(self, name: str) -> dict:  # pylint: disable=unused-argument
         """
         Get details of a specific graphspace.
 
@@ -55,10 +55,7 @@ class GraphspaceManager(HugeParamsBase):
         Returns:
             dict: Graphspace details.
         """
-        return self._invoke_request(
-            placeholders={"name": name},
-            validator=ResponseValidation("text"),
-        )
+        return self._invoke_request(validator=ResponseValidation("text"))
 
     @router.http("GET", "/graphspaces")
     def list(self) -> dict:
@@ -71,7 +68,7 @@ class GraphspaceManager(HugeParamsBase):
         return self._invoke_request(validator=ResponseValidation("text"))
 
     @router.http("DELETE", "/graphspaces/{name}")
-    def delete(self, name: str) -> dict:
+    def delete(self, name: str) -> dict:  # pylint: disable=unused-argument
         """
         Delete a graphspace.
 
@@ -81,13 +78,10 @@ class GraphspaceManager(HugeParamsBase):
         Returns:
             dict: Response containing deletion result.
         """
-        return self._invoke_request(
-            placeholders={"name": name},
-            validator=ResponseValidation("text"),
-        )
+        return self._invoke_request(validator=ResponseValidation("text"))
 
     @router.http("PUT", "/graphspaces/{name}")
-    def update(self, name: str, new_name: str = None, description: str = None) -> dict:
+    def update(self, name: str, new_name: str = None, description: str = None) -> dict:  # pylint: disable=unused-argument
         """
         Update graphspace properties.
 
@@ -106,7 +100,6 @@ class GraphspaceManager(HugeParamsBase):
             data["description"] = description
 
         return self._invoke_request(
-            placeholders={"name": name},
             validator=ResponseValidation("text"),
             data=json.dumps(data) if data else None,
         )
