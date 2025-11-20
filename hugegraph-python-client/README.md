@@ -171,6 +171,80 @@ res = g.exec("g.V().limit(5)")
 print(res)
 ```
 
+### Graphspace Management (HugeGraph v3.0+)
+
+Starting from HugeGraph v3.0, graphspaces provide isolation between different graph collections. The client provides comprehensive graphspace management:
+
+```python
+from pyhugegraph.client import PyHugeClient
+
+# Initialize client with graphspace support (auto-detected for v3.0+)
+client = PyHugeClient("127.0.0.1", "8080", user="admin", pwd="admin", graph="hugegraph", graphspace="DEFAULT")
+
+# Create a new graphspace
+client.graphspace().create("my_graphspace")
+
+# List all graphspaces
+graphspaces = client.graphspace().list()
+print(graphspaces)
+
+# Get details of a specific graphspace
+info = client.graphspace().get("my_graphspace")
+
+# Delete a graphspace
+client.graphspace().delete("my_graphspace")
+```
+
+### Dynamic Graph Management (HugeGraph v3.0+)
+
+The client now supports dynamic graph creation and management:
+
+```python
+# Create a new graph in the current graphspace
+client.graphs().create_graph("new_graph")
+
+# Clone an existing graph (schema and optionally data)
+client.graphs().clone_graph(
+    source_graph="hugegraph",
+    target_graph="hugegraph_copy",
+    clone_schema=True,
+    clone_data=False
+)
+
+# Delete a graph
+client.graphs().delete_graph("new_graph")
+```
+
+### Operating Multiple Graphs/Graphspaces
+
+You can now operate on different graphs and graphspaces using a single client instance without re-instantiation:
+
+```python
+from pyhugegraph.client import PyHugeClient
+
+# Initialize client
+client = PyHugeClient("127.0.0.1", "8080", user="admin", pwd="admin", graph="graph1", graphspace="space1")
+
+# Work with graph1 in space1
+schema = client.schema()
+schema.getVertexLabels()
+
+# Switch to a different graph in the same graphspace
+client.switch_graph("graph2")
+schema = client.schema()  # Now working with graph2
+schema.getVertexLabels()
+
+# Switch to a different graphspace (requires v3.0+)
+client.switch_graphspace("space2")
+# Now all operations target space2
+
+# Switch back to original graph
+client.switch_graph("graph1")
+client.switch_graphspace("space1")
+```
+
+**Note:** When you switch graphs or graphspaces, all cached manager instances are automatically recreated with the new context.
+
 Other info is under 🚧 (Welcome to add more docs for it, users could refer [java-client-doc]([url](https://hugegraph.apache.org/docs/clients/hugegraph-client/)) for similar usage)
 
 ## Contributing

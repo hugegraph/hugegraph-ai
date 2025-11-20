@@ -19,6 +19,7 @@ from typing import Any, Callable, Optional, TypeVar
 
 from pyhugegraph.api.auth import AuthManager
 from pyhugegraph.api.graph import GraphManager
+from pyhugegraph.api.graphspace import GraphspaceManager
 from pyhugegraph.api.graphs import GraphsManager
 from pyhugegraph.api.gremlin import GremlinManager
 from pyhugegraph.api.metric import MetricsManager
@@ -96,6 +97,58 @@ class PyHugeClient:
     @manager_builder
     def version(self) -> "VersionManager":
         return VersionManager
+
+    @manager_builder
+    def graphspace(self) -> "GraphspaceManager":
+        return GraphspaceManager
+
+    def switch_graph(self, graph_name: str) -> None:
+        """
+        Switch to a different graph within the same graphspace.
+        This allows operating on multiple graphs without creating a new client.
+
+        Args:
+            graph_name (str): Name of the graph to switch to.
+
+        Note:
+            This invalidates all cached managers, so they will be recreated
+            with the new graph context on next access.
+        """
+        self.cfg.graph_name = graph_name
+        self._clear_cached_managers()
+
+    def switch_graphspace(self, graphspace_name: str) -> None:
+        """
+        Switch to a different graphspace (requires HugeGraph v3.0+).
+        This allows operating on multiple graphspaces without creating a new client.
+
+        Args:
+            graphspace_name (str): Name of the graphspace to switch to.
+
+        Raises:
+            RuntimeError: If graphspace is not supported (HugeGraph < v3.0).
+
+        Note:
+            This invalidates all cached managers, so they will be recreated
+            with the new graphspace context on next access.
+        """
+        if not self.cfg.gs_supported:
+            raise RuntimeError(
+                "Graphspace switching is only supported in HugeGraph v3.0+. "
+                "Current server does not support graphspaces."
+            )
+        self.cfg.graphspace = graphspace_name
+        self._clear_cached_managers()
+
+    def _clear_cached_managers(self) -> None:
+        """Clear all cached manager instances to force recreation with new context."""
+        attrs_to_clear = [
+            attr
+            for attr in dir(self)
+            if attr.startswith("_lazy_") and not callable(getattr(self, attr))
+        ]
+        for attr in attrs_to_clear:
+            delattr(self, attr)
 
     def __repr__(self) -> str:
         return str(self.cfg)
