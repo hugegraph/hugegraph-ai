@@ -60,14 +60,12 @@ class TestGraphsManager(unittest.TestCase):
         self.assertIsNotNone(graph_config)
 
     def test_create_and_delete_graph(self):
-        """Test dynamic graph creation and deletion (v3.0+ only)."""
-        if not self.client.client.cfg.gs_supported:
-            self.skipTest("Dynamic graph operations require HugeGraph v3.0+")
-        
+        """Test dynamic graph creation and deletion."""
         test_graph_name = "test_graph_temp"
         
         try:
-            # Create a new graph
+            # Create a new graph with minimal config
+            # In practice, you'd provide proper configuration
             result = self.graphs.create_graph(test_graph_name)
             self.assertIsNotNone(result)
             
@@ -78,44 +76,35 @@ class TestGraphsManager(unittest.TestCase):
             # Delete the graph
             delete_result = self.graphs.delete_graph(test_graph_name)
             self.assertIsNotNone(delete_result)
-        except NotImplementedError:
-            self.skipTest("Dynamic graph operations not available on this server version")
         except Exception as e:
             # Clean up in case of error
             try:
                 self.graphs.delete_graph(test_graph_name)
             except Exception:
                 pass
-            # Don't fail test if feature not available
+            # Skip test if feature not available or requires admin permissions
             self.skipTest(f"Dynamic graph operations not supported: {e}")
 
     def test_clone_graph(self):
-        """Test graph cloning (v3.0+ only)."""
-        if not self.client.client.cfg.gs_supported:
-            self.skipTest("Graph cloning requires HugeGraph v3.0+")
-        
+        """Test graph cloning."""
         source_graph = "hugegraph"
         target_graph = "hugegraph_clone_temp"
         
         try:
-            # Clone the graph (schema only)
+            # Clone the graph
             result = self.graphs.clone_graph(
                 source_graph=source_graph,
-                target_graph=target_graph,
-                clone_schema=True,
-                clone_data=False
+                target_graph=target_graph
             )
             self.assertIsNotNone(result)
             
             # Clean up - delete the cloned graph
             self.graphs.delete_graph(target_graph)
-        except NotImplementedError:
-            self.skipTest("Graph cloning not available on this server version")
         except Exception as e:
             # Clean up in case of error
             try:
                 self.graphs.delete_graph(target_graph)
             except Exception:
                 pass
-            # Don't fail test if feature not available
+            # Skip test if feature not available or requires admin permissions
             self.skipTest(f"Graph cloning not supported: {e}")

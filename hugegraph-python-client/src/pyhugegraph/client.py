@@ -19,7 +19,6 @@ from typing import Any, Callable, Optional, TypeVar
 
 from pyhugegraph.api.auth import AuthManager
 from pyhugegraph.api.graph import GraphManager
-from pyhugegraph.api.graphspace import GraphspaceManager
 from pyhugegraph.api.graphs import GraphsManager
 from pyhugegraph.api.gremlin import GremlinManager
 from pyhugegraph.api.metric import MetricsManager
@@ -97,10 +96,6 @@ class PyHugeClient:
     @manager_builder
     def version(self) -> "VersionManager":
         return VersionManager
-
-    @manager_builder
-    def graphspace(self) -> "GraphspaceManager":
-        return GraphspaceManager
 
     def switch_graph(self, graph_name: str) -> None:
         """

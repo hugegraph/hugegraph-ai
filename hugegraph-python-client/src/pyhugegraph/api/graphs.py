@@ -56,93 +56,112 @@ class GraphsManager(HugeParamsBase):
     def get_graph_config(self) -> dict:
         return self._invoke_request(validator=ResponseValidation("text"))
 
-    def create_graph(self, graph_name: str, config_path: str = None) -> dict:
+    def create_graph(self, graph_name: str, config_text: str = None) -> dict:
         """
         Create a new graph dynamically.
+        
+        According to HugeGraph API: POST /graphs/{graph_name}
+        The request body should be configuration properties in text/plain format.
 
         Args:
             graph_name (str): Name of the graph to create.
-            config_path (str, optional): Path to graph configuration file.
+            config_text (str, optional): Graph configuration as text (properties format).
+                Example:
+                    gremlin.graph=org.apache.hugegraph.HugeFactory
+                    backend=rocksdb
+                    serializer=binary
+                    store=hugegraph2
+                    rocksdb.data_path=./rks-data
+                    rocksdb.wal_path=./rks-data
 
         Returns:
-            dict: Response containing graph creation result.
+            dict: Response containing graph creation result with name and backend.
         """
-        if self._sess.cfg.gs_supported:
-            # For v3+, use graphspace-aware endpoint
-            url = f"/graphspaces/{self._sess.cfg.graphspace}/graphs"
-            data = {"name": graph_name}
-            if config_path:
-                data["config_path"] = config_path
+        # Graph creation uses absolute path /graphs/{name}
+        url = f"/graphs/{graph_name}"
+        
+        if config_text:
+            # Configuration provided as text/plain
             return self._sess.request(
                 url,
                 "POST",
                 validator=ResponseValidation("text"),
-                data=json.dumps(data),
+                data=config_text,
             )
         else:
-            # For older versions, graph creation typically requires server restart
-            # This is a configuration-based operation
-            raise NotImplementedError(
-                "Dynamic graph creation is only supported in HugeGraph v3.0+. "
-                "For older versions, graphs must be configured in the server configuration."
+            # No configuration provided - use default or minimal config
+            return self._sess.request(
+                url,
+                "POST",
+                validator=ResponseValidation("text"),
             )
 
-    def delete_graph(self, graph_name: str) -> dict:
+    def delete_graph(self, graph_name: str, confirm_message: str = "I'm sure to drop the graph") -> dict:
         """
-        Delete a graph.
+        Delete a graph and all its data.
+        
+        According to HugeGraph API: DELETE /graphs/{graph_name}?confirm_message=...
 
         Args:
             graph_name (str): Name of the graph to delete.
+            confirm_message (str): Confirmation message to prevent accidental deletion.
+                Default is "I'm sure to drop the graph".
 
         Returns:
-            dict: Response containing deletion result.
+            dict: Response containing deletion result (HTTP 204).
         """
-        if self._sess.cfg.gs_supported:
-            url = f"/graphspaces/{self._sess.cfg.graphspace}/graphs/{graph_name}"
-            return self._sess.request(
-                url,
-                "DELETE",
-                validator=ResponseValidation("text"),
-            )
-        else:
-            raise NotImplementedError(
-                "Dynamic graph deletion is only supported in HugeGraph v3.0+."
-            )
+        # Graph deletion uses absolute path with confirmation
+        from urllib.parse import quote
+        url = f"/graphs/{graph_name}?confirm_message={quote(confirm_message)}"
+        return self._sess.request(
+            url,
+            "DELETE",
+            validator=ResponseValidation("text"),
+        )
 
     def clone_graph(
         self,
         source_graph: str,
         target_graph: str,
-        clone_schema: bool = True,
-        clone_data: bool = False,
+        config_text: str = None,
     ) -> dict:
         """
-        Clone a graph (schema and optionally data).
+        Clone a graph from an existing graph.
+        
+        According to HugeGraph API: POST /graphs/{new_graph}?clone_graph_name={source}
+        The request body can optionally contain configuration to override.
 
         Args:
             source_graph (str): Name of the source graph to clone from.
-            target_graph (str): Name of the target graph to create.
-            clone_schema (bool): Whether to clone schema (default: True).
-            clone_data (bool): Whether to clone data (default: False).
+            target_graph (str): Name of the new graph to create.
+            config_text (str, optional): Configuration text to override settings in cloned graph.
+                If not provided, uses configuration from source graph.
+                Example:
+                    gremlin.graph=org.apache.hugegraph.HugeFactory
+                    backend=rocksdb
+                    serializer=binary
+                    store=hugegraph_clone
+                    rocksdb.data_path=./rks-data-clone
+                    rocksdb.wal_path=./rks-data-clone
 
         Returns:
-            dict: Response containing clone operation result.
+            dict: Response containing clone operation result with name and backend.
         """
-        if self._sess.cfg.gs_supported:
-            url = f"/graphspaces/{self._sess.cfg.graphspace}/graphs"
-            data = {
-                "name": target_graph,
-                "clone_graph_name": source_graph,
-                "clone_schema": clone_schema,
-                "clone_data": clone_data,
-            }
+        # Graph cloning uses absolute path with query parameter
+        url = f"/graphs/{target_graph}?clone_graph_name={source_graph}"
+        
+        if config_text:
+            # Configuration override provided as text/plain
             return self._sess.request(
                 url,
                 "POST",
                 validator=ResponseValidation("text"),
-                data=json.dumps(data),
+                data=config_text,
             )
         else:
-            raise NotImplementedError(
-                "Graph cloning is only supported in HugeGraph v3.0+."
+            # No configuration override - use source graph config
+            return self._sess.request(
+                url,
+                "POST",
+                validator=ResponseValidation("text"),
             )
