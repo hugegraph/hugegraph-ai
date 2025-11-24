@@ -1,0 +1,2 @@
+# HugeGraph MCP package init
+

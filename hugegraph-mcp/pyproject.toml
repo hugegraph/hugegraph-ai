@@ -1,0 +1,27 @@
+[project]
+name = "hugegraph-mcp"
+version = "0.1.0"
+description = "FastMCP server that exposes HugeGraph schema & Gremlin tools over MCP/STDIO"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" },
+]
+
+dependencies = [
+    "fastmcp>=2.2.0",
+    "pyhugegraph @ git+https://github.com/apache/incubator-hugegraph-ai.git#subdirectory=hugegraph-python-client",
+]
+[project.scripts]
+hugegraph-mcp = "hugegraph_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hugegraph_mcp"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
