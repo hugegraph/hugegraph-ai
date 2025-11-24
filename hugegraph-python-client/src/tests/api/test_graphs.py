@@ -64,9 +64,16 @@ class TestGraphsManager(unittest.TestCase):
         test_graph_name = "test_graph_temp"
         
         try:
-            # Create a new graph with minimal config
-            # In practice, you'd provide proper configuration
-            result = self.graphs.create_graph(test_graph_name)
+            # Create a new graph with configuration (1.7.0+ uses JSON format)
+            config = {
+                "gremlin.graph": "org.apache.hugegraph.HugeFactory",
+                "backend": "rocksdb",
+                "serializer": "binary",
+                "store": test_graph_name,
+                "rocksdb.data_path": f"./rks-data-{test_graph_name}",
+                "rocksdb.wal_path": f"./rks-data-{test_graph_name}"
+            }
+            result = self.graphs.create_graph(test_graph_name, config_dict=config)
             self.assertIsNotNone(result)
             
             # Verify it exists by checking all graphs
@@ -91,10 +98,17 @@ class TestGraphsManager(unittest.TestCase):
         target_graph = "hugegraph_clone_temp"
         
         try:
-            # Clone the graph
+            # Clone the graph with optional config override
+            config_override = {
+                "backend": "rocksdb",
+                "store": target_graph,
+                "rocksdb.data_path": f"./rks-data-{target_graph}",
+                "rocksdb.wal_path": f"./rks-data-{target_graph}"
+            }
             result = self.graphs.clone_graph(
                 source_graph=source_graph,
-                target_graph=target_graph
+                target_graph=target_graph,
+                config_dict=config_override
             )
             self.assertIsNotNone(result)
             
