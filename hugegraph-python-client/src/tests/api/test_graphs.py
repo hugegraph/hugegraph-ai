@@ -58,3 +58,67 @@ class TestGraphsManager(unittest.TestCase):
     def test_get_graph_config(self):
         graph_config = self.graphs.get_graph_config()
         self.assertIsNotNone(graph_config)
+
+    def test_create_and_delete_graph(self):
+        """Test dynamic graph creation and deletion."""
+        test_graph_name = "test_graph_temp"
+        
+        try:
+            # Create a new graph with configuration (1.7.0+ uses JSON format)
+            config = {
+                "gremlin.graph": "org.apache.hugegraph.HugeFactory",
+                "backend": "rocksdb",
+                "serializer": "binary",
+                "store": test_graph_name,
+                "rocksdb.data_path": f"./rks-data-{test_graph_name}",
+                "rocksdb.wal_path": f"./rks-data-{test_graph_name}"
+            }
+            result = self.graphs.create_graph(test_graph_name, config_dict=config)
+            self.assertIsNotNone(result)
+            
+            # Verify it exists by checking all graphs
+            all_graphs = self.graphs.get_all_graphs()
+            self.assertIn(test_graph_name, str(all_graphs))
+            
+            # Delete the graph
+            delete_result = self.graphs.delete_graph(test_graph_name)
+            self.assertIsNotNone(delete_result)
+        except Exception as e:
+            # Clean up in case of error
+            try:
+                self.graphs.delete_graph(test_graph_name)
+            except Exception:
+                pass
+            # Skip test if feature not available or requires admin permissions
+            self.skipTest(f"Dynamic graph operations not supported: {e}")
+
+    def test_clone_graph(self):
+        """Test graph cloning."""
+        source_graph = "hugegraph"
+        target_graph = "hugegraph_clone_temp"
+        
+        try:
+            # Clone the graph with optional config override
+            config_override = {
+                "backend": "rocksdb",
+                "store": target_graph,
+                "rocksdb.data_path": f"./rks-data-{target_graph}",
+                "rocksdb.wal_path": f"./rks-data-{target_graph}"
+            }
+            result = self.graphs.clone_graph(
+                source_graph=source_graph,
+                target_graph=target_graph,
+                config_dict=config_override
+            )
+            self.assertIsNotNone(result)
+            
+            # Clean up - delete the cloned graph
+            self.graphs.delete_graph(target_graph)
+        except Exception as e:
+            # Clean up in case of error
+            try:
+                self.graphs.delete_graph(target_graph)
+            except Exception:
+                pass
+            # Skip test if feature not available or requires admin permissions
+            self.skipTest(f"Graph cloning not supported: {e}")

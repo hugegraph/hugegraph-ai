@@ -171,6 +171,77 @@ res = g.exec("g.V().limit(5)")
 print(res)
 ```
 
+### Dynamic Graph Management
+
+The client supports dynamic graph creation and management through the REST API (HugeGraph 1.7.0+):
+
+```python
+from pyhugegraph.client import PyHugeClient
+
+# For HugeGraph 1.7.0+, graphspace parameter is required
+client = PyHugeClient("127.0.0.1", "8080", user="admin", pwd="admin", 
+                      graph="hugegraph", graphspace="DEFAULT")
+
+# Create a new graph (requires admin permission)
+# Provide configuration as a dictionary (JSON format for 1.7.0+)
+config = {
+    "gremlin.graph": "org.apache.hugegraph.HugeFactory",
+    "backend": "rocksdb",
+    "serializer": "binary",
+    "store": "new_graph",
+    "rocksdb.data_path": "./rks-data-new",
+    "rocksdb.wal_path": "./rks-data-new"
+}
+client.graphs().create_graph("new_graph", config_dict=config)
+
+# Clone an existing graph (requires admin permission)
+# Optionally provide config dictionary to override settings
+config_override = {
+    "backend": "rocksdb",
+    "store": "hugegraph_clone",
+    "rocksdb.data_path": "./rks-data-clone",
+    "rocksdb.wal_path": "./rks-data-clone"
+}
+client.graphs().clone_graph(
+    source_graph="hugegraph",
+    target_graph="hugegraph_clone",
+    config_dict=config_override
+)
+
+# Delete a graph (requires admin permission)
+client.graphs().delete_graph("new_graph")
+```
+
+**Note:** 
+- Graph creation, cloning, and deletion require administrator privileges
+- For HugeGraph 1.7.0+, configuration is provided as JSON (dict)
+- For HugeGraph 1.5.0 and earlier, use text/plain format instead
+
+### Operating Multiple Graphs
+
+You can operate on different graphs using a single client instance without re-instantiation:
+
+```python
+from pyhugegraph.client import PyHugeClient
+
+# Initialize client
+client = PyHugeClient("127.0.0.1", "8080", user="admin", pwd="admin", graph="graph1")
+
+# Work with graph1
+schema = client.schema()
+schema.getVertexLabels()
+
+# Switch to a different graph
+client.switch_graph("graph2")
+schema = client.schema()  # Now working with graph2
+schema.getVertexLabels()
+
+# Switch back to original graph
+client.switch_graph("graph1")
+```
+
+**Note:** When you switch graphs, all cached manager instances are automatically recreated with the new graph context.
+
 Other info is under 🚧 (Welcome to add more docs for it, users could refer [java-client-doc]([url](https://hugegraph.apache.org/docs/clients/hugegraph-client/)) for similar usage)
 
 ## Contributing
