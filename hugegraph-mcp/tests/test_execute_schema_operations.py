@@ -11,11 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import sys
 from pathlib import Path
-
-import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -62,7 +59,7 @@ def test_execute_schema_operations_all_success(monkeypatch):
 
 def test_execute_schema_operations_collects_errors(monkeypatch):
     """Mixed success/failure → When operations fail, errors are collected and success is False."""
-    
+
     from hugegraph_mcp import schema_tools
 
     def fake_runner(ops):
@@ -84,5 +81,3 @@ def test_execute_schema_operations_collects_errors(monkeypatch):
     assert result["success"] is False
     assert result["errors"]
     assert result["errors"][0]["message"] == "Constraint violation"
-
-

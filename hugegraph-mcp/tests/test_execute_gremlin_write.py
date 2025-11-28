@@ -11,7 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import sys
 from pathlib import Path
 
@@ -37,7 +36,7 @@ def test_execute_gremlin_write_basic(monkeypatch):
 
     # Set readonly environment to false for this test
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
-    
+
     from hugegraph_mcp import gremlin_tools
 
     fake_client = FakeGremlinClient(results=[{"id": 1}, {"id": 2}])
@@ -50,8 +49,6 @@ def test_execute_gremlin_write_basic(monkeypatch):
     assert res["is_write"] is True
     assert res["affected"] == 2
     assert isinstance(res["duration_ms"], (int, float))
-
-
 
 
 def test_execute_gremlin_write_blocked_in_readonly(monkeypatch):

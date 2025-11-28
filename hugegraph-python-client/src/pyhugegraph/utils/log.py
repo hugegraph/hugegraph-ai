@@ -119,7 +119,7 @@ def init_logger(
 
         try:
             os.makedirs(os.path.dirname(log_filename), exist_ok=True)
-        except OSError as e:
+        except OSError:
             # If we can't create the log directory (e.g., read-only filesystem),
             # fall back to console-only logging
             if stdout_logging:

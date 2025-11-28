@@ -13,7 +13,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pyhugegraph.client import PyHugeClient
 
@@ -24,7 +24,7 @@ class HugeGraphMCPConfig:
     graph_name: str = "hugegraph"
     graph_user: str = "admin"
     graph_pwd: str = ""  # pragma: allowlist secret - value comes from env
-    graph_space: Optional[str] = None
+    graph_space: str | None = None
 
     @classmethod
     def from_env(cls) -> "HugeGraphMCPConfig":
@@ -51,39 +51,31 @@ def _build_client() -> PyHugeClient:
     )
 
 
-def _simple_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+def _simple_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Simplify HugeGraph schema for LLM consumption.
 
     This mirrors the behaviour of hugegraph_llm.SchemaManager.simple_schema
     for the fields used in tests.
     """
 
-    mini_schema: Dict[str, Any] = {}
+    mini_schema: dict[str, Any] = {}
 
-    if "vertexlabels" in schema and schema["vertexlabels"]:
+    if schema.get("vertexlabels"):
         mini_schema["vertexlabels"] = []
         for vertex in schema["vertexlabels"]:
-            new_vertex = {
-                key: vertex[key]
-                for key in ("id", "name", "properties")
-                if key in vertex
-            }
+            new_vertex = {key: vertex[key] for key in ("id", "name", "properties") if key in vertex}
             mini_schema["vertexlabels"].append(new_vertex)
 
-    if "edgelabels" in schema and schema["edgelabels"]:
+    if schema.get("edgelabels"):
         mini_schema["edgelabels"] = []
         for edge in schema["edgelabels"]:
-            new_edge = {
-                key: edge[key]
-                for key in ("name", "source_label", "target_label", "properties")
-                if key in edge
-            }
+            new_edge = {key: edge[key] for key in ("name", "source_label", "target_label", "properties") if key in edge}
             mini_schema["edgelabels"].append(new_edge)
 
     return mini_schema
 
 
-def get_live_schema() -> Dict[str, Any]:
+def get_live_schema() -> dict[str, Any]:
     """Fetch live schema from HugeGraph and return both full and simplified forms.
 
     This is written in a way that can be wrapped as a FastMCP tool later.
@@ -96,7 +88,7 @@ def get_live_schema() -> Dict[str, Any]:
     if raw_schema is None:
         raise ValueError("Failed to retrieve schema from HugeGraph server")
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "schema": raw_schema,
         "simple_schema": _simple_schema(raw_schema),
     }
@@ -113,7 +105,7 @@ def get_live_schema() -> Dict[str, Any]:
     return result
 
 
-def _run_schema_operations(operations: list[Dict[str, Any]]) -> Dict[str, Any]:
+def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
     """Low-level schema executor against HugeGraph REST schema API.
 
     This is a minimal first version that supports a small subset of
@@ -124,8 +116,8 @@ def _run_schema_operations(operations: list[Dict[str, Any]]) -> Dict[str, Any]:
     client = _build_client()
     schema = client.schema()
 
-    results: list[Dict[str, Any]] = []
-    errors: list[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
 
     for idx, op in enumerate(operations):
         op_type = op.get("type")
@@ -163,9 +155,7 @@ def _run_schema_operations(operations: list[Dict[str, Any]]) -> Dict[str, Any]:
                 nullable_keys = op.get("nullable_keys", [])
                 frequency = op.get("frequency", "MULTI").upper()
 
-                el_builder = schema.edgeLabel(name).sourceLabel(source_label).targetLabel(
-                    target_label
-                )
+                el_builder = schema.edgeLabel(name).sourceLabel(source_label).targetLabel(target_label)
                 if properties:
                     el_builder = el_builder.properties(*properties)
                 if sort_keys:
@@ -215,9 +205,7 @@ def _run_schema_operations(operations: list[Dict[str, Any]]) -> Dict[str, Any]:
     return {"success": not bool(errors), "results": results, "errors": errors}
 
 
-def execute_schema_operations(
-    operations: list[Dict[str, Any]]
-) -> Dict[str, Any]:
+def execute_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
     """Execute a sequence of idempotent schema operations.
 
     Behaviour covered by tests:
