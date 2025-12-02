@@ -25,18 +25,18 @@ Get HugeGraph MCP running in your IDE in 30 seconds without any installation:
 - Python 3.10+ (handled automatically by uvx)
 - Git in system PATH
 
-### Windsurf Configuration
+### MCP Configuration
 
-Add this to `~/.codeium/windsurf/mcp_config.json`:
+Add an MCP server entry to your IDE or assistant MCP configuration file. Example:
 
 ```json
 {
   "mcpServers": {
-    "hugegraph": {
+    "hugegraph-mcp": {
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/hugegraph/hugegraph-ai.git#subdirectory=hugegraph-mcp",
+        "git+https://github.com/hugegraph/hugegraph-ai.git@graph-mcp#subdirectory=hugegraph-mcp",
         "hugegraph-mcp"
       ],
       "env": {
@@ -51,33 +51,15 @@ Add this to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-### Claude Desktop Configuration
+Restart your IDE or assistant after adding the configuration.
 
-Add this to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or equivalent:
+Note: uvx installs dependencies on first run. If dependency installation is slow or times out, some IDEs or assistants may report MCP load failure. To avoid this, pre-install the MCP locally by running:
 
-```json
-{
-  "mcpServers": {
-    "hugegraph": {
-      "command": "uvx",
-      "args": [
-        "--from",
-        "git+https://github.com/hugegraph/hugegraph-ai.git#subdirectory=hugegraph-mcp",
-        "hugegraph-mcp"
-      ],
-      "env": {
-        "HUGEGRAPH_URL": "http://127.0.0.1:8080",
-        "HUGEGRAPH_GRAPH_NAME": "hugegraph",
-        "HUGEGRAPH_USER": "admin",
-        "HUGEGRAPH_PASSWORD": "secret",
-        "HUGEGRAPH_MCP_READONLY": "true"
-      }
-    }
-  }
-}
+```bash
+uvx --from git+https://github.com/hugegraph/hugegraph-ai.git@graph-mcp#subdirectory=hugegraph-mcp hugegraph-mcp
 ```
 
-**Restart your IDE** - you're done! The AI assistant can now query your HugeGraph database.
+After the command completes, restart your IDE or assistant.
 
 ## Features
 
