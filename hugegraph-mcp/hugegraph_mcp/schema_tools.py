@@ -20,10 +20,10 @@ from pyhugegraph.client import PyHugeClient
 
 @dataclass
 class HugeGraphMCPConfig:
-    graph_url: str = "http://192.168.1.115:8080"
+    graph_url: str = "http://127.0.0.1:8080"
     graph_name: str = "hugegraph"
     graph_user: str = "admin"
-    graph_pwd: str = ""  # pragma: allowlist secret - value comes from env
+    graph_pwd: str = "xxx"  # pragma: allowlist secret - value comes from env
     graphspace: str | None = "DEFAULT"  # HugeGraph 1.7.0+ enhanced graph space support
 
     @classmethod
@@ -43,7 +43,7 @@ class HugeGraphMCPConfig:
             graph_url=os.getenv("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
             graph_name=graph_name,
             graph_user=os.getenv("HUGEGRAPH_USER", "admin"),
-            graph_pwd=os.getenv("HUGEGRAPH_PASSWORD", ""),
+            graph_pwd=os.getenv("HUGEGRAPH_PASSWORD", "xxx"),
             graphspace=graphspace,
         )
 

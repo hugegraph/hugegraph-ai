@@ -25,7 +25,7 @@ class HugeGraphGremlinConfig:
     url: str = "http://127.0.0.1:8080"
     graph: str = "hugegraph"
     user: str = "admin"
-    password: str = ""
+    password: str = "xxx"
     graphspace: str | None = "DEFAULT"  # HugeGraph 1.7.0+ enhanced graph space support
 
     @classmethod
@@ -45,7 +45,7 @@ class HugeGraphGremlinConfig:
             url=os.getenv("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
             graph=graph,
             user=os.getenv("HUGEGRAPH_USER", "admin"),
-            password=os.getenv("HUGEGRAPH_PASSWORD", ""),
+            password=os.getenv("HUGEGRAPH_PASSWORD", "xxx"),
             graphspace=graphspace,
         )
 
