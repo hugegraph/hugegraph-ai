@@ -20,8 +20,22 @@ from logging.handlers import RotatingFileHandler
 
 # MUST patch BEFORE importing any module that triggers pyhugegraph
 # pyhugegraph initializes logging at module level and tries to create 'logs' directory
-# We intercept RotatingFileHandler to prevent file logging in MCP context
+# We intercept both os.makedirs and RotatingFileHandler to prevent file logging in MCP context
 
+# 1. Patch os.makedirs to silently skip 'logs' directory creation
+_original_makedirs = os.makedirs
+
+
+def _safe_makedirs(name, mode=0o777, exist_ok=False):
+    # Silently succeed for 'logs' directory (don't actually create it)
+    if isinstance(name, str) and ("logs" in name or name == "logs"):
+        return None  # Pretend success
+    return _original_makedirs(name, mode, exist_ok)
+
+
+os.makedirs = _safe_makedirs
+
+# 2. Patch RotatingFileHandler to return NullHandler for 'logs/' files
 _OriginalRotatingFileHandler = RotatingFileHandler
 
 
@@ -34,13 +48,12 @@ class _NoOpFileHandler(logging.NullHandler):
 
 
 def _patched_rotating_handler(filename, *args, **kwargs):
-    # If the filename contains 'logs/', disable file logging by returning a no-op handler
+    # If the filename contains 'logs', disable file logging by returning a no-op handler
     if "logs" in str(filename):
         return _NoOpFileHandler()
     return _OriginalRotatingFileHandler(filename, *args, **kwargs)
 
 
-# Patch at module level in logging.handlers so pyhugegraph picks it up
 logging.handlers.RotatingFileHandler = _patched_rotating_handler
 
 # Now safe to import modules that use pyhugegraph
