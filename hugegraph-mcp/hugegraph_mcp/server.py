@@ -16,10 +16,24 @@
 import logging
 import os
 
-from fastmcp import FastMCP
+# Block pyhugegraph from creating any log directories
+original_makedirs = os.makedirs
 
-from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
-from hugegraph_mcp.schema_tools import execute_schema_operations, get_live_schema
+
+def noop_makedirs(*args, **kwargs):
+    pass
+
+
+# Temporarily replace os.makedirs to prevent log directory creation
+os.makedirs = noop_makedirs
+
+from fastmcp import FastMCP  # noqa: E402
+
+from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write  # noqa: E402
+from hugegraph_mcp.schema_tools import execute_schema_operations, get_live_schema  # noqa: E402
+
+# Restore original os.makedirs
+os.makedirs = original_makedirs
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
 # stdout is reserved for MCP JSON protocol only. Windsurf's MCP client
