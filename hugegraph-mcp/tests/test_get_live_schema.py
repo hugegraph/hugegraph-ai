@@ -91,12 +91,16 @@ def test_get_live_schema_basic(monkeypatch):
 def test_get_live_schema_with_graphspace(monkeypatch):
     os.environ["HUGEGRAPH_GRAPH_PATH"] = "mcp_space/hugegraph"
 
-    from hugegraph_mcp import schema_tools
+    # Reload the module to pick up the new environment variable
+    import importlib
+    import hugegraph_mcp.schema_tools
+
+    importlib.reload(hugegraph_mcp.schema_tools)
 
     FakePyHugeClient.schema_data = _make_full_schema()
-    monkeypatch.setattr(schema_tools, "PyHugeClient", FakePyHugeClient)
+    monkeypatch.setattr(hugegraph_mcp.schema_tools, "PyHugeClient", FakePyHugeClient)
 
-    result = schema_tools.get_live_schema()
+    result = hugegraph_mcp.schema_tools.get_live_schema()
 
     # Type checker: ensure last_init_kwargs is not None before accessing
     assert FakePyHugeClient.last_init_kwargs is not None
