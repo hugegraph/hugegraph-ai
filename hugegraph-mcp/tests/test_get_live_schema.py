@@ -32,7 +32,9 @@ class FakePyHugeClient:
     last_init_kwargs: dict | None = None
     schema_data: dict | None = None
 
-    def __init__(self, url: str, graph: str, user: str, pwd: str, graphspace=None, timeout=None):
+    def __init__(
+        self, url: str, graph: str, user: str, pwd: str, graphspace=None, timeout=None
+    ):
         FakePyHugeClient.last_init_kwargs = {
             "url": url,
             "graph": graph,
@@ -87,7 +89,7 @@ def test_get_live_schema_basic(monkeypatch):
 
 
 def test_get_live_schema_with_graphspace(monkeypatch):
-    os.environ["HUGEGRAPH_GRAPH_SPACE"] = "mcp_space"
+    os.environ["HUGEGRAPH_GRAPH_PATH"] = "mcp_space/hugegraph"
 
     from hugegraph_mcp import schema_tools
 

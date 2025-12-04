@@ -24,16 +24,27 @@ class HugeGraphMCPConfig:
     graph_name: str = "hugegraph"
     graph_user: str = "admin"
     graph_pwd: str = ""  # pragma: allowlist secret - value comes from env
-    graph_space: str | None = None
+    graphspace: str | None = "DEFAULT"  # HugeGraph 1.7.0+ enhanced graph space support
 
     @classmethod
     def from_env(cls) -> "HugeGraphMCPConfig":
+        # 支持字符串拼接格式：HUGEGRAPH_GRAPH_PATH="DEFAULT/hugegraph"，仅此一种方式
+        graph_path = os.getenv("HUGEGRAPH_GRAPH_PATH") or "DEFAULT/hugegraph"
+
+        if "/" in graph_path:
+            graphspace, graph_name = graph_path.split("/", 1)
+        else:
+            graphspace, graph_name = "DEFAULT", graph_path
+
+        graphspace = (graphspace or "DEFAULT").strip() or "DEFAULT"
+        graph_name = (graph_name or "hugegraph").strip() or "hugegraph"
+
         return cls(
             graph_url=os.getenv("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
-            graph_name=os.getenv("HUGEGRAPH_GRAPH_NAME", "hugegraph"),
+            graph_name=graph_name,
             graph_user=os.getenv("HUGEGRAPH_USER", "admin"),
             graph_pwd=os.getenv("HUGEGRAPH_PASSWORD", ""),
-            graph_space=os.getenv("HUGEGRAPH_GRAPH_SPACE") or None,
+            graphspace=graphspace,
         )
 
 
@@ -41,14 +52,25 @@ _config = HugeGraphMCPConfig.from_env()
 
 
 def _build_client() -> PyHugeClient:
-    graphspace = os.getenv("HUGEGRAPH_GRAPH_SPACE", _config.graph_space or "") or None
-    return PyHugeClient(
-        url=_config.graph_url,
-        graph=_config.graph_name,
-        user=_config.graph_user,
-        pwd=_config.graph_pwd,
-        graphspace=graphspace,
-    )
+    # HugeGraph 1.7.0+ graph space support - resolved from config (HUGEGRAPH_GRAPH_PATH)
+    graphspace = _config.graphspace
+    # Only pass graphspace if it's not None and not empty string
+    if graphspace and graphspace.strip():
+        return PyHugeClient(
+            url=_config.graph_url,
+            graph=_config.graph_name,
+            user=_config.graph_user,
+            pwd=_config.graph_pwd,
+            graphspace=graphspace.strip(),
+        )
+    else:
+        # Default client without graphspace for backward compatibility
+        return PyHugeClient(
+            url=_config.graph_url,
+            graph=_config.graph_name,
+            user=_config.graph_user,
+            pwd=_config.graph_pwd,
+        )
 
 
 def _simple_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -63,13 +85,21 @@ def _simple_schema(schema: dict[str, Any]) -> dict[str, Any]:
     if schema.get("vertexlabels"):
         mini_schema["vertexlabels"] = []
         for vertex in schema["vertexlabels"]:
-            new_vertex = {key: vertex[key] for key in ("id", "name", "properties") if key in vertex}
+            new_vertex = {
+                key: vertex[key]
+                for key in ("id", "name", "properties")
+                if key in vertex
+            }
             mini_schema["vertexlabels"].append(new_vertex)
 
     if schema.get("edgelabels"):
         mini_schema["edgelabels"] = []
         for edge in schema["edgelabels"]:
-            new_edge = {key: edge[key] for key in ("name", "source_label", "target_label", "properties") if key in edge}
+            new_edge = {
+                key: edge[key]
+                for key in ("name", "source_label", "target_label", "properties")
+                if key in edge
+            }
             mini_schema["edgelabels"].append(new_edge)
 
     return mini_schema
@@ -93,10 +123,9 @@ def get_live_schema() -> dict[str, Any]:
         "simple_schema": _simple_schema(raw_schema),
     }
 
-    # Derive graphspace from env/config rather than client internals so that
-    # tests with a lightweight FakePyHugeClient still work.
-    graphspace = os.getenv("HUGEGRAPH_GRAPH_SPACE", _config.graph_space or "") or None
-    if graphspace is not None:
+    # HugeGraph 1.7.0+ graph space handling - from resolved config
+    graphspace = _config.graphspace
+    if graphspace:
         result["graphspace"] = graphspace
 
     readonly_env = os.getenv("HUGEGRAPH_MCP_READONLY", "").lower()
@@ -155,7 +184,11 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
                 nullable_keys = op.get("nullable_keys", [])
                 frequency = op.get("frequency", "MULTI").upper()
 
-                el_builder = schema.edgeLabel(name).sourceLabel(source_label).targetLabel(target_label)
+                el_builder = (
+                    schema.edgeLabel(name)
+                    .sourceLabel(source_label)
+                    .targetLabel(target_label)
+                )
                 if properties:
                     el_builder = el_builder.properties(*properties)
                 if sort_keys:
@@ -179,7 +212,9 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
                 elif base_type == "EDGE":
                     il_builder = il_builder.onE(base_label)
                 else:
-                    raise ValueError(f"Unsupported base_type for index label: {base_type}")
+                    raise ValueError(
+                        f"Unsupported base_type for index label: {base_type}"
+                    )
 
                 if fields:
                     il_builder = il_builder.by(*fields)
@@ -189,7 +224,9 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
                 elif index_type == "RANGE":
                     il_builder = il_builder.range()
                 else:
-                    raise ValueError(f"Unsupported index_type for index label: {index_type}")
+                    raise ValueError(
+                        f"Unsupported index_type for index label: {index_type}"
+                    )
 
                 il_builder.ifNotExist().create()
 

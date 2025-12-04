@@ -26,16 +26,27 @@ class HugeGraphGremlinConfig:
     graph: str = "hugegraph"
     user: str = "admin"
     password: str = ""
-    graphspace: str | None = None
+    graphspace: str | None = "DEFAULT"  # HugeGraph 1.7.0+ enhanced graph space support
 
     @classmethod
     def from_env(cls) -> "HugeGraphGremlinConfig":
+        # 支持字符串拼接格式：HUGEGRAPH_GRAPH_PATH="DEFAULT/hugegraph"，仅此一种方式
+        graph_path = os.getenv("HUGEGRAPH_GRAPH_PATH") or "DEFAULT/hugegraph"
+
+        if "/" in graph_path:
+            graphspace, graph = graph_path.split("/", 1)
+        else:
+            graphspace, graph = "DEFAULT", graph_path
+
+        graphspace = (graphspace or "DEFAULT").strip() or "DEFAULT"
+        graph = (graph or "hugegraph").strip() or "hugegraph"
+
         return cls(
             url=os.getenv("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
-            graph=os.getenv("HUGEGRAPH_GRAPH_NAME", "hugegraph"),
+            graph=graph,
             user=os.getenv("HUGEGRAPH_USER", "admin"),
             password=os.getenv("HUGEGRAPH_PASSWORD", ""),
-            graphspace=os.getenv("HUGEGRAPH_GRAPH_SPACE") or None,
+            graphspace=graphspace,
         )
 
 
@@ -45,21 +56,31 @@ _cfg = HugeGraphGremlinConfig.from_env()
 class GremlinExecutor:
     """Encapsulate HugeGraph Gremlin read/write clients.
 
-    当前实现仍然基于 HTTP REST + pyhugegraph.gremlin(),后续可以在这里
-    切换为 WebSocket 或按 HUGEGRAPH_READ_URL/HUGEGRAPH_WRITE_URL 拆分端点。
+    HugeGraph 1.7.0+ compatible with enhanced graph space support.
+    Uses HTTP REST + pyhugegraph.gremlin(), ready for WebSocket or URL splitting.
     """
 
     def __init__(self, cfg: HugeGraphGremlinConfig) -> None:
         self._cfg = cfg
 
     def _build_client(self) -> PyHugeClient:
-        return PyHugeClient(
-            url=self._cfg.url,
-            graph=self._cfg.graph,
-            user=self._cfg.user,
-            pwd=self._cfg.password,
-            graphspace=self._cfg.graphspace,
-        )
+        # HugeGraph 1.7.0+ graph space support - only use if explicitly set
+        if self._cfg.graphspace and self._cfg.graphspace.strip():
+            return PyHugeClient(
+                url=self._cfg.url,
+                graph=self._cfg.graph,
+                user=self._cfg.user,
+                pwd=self._cfg.password,
+                graphspace=self._cfg.graphspace.strip(),
+            )
+        else:
+            # Default client without graphspace for 1.7.0 compatibility
+            return PyHugeClient(
+                url=self._cfg.url,
+                graph=self._cfg.graph,
+                user=self._cfg.user,
+                pwd=self._cfg.password,
+            )
 
     def get_read_client(self):
         return self._build_client().gremlin()
@@ -82,7 +103,9 @@ def _get_write_client():
 _WRITE_KEYWORDS = ("addV", "addE", "dropV", "dropE", "property(")
 
 
-def _execute_gremlin_with_error_handling(client, gremlin_query: str, operation_type: str = "read") -> dict[str, Any]:
+def _execute_gremlin_with_error_handling(
+    client, gremlin_query: str, operation_type: str = "read"
+) -> dict[str, Any]:
     """Execute Gremlin query with comprehensive error handling.
 
     Args:
@@ -129,7 +152,11 @@ def _execute_gremlin_with_error_handling(client, gremlin_query: str, operation_t
         }
 
     except requests.exceptions.HTTPError as e:
-        status_code = e.response.status_code if hasattr(e, "response") and e.response else "unknown"
+        status_code = (
+            e.response.status_code
+            if hasattr(e, "response") and e.response
+            else "unknown"
+        )
 
         if status_code == 401:
             error_type = "authentication_error"
@@ -148,7 +175,10 @@ def _execute_gremlin_with_error_handling(client, gremlin_query: str, operation_t
         elif status_code == 404:
             error_type = "not_found_error"
             message = "Graph or endpoint not found"
-            suggestions = ["Check if the graph name is correct", "Verify the graph exists in HugeGraph"]
+            suggestions = [
+                "Check if the graph name is correct",
+                "Verify the graph exists in HugeGraph",
+            ]
         elif status_code == 500:
             error_type = "server_error"
             message = "HugeGraph server internal error"
@@ -243,7 +273,9 @@ def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
     # Global readonly guard for all write operations
     if os.getenv("HUGEGRAPH_MCP_READONLY", "").lower() in {"1", "true", "yes"}:
         # For backward compatibility with existing tests, raise PermissionError
-        raise PermissionError("HugeGraph MCP server is in read-only mode; write queries are disabled")
+        raise PermissionError(
+            "HugeGraph MCP server is in read-only mode; write queries are disabled"
+        )
 
     client = _get_write_client()
     result = _execute_gremlin_with_error_handling(client, gremlin_query, "write")

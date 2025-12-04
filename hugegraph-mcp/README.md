@@ -21,7 +21,7 @@ Get HugeGraph MCP running in your IDE in 30 seconds without any installation:
 
 ### Prerequisites
 
-- HugeGraph instance (e.g., `http://127.0.0.1:8080`)
+- HugeGraph instance (e.g., `http://127.0.0.1:8080`) >= 1.7.0
 - Python 3.10+ (handled automatically by uvx)
 - Git in system PATH
 
@@ -40,10 +40,6 @@ Add an MCP server entry to your IDE or assistant MCP configuration file. Example
         "hugegraph-mcp"
       ],
       "env": {
-        "HUGEGRAPH_URL": "http://127.0.0.1:8080",
-        "HUGEGRAPH_GRAPH_NAME": "hugegraph",
-        "HUGEGRAPH_USER": "admin",
-        "HUGEGRAPH_PASSWORD": "secret",
         "HUGEGRAPH_MCP_READONLY": "true"
       }
     }
@@ -52,6 +48,17 @@ Add an MCP server entry to your IDE or assistant MCP configuration file. Example
 ```
 
 Restart your IDE or assistant after adding the configuration.
+
+#### Optional environment variables
+
+The HugeGraph MCP server also respects the following environment variables. All of them are **optional**; if not set, the defaults below are used:
+
+- `HUGEGRAPH_URL` (default: `http://127.0.0.1:8080`)
+- `HUGEGRAPH_GRAPH_PATH` (default: `DEFAULT/hugegraph`)
+- `HUGEGRAPH_USER` (default: `admin`)
+- `HUGEGRAPH_PASSWORD` (default: empty string)
+
+`HUGEGRAPH_GRAPH_PATH` uses the format `GRAPH_SPACE/GRAPH_NAME`, for example `DEFAULT/hugegraph`.
 
 Note: uvx installs dependencies on first run. If dependency installation is slow or times out, some IDEs or assistants may report MCP load failure. To avoid this, pre-install the MCP locally by running:
 
