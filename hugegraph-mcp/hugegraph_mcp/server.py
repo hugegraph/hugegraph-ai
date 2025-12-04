@@ -14,23 +14,34 @@
 # FastMCP server bootstrap for HugeGraph MCP
 
 import logging
+import logging.handlers
 import os
+from logging.handlers import RotatingFileHandler
 
-# MUST replace os.makedirs BEFORE importing any module that triggers pyhugegraph
+# MUST patch BEFORE importing any module that triggers pyhugegraph
 # pyhugegraph initializes logging at module level and tries to create 'logs' directory
-_original_makedirs = os.makedirs
+# We intercept RotatingFileHandler to prevent file logging in MCP context
+
+_OriginalRotatingFileHandler = RotatingFileHandler
 
 
-def _safe_makedirs(name, mode=0o777, exist_ok=False):
-    # Block creating 'logs' directory (pyhugegraph log initialization) only in this MCP process.
-    # We raise OSError so that pyhugegraph's init_logger() can detect the failure and fall back
-    # to console-only logging instead of attempting to open a file in a non-existent directory.
-    if isinstance(name, str) and os.path.basename(name) == "logs":
-        raise OSError("HugeGraph MCP: disable file logging for 'logs' directory")
-    return _original_makedirs(name, mode, exist_ok)
+class _NoOpFileHandler(logging.NullHandler):
+    """A no-op handler that silently ignores all log records (used to disable file logging in MCP)."""
+
+    def __init__(self, *args, **kwargs):
+        # Ignore all arguments (filename, maxBytes, etc.) and just create a NullHandler
+        super().__init__()
 
 
-os.makedirs = _safe_makedirs
+def _patched_rotating_handler(filename, *args, **kwargs):
+    # If the filename contains 'logs/', disable file logging by returning a no-op handler
+    if "logs" in str(filename):
+        return _NoOpFileHandler()
+    return _OriginalRotatingFileHandler(filename, *args, **kwargs)
+
+
+# Patch at module level in logging.handlers so pyhugegraph picks it up
+logging.handlers.RotatingFileHandler = _patched_rotating_handler
 
 # Now safe to import modules that use pyhugegraph
 from fastmcp import FastMCP
