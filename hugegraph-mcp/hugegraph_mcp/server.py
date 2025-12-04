@@ -22,9 +22,11 @@ _original_makedirs = os.makedirs
 
 
 def _safe_makedirs(name, mode=0o777, exist_ok=False):
-    # Block creating 'logs' directory (pyhugegraph log initialization)
-    if isinstance(name, str) and ("logs" in name or name.endswith("/logs")):
-        return  # Silently ignore
+    # Block creating 'logs' directory (pyhugegraph log initialization) only in this MCP process.
+    # We raise OSError so that pyhugegraph's init_logger() can detect the failure and fall back
+    # to console-only logging instead of attempting to open a file in a non-existent directory.
+    if isinstance(name, str) and os.path.basename(name) == "logs":
+        raise OSError("HugeGraph MCP: disable file logging for 'logs' directory")
     return _original_makedirs(name, mode, exist_ok)
 
 
