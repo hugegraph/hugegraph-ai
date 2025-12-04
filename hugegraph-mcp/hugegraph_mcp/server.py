@@ -16,30 +16,40 @@
 import logging
 import os
 
-# Block pyhugegraph from creating any log directories
-original_makedirs = os.makedirs
+from fastmcp import FastMCP
 
-
-def noop_makedirs(*args, **kwargs):
-    pass
-
-
-# Temporarily replace os.makedirs to prevent log directory creation
-os.makedirs = noop_makedirs
-
-from fastmcp import FastMCP  # noqa: E402
-
-from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write  # noqa: E402
-from hugegraph_mcp.schema_tools import execute_schema_operations, get_live_schema  # noqa: E402
-
-# Restore original os.makedirs
-os.makedirs = original_makedirs
+from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
+from hugegraph_mcp.schema_tools import execute_schema_operations, get_live_schema
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
 # stdout is reserved for MCP JSON protocol only. Windsurf's MCP client
 # reads stdout as a pure JSON stream and will fail if human-readable logs
 # are mixed in.
 logging.disable(logging.CRITICAL)
+
+
+# Context manager to prevent pyhugegraph from creating log directories
+class _NoLogDirs:
+    def __enter__(self):
+        self.original_makedirs = os.makedirs
+        os.makedirs = lambda *args, **kwargs: None
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        os.makedirs = self.original_makedirs
+
+
+# Initialize pyhugegraph modules without allowing log directory creation
+def _init_modules():
+    with _NoLogDirs():
+        # Re-import to trigger pyhugegraph initialization with safe makedirs
+        import importlib
+
+        importlib.import_module("pyhugegraph")
+
+
+# Initialize modules on import
+_init_modules()
 
 
 # Check if server should run in read-only mode
