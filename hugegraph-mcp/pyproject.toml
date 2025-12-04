@@ -38,3 +38,7 @@ packages = ["hugegraph_mcp"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.ruff.lint.per-file-ignores]
+# server.py must patch os.makedirs before importing pyhugegraph (which creates logs at import time)
+"hugegraph_mcp/server.py" = ["E402"]

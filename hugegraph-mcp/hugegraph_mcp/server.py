@@ -16,6 +16,21 @@
 import logging
 import os
 
+# MUST replace os.makedirs BEFORE importing any module that triggers pyhugegraph
+# pyhugegraph initializes logging at module level and tries to create 'logs' directory
+_original_makedirs = os.makedirs
+
+
+def _safe_makedirs(name, mode=0o777, exist_ok=False):
+    # Block creating 'logs' directory (pyhugegraph log initialization)
+    if isinstance(name, str) and ("logs" in name or name.endswith("/logs")):
+        return  # Silently ignore
+    return _original_makedirs(name, mode, exist_ok)
+
+
+os.makedirs = _safe_makedirs
+
+# Now safe to import modules that use pyhugegraph
 from fastmcp import FastMCP
 
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
@@ -26,23 +41,6 @@ from hugegraph_mcp.schema_tools import execute_schema_operations, get_live_schem
 # reads stdout as a pure JSON stream and will fail if human-readable logs
 # are mixed in.
 logging.disable(logging.CRITICAL)
-
-# Permanently replace os.makedirs to prevent pyhugegraph from creating log directories
-# This is needed because pyhugegraph initializes logging at module level
-_original_makedirs = os.makedirs
-
-
-def _safe_makedirs(name, mode=0o777, exist_ok=False):
-    # Allow creating directories in /tmp and /var/folders (temporary directories)
-    # but block creating 'logs' directory in current directory
-    if isinstance(name, str) and ("logs" in name or name.endswith("/logs")):
-        # Silently ignore log directory creation attempts
-        return
-    return _original_makedirs(name, mode, exist_ok)
-
-
-# Replace os.makedirs globally
-os.makedirs = _safe_makedirs
 
 
 # Check if server should run in read-only mode
