@@ -27,29 +27,22 @@ from hugegraph_mcp.schema_tools import execute_schema_operations, get_live_schem
 # are mixed in.
 logging.disable(logging.CRITICAL)
 
-
-# Context manager to prevent pyhugegraph from creating log directories
-class _NoLogDirs:
-    def __enter__(self):
-        self.original_makedirs = os.makedirs
-        os.makedirs = lambda *args, **kwargs: None
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        os.makedirs = self.original_makedirs
+# Permanently replace os.makedirs to prevent pyhugegraph from creating log directories
+# This is needed because pyhugegraph initializes logging at module level
+_original_makedirs = os.makedirs
 
 
-# Initialize pyhugegraph modules without allowing log directory creation
-def _init_modules():
-    with _NoLogDirs():
-        # Re-import to trigger pyhugegraph initialization with safe makedirs
-        import importlib
+def _safe_makedirs(name, mode=0o777, exist_ok=False):
+    # Allow creating directories in /tmp and /var/folders (temporary directories)
+    # but block creating 'logs' directory in current directory
+    if isinstance(name, str) and ("logs" in name or name.endswith("/logs")):
+        # Silently ignore log directory creation attempts
+        return
+    return _original_makedirs(name, mode, exist_ok)
 
-        importlib.import_module("pyhugegraph")
 
-
-# Initialize modules on import
-_init_modules()
+# Replace os.makedirs globally
+os.makedirs = _safe_makedirs
 
 
 # Check if server should run in read-only mode
