@@ -14,9 +14,9 @@
 
     "_comment_llm": "LLM 翻译配置（将泛化后的 Gremlin + 简单描述翻译为自然语言问题）",
     "llm": {
-        "base_url": "https://api.siliconflow.cn/v1",
-        "api_key": "sk-czehlouvxutlmzuocxvlhaooabzfarzyveapjgldvurjjyrf",
-        "model": "Pro/moonshotai/Kimi-K2.5",
+        "base_url": "http://your-llm-server:port/v1",
+        "api_key": "your-api-key",
+        "model": "your-model-name",
         "temperature": 0.7,
         "max_retries": 3,
         "max_concurrency": 20,

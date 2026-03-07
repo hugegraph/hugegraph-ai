@@ -3,11 +3,32 @@
 从模板生成大量多样化的 Gremlin 查询及其中文描述，用于测试、训练和分析。
 
 ## 快速开始
-环境配置：python：3.12.10
+
+### 1. 环境配置
+Python 版本：3.12.10
 ```bash
 pip install -r requirements.txt
 ```
 
+### 2. 配置文件
+复制示例配置文件并填入你的配置：
+```bash
+cp config_example.json config.json
+```
+
+然后编辑 `config.json`，填入你的 LLM API 配置：
+```json
+"llm": {
+    "base_url": "http://your-llm-server:port/v1",
+    "api_key": "your-api-key",
+    "model": "your-model-name",
+    ...
+}
+```
+
+> ⚠️ 注意：`config.json` 包含敏感信息，已被 `.gitignore` 忽略，请勿提交到版本控制。
+
+### 3. 运行
 ```bash
 # 生成语料库
 python generate_corpus.py
