@@ -153,18 +153,10 @@ print(f"生成了 {result['total_unique_queries']} 个查询")
 
 ```bash
 # 分析语法分布
-python analyze_syntax_distribution.py
-
-# 查看统计
-python show_syntax_stats.py
-
-# 可视化
-python visualize_syntax_distribution.py
+python3 analyze_syntax.py
 ```
-
 分析结果：
 - `output/syntax_distribution_stats.json` - 统计数据
-- `output/SYNTAX_ANALYSIS_SUMMARY.md` - 分析报告
 
 ---
 
