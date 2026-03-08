@@ -57,6 +57,7 @@ The HugeGraph MCP server also respects the following environment variables. All 
 - `HUGEGRAPH_GRAPH_PATH` (default: `DEFAULT/hugegraph`)
 - `HUGEGRAPH_USER` (default: `admin`)
 - `HUGEGRAPH_PASSWORD` (default: empty string)
+- `HUGEGRAPH_MCP_READONLY` (default: false) - Set to `true` to enable read-only mode, blocking all write operations (schema changes, Gremlin writes, etc.).
 
 `HUGEGRAPH_GRAPH_PATH` uses the format `GRAPH_SPACE/GRAPH_NAME`, for example `DEFAULT/hugegraph`.
 
@@ -76,6 +77,15 @@ After the command completes, restart your IDE or assistant.
 - **🎯 Schema Design Guidance**: Multi-turn interactive schema design assistant
 - **📝 Gremlin Writes**: Execute data modification queries
 - **🔐 Security Controls**: Read-only mode protection
+
+## Usage
+
+When chatting with Claude or other AI assistants, tell it to **"use hugegraph-mcp"** to enable the MCP server. Then you can ask it to:
+
+- Design a graph schema for your use case
+- Create/modify vertex labels, edge labels, and property keys
+- Execute Gremlin queries to read or write data
+- Explore your existing schema
 
 ## License
 
