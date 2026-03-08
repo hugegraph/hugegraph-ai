@@ -197,6 +197,17 @@ if not READONLY:
         - Creating vertex and edge labels with defined properties
         - Creating index labels for query optimization
 
+        【Prerequisite - Must Read】
+
+        ⚠️ Before using this tool, you MUST use design_schema_tool first if ANY of the following applies:
+        - User's design intent is not clear or obvious
+        - User's request lacks sufficient schema details (entities, properties, relationships)
+        - User is designing a new schema but has not gone through the interactive design process
+        - You are uncertain about the appropriate schema structure
+
+        If any of the above conditions are true, call design_schema_tool first to interactively
+        gather the required information, then use this tool to execute the operations.
+
         ⚠️ WRITE TOOL - Only available when HUGEGRAPH_MCP_READONLY is false/undefined.
 
         Args:
