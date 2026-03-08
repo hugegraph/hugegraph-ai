@@ -181,7 +181,28 @@ def _execute_gremlin_with_error_handling(
             ]
         elif status_code == 500:
             error_type = "server_error"
-            message = "HugeGraph server internal error"
+            # Try to extract detailed error message from response body
+            detail_message = ""
+            try:
+                if hasattr(e, "response") and e.response is not None:
+                    error_json = e.response.json()
+                    # HugeGraph returns error in format: {"exception": "detailed message"}
+                    detail_message = error_json.get("exception") or ""
+                    if not detail_message:
+                        # Try other common fields
+                        detail_message = (
+                            error_json.get("message")
+                            or error_json.get("detail")
+                            or error_json.get("error")
+                            or str(error_json)
+                        )
+            except Exception:
+                pass  # Use default message if extraction fails
+
+            if detail_message:
+                message = f"HugeGraph server internal error: {detail_message}"
+            else:
+                message = "HugeGraph server internal error"
             suggestions = [
                 "Check the Gremlin query syntax",
                 "Verify all referenced vertex/edge labels exist",
