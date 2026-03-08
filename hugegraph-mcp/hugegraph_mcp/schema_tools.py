@@ -259,3 +259,175 @@ def execute_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any
         result["success"] = not bool(result["errors"])
 
     return result
+
+
+def design_schema(
+    thought: str,
+    thought_number: int,
+    total_thoughts: int = 4,
+    next_thought_needed: bool = True,
+    is_revision: bool = False,
+    revision_of: int | None = None,
+) -> dict:
+    """Schema design guidance tool - Reference Sequential Thinking pattern
+
+    HugeGraph uses a schema-based graph model. You must define schema
+    (PropertyKeys, VertexLabels, EdgeLabels, IndexLabels) before inserting data.
+
+    【Best Practices for Designing Schema in HugeGraph】
+
+    1. Define PropertyKeys first: All properties used in VertexLabel and EdgeLabel
+       must be predefined as PropertyKeys. This ensures data consistency and type enforcement.
+
+    2. Choose appropriate data types and cardinality: When defining PropertyKeys,
+       select the correct DataType (TEXT, INT, DATE, DOUBLE) and Cardinality
+       (SINGLE, SET, LIST) based on the nature of the data.
+
+    3. Specify Primary Keys for VertexLabels: VertexLabels should have primaryKeys
+       defined, which uniquely identify a vertex within that label.
+
+    4. Define Link for EdgeLabels: EdgeLabels must specify sourceLabel and targetLabel
+       to define the types of vertices it connects.
+
+    5. Consider Frequency for EdgeLabels: EdgeLabels can be SINGLE (one edge between
+       two vertices) or MULTIPLE (multiple edges between two vertices).
+
+    6. Use nullableKeys: Specify properties that can be null using nullableKeys.
+
+    7. Create Indexes for efficient queries: Define IndexLabels on PropertyKeys for
+       VertexLabels (onV) or EdgeLabels (onE). Choose between secondary, range,
+       or search indexes based on query patterns.
+
+    【Information to Collect from Users】
+
+    To design an effective HugeGraph schema, collect:
+
+    * Entities (Vertices):
+      - Main entity types (person, software, book) -> VertexLabels
+      - Properties for each entity (name, age, city for person) -> PropertyKeys
+      - Properties that uniquely identify an entity (primaryKeys)
+      - Data type and cardinality for each property
+
+    * Relationships (Edges):
+      - Relationships between entities (knows, created) -> EdgeLabels
+      - sourceLabel and targetLabel for each relationship
+      - Properties describing each relationship
+      - Frequency (singleTime vs multiTimes)
+
+    * Query Patterns:
+      - How will users query the graph?
+      - What properties will be used in filters, sorting, or range queries?
+      - Which IndexLabels to create (secondary, range, search)
+
+    【Complete Examples】
+
+    PropertyKey Definitions:
+    ```groovy
+    schema.propertyKey("name").asText().ifNotExist().create()
+    schema.propertyKey("age").asInt().ifNotExist().create()
+    schema.propertyKey("city").asText().ifNotExist().create()
+    schema.propertyKey("weight").asDouble().ifNotExist().create()
+    schema.propertyKey("date").asText().ifNotExist().create()
+    ```
+
+    VertexLabel Definitions:
+    ```groovy
+    schema.vertexLabel("person")
+          .properties("name", "age", "city")
+          .primaryKeys("name")
+          .ifNotExist().create()
+
+    schema.vertexLabel("software")
+          .properties("name", "lang", "price")
+          .primaryKeys("name")
+          .ifNotExist().create()
+    ```
+
+    EdgeLabel Definitions:
+    ```groovy
+    schema.edgeLabel("knows")
+          .sourceLabel("person")
+          .targetLabel("person")
+          .properties("date", "weight")
+          .ifNotExist().create()
+
+    schema.edgeLabel("created")
+          .sourceLabel("person")
+          .targetLabel("software")
+          .properties("date", "weight")
+          .ifNotExist().create()
+    ```
+
+    IndexLabel Definitions:
+    ```groovy
+    schema.indexLabel("personByCity").onV("person").by("city").secondary().ifNotExist().create()
+    schema.indexLabel("softwareByPrice").onV("software").by("price").range().ifNotExist().create()
+    schema.indexLabel("createdByDate").onE("created").by("date").secondary().ifNotExist().create()
+    ```
+
+    【Usage Example - Movie Recommendation Graph】
+
+    Turn 1 - Ask about scenario:
+    LLM asks: What is your graph for?
+    User: Movie recommendation system
+
+    Turn 2 - Ask about entities:
+    LLM asks: What are the main entities? (e.g., user, movie, actor, director)
+    User: user, movie, actor
+
+    Turn 3 - Ask about properties:
+    LLM asks: What properties does each entity have?
+    - user: name, age, gender, city
+    - movie: title, year, rating, genre
+    - actor: name, birthday, nationality
+
+    Turn 4 - Ask about relationships:
+    LLM asks: How do entities relate to each other?
+    - user -> movie: watched
+    - user -> user: follows
+    - actor -> movie: acted_in
+    - user -> actor: liked
+
+    After confirmation, generate operations:
+
+    [
+      {"type": "create_property_key", "name": "name", "data_type": "TEXT"},
+      {"type": "create_property_key", "name": "age", "data_type": "INT"},
+      {"type": "create_property_key", "name": "gender", "data_type": "TEXT"},
+      {"type": "create_property_key", "name": "city", "data_type": "TEXT"},
+      {"type": "create_property_key", "name": "title", "data_type": "TEXT"},
+      {"type": "create_property_key", "name": "year", "data_type": "INT"},
+      {"type": "create_property_key", "name": "rating", "data_type": "DOUBLE"},
+      {"type": "create_property_key", "name": "genre", "data_type": "TEXT"},
+      {"type": "create_property_key", "name": "birthday", "data_type": "TEXT"},
+      {"type": "create_property_key", "name": "nationality", "data_type": "TEXT"},
+
+      {"type": "create_vertex_label", "name": "person", "properties": ["name", "age", "gender", "city"], "primary_keys": ["name"]},
+      {"type": "create_vertex_label", "name": "movie", "properties": ["title", "year", "rating", "genre"], "primary_keys": ["title", "year"]},
+      {"type": "create_vertex_label", "name": "actor", "properties": ["name", "birthday", "nationality"], "primary_keys": ["name"]},
+
+      {"type": "create_edge_label", "name": "watched", "source_label": "person", "target_label": "movie"},
+      {"type": "create_edge_label", "name": "follows", "source_label": "person", "target_label": "person"},
+      {"type": "create_edge_label", "name": "acted_in", "source_label": "actor", "target_label": "movie"},
+      {"type": "create_edge_label", "name": "liked", "source_label": "person", "target_label": "actor"},
+
+      {"type": "create_index_label", "name": "personByCity", "base_type": "VERTEX", "base_label": "person", "fields": ["city"], "index_type": "SECONDARY"},
+      {"type": "create_index_label", "name": "movieByRating", "base_type": "VERTEX", "base_label": "movie", "fields": ["rating"], "index_type": "RANGE"},
+    ]
+
+    Args:
+        thought: Current thought or summary of user's answer
+        thought_number: Current iteration number
+        total_thoughts: Planned total iterations (3-5 recommended)
+        next_thought_needed: Whether to continue to next iteration
+        is_revision: Whether revising previous thought
+        revision_of: Which iteration being revised
+
+    Returns:
+        {"thought_number": 1, "total_thoughts": 4, "next_thought_needed": True}
+    """
+    return {
+        "thought_number": thought_number,
+        "total_thoughts": total_thoughts,
+        "next_thought_needed": next_thought_needed,
+    }

@@ -73,6 +73,7 @@ After the command completes, restart your IDE or assistant.
 - **📊 Live Schema Inspection**: Real-time vertex labels, edge labels, properties, and indexes
 - **🔍 Gremlin Read Queries**: Execute read-only Gremlin traversals safely
 - **✏️ Schema Operations**: Create/modify vertex labels, edge labels, and property keys
+- **🎯 Schema Design Guidance**: Multi-turn interactive schema design assistant
 - **📝 Gremlin Writes**: Execute data modification queries
 - **🔐 Security Controls**: Read-only mode protection
 

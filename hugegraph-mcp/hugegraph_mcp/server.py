@@ -60,7 +60,11 @@ logging.handlers.RotatingFileHandler = _patched_rotating_handler
 from fastmcp import FastMCP
 
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
-from hugegraph_mcp.schema_tools import execute_schema_operations, get_live_schema
+from hugegraph_mcp.schema_tools import (
+    design_schema,
+    execute_schema_operations,
+    get_live_schema,
+)
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
 # stdout is reserved for MCP JSON protocol only. Windsurf's MCP client
@@ -128,6 +132,61 @@ def execute_gremlin_read_tool(gremlin_query: str) -> dict:
 
 # Write tools - only registered when not in read-only mode
 if not READONLY:
+
+    @mcp.tool()
+    def design_schema_tool(
+        thought: str,
+        thought_number: int,
+        total_thoughts: int = 4,
+        next_thought_needed: bool = True,
+        is_revision: bool = False,
+        revision_of: int | None = None,
+    ) -> dict:
+        """Schema design guidance tool - Multi-turn interactive graph design
+
+        【When to Use This Tool】
+
+        Use this tool when:
+        - User requests to design a new HugeGraph schema but doesn't know the specific structure
+        - User describes a graph database use case and needs help planning entities, properties, and relationships
+        - User needs interactive guidance to complete schema definition
+
+        【When NOT to Use This Tool】
+        - User already knows exactly what vertex labels and edge labels to create
+        - User provides complete schema definition and only needs execution (use execute_schema_operations directly)
+        - Only querying existing schema (use get_live_schema)
+
+        【Workflow】
+        1. Call design_schema_tool to start interactive design
+        2. Iterate through questions based on returned thought_number
+        3. Generate operations list after collecting all information
+        4. Call execute_schema_operations to create the schema
+
+        Reference Sequential Thinking pattern, letting LLM autonomously guide users
+        through schema design. Tool only returns current iteration info.
+
+        See design_schema() docstring for best practices and examples.
+
+        Args:
+            thought: Current thought or summary of user's answer
+            thought_number: Current iteration number
+            total_thoughts: Planned total iterations (3-5 recommended)
+            next_thought_needed: Whether to continue to next iteration
+            is_revision: Whether revising previous thought
+            revision_of: Which iteration being revised
+
+        Returns:
+            dict: Contains 'thought_number', 'total_thoughts', 'next_thought_needed'
+        """
+
+        return design_schema(
+            thought=thought,
+            thought_number=thought_number,
+            total_thoughts=total_thoughts,
+            next_thought_needed=next_thought_needed,
+            is_revision=is_revision,
+            revision_of=revision_of,
+        )
 
     @mcp.tool()
     def execute_schema_operations_tool(operations: list[dict]) -> dict:
