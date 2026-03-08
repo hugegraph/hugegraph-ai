@@ -56,7 +56,8 @@ class HGraphConfig:
                 major, minor, patch = map(int, match.groups())
                 self.version.extend([major, minor, patch])
 
-                if major >= 3:
+                if major > 1 or (major == 1 and minor > 6):
+                    # HugeGraph 1.7.0+ supports graphspace
                     self.graphspace = "DEFAULT"
                     self.gs_supported = True
                     log.warning("graph space is not set, default value 'DEFAULT' will be used.")
