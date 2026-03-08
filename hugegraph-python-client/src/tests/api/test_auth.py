@@ -19,7 +19,8 @@
 import unittest
 
 from pyhugegraph.utils.exceptions import NotFoundError
-from tests.client_utils import ClientUtils
+
+from ..client_utils import ClientUtils
 
 
 class TestAuthManager(unittest.TestCase):
@@ -98,9 +99,7 @@ class TestAuthManager(unittest.TestCase):
         self.assertEqual(group["group_name"], "test_group")
 
         # Modify the group
-        group = self.auth.modify_group(
-            group["id"], group_description="test_description"
-        )
+        group = self.auth.modify_group(group["id"], group_description="test_description")
         self.assertEqual(group["group_description"], "test_description")
 
         # Delete the group
@@ -135,14 +134,12 @@ class TestAuthManager(unittest.TestCase):
             [{"type": "VERTEX", "label": "person", "properties": {"city": "Shanghai"}}],
         )
         # Verify the target was modified
-        self.assertEqual(
-            target["target_resources"][0]["properties"]["city"], "Shanghai"
-        )
+        self.assertEqual(target["target_resources"][0]["properties"]["city"], "Shanghai")
 
         # Delete the target
         self.auth.delete_target(target["id"])
         # Verify the target was deleted
-        with self.assertRaises(Exception):
+        with self.assertRaises(NotFoundError):
             self.auth.get_target(target["id"])
 
     def test_belong_operations(self):
@@ -174,7 +171,7 @@ class TestAuthManager(unittest.TestCase):
         # Delete the belong
         self.auth.delete_belong(belong["id"])
         # Verify the belong was deleted
-        with self.assertRaises(Exception):
+        with self.assertRaises(NotFoundError):
             self.auth.get_belong(belong["id"])
 
     def test_access_operations(self):
@@ -209,5 +206,5 @@ class TestAuthManager(unittest.TestCase):
         # Delete the permission
         self.auth.revoke_accesses(access["id"])
         # Verify the permission was deleted
-        with self.assertRaises(Exception):
+        with self.assertRaises(NotFoundError):
             self.auth.get_accesses(access["id"])

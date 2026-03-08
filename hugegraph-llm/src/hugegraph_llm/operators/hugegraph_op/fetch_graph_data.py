@@ -16,13 +16,12 @@
 # under the License.
 
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from pyhugegraph.client import PyHugeClient
 
 
 class FetchGraphData:
-
     def __init__(self, graph: PyHugeClient):
         self.graph = graph
 

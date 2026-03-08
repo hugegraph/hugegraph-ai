@@ -25,7 +25,7 @@ import requests
 from dotenv import dotenv_values
 from requests.auth import HTTPBasicAuth
 
-from hugegraph_llm.config import huge_settings, llm_settings
+from hugegraph_llm.config import huge_settings, index_settings, llm_settings
 from hugegraph_llm.models.embeddings.litellm import LiteLLMEmbedding
 from hugegraph_llm.models.llms.litellm import LiteLLMClient
 from hugegraph_llm.utils.log import log
@@ -64,16 +64,12 @@ def test_litellm_chat(api_key, api_base, model_name, max_tokens: int) -> int:
     return 200
 
 
-def test_api_connection(
-    url, method="GET", headers=None, params=None, body=None, auth=None, origin_call=None
-) -> int:
+def test_api_connection(url, method="GET", headers=None, params=None, body=None, auth=None, origin_call=None) -> int:
     # TODO: use fastapi.request / starlette instead?
     log.debug("Request URL: %s", url)
     try:
         if method.upper() == "GET":
-            resp = requests.get(
-                url, headers=headers, params=params, timeout=(1.0, 5.0), auth=auth
-            )
+            resp = requests.get(url, headers=headers, params=params, timeout=(1.0, 5.0), auth=auth)
         elif method.upper() == "POST":
             resp = requests.post(
                 url,
@@ -108,6 +104,81 @@ def test_api_connection(
     return resp.status_code
 
 
+def apply_vector_engine(engine: str):
+    # Persist the vector engine selection
+    setattr(index_settings, "cur_vector_index", engine)
+    try:
+        index_settings.update_env()
+    except Exception:  # pylint: disable=W0718
+        pass
+    gr.Info("Configured!")
+
+
+def apply_vector_engine_backend(  # pylint: disable=too-many-branches
+    engine: str,
+    host: Optional[str] = None,
+    port: Optional[str] = None,
+    user: Optional[str] = None,
+    password: Optional[str] = None,
+    api_key: Optional[str] = None,
+    origin_call=None,
+) -> int:
+    """Test connection and persist per-engine connection settings"""
+    status_code = -1
+
+    # Test connection first
+    try:
+        if engine == "Milvus":
+            from pymilvus import connections, utility
+
+            connections.connect(host=host, port=int(port or 19530), user=user or "", password=password or "")
+            # Test if we can list collections
+            _ = utility.list_collections()
+            connections.disconnect("default")
+            status_code = 200
+        elif engine == "Qdrant":
+            from qdrant_client import QdrantClient
+
+            client = QdrantClient(host=host, port=int(port or 6333), api_key=api_key)
+            # Test if we can get collections
+            _ = client.get_collections()
+            status_code = 200
+    except ImportError as e:
+        msg = f"Missing dependency: {e}. Please install with: uv sync --extra vectordb"
+        if origin_call is None:
+            raise gr.Error(msg) from e
+        return -1
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        msg = f"Connection failed: {e}"
+        log.error(msg)
+        if origin_call is None:
+            raise gr.Error(msg) from e
+        return -1
+
+    # Persist settings after successful test
+    if engine == "Milvus":
+        if host is not None:
+            index_settings.milvus_host = host
+        if port is not None and str(port).strip():
+            index_settings.milvus_port = int(port)  # type: ignore[arg-type]
+        index_settings.milvus_user = user or ""
+        index_settings.milvus_password = password or ""
+    elif engine == "Qdrant":
+        if host is not None:
+            index_settings.qdrant_host = host
+        if port is not None and str(port).strip():
+            index_settings.qdrant_port = int(port)  # type: ignore[arg-type]
+        # Empty string treated as None for api key
+        index_settings.qdrant_api_key = api_key or None
+
+    try:
+        index_settings.update_env()
+    except Exception:  # pylint: disable=W0718
+        pass
+    gr.Info("Configured!")
+    return status_code
+
+
 def apply_embedding_config(arg1, arg2, arg3, origin_call=None) -> int:
     status_code = -1
     embedding_option = llm_settings.embedding_type
@@ -118,16 +189,12 @@ def apply_embedding_config(arg1, arg2, arg3, origin_call=None) -> int:
         test_url = llm_settings.openai_embedding_api_base + "/embeddings"
         headers = {"Authorization": f"Bearer {arg1}"}
         data = {"model": arg3, "input": "test"}
-        status_code = test_api_connection(
-            test_url, method="POST", headers=headers, body=data, origin_call=origin_call
-        )
+        status_code = test_api_connection(test_url, method="POST", headers=headers, body=data, origin_call=origin_call)
     elif embedding_option == "ollama/local":
         llm_settings.ollama_embedding_host = arg1
         llm_settings.ollama_embedding_port = int(arg2)
         llm_settings.ollama_embedding_model = arg3
-        status_code = test_api_connection(
-            f"http://{arg1}:{arg2}", origin_call=origin_call
-        )
+        status_code = test_api_connection(f"http://{arg1}:{arg2}", origin_call=origin_call)
     elif embedding_option == "litellm":
         llm_settings.litellm_embedding_api_key = arg1
         llm_settings.litellm_embedding_api_base = arg2
@@ -217,43 +284,28 @@ def apply_llm_config(
         setattr(llm_settings, f"openai_{current_llm_config}_language_model", model_name)
         setattr(llm_settings, f"openai_{current_llm_config}_tokens", int(max_tokens))
 
-        test_url = (
-            getattr(llm_settings, f"openai_{current_llm_config}_api_base")
-            + "/chat/completions"
-        )
+        test_url = getattr(llm_settings, f"openai_{current_llm_config}_api_base") + "/chat/completions"
         data = {
             "model": model_name,
             "temperature": 0.01,
             "messages": [{"role": "user", "content": "test"}],
         }
         headers = {"Authorization": f"Bearer {api_key_or_host}"}
-        status_code = test_api_connection(
-            test_url, method="POST", headers=headers, body=data, origin_call=origin_call
-        )
+        status_code = test_api_connection(test_url, method="POST", headers=headers, body=data, origin_call=origin_call)
 
     elif llm_option == "ollama/local":
         setattr(llm_settings, f"ollama_{current_llm_config}_host", api_key_or_host)
-        setattr(
-            llm_settings, f"ollama_{current_llm_config}_port", int(api_base_or_port)
-        )
+        setattr(llm_settings, f"ollama_{current_llm_config}_port", int(api_base_or_port))
         setattr(llm_settings, f"ollama_{current_llm_config}_language_model", model_name)
-        status_code = test_api_connection(
-            f"http://{api_key_or_host}:{api_base_or_port}", origin_call=origin_call
-        )
+        status_code = test_api_connection(f"http://{api_key_or_host}:{api_base_or_port}", origin_call=origin_call)
 
     elif llm_option == "litellm":
         setattr(llm_settings, f"litellm_{current_llm_config}_api_key", api_key_or_host)
-        setattr(
-            llm_settings, f"litellm_{current_llm_config}_api_base", api_base_or_port
-        )
-        setattr(
-            llm_settings, f"litellm_{current_llm_config}_language_model", model_name
-        )
+        setattr(llm_settings, f"litellm_{current_llm_config}_api_base", api_base_or_port)
+        setattr(llm_settings, f"litellm_{current_llm_config}_language_model", model_name)
         setattr(llm_settings, f"litellm_{current_llm_config}_tokens", int(max_tokens))
 
-        status_code = test_litellm_chat(
-            api_key_or_host, api_base_or_port, model_name, int(max_tokens)
-        )
+        status_code = test_litellm_chat(api_key_or_host, api_base_or_port, model_name, int(max_tokens))
 
     gr.Info("Configured!")
     llm_settings.update_env()
@@ -373,28 +425,18 @@ def create_configs_block() -> list:
                         ),
                     ]
                 else:
-                    llm_config_input = [
-                        gr.Textbox(value="", visible=False) for _ in range(4)
-                    ]
+                    llm_config_input = [gr.Textbox(value="", visible=False) for _ in range(4)]
                 llm_config_button = gr.Button("Apply configuration")
-                llm_config_button.click(
-                    apply_llm_config_with_chat_op, inputs=llm_config_input
-                )
+                llm_config_button.click(apply_llm_config_with_chat_op, inputs=llm_config_input)
                 # Determine whether there are Settings in the.env file
-                env_path = os.path.join(
-                    os.getcwd(), ".env"
-                )  # Load .env from the current working directory
+                env_path = os.path.join(os.getcwd(), ".env")  # Load .env from the current working directory
                 env_vars = dotenv_values(env_path)
                 api_extract_key = env_vars.get("OPENAI_EXTRACT_API_KEY")
                 api_text2sql_key = env_vars.get("OPENAI_TEXT2GQL_API_KEY")
                 if not api_extract_key:
-                    llm_config_button.click(
-                        apply_llm_config_with_text2gql_op, inputs=llm_config_input
-                    )
+                    llm_config_button.click(apply_llm_config_with_text2gql_op, inputs=llm_config_input)
                 if not api_text2sql_key:
-                    llm_config_button.click(
-                        apply_llm_config_with_extract_op, inputs=llm_config_input
-                    )
+                    llm_config_button.click(apply_llm_config_with_extract_op, inputs=llm_config_input)
 
         with gr.Tab(label="mini_tasks"):
             extract_llm_dropdown = gr.Dropdown(
@@ -419,9 +461,7 @@ def create_configs_block() -> list:
                             label="api_base",
                         ),
                         gr.Textbox(
-                            value=getattr(
-                                llm_settings, "openai_extract_language_model"
-                            ),
+                            value=getattr(llm_settings, "openai_extract_language_model"),
                             label="model_name",
                         ),
                         gr.Textbox(
@@ -440,9 +480,7 @@ def create_configs_block() -> list:
                             label="port",
                         ),
                         gr.Textbox(
-                            value=getattr(
-                                llm_settings, "ollama_extract_language_model"
-                            ),
+                            value=getattr(llm_settings, "ollama_extract_language_model"),
                             label="model_name",
                         ),
                         gr.Textbox(value="", visible=False),
@@ -460,9 +498,7 @@ def create_configs_block() -> list:
                             info="If you want to use the default api_base, please keep it blank",
                         ),
                         gr.Textbox(
-                            value=getattr(
-                                llm_settings, "litellm_extract_language_model"
-                            ),
+                            value=getattr(llm_settings, "litellm_extract_language_model"),
                             label="model_name",
                             info="Please refer to https://docs.litellm.ai/docs/providers",
                         ),
@@ -472,13 +508,9 @@ def create_configs_block() -> list:
                         ),
                     ]
                 else:
-                    llm_config_input = [
-                        gr.Textbox(value="", visible=False) for _ in range(4)
-                    ]
+                    llm_config_input = [gr.Textbox(value="", visible=False) for _ in range(4)]
                 llm_config_button = gr.Button("Apply configuration")
-                llm_config_button.click(
-                    apply_llm_config_with_extract_op, inputs=llm_config_input
-                )
+                llm_config_button.click(apply_llm_config_with_extract_op, inputs=llm_config_input)
 
         with gr.Tab(label="text2gql"):
             text2gql_llm_dropdown = gr.Dropdown(
@@ -503,9 +535,7 @@ def create_configs_block() -> list:
                             label="api_base",
                         ),
                         gr.Textbox(
-                            value=getattr(
-                                llm_settings, "openai_text2gql_language_model"
-                            ),
+                            value=getattr(llm_settings, "openai_text2gql_language_model"),
                             label="model_name",
                         ),
                         gr.Textbox(
@@ -524,9 +554,7 @@ def create_configs_block() -> list:
                             label="port",
                         ),
                         gr.Textbox(
-                            value=getattr(
-                                llm_settings, "ollama_text2gql_language_model"
-                            ),
+                            value=getattr(llm_settings, "ollama_text2gql_language_model"),
                             label="model_name",
                         ),
                         gr.Textbox(value="", visible=False),
@@ -544,9 +572,7 @@ def create_configs_block() -> list:
                             info="If you want to use the default api_base, please keep it blank",
                         ),
                         gr.Textbox(
-                            value=getattr(
-                                llm_settings, "litellm_text2gql_language_model"
-                            ),
+                            value=getattr(llm_settings, "litellm_text2gql_language_model"),
                             label="model_name",
                             info="Please refer to https://docs.litellm.ai/docs/providers",
                         ),
@@ -556,13 +582,9 @@ def create_configs_block() -> list:
                         ),
                     ]
                 else:
-                    llm_config_input = [
-                        gr.Textbox(value="", visible=False) for _ in range(4)
-                    ]
+                    llm_config_input = [gr.Textbox(value="", visible=False) for _ in range(4)]
                 llm_config_button = gr.Button("Apply configuration")
-                llm_config_button.click(
-                    apply_llm_config_with_text2gql_op, inputs=llm_config_input
-                )
+                llm_config_button.click(apply_llm_config_with_text2gql_op, inputs=llm_config_input)
 
     with gr.Accordion("3. Set up the Embedding.", open=False):
         embedding_dropdown = gr.Dropdown(
@@ -594,12 +616,8 @@ def create_configs_block() -> list:
             elif embedding_type == "ollama/local":
                 with gr.Row():
                     embedding_config_input = [
-                        gr.Textbox(
-                            value=llm_settings.ollama_embedding_host, label="host"
-                        ),
-                        gr.Textbox(
-                            value=str(llm_settings.ollama_embedding_port), label="port"
-                        ),
+                        gr.Textbox(value=llm_settings.ollama_embedding_host, label="host"),
+                        gr.Textbox(value=str(llm_settings.ollama_embedding_port), label="port"),
                         gr.Textbox(
                             value=llm_settings.ollama_embedding_model,
                             label="model_name",
@@ -648,9 +666,7 @@ def create_configs_block() -> list:
 
         @gr.render(inputs=[reranker_dropdown])
         def reranker_settings(reranker_type):
-            llm_settings.reranker_type = (
-                reranker_type if reranker_type != "None" else None
-            )
+            llm_settings.reranker_type = reranker_type if reranker_type != "None" else None
             if reranker_type == "cohere":
                 with gr.Row():
                     reranker_config_input = [
@@ -660,9 +676,7 @@ def create_configs_block() -> list:
                             type="password",
                         ),
                         gr.Textbox(value=llm_settings.reranker_model, label="model"),
-                        gr.Textbox(
-                            value=llm_settings.cohere_base_url, label="base_url"
-                        ),
+                        gr.Textbox(value=llm_settings.cohere_base_url, label="base_url"),
                     ]
             elif reranker_type == "siliconflow":
                 with gr.Row():
@@ -693,6 +707,50 @@ def create_configs_block() -> list:
                 fn=apply_reranker_config,
                 inputs=reranker_config_input,  # pylint: disable=no-member
             )
+
+    with gr.Accordion("5. Set up the vector engine.", open=False):
+        engine_selector = gr.Dropdown(
+            choices=["Faiss", "Milvus", "Qdrant"],
+            value=index_settings.cur_vector_index,
+            label="Select vector engine.",
+        )
+        engine_selector.select(
+            fn=lambda engine: setattr(index_settings, "cur_vector_index", engine),
+            inputs=[engine_selector],
+        )
+
+        @gr.render(inputs=[engine_selector])
+        def vector_engine_settings(engine):
+            if engine == "Milvus":
+                with gr.Row():
+                    milvus_inputs = [
+                        gr.Textbox(value=index_settings.milvus_host, label="host"),
+                        gr.Textbox(value=str(index_settings.milvus_port), label="port"),
+                        gr.Textbox(value=index_settings.milvus_user, label="user"),
+                        gr.Textbox(value=index_settings.milvus_password, label="password", type="password"),
+                    ]
+                apply_backend_button = gr.Button("Apply Configuration")
+                apply_backend_button.click(partial(apply_vector_engine_backend, "Milvus"), inputs=milvus_inputs)
+            elif engine == "Qdrant":
+                with gr.Row():
+                    qdrant_inputs = [
+                        gr.Textbox(value=index_settings.qdrant_host, label="host"),
+                        gr.Textbox(value=str(index_settings.qdrant_port), label="port"),
+                        gr.Textbox(
+                            value=(index_settings.qdrant_api_key or ""),
+                            label="api_key",
+                            type="password",
+                        ),
+                    ]
+                apply_backend_button = gr.Button("Apply Configuration")
+                apply_backend_button.click(
+                    lambda h, p, k: apply_vector_engine_backend("Qdrant", h, p, None, None, k),
+                    inputs=qdrant_inputs,
+                )
+            else:
+                gr.Markdown("✅ Faiss 本地索引无需额外配置。")
+                apply_faiss_button = gr.Button("Apply Configuration")
+                apply_faiss_button.click(lambda: apply_vector_engine(engine))
 
     # The reason for returning this partial value is the functional need to refresh the ui
     return graph_config_input

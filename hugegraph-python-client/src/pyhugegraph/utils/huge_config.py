@@ -19,7 +19,6 @@ import re
 import sys
 import traceback
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 import requests
 
@@ -32,14 +31,14 @@ class HGraphConfig:
     username: str
     password: str
     graph_name: str
-    graphspace: Optional[str] = None
+    graphspace: str | None = None
     timeout: tuple[float, float] = (0.5, 15.0)
     gs_supported: bool = field(default=False, init=False)
-    version: List[int] = field(default_factory=list)
+    version: list[int] = field(default_factory=list)
 
     def __post_init__(self):
         # Add URL prefix compatibility check
-        if self.url and not self.url.startswith('http'):
+        if self.url and not self.url.startswith("http"):
             self.url = f"http://{self.url}"
 
         if self.graphspace and self.graphspace.strip():
@@ -47,9 +46,7 @@ class HGraphConfig:
 
         else:
             try:
-                response = requests.get(
-                    f"{self.url}/versions", timeout=0.5
-                )
+                response = requests.get(f"{self.url}/versions", timeout=0.5)
                 core = response.json()["versions"]["core"]
                 log.info(  # pylint: disable=logging-fstring-interpolation
                     f"Retrieved API version information from the server: {core}."

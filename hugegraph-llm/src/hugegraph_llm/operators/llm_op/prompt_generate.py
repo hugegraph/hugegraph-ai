@@ -18,9 +18,10 @@
 
 import json
 import os
-from typing import Dict, Any
+from typing import Any, Dict
 
-from hugegraph_llm.config import resource_path, prompt as prompt_tpl
+from hugegraph_llm.config import prompt as prompt_tpl
+from hugegraph_llm.config import resource_path
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.utils.log import log
 
@@ -52,11 +53,11 @@ class PromptGenerate:
         few_shot_example = self._load_few_shot_example(example_name)
 
         meta_prompt = prompt_tpl.generate_extract_prompt_template.format(
-            few_shot_text=few_shot_example.get('text', ''),
-            few_shot_prompt=few_shot_example.get('prompt', ''),
+            few_shot_text=few_shot_example.get("text", ""),
+            few_shot_prompt=few_shot_example.get("prompt", ""),
             user_text=source_text,
             user_scenario=scenario,
-            language=prompt_tpl.llm_settings.language
+            language=prompt_tpl.llm_settings.language,
         )
         log.debug("Meta-prompt sent to LLM: %s", meta_prompt)
         generated_prompt = self.llm.generate(prompt=meta_prompt)

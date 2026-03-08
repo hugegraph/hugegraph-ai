@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Optional, List
+from typing import List, Optional
 
 import requests
 
@@ -32,15 +32,24 @@ class CohereReranker:
         self.model = model
 
     def get_rerank_lists(self, query: str, documents: List[str], top_n: Optional[int] = None) -> List[str]:
-        if not top_n:
+        if not documents:
+            raise ValueError("Documents list cannot be empty")
+
+        if top_n is None:
             top_n = len(documents)
-        assert top_n <= len(documents), "'top_n' should be less than or equal to the number of documents"
+
+        if top_n < 0:
+            raise ValueError("'top_n' should be non-negative")
+
+        if top_n > len(documents):
+            raise ValueError("'top_n' should be less than or equal to the number of documents")
 
         if top_n == 0:
             return []
 
         url = self.base_url
         from pyhugegraph.utils.constants import Constants
+
         headers = {
             "accept": Constants.HEADER_CONTENT_TYPE,
             "content-type": Constants.HEADER_CONTENT_TYPE,

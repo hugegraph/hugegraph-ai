@@ -26,7 +26,6 @@ from pyhugegraph.utils.util import ResponseValidation
 
 
 class IndexLabel(HugeParamsBase):
-
     @decorator_params
     def onV(self, vertex_label) -> "IndexLabel":
         self._parameter_holder.set("base_value", vertex_label)
@@ -75,7 +74,7 @@ class IndexLabel(HugeParamsBase):
 
     @decorator_params
     def ifNotExist(self) -> "IndexLabel":
-        path = f'schema/indexlabels/{self._parameter_holder.get_value("name")}'
+        path = f"schema/indexlabels/{self._parameter_holder.get_value('name')}"
         if _ := self._sess.request(path, validator=ResponseValidation(strict=False)):
             self._parameter_holder.set("not_exist", False)
         return self
@@ -83,16 +82,18 @@ class IndexLabel(HugeParamsBase):
     @decorator_create
     def create(self):
         dic = self._parameter_holder.get_dic()
-        data = {"name": dic["name"],
-                "base_type": dic["base_type"],
-                "base_value": dic["base_value"],
-                "index_type": dic["index_type"],
-                "fields": list(dic["fields"])}
+        data = {
+            "name": dic["name"],
+            "base_type": dic["base_type"],
+            "base_value": dic["base_value"],
+            "index_type": dic["index_type"],
+            "fields": list(dic["fields"]),
+        }
         path = "schema/indexlabels"
         self.clean_parameter_holder()
         if response := self._sess.request(path, "POST", data=json.dumps(data)):
-            return f'create IndexLabel success, Detail: "{str(response)}"'
-        log.error(f'create IndexLabel failed, Detail: "{str(response)}"')
+            return f'create IndexLabel success, Detail: "{response!s}"'
+        log.error(f'create IndexLabel failed, Detail: "{response!s}"')
         return None
 
     @decorator_params
@@ -101,6 +102,6 @@ class IndexLabel(HugeParamsBase):
         path = f"schema/indexlabels/{name}"
         self.clean_parameter_holder()
         if response := self._sess.request(path, "DELETE"):
-            return f'remove IndexLabel success, Detail: "{str(response)}"'
-        log.error(f'remove IndexLabel failed, Detail: "{str(response)}"')
+            return f'remove IndexLabel success, Detail: "{response!s}"'
+        log.error(f'remove IndexLabel failed, Detail: "{response!s}"')
         return None

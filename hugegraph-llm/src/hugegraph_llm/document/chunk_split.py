@@ -16,15 +16,16 @@
 # under the License.
 
 
-from typing import Literal, Union, List
+from typing import List, Literal, Union
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 class ChunkSplitter:
     def __init__(
-            self,
-            split_type: Literal["paragraph", "sentence"] = "paragraph",
-            language: Literal["zh", "en"] = "zh"
+        self,
+        split_type: Literal["paragraph", "sentence"] = "paragraph",
+        language: Literal["zh", "en"] = "zh",
     ):
         if language == "zh":
             separators = ["\n\n", "\n", "。", "，", ""]
@@ -33,17 +34,9 @@ class ChunkSplitter:
         else:
             raise ValueError("Argument `language` must be zh or en!")
         if split_type == "paragraph":
-            self.text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=500,
-                chunk_overlap=30,
-                separators=separators
-            )
+            self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=30, separators=separators)
         elif split_type == "sentence":
-            self.text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=50,
-                chunk_overlap=0,
-                separators=separators
-            )
+            self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=50, chunk_overlap=0, separators=separators)
         else:
             raise ValueError("Arg `type` must be paragraph, sentence!")
 

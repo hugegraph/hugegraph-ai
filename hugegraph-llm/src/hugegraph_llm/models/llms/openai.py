@@ -15,16 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Callable, List, Optional, Dict, Any, Generator, AsyncGenerator
+from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Optional
 
 import openai
 import tiktoken
-from openai import OpenAI, AsyncOpenAI, RateLimitError, APITimeoutError, APIConnectionError
+from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, OpenAI, RateLimitError
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
 
 from hugegraph_llm.models.llms.base import BaseLLM
@@ -42,7 +42,7 @@ class OpenAIClient(BaseLLM):
         max_tokens: int = 8092,
         temperature: float = 0.01,
     ) -> None:
-        api_key = api_key or ''
+        api_key = api_key or ""
         self.client = OpenAI(api_key=api_key, base_url=api_base)
         self.aclient = AsyncOpenAI(api_key=api_key, base_url=api_base)
         self.model = model_name
@@ -186,7 +186,7 @@ class OpenAIClient(BaseLLM):
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 messages=messages,
-                stream=True
+                stream=True,
             )
             async for chunk in completions:
                 if not chunk.choices:

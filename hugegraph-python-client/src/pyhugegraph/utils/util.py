@@ -24,7 +24,7 @@ import requests
 from pyhugegraph.utils.exceptions import (
     NotAuthorizedError,
     NotFoundError,
-    ServiceUnavailableException,
+    ServiceUnavailableError,
 )
 from pyhugegraph.utils.log import log
 
@@ -33,9 +33,8 @@ def create_exception(response_content):
     try:
         data = json.loads(response_content)
         if "ServiceUnavailableException" in data.get("exception", ""):
-            raise ServiceUnavailableException(
-                f'ServiceUnavailableException, "message": "{data["message"]}",'
-                f' "cause": "{data["cause"]}"'
+            raise ServiceUnavailableError(
+                f'ServiceUnavailableException, "message": "{data["message"]}", "cause": "{data["cause"]}"'
             )
     except (json.JSONDecodeError, KeyError) as e:
         raise Exception(f"Error parsing response content: {response_content}") from e
@@ -44,7 +43,7 @@ def create_exception(response_content):
 
 def check_if_authorized(response):
     if response.status_code == 401:
-        raise NotAuthorizedError(f"Please check your username and password. {str(response.content)}")
+        raise NotAuthorizedError(f"Please check your username and password. {response.content!s}")
     return True
 
 
@@ -56,8 +55,12 @@ def check_if_success(response, error=None):
         req = response.request
         req_body = req.body if req.body else "Empty body"
         response_body = response.text if response.text else "Empty body"
-        log.error("Error-Client: Request URL: %s, Request Body: %s, Response Body: %s",
-                  req.url, req_body, response_body)
+        log.error(
+            "Error-Client: Request URL: %s, Request Body: %s, Response Body: %s",
+            req.url,
+            req_body,
+            response_body,
+        )
         raise error
     return True
 
@@ -103,9 +106,14 @@ class ResponseValidation:
                     details = "key 'exception' not found"
 
                 req_body = response.request.body if response.request.body else "Empty body"
-                req_body = req_body.encode('utf-8').decode('unicode_escape')
-                log.error("%s: %s\n[Body]: %s\n[Server Exception]: %s",
-                          method, str(e).encode('utf-8').decode('unicode_escape'), req_body, details)
+                req_body = req_body.encode("utf-8").decode("unicode_escape")
+                log.error(
+                    "%s: %s\n[Body]: %s\n[Server Exception]: %s",
+                    method,
+                    str(e).encode("utf-8").decode("unicode_escape"),
+                    req_body,
+                    details,
+                )
 
                 if response.status_code == 404:
                     raise NotFoundError(response.content) from e

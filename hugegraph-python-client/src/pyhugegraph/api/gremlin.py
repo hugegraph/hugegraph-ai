@@ -17,15 +17,14 @@
 
 
 from pyhugegraph.api.common import HugeParamsBase
-from pyhugegraph.utils.exceptions import NotFoundError
 from pyhugegraph.structure.gremlin_data import GremlinData
 from pyhugegraph.structure.response_data import ResponseData
 from pyhugegraph.utils import huge_router as router
+from pyhugegraph.utils.exceptions import NotFoundError
 from pyhugegraph.utils.log import log
 
 
 class GremlinManager(HugeParamsBase):
-
     @router.http("POST", "/gremlin")
     def exec(self, gremlin):
         gremlin_data = GremlinData(gremlin)
@@ -43,9 +42,7 @@ class GremlinManager(HugeParamsBase):
         try:
             if response := self._invoke_request(data=gremlin_data.to_json()):
                 return ResponseData(response).result
-            log.error(  # pylint: disable=logging-fstring-interpolation
-                f"Gremlin can't get results: {str(response)}"
-            )
+            log.error("Gremlin can't get results: %s", str(response))
             return None
         except Exception as e:
             raise NotFoundError(f"Gremlin can't get results: {e}") from e

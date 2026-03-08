@@ -32,9 +32,9 @@ class SimilarityMode(str, Enum):
 
 
 def similarity(
-        embedding1: Union[List[float], np.ndarray],
-        embedding2: Union[List[float], np.ndarray],
-        mode: SimilarityMode = SimilarityMode.DEFAULT,
+    embedding1: Union[List[float], np.ndarray],
+    embedding2: Union[List[float], np.ndarray],
+    mode: SimilarityMode = SimilarityMode.DEFAULT,
 ) -> float:
     """Get embedding similarity."""
     if isinstance(embedding1, list):
@@ -57,28 +57,28 @@ class BaseEmbedding(ABC):
     # TODO: replace all the usage by get_texts_embeddings() & remove it in the future
     @deprecated("Use get_texts_embeddings() instead in the future.")
     @abstractmethod
-    def get_text_embedding(
-            self,
-            text: str
-    ) -> List[float]:
+    def get_text_embedding(self, text: str) -> List[float]:
         """Comment"""
 
     @abstractmethod
-    def get_texts_embeddings(
-            self,
-            texts: List[str]
-    ) -> List[List[float]]:
-        """Get embeddings for multiple texts in a single batch.
-        
+    def get_embedding_dim(
+        self,
+    ) -> int:
+        """Get the dimension of the embedding."""
+
+    @abstractmethod
+    def get_texts_embeddings(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
+        """Get embeddings for multiple texts with automatic batch splitting.
+
         This method should efficiently process multiple texts at once by leveraging
         the embedding model's batching capabilities, which is typically more efficient
         than processing texts individually.
-        
+
         Parameters
         ----------
         texts : List[str]
             A list of text strings to be embedded.
-            
+
         Returns
         -------
         List[List[float]]
@@ -87,12 +87,9 @@ class BaseEmbedding(ABC):
         """
 
     @abstractmethod
-    async def async_get_texts_embeddings(
-            self,
-            texts: List[str]
-    ) -> List[List[float]]:
-        """Get embeddings for multiple texts in a single batch asynchronously.
-        
+    async def async_get_texts_embeddings(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
+        """Get embeddings for multiple texts asynchronously with automatic batch splitting.
+
         This method should efficiently process multiple texts at once by leveraging
         the embedding model's batching capabilities, which is typically more efficient
         than processing texts individually.
@@ -101,7 +98,7 @@ class BaseEmbedding(ABC):
         ----------
         texts : List[str]
             A list of text strings to be embedded.
-            
+
         Returns
         -------
         List[List[float]]
@@ -111,9 +108,9 @@ class BaseEmbedding(ABC):
 
     @staticmethod
     def similarity(
-            embedding1: Union[List[float], np.ndarray],
-            embedding2: Union[List[float], np.ndarray],
-            mode: SimilarityMode = SimilarityMode.DEFAULT,
+        embedding1: Union[List[float], np.ndarray],
+        embedding2: Union[List[float], np.ndarray],
+        mode: SimilarityMode = SimilarityMode.DEFAULT,
     ) -> float:
         """Get embedding similarity."""
         if isinstance(embedding1, list):

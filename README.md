@@ -75,42 +75,6 @@ python -m hugegraph_llm.demo.rag_demo.app
 > [!NOTE]
 > Examples assume you've activated the virtual environment with `source .venv/bin/activate`
 
-#### GraphRAG - Question Answering
-
-```python
-from hugegraph_llm.operators.graph_rag_task import RAGPipeline
-
-# Initialize RAG pipeline
-graph_rag = RAGPipeline()
-
-# Ask questions about your graph
-result = (graph_rag
-    .extract_keywords(text="Tell me about Al Pacino.")
-    .keywords_to_vid()
-    .query_graphdb(max_deep=2, max_graph_items=30)
-    .merge_dedup_rerank()
-    .synthesize_answer()
-    .run())
-```
-
-#### Knowledge Graph Construction
-
-```python
-from hugegraph_llm.models.llms.init_llm import LLMs
-from hugegraph_llm.operators.kg_construction_task import KgBuilder
-
-# Build KG from text
-TEXT = "Your text content here..."
-builder = KgBuilder(LLMs().get_chat_llm())
-
-(builder
-    .import_schema(from_hugegraph="hugegraph")
-    .chunk_split(TEXT)
-    .extract_info(extract_type="property_graph")
-    .commit_to_hugegraph()
-    .run())
-```
-
 #### Graph Machine Learning
 
 ```bash
@@ -214,8 +178,19 @@ uv add numpy  # Add to base dependencies
 uv add --group dev pytest-mock  # Add to dev group
 ```
 
-**Key Points:**
+### Code Quality (ruff + pre-commit)
 
+- Ruff is used for linting and formatting:
+  - \`ruff format .\`
+  - \`ruff check .\`
+- Enable Git hooks via pre-commit:
+  - \`pre-commit install\`
+  - \`pre-commit run --all-files\`
+- Config: [.pre-commit-config.yaml](.pre-commit-config.yaml). CI enforces these checks.
+  **Key Points:**
+- Config: [.pre-commit-config.yaml](.pre-commit-config.yaml). CI enforces these checks.
+
+**Key Points:**
 - Use [GitHub Desktop](https://desktop.github.com/) for easier PR management
 - Check existing issues before reporting bugs
 
@@ -229,6 +204,7 @@ hugegraph-ai is licensed under [Apache 2.0 License](./LICENSE).
 
 - **GitHub Issues**: [Report bugs or request features](https://github.com/apache/incubator-hugegraph-ai/issues) (fastest response)
 - **Email**: [dev@hugegraph.apache.org](mailto:dev@hugegraph.apache.org) ([subscription required](https://hugegraph.apache.org/docs/contribution-guidelines/subscribe/))
+- **Slack**: [Join the ASF HugeGraph channel](https://the-asf.slack.com/archives/C059UU2FJ23)
 - **WeChat**: Follow "Apache HugeGraph" official account
 
 <img src="https://raw.githubusercontent.com/apache/hugegraph-doc/master/assets/images/wechat.png" alt="Apache HugeGraph WeChat QR Code" width="200"/>

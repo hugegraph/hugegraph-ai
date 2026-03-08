@@ -16,6 +16,7 @@
   - [LiteLLM 配置](#litellm-配置)
   - [重排序配置](#重排序配置)
   - [HugeGraph 数据库配置](#hugegraph-数据库配置)
+  - [向量数据库配置](#向量数据库配置)
   - [管理员配置](#管理员配置)
 - [配置使用示例](#配置使用示例)
 - [配置文件位置](#配置文件位置)
@@ -26,14 +27,17 @@
 
 ### 基础配置
 
-| 配置项                 | 类型                                                     | 默认值    | 说明                                    |
-|---------------------|--------------------------------------------------------|--------|---------------------------------------|
-| `LANGUAGE`          | Literal["EN", "CN"]                                    | EN     | prompt语言，支持 EN（英文）和 CN（中文）            |
-| `CHAT_LLM_TYPE`     | Literal["openai", "litellm", "ollama/local"]           | openai | 聊天 LLM 类型：openai/litellm/ollama/local |
-| `EXTRACT_LLM_TYPE`  | Literal["openai", "litellm", "ollama/local"]           | openai | 信息提取 LLM 类型                           |
-| `TEXT2GQL_LLM_TYPE` | Literal["openai", "litellm", "ollama/local"]           | openai | 文本转 GQL LLM 类型                        |
-| `EMBEDDING_TYPE`    | Optional[Literal["openai", "litellm", "ollama/local"]] | openai | 嵌入模型类型                                |
-| `RERANKER_TYPE`     | Optional[Literal["cohere", "siliconflow"]]             | None   | 重排序模型类型：cohere/siliconflow            |
+| 配置项                    | 类型                                                     | 默认值    | 说明                                    |
+|------------------------|--------------------------------------------------------|--------|---------------------------------------|
+| `LANGUAGE`             | Literal["EN", "CN"]                                    | EN     | prompt语言，支持 EN（英文）和 CN（中文）            |
+| `CHAT_LLM_TYPE`        | Literal["openai", "litellm", "ollama/local"]           | openai | 聊天 LLM 类型：openai/litellm/ollama/local |
+| `EXTRACT_LLM_TYPE`     | Literal["openai", "litellm", "ollama/local"]           | openai | 信息提取 LLM 类型                           |
+| `TEXT2GQL_LLM_TYPE`    | Literal["openai", "litellm", "ollama/local"]           | openai | 文本转 GQL LLM 类型                        |
+| `EMBEDDING_TYPE`       | Optional[Literal["openai", "litellm", "ollama/local"]] | openai | 嵌入模型类型                                |
+| `RERANKER_TYPE`        | Optional[Literal["cohere", "siliconflow"]]             | None   | 重排序模型类型：cohere/siliconflow            |
+| `KEYWORD_EXTRACT_TYPE` | Literal["llm", "textrank", "hybrid"]                   | llm    | 关键词提取模型类型：llm/textrank/hybrid         |
+| `WINDOW_SIZE`          | Optional[Integer] | 3 | TextRank 滑窗大小 (范围: 1-10),较大的窗口可以捕获更长距离的词语关系,但会增加计算复杂度 |
+| `HYBRID_LLM_WEIGHTS`   | Optional[Float] | 0.5 | 混合模式中 LLM 结果的权重 (范围: 0.0-1.0),TextRank 权重 = 1 - 该值。推荐 0.5 以平衡两种方法 |
 
 ### OpenAI 配置
 
@@ -126,6 +130,18 @@
 | `VECTOR_DIS_THRESHOLD` | Optional[Float]   | 0.9            | 向量距离阈值             |
 | `TOPK_PER_KEYWORD`     | Optional[Integer] | 1              | 每个关键词返回的 TopK 数量   |
 | `TOPK_RETURN_RESULTS`  | Optional[Integer] | 20             | 返回结果数量             |
+
+### 向量数据库配置
+
+| 配置项              | 类型               | 默认值  | 说明                     |
+|------------------|------------------|-------|------------------------|
+| `QDRANT_HOST`    | Optional[String] | None  | Qdrant 服务器主机地址         |
+| `QDRANT_PORT`    | Integer          | 6333  | Qdrant 服务器端口           |
+| `QDRANT_API_KEY` | Optional[String] | None  | Qdrant API 密钥（如果设置了的话） |
+| `MILVUS_HOST`    | Optional[String] | None  | Milvus 服务器主机地址         |
+| `MILVUS_PORT`    | Integer          | 19530 | Milvus 服务器端口           |
+| `MILVUS_USER`    | String           | ""    | Milvus 用户名              |
+| `MILVUS_PASSWORD`| String           | ""    | Milvus 密码               |
 
 ### 管理员配置
 

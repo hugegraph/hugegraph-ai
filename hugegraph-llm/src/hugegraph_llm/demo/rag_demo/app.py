@@ -16,25 +16,25 @@
 # under the License.
 
 import argparse
+
 import gradio as gr
 import uvicorn
-from fastapi import FastAPI, Depends, APIRouter
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from hugegraph_llm.api.admin_api import admin_http_api
 from hugegraph_llm.api.rag_api import rag_http_api
 from hugegraph_llm.config import admin_settings, huge_settings, prompt
 from hugegraph_llm.demo.rag_demo.admin_block import create_admin_block, log_stream
 from hugegraph_llm.demo.rag_demo.configs_block import (
-    create_configs_block,
-    apply_llm_config,
     apply_embedding_config,
-    apply_reranker_config,
     apply_graph_config,
+    apply_llm_config,
+    apply_reranker_config,
+    create_configs_block,
+    get_header_with_language_indicator,
 )
-from hugegraph_llm.demo.rag_demo.configs_block import get_header_with_language_indicator
-from hugegraph_llm.demo.rag_demo.other_block import create_other_block
-from hugegraph_llm.demo.rag_demo.other_block import lifespan
+from hugegraph_llm.demo.rag_demo.other_block import create_other_block, lifespan
 from hugegraph_llm.demo.rag_demo.rag_block import create_rag_block, rag_answer
 from hugegraph_llm.demo.rag_demo.text2gremlin_block import (
     create_text2gremlin_block,
@@ -93,9 +93,7 @@ def init_rag_ui() -> gr.Interface:
         textbox_array_graph_config = create_configs_block()
 
         with gr.Tab(label="1. Build RAG Index 💡"):
-            textbox_input_text, textbox_input_schema, textbox_info_extract_template = (
-                create_vector_graph_block()
-            )
+            textbox_input_text, textbox_input_schema, textbox_info_extract_template = create_vector_graph_block()
         with gr.Tab(label="2. (Graph)RAG & User Functions 📖"):
             (
                 textbox_inp,
@@ -104,9 +102,7 @@ def init_rag_ui() -> gr.Interface:
                 textbox_custom_related_information,
             ) = create_rag_block()
         with gr.Tab(label="3. Text2gremlin ⚙️"):
-            textbox_gremlin_inp, textbox_gremlin_schema, textbox_gremlin_prompt = (
-                create_text2gremlin_block()
-            )
+            textbox_gremlin_inp, textbox_gremlin_schema, textbox_gremlin_prompt = create_text2gremlin_block()
         with gr.Tab(label="4. Graph Tools 🚧"):
             create_other_block()
         with gr.Tab(label="5. Admin Tools 🛠"):
@@ -115,7 +111,7 @@ def init_rag_ui() -> gr.Interface:
         def refresh_ui_config_prompt() -> tuple:
             # we can use its __init__() for in-place reload
             # settings.from_env()
-            huge_settings.__init__()  # pylint: disable=C2801
+            huge_settings.__init__()  # type: ignore[misc] # pylint: disable=C2801
             prompt.ensure_yaml_file_exists()
             return (
                 huge_settings.graph_url,
@@ -165,9 +161,7 @@ def create_app():
     # settings.check_env()
     prompt.update_yaml_file()
     auth_enabled = admin_settings.enable_login.lower() == "true"
-    log.info(
-        "(Status) Authentication is %s now.", "enabled" if auth_enabled else "disabled"
-    )
+    log.info("(Status) Authentication is %s now.", "enabled" if auth_enabled else "disabled")
     api_auth = APIRouter(dependencies=[Depends(authenticate)] if auth_enabled else [])
 
     hugegraph_llm = init_rag_ui()

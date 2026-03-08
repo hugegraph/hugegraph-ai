@@ -17,7 +17,7 @@
 
 import unittest
 
-from tests.client_utils import ClientUtils
+from ..client_utils import ClientUtils
 
 
 class TestVersion(unittest.TestCase):
@@ -42,7 +42,7 @@ class TestVersion(unittest.TestCase):
     def test_version(self):
         version = self.version.version()
         self.assertIsInstance(version, dict)
-        self.assertIn("version", version['versions'])
-        self.assertIn("core", version['versions'])
-        self.assertIn("gremlin", version['versions'])
-        self.assertIn("api", version['versions'])
+        self.assertIn("version", version["versions"])
+        self.assertIn("core", version["versions"])
+        self.assertIn("gremlin", version["versions"])
+        self.assertIn("api", version["versions"])

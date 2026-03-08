@@ -15,16 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Callable, List, Optional, Dict, Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
 import tiktoken
-from litellm import completion, acompletion
-from litellm.exceptions import RateLimitError, BudgetExceededError, APIError
+from litellm import acompletion, completion
+from litellm.exceptions import APIError, BudgetExceededError, RateLimitError
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
 
 from hugegraph_llm.models.llms.base import BaseLLM
@@ -51,7 +51,7 @@ class LiteLLMClient(BaseLLM):
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=5),
-        retry=retry_if_exception_type((RateLimitError, BudgetExceededError, APIError))
+        retry=retry_if_exception_type((RateLimitError, BudgetExceededError, APIError)),
     )
     def generate(
         self,
@@ -80,12 +80,12 @@ class LiteLLMClient(BaseLLM):
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=5),
-        retry=retry_if_exception_type((RateLimitError, BudgetExceededError, APIError))
+        retry=retry_if_exception_type((RateLimitError, BudgetExceededError, APIError)),
     )
     async def agenerate(
-            self,
-            messages: Optional[List[Dict[str, Any]]] = None,
-            prompt: Optional[str] = None,
+        self,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        prompt: Optional[str] = None,
     ) -> str:
         """Generate a response to the query messages/prompt asynchronously."""
         if messages is None:

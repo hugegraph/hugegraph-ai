@@ -23,9 +23,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 
-from hugegraph_llm.utils.hugegraph_utils import init_hg_test_data, run_gremlin_query, backup_data
-from hugegraph_llm.utils.log import log
 from hugegraph_llm.demo.rag_demo.vector_graph_block import timely_update_vid_embedding
+from hugegraph_llm.utils.hugegraph_utils import backup_data, init_hg_test_data, run_gremlin_query
+from hugegraph_llm.utils.log import log
 
 
 def create_other_block():
@@ -54,12 +54,7 @@ def create_other_block():
 async def lifespan(app: FastAPI):  # pylint: disable=W0621
     log.info("Starting background scheduler...")
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        backup_data,
-        trigger=CronTrigger(hour=1, minute=0),
-        id="daily_backup",
-        replace_existing=True
-    )
+    scheduler.add_job(backup_data, trigger=CronTrigger(hour=1, minute=0), id="daily_backup", replace_existing=True)
     scheduler.start()
 
     log.info("Starting vid embedding update task...")

@@ -19,12 +19,13 @@ import json
 import os
 import shutil
 from datetime import datetime
+
 import requests
+from pyhugegraph.client import PyHugeClient
 from requests.auth import HTTPBasicAuth
 
 from hugegraph_llm.config import huge_settings, resource_path
 from hugegraph_llm.utils.log import log
-from pyhugegraph.client import PyHugeClient
 
 MAX_BACKUP_DIRS = 7
 MAX_VERTICES = 100000
@@ -110,13 +111,13 @@ def backup_data():
 
         files = {
             "vertices.json": f"g.V().limit({MAX_VERTICES})"
-                             f".aggregate('vertices').count().as('count').select('count','vertices')",
+            f".aggregate('vertices').count().as('count').select('count','vertices')",
             "edges.json": f"g.E().limit({MAX_EDGES}).aggregate('edges').count().as('count').select('count','edges')",
-            "schema.json": client.schema().getSchema(_format="groovy")
+            "schema.json": client.schema().getSchema(_format="groovy"),
         }
 
         vertexlabels = client.schema().getSchema()["vertexlabels"]
-        all_pk_flag = all(data.get('id_strategy') == 'PRIMARY_KEY' for data in vertexlabels)
+        all_pk_flag = all(data.get("id_strategy") == "PRIMARY_KEY" for data in vertexlabels)
 
         for filename, query in files.items():
             write_backup_file(client, backup_subdir, filename, query, all_pk_flag)
@@ -137,8 +138,11 @@ def write_backup_file(client, backup_subdir, filename, query, all_pk_flag):
             json.dump(data, f, ensure_ascii=False)
         elif filename == "vertices.json":
             data_full = client.gremlin().exec(query)["data"][0]["vertices"]
-            data = [{key: value for key, value in vertex.items() if key != "id"}
-                    for vertex in data_full] if all_pk_flag else data_full
+            data = (
+                [{key: value for key, value in vertex.items() if key != "id"} for vertex in data_full]
+                if all_pk_flag
+                else data_full
+            )
             json.dump(data, f, ensure_ascii=False)
         elif filename == "schema.json":
             data_full = query
@@ -154,9 +158,7 @@ def write_backup_file(client, backup_subdir, filename, query, all_pk_flag):
 def manage_backup_retention():
     try:
         backup_dirs = [
-            os.path.join(BACKUP_DIR, d)
-            for d in os.listdir(BACKUP_DIR)
-            if os.path.isdir(os.path.join(BACKUP_DIR, d))
+            os.path.join(BACKUP_DIR, d) for d in os.listdir(BACKUP_DIR) if os.path.isdir(os.path.join(BACKUP_DIR, d))
         ]
         backup_dirs.sort(key=os.path.getctime)
         if len(backup_dirs) > MAX_BACKUP_DIRS:
@@ -171,7 +173,7 @@ def manage_backup_retention():
         raise Exception("Failed to manage backup retention") from e
 
 
-#TODO: In the path demo/rag_demo/configs_block.py,
+# TODO: In the path demo/rag_demo/configs_block.py,
 # there is a function test_api_connection that is similar to this function,
 # but it is not straightforward to reuse
 def check_graph_db_connection(url: str, name: str, user: str, pwd: str, graph_space: str) -> bool:

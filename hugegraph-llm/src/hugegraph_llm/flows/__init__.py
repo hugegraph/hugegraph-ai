@@ -15,22 +15,20 @@
 # specific language governing permissions and limitations
 # under the License.
 
-
-import unittest
-from pprint import pprint
-
-from hugegraph_llm.indices.vector_index import VectorIndex
-from hugegraph_llm.models.embeddings.ollama import OllamaEmbedding
+from enum import Enum
 
 
-class TestVectorIndex(unittest.TestCase):
-    def test_vector_index(self):
-        embedder = OllamaEmbedding("quentinz/bge-large-zh-v1.5")
-        data = ["腾讯的合伙人有字节跳动", "谷歌和微软是竞争关系", "美团的合伙人有字节跳动"]
-        data_embedding = [embedder.get_text_embedding(d) for d in data]
-        index = VectorIndex(1024)
-        index.add(data_embedding, data)
-        query = "腾讯的合伙人有哪些？"
-        query_vector = embedder.get_text_embedding(query)
-        results = index.search(query_vector, 2)
-        pprint(results)
+class FlowName(str, Enum):
+    RAG_GRAPH_ONLY = "rag_graph_only"
+    RAG_VECTOR_ONLY = "rag_vector_only"
+    TEXT2GREMLIN = "text2gremlin"
+    BUILD_EXAMPLES_INDEX = "build_examples_index"
+    BUILD_VECTOR_INDEX = "build_vector_index"
+    GRAPH_EXTRACT = "graph_extract"
+    IMPORT_GRAPH_DATA = "import_graph_data"
+    UPDATE_VID_EMBEDDINGS = "update_vid_embeddings"
+    GET_GRAPH_INDEX_INFO = "get_graph_index_info"
+    BUILD_SCHEMA = "build_schema"
+    PROMPT_GENERATE = "prompt_generate"
+    RAG_RAW = "rag_raw"
+    RAG_GRAPH_VECTOR = "rag_graph_vector"

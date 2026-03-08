@@ -16,9 +16,9 @@
 # under the License.
 
 
-from pyhugegraph.utils import huge_router as router
 from pyhugegraph.api.common import HugeParamsBase
 from pyhugegraph.structure.services_data import ServiceCreateParameters
+from pyhugegraph.utils import huge_router as router
 
 
 class ServicesManager(HugeParamsBase):
@@ -87,9 +87,7 @@ class ServicesManager(HugeParamsBase):
         return self._invoke_request()
 
     @router.http("GET", "/graphspaces/{graphspace}/services/{service}")
-    def get_service(
-        self, graphspace: str, service: str  # pylint: disable=unused-argument
-    ):
+    def get_service(self, graphspace: str, service: str):  # pylint: disable=unused-argument
         """
         Retrieve the details of a specific service.
 
@@ -112,9 +110,7 @@ class ServicesManager(HugeParamsBase):
         """
         return self._invoke_request()
 
-    def delete_service(
-        self, graphspace: str, service: str  # pylint: disable=unused-argument
-    ):
+    def delete_service(self, graphspace: str, service: str):  # pylint: disable=unused-argument
         """
         Delete a specific service within a graph space.
 
@@ -129,7 +125,6 @@ class ServicesManager(HugeParamsBase):
             None
         """
         return self._sess.request(
-            f"/graphspaces/{graphspace}/services/{service}"
-            f"?confirm_message=I'm sure to delete the service",
+            f"/graphspaces/{graphspace}/services/{service}?confirm_message=I'm sure to delete the service",
             "DELETE",
         )
