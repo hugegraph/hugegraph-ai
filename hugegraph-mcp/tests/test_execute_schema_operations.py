@@ -45,7 +45,9 @@ def test_execute_schema_operations_all_success(monkeypatch):
         }
 
     # Assume execute_schema_operations will delegate to an internal runner
-    monkeypatch.setattr(schema_tools, "_run_schema_operations", fake_runner, raising=False)
+    monkeypatch.setattr(
+        schema_tools, "_run_schema_operations", fake_runner, raising=False
+    )
 
     ops = _sample_ops()
     result = schema_tools.execute_schema_operations(ops)
@@ -74,7 +76,9 @@ def test_execute_schema_operations_collects_errors(monkeypatch):
             ],
         }
 
-    monkeypatch.setattr(schema_tools, "_run_schema_operations", fake_runner, raising=False)
+    monkeypatch.setattr(
+        schema_tools, "_run_schema_operations", fake_runner, raising=False
+    )
 
     result = schema_tools.execute_schema_operations(_sample_ops())
 

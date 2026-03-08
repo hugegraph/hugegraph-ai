@@ -24,7 +24,9 @@ def test_connection_error_handling():
     """Test handling of connection errors."""
     with patch("hugegraph_mcp.gremlin_tools._get_read_client") as mock_client:
         mock_client_instance = Mock()
-        mock_client_instance.exec.side_effect = requests.exceptions.ConnectionError("Connection refused")
+        mock_client_instance.exec.side_effect = requests.exceptions.ConnectionError(
+            "Connection refused"
+        )
         mock_client.return_value = mock_client_instance
 
         result = execute_gremlin_read("g.V().count()")
@@ -44,7 +46,9 @@ def test_http_500_error_handling():
         # Create a mock response with status code 500
         mock_response = Mock()
         mock_response.status_code = 500
-        error = requests.exceptions.HTTPError("Internal Server Error", response=mock_response)
+        error = requests.exceptions.HTTPError(
+            "Internal Server Error", response=mock_response
+        )
         mock_client_instance.exec.side_effect = error
         mock_client.return_value = mock_client_instance
 
@@ -74,7 +78,9 @@ def test_authentication_error_handling():
         assert result["success"] is False
         assert result["error_type"] == "authentication_error"
         assert "Authentication failed" in result["message"]
-        assert any("Check HUGEGRAPH_USER" in suggestion for suggestion in result["suggestions"])
+        assert any(
+            "Check HUGEGRAPH_USER" in suggestion for suggestion in result["suggestions"]
+        )
 
 
 def test_readonly_mode_error():

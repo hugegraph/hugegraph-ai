@@ -38,7 +38,9 @@ def test_execute_gremlin_read_basic(monkeypatch):
     from hugegraph_mcp import gremlin_tools  # to be implemented
 
     client = FakeGremlinClient()
-    monkeypatch.setattr(gremlin_tools, "_get_read_client", lambda: client, raising=False)
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
 
     result = gremlin_tools.execute_gremlin_read("g.V().limit(2)")
 
@@ -54,7 +56,9 @@ def test_execute_gremlin_read_rejects_obvious_writes(monkeypatch):
     from hugegraph_mcp import gremlin_tools
 
     client = FakeGremlinClient()
-    monkeypatch.setattr(gremlin_tools, "_get_read_client", lambda: client, raising=False)
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
 
     with pytest.raises(ValueError):
         gremlin_tools.execute_gremlin_read("g.addV('person')")
@@ -68,7 +72,9 @@ def test_execute_gremlin_read_respects_readonly_env(monkeypatch):
     from hugegraph_mcp import gremlin_tools
 
     client = FakeGremlinClient()
-    monkeypatch.setattr(gremlin_tools, "_get_read_client", lambda: client, raising=False)
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
 
     result = gremlin_tools.execute_gremlin_read("g.V().count()")
 
