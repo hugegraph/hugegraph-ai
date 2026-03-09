@@ -117,10 +117,7 @@ def get_llm_config(config: dict) -> dict:
 
     missing = [f for f in required_fields if f not in llm_cfg]
     if missing:
-        raise ValueError(
-            f"config.json 的 'llm' 配置中缺少必需字段: {missing}\n"
-            "请在 config.json 中补充这些字段。"
-        )
+        raise ValueError(f"config.json 的 'llm' 配置中缺少必需字段: {missing}\n请在 config.json 中补充这些字段。")
 
     placeholder_fields = []
     for field, placeholders in required_fields.items():
@@ -131,8 +128,7 @@ def get_llm_config(config: dict) -> dict:
     if placeholder_fields:
         details = ", ".join(f'{f}="{llm_cfg[f]}"' for f in placeholder_fields)
         raise ValueError(
-            f"config.json 的 'llm' 配置中以下字段仍为占位符，请修改为实际值: "
-            f"{placeholder_fields}\n  当前值: {details}"
+            f"config.json 的 'llm' 配置中以下字段仍为占位符，请修改为实际值: {placeholder_fields}\n  当前值: {details}"
         )
 
     return {
@@ -175,20 +171,13 @@ def build_translation_prompt(item: dict, all_styles: List[str]) -> str:
         all_styles: 6 种风格名列表（4 固定 + 2 随机，已确定）
     """
     # 构建风格要求部分
-    styles_text = "\n".join(
-        f"{i}. {style}: {STYLE_DESCRIPTIONS[style]}"
-        for i, style in enumerate(all_styles, 1)
-    )
+    styles_text = "\n".join(f"{i}. {style}: {STYLE_DESCRIPTIONS[style]}" for i, style in enumerate(all_styles, 1))
 
     # 构建输出格式
-    output_fields = ",\n        ".join(
-        f'"{style}": "..."' for style in all_styles
-    )
+    output_fields = ",\n        ".join(f'"{style}": "..."' for style in all_styles)
 
     # 构建示例输出
-    example_fields = ",\n        ".join(
-        f'"{style}": "{STYLE_EXAMPLES[style]}"' for style in all_styles
-    )
+    example_fields = ",\n        ".join(f'"{style}": "{STYLE_EXAMPLES[style]}"' for style in all_styles)
 
     prompt = f"""你是一个图数据库专家，需要将 Gremlin 查询语句翻译为图数据库使用者可能提出的自然语言问题。
 ### 任务
@@ -225,8 +214,8 @@ Gremlin: g.V().hasLabel('movie').out('has_genre').dedup().values('name')
 
 ### 实际输入
 结合以上要求，将以下输入的gremlin语句进行翻译：
-Gremlin: {item['query']}
-简单描述: {item['description']}
+Gremlin: {item["query"]}
+简单描述: {item["description"]}
 ```"""
 
     return prompt
@@ -342,8 +331,7 @@ async def translate_all(
 
     # 创建所有任务
     tasks = {
-        asyncio.create_task(translate_one(client, item, semaphore, llm_config)): idx
-        for idx, item in enumerate(corpus)
+        asyncio.create_task(translate_one(client, item, semaphore, llm_config)): idx for idx, item in enumerate(corpus)
     }
     pending = set(tasks.keys())
 
@@ -489,10 +477,9 @@ def main():
 
     # 执行翻译
     start_time = time.time()
-    results = asyncio.run(translate_all(
-        corpus, llm_config, output_path, input_path,
-        save_interval=llm_config["save_interval"]
-    ))
+    results = asyncio.run(
+        translate_all(corpus, llm_config, output_path, input_path, save_interval=llm_config["save_interval"])
+    )
     elapsed = time.time() - start_time
 
     # 保存结果

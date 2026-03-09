@@ -31,9 +31,7 @@ class Config:
     def __init__(self, file_path):
         self.file_path = file_path
         self.config_data = self.load_config()
-        self.gen_query = self.config_data.get(
-            "genQuery"
-        )  # default genQuery，can be set as translate
+        self.gen_query = self.config_data.get("genQuery")  # default genQuery，can be set as translate
         self.db_id = self.config_data.get("db_id")
 
     def load_config(self):

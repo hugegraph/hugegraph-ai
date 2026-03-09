@@ -21,6 +21,7 @@ Gremlin 查询生成器包
 
 这个包提供了从模板生成 Gremlin 查询语料库的功能。
 """
+
 from .generator import generate_gremlin_corpus
 
-__all__ = ['generate_gremlin_corpus']
+__all__ = ["generate_gremlin_corpus"]

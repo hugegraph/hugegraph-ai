@@ -53,6 +53,7 @@ from llm_augment.generalize_llm import get_llm_config, load_config
 
 class GeneratedSample(BaseModel):
     """单条迁移生成的样本"""
+
     operation: str = Field(description="操作类型: read/create/update/delete")
     language_style: str = Field(description="语言风格")
     query: str = Field(description="Gremlin 查询")
@@ -61,6 +62,7 @@ class GeneratedSample(BaseModel):
 
 class MigrationResult(BaseModel):
     """单次迁移的 LLM 输出"""
+
     source_pattern: str = Field(description="原始查询模式")
     source_intent: str = Field(description="原始查询意图")
     target_domain: str = Field(description="目标领域")
@@ -75,13 +77,15 @@ def load_schemas(path: str = "db_data/reference/schemas_data.json") -> List[dict
     scenarios = data.get("scenarios", {})
     result = []
     for key, val in scenarios.items():
-        result.append({
-            "key": key,
-            "index": val["index"],
-            "name_zh": val["name_zh"],
-            "domain": val["domain"],
-            "schema": val["schema"],
-        })
+        result.append(
+            {
+                "key": key,
+                "index": val["index"],
+                "name_zh": val["name_zh"],
+                "domain": val["domain"],
+                "schema": val["schema"],
+            }
+        )
     result.sort(key=lambda x: x["index"])
     return result
 
@@ -120,11 +124,13 @@ def prepare_pairs(translated_path: str, output_dir: str = "output") -> tuple[str
             continue
 
         chosen_style = random.choice(available)
-        pairs.append({
-            "text": style_map[chosen_style],
-            "gremlin": item["query"],
-            "style": chosen_style,
-        })
+        pairs.append(
+            {
+                "text": style_map[chosen_style],
+                "gremlin": item["query"],
+                "style": chosen_style,
+            }
+        )
         style_counts[chosen_style] = style_counts.get(chosen_style, 0) + 1
 
     random.shuffle(pairs)
@@ -295,9 +301,7 @@ async def migrate_one(
     async with semaphore:
         for attempt in range(max_retries):
             try:
-                prompt = build_migration_prompt(
-                    pair["text"], pair["gremlin"], target_schema["schema"]
-                )
+                prompt = build_migration_prompt(pair["text"], pair["gremlin"], target_schema["schema"])
 
                 response = await client.chat.completions.create(
                     model=llm_config["model"],
@@ -401,9 +405,7 @@ async def migrate_all(
         for j in range(4):
             schema_idx = (base_schema_idx + j) % num_schemas
             target_schema = schemas[schema_idx]
-            task = asyncio.create_task(
-                migrate_one(client, pair, target_schema, semaphore, llm_config)
-            )
+            task = asyncio.create_task(migrate_one(client, pair, target_schema, semaphore, llm_config))
             tasks[task] = (idx, j)
 
     pending = set(tasks.keys())
@@ -599,10 +601,16 @@ def main():
     print("-" * 60)
 
     start_time = time.time()
-    results = asyncio.run(migrate_all(
-        pairs, schemas, llm_config, output_path, input_path,
-        save_interval=llm_config["save_interval"],
-    ))
+    results = asyncio.run(
+        migrate_all(
+            pairs,
+            schemas,
+            llm_config,
+            output_path,
+            input_path,
+            save_interval=llm_config["save_interval"],
+        )
+    )
     elapsed = time.time() - start_time
 
     save_results(results, output_path, input_path, elapsed)

@@ -23,14 +23,17 @@ Gremlin查询结构化表示模块。
 """
 
 from typing import List, Any
+
 # 导入将在 Step 参数中存储的结构化表达式类。
 from .GremlinExpr import Predicate, AnonymousTraversal, TextPredicate, Connector
+
 
 class Step:
     """
     Gremlin 遍历中的单个原子操作（一个步骤）。
     例如：.V(), .has('name', 'marko'), .out('knows'), .addV('person')
     """
+
     def __init__(self, name: str, params: List[Any] = None):
         """
         初始化一个 Step 实例。
@@ -55,10 +58,12 @@ class Step:
         param_str = ", ".join(map(repr, self.params))
         return f"Step({self.name}, params=[{param_str}])"
 
+
 class Traversal:
     """
     将整个 Gremlin 遍历表示为一个由 Step 对象组成的序列，捕获输入查询模板的意图和结构。
     """
+
     def __init__(self):
         """
         初始化一个空的 Traversal 实例。
@@ -80,10 +85,12 @@ class Traversal:
         """
         if not self.steps:
             return "Traversal(empty)"
-        
+
         # 创建一个类似方法链的表示形式
         step_chain = " -> ".join([step.name for step in self.steps])
         return f"Traversal({step_chain})"
+
+
 if __name__ == "__main__":
     # 创建Traversal 实例
     traversal = Traversal()

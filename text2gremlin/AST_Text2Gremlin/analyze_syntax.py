@@ -40,29 +40,49 @@ from datetime import datetime
 from glob import glob
 
 
-# ============ 语法元素定义 ============
-
 # Gremlin 步骤的正则匹配模式
-STEP_PATTERN = re.compile(r'\.(\w+)\s*\(')
+STEP_PATTERN = re.compile(r"\.(\w+)\s*\(")
 # 起始步骤
-START_PATTERN = re.compile(r'^g\.(\w+)\s*\(')
+START_PATTERN = re.compile(r"^g\.(\w+)\s*\(")
 # 谓词 P.xxx(...)
-PREDICATE_PATTERN = re.compile(r'P\.(\w+)\s*\(')
+PREDICATE_PATTERN = re.compile(r"P\.(\w+)\s*\(")
 # 文本谓词 TextP.xxx(...)
-TEXT_PREDICATE_PATTERN = re.compile(r'TextP\.(\w+)\s*\(')
+TEXT_PREDICATE_PATTERN = re.compile(r"TextP\.(\w+)\s*\(")
 # 匿名遍历 __.xxx(...)
-ANONYMOUS_PATTERN = re.compile(r'__\.(\w+)\s*\(')
+ANONYMOUS_PATTERN = re.compile(r"__\.(\w+)\s*\(")
 
 # 步骤分类
 STEP_CATEGORIES = {
     "图遍历起始": ["V", "E"],
-    "过滤步骤": ["hasLabel", "has", "hasId", "hasKey", "hasValue", "where",
-                  "filter", "is", "dedup", "simplePath", "cyclicPath", "not"],
+    "过滤步骤": [
+        "hasLabel",
+        "has",
+        "hasId",
+        "hasKey",
+        "hasValue",
+        "where",
+        "filter",
+        "is",
+        "dedup",
+        "simplePath",
+        "cyclicPath",
+        "not",
+    ],
     "图导航": ["out", "in", "both", "outE", "inE", "bothE", "outV", "inV", "otherV"],
     "聚合统计": ["groupCount", "count", "sum", "mean", "max", "min", "fold", "unfold"],
     "排序限制": ["order", "limit", "range", "skip", "tail", "sample", "coin"],
-    "投影转换": ["values", "valueMap", "elementMap", "properties", "project",
-                  "select", "label", "id", "constant", "identity"],
+    "投影转换": [
+        "values",
+        "valueMap",
+        "elementMap",
+        "properties",
+        "project",
+        "select",
+        "label",
+        "id",
+        "constant",
+        "identity",
+    ],
     "分支条件": ["union", "coalesce", "choose", "optional"],
     "循环": ["repeat", "times", "until", "emit"],
     "路径": ["path", "tree"],
@@ -73,8 +93,6 @@ STEP_CATEGORIES = {
     "终端": ["iterate", "explain", "profile", "next", "toList"],
 }
 
-
-# ============ 分析函数 ============
 
 def analyze_query(query: str) -> dict:
     """分析单条 Gremlin 查询，提取语法元素"""
@@ -129,8 +147,6 @@ def analyze_corpus(corpus: list) -> dict:
     return total_stats
 
 
-# ============ 分类统计 ============
-
 def compute_category_stats(steps: Counter) -> list:
     """按分类汇总步骤统计"""
     total = sum(steps.values())
@@ -159,8 +175,6 @@ def compute_cumulative(steps: Counter) -> list:
             milestone_idx += 1
     return results
 
-
-# ============ 输出函数 ============
 
 def print_bar(name: str, count: int, max_count: int, total: int, rank: int, bar_width: int = 40):
     """打印单行条形图"""
@@ -237,8 +251,6 @@ def print_results(stats: dict, total_queries: int):
     print()
 
 
-# ============ 保存 JSON ============
-
 def save_stats_json(stats: dict, total_queries: int, output_path: str):
     """保存统计数据到 JSON"""
     step_counts = stats["step_counts"]
@@ -259,18 +271,13 @@ def save_stats_json(stats: dict, total_queries: int, output_path: str):
         "steps": dict(stats["steps"].most_common()),
         "predicates": dict(stats["predicates"].most_common()),
         "text_predicates": dict(stats["text_predicates"].most_common()),
-        "step_categories": {
-            cat: count
-            for cat, count, _ in compute_category_stats(stats["steps"])
-        },
+        "step_categories": {cat: count for cat, count, _ in compute_category_stats(stats["steps"])},
     }
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-
-# ============ 生成 Markdown 报告 ============
 
 def generate_report(stats: dict, total_queries: int, input_file: str, report_path: str):
     """生成 Markdown 分析报告"""
@@ -346,8 +353,6 @@ def generate_report(stats: dict, total_queries: int, input_file: str, report_pat
     with open(report_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-
-# ============ 入口 ============
 
 def find_latest_corpus(output_dir: str = "output") -> str:
     """找到最新的泛化结果文件"""

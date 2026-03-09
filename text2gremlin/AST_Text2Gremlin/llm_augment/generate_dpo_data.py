@@ -48,14 +48,17 @@ from llm_augment.generalize_llm import get_llm_config, load_config
 
 # ---- Pydantic 模型 ----
 
+
 class DPOCandidate(BaseModel):
     """DPO 候选（chosen 或 rejected）"""
+
     style: str = Field(description="groovy 或 gremlin")
     code: str = Field(description="代码内容")
 
 
 class DPOSampleA(BaseModel):
     """A 类：多任务组合的 LLM 输出"""
+
     instruction: str = Field(description="合成的自然语言任务描述")
     chosen: DPOCandidate
     rejected: DPOCandidate
@@ -64,6 +67,7 @@ class DPOSampleA(BaseModel):
 
 class DPOSampleB(BaseModel):
     """B 类：单任务的 LLM 输出"""
+
     chosen: DPOCandidate
     rejected: DPOCandidate
     preference_reason: List[str] = Field(description="偏好原因")
@@ -71,18 +75,21 @@ class DPOSampleB(BaseModel):
 
 class DPOSampleC(BaseModel):
     """C 类：复杂长链拆解的 LLM 输出"""
+
     chosen: DPOCandidate
     preference_reason: List[str] = Field(description="偏好原因")
 
 
 class DPOSampleCWithSkip(BaseModel):
     """C 类带跳过标识"""
+
     skip: bool = Field(description="是否跳过（该语句不适合改写为 groovy）")
     chosen: Optional[DPOCandidate] = None
     preference_reason: Optional[List[str]] = None
 
 
 # ---- 数据加载与预处理 ----
+
 
 def load_pairs(input_path: str) -> List[dict]:
     with open(input_path, "r", encoding="utf-8") as f:
@@ -103,7 +110,7 @@ def count_gremlin_steps(gremlin: str) -> int:
     for i, ch in enumerate(gremlin):
         if ch in ("'", '"'):
             in_str = not in_str
-        elif ch == '.' and not in_str:
+        elif ch == "." and not in_str:
             dots += 1
     return dots
 
@@ -152,6 +159,7 @@ def select_related_group(short_pairs: List[dict], n: int) -> List[dict]:
 
 
 # ---- Prompt 构建 ----
+
 
 def build_prompt_type_a(selected_pairs: List[dict]) -> str:
     """A 类 prompt：多任务组合，合成 groovy 和纯 gremlin"""
@@ -216,8 +224,8 @@ def build_prompt_type_b(pair: dict) -> str:
 请你生成一个"过度工程化"的 Groovy 写法作为负样本。
 
 ## 原始查询
-自然语言: {pair['text']}
-Gremlin: {pair['gremlin']}
+自然语言: {pair["text"]}
+Gremlin: {pair["gremlin"]}
 
 ## 要求
 1. rejected 的 Groovy 写法要体现"过度包装"：用 def 变量、.next()、返回 map 等，但实际上完全没必要
@@ -251,8 +259,8 @@ def build_prompt_type_c(pair: dict) -> str:
 - 如果这条查询用 Gremlin 写已经是最优的（无法有意义地拆分），请标记 skip=true
 
 ## 原始查询
-自然语言: {pair['text']}
-Gremlin: {pair['gremlin']}
+自然语言: {pair["text"]}
+Gremlin: {pair["gremlin"]}
 
 ## 要求
 1. 如果适合改写：
@@ -289,6 +297,7 @@ Gremlin: {pair['gremlin']}
 
 # ---- LLM 调用 ----
 
+
 async def call_llm(
     client: AsyncOpenAI,
     prompt: str,
@@ -319,6 +328,7 @@ def extract_json(content: str) -> dict:
 
 # ---- 单条任务处理 ----
 
+
 async def process_type_a(
     client: AsyncOpenAI,
     task: dict,
@@ -340,10 +350,7 @@ async def process_type_a(
                     "task_id": task["task_id"],
                     "task_type": "A",
                     "domain": "movie",
-                    "source_queries": [
-                        {"text": p["text"], "gremlin": p["gremlin"]}
-                        for p in task["pairs"]
-                    ],
+                    "source_queries": [{"text": p["text"], "gremlin": p["gremlin"]} for p in task["pairs"]],
                     "input": {"instruction": validated.instruction},
                     "chosen": validated.chosen.model_dump(),
                     "rejected": validated.rejected.model_dump(),
@@ -447,6 +454,7 @@ def _error_result(task_id: str, task_type: str, error: str) -> dict:
 
 # ---- 任务准备 ----
 
+
 def prepare_tasks(classified: dict, num_a: int, num_b: int) -> List[dict]:
     """准备所有任务。"""
     tasks = []
@@ -461,37 +469,44 @@ def prepare_tasks(classified: dict, num_a: int, num_b: int) -> List[dict]:
         n = random.randint(2, 5)
         group = select_related_group(short_pairs, n)
         task_counter += 1
-        tasks.append({
-            "task_id": f"pref_A_{task_counter:04d}",
-            "type": "A",
-            "pairs": group,
-        })
+        tasks.append(
+            {
+                "task_id": f"pref_A_{task_counter:04d}",
+                "type": "A",
+                "pairs": group,
+            }
+        )
 
     # B 类：从 short + medium 中选单条
     b_pool = short_pairs + medium_pairs
     b_selected = random.sample(b_pool, min(num_b, len(b_pool)))
     for pair in b_selected:
         task_counter += 1
-        tasks.append({
-            "task_id": f"pref_B_{task_counter:04d}",
-            "type": "B",
-            "pair": pair,
-        })
+        tasks.append(
+            {
+                "task_id": f"pref_B_{task_counter:04d}",
+                "type": "B",
+                "pair": pair,
+            }
+        )
 
     # C 类：所有 long 链都尝试
     for pair in long_pairs:
         task_counter += 1
-        tasks.append({
-            "task_id": f"pref_C_{task_counter:04d}",
-            "type": "C",
-            "pair": pair,
-        })
+        tasks.append(
+            {
+                "task_id": f"pref_C_{task_counter:04d}",
+                "type": "C",
+                "pair": pair,
+            }
+        )
 
     random.shuffle(tasks)
     return tasks
 
 
 # ---- 流水线并发 ----
+
 
 async def run_pipeline(
     tasks: List[dict],
@@ -546,9 +561,9 @@ async def run_pipeline(
             speed = completed / elapsed if elapsed > 0 else 0
             valid = len([r for r in results if "_error" not in r])
             print(
-                f"\r  进度: {completed}/{len(tasks)} "
-                f"(有效:{valid} 跳过:{skipped} {speed:.1f}条/秒)",
-                end="", flush=True,
+                f"\r  进度: {completed}/{len(tasks)} (有效:{valid} 跳过:{skipped} {speed:.1f}条/秒)",
+                end="",
+                flush=True,
             )
 
             if len(results) - last_save >= save_interval and results:
@@ -561,6 +576,7 @@ async def run_pipeline(
 
 
 # ---- 保存 ----
+
 
 def _incremental_save(results: List[dict], output_path: str, input_path: str, elapsed: float):
     success = [r for r in results if "_error" not in r]
@@ -619,6 +635,7 @@ def save_results(results: List[dict], output_path: str, input_path: str, elapsed
 
 
 # ---- 主函数 ----
+
 
 def main():
     parser = argparse.ArgumentParser(description="生成 DPO 偏好训练数据 (Groovy vs Gremlin)")
@@ -681,10 +698,15 @@ def main():
     print("-" * 60)
 
     start_time = time.time()
-    results = asyncio.run(run_pipeline(
-        tasks, llm_config, output_path, input_path,
-        save_interval=llm_config["save_interval"],
-    ))
+    results = asyncio.run(
+        run_pipeline(
+            tasks,
+            llm_config,
+            output_path,
+            input_path,
+            save_interval=llm_config["save_interval"],
+        )
+    )
     elapsed = time.time() - start_time
 
     save_results(results, output_path, input_path, elapsed)

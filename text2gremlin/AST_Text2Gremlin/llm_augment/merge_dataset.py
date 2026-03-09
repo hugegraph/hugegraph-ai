@@ -67,13 +67,15 @@ def load_from_translated(path: str) -> list[dict]:
             text = t.get("text", "")
             style = t.get("style", "unknown")
             if text:
-                pairs.append({
-                    "text": text,
-                    "gremlin": query,
-                    "source": "llm_translated",
-                    "language_style": style,
-                    "domain": "movie",
-                })
+                pairs.append(
+                    {
+                        "text": text,
+                        "gremlin": query,
+                        "source": "llm_translated",
+                        "language_style": style,
+                        "domain": "movie",
+                    }
+                )
     return pairs
 
 
@@ -90,22 +92,24 @@ def load_from_migrated(path: str) -> list[dict]:
             query = sample.get("query", "")
             nl = sample.get("natural_language", "")
             if query and nl:
-                pairs.append({
-                    "text": nl,
-                    "gremlin": query,
-                    "source": "migrated",
-                    "language_style": sample.get("language_style", "unknown"),
-                    "domain": domain,
-                    "operation": sample.get("operation", "unknown"),
-                })
+                pairs.append(
+                    {
+                        "text": nl,
+                        "gremlin": query,
+                        "source": "migrated",
+                        "language_style": sample.get("language_style", "unknown"),
+                        "domain": domain,
+                        "operation": sample.get("operation", "unknown"),
+                    }
+                )
     return pairs
 
 
 def guess_operation(gremlin: str) -> str:
     """基于简单规则猜测 CRUD 类型。"""
-    has_add = bool(re.search(r'\.(addV|addE)\s*\(', gremlin))
-    has_drop = bool(re.search(r'\.drop\s*\(', gremlin))
-    has_property = bool(re.search(r'\.property\s*\(', gremlin))
+    has_add = bool(re.search(r"\.(addV|addE)\s*\(", gremlin))
+    has_drop = bool(re.search(r"\.drop\s*\(", gremlin))
+    has_property = bool(re.search(r"\.property\s*\(", gremlin))
 
     if has_add:
         return "create"
@@ -206,9 +210,14 @@ def main():
             "generation_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         },
         "corpus": [
-            {"query": p["gremlin"], "text": p["text"],
-             "domain": p["domain"], "operation": p["operation"],
-             "language_style": p["language_style"], "source": p["source"]}
+            {
+                "query": p["gremlin"],
+                "text": p["text"],
+                "domain": p["domain"],
+                "operation": p["operation"],
+                "language_style": p["language_style"],
+                "source": p["source"],
+            }
             for p in all_pairs
         ],
     }

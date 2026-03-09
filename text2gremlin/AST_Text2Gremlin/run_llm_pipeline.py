@@ -94,11 +94,15 @@ def main():
         """,
     )
     parser.add_argument(
-        "--stage", choices=STAGES, default="translate",
+        "--stage",
+        choices=STAGES,
+        default="translate",
         help="从哪个阶段开始（默认: translate）",
     )
     parser.add_argument(
-        "--stop", choices=STAGES, default=None,
+        "--stop",
+        choices=STAGES,
+        default=None,
         help="在哪个阶段停止（含该阶段，默认: 执行到最后）",
     )
 
@@ -111,7 +115,7 @@ def main():
         print(f"❌ --stage ({args.stage}) 不能在 --stop ({args.stop}) 之后")
         sys.exit(1)
 
-    stages_to_run = STAGES[start_idx:stop_idx + 1]
+    stages_to_run = STAGES[start_idx : stop_idx + 1]
 
     print("=" * 60)
     print("🚀 LLM 增强数据生成流水线")
