@@ -1,6 +1,6 @@
 # Gremlin 查询语料库生成器
 
-从模板生成大量多样化的 Gremlin 查询及其中文描述，用于测试、训练和分析。
+从模板生成大量多样化的 Gremlin 查询及其自然语言描述，并通过 LLM 进行多阶段数据增强与偏好数据合成，用于训练和评估 text2gremlin 模型。
 
 ## 快速开始
 
@@ -16,96 +16,139 @@ pip install -r requirements.txt
 cp config_example.json config.json
 ```
 
-然后编辑 `config.json`，填入你的 LLM API 配置：
+编辑 `config.json`，填入 LLM API 配置：
 ```json
 "llm": {
     "base_url": "http://your-llm-server:port/v1",
     "api_key": "your-api-key",
     "model": "your-model-name",
-    ...
+    "temperature": 1.0,
+    "max_retries": 3,
+    "max_concurrency": 5,
+    "save_interval": 50,
+    "timeout": 40
 }
 ```
 
-> ⚠️ 注意：`config.json` 包含敏感信息，已被 `.gitignore` 忽略，请勿提交到版本控制。
+> ⚠️ `config.json` 包含敏感信息，已被 `.gitignore` 忽略，请勿提交到版本控制。
 
 ### 3. 运行
-```bash
-# 生成语料库
-python generate_corpus.py
 
-# 查看统计
-python show_syntax_stats.py
+#### 阶段一：AST 泛化生成语料库
+```bash
+python generate_corpus.py
 ```
 
-生成结果在 `output/generated_corpus_*.json`
+#### 阶段二～五：LLM 增强流水线
+```bash
+# 执行全部 LLM 增强阶段（翻译 → 迁移 → 合并 → DPO）
+python run_llm_pipeline.py
+
+# 从指定阶段开始
+python run_llm_pipeline.py --stage migrate
+
+# 只执行某个阶段
+python run_llm_pipeline.py --stage merge --stop merge
+```
+
+各阶段也可独立运行：
+```bash
+# 多风格翻译
+python -m llm_augment.generalize_llm
+
+# 场景迁移
+python -m llm_augment.migrate_scenario
+
+# 数据集合并
+python -m llm_augment.merge_dataset
+
+# DPO 偏好数据生成
+python -m llm_augment.generate_dpo_data
+```
+
+#### 语法分析
+```bash
+python analyze_syntax.py
+```
 
 ---
 
-## 核心功能
+## 数据生成流水线
 
-- **模板泛化**: 1 个模板 → 数百个查询变体
-- **智能控制**: 自动控制组合爆炸，避免生成过多查询
-- **中文描述**: 自动生成流畅的查询描述
-- **语法分析**: 统计生成查询的语法分布
+```text
+阶段 1: AST 泛化          generate_corpus.py
+         251 模板 → ~1500 条 (query + 简单描述)
+              ↓
+阶段 2: LLM 多风格翻译    llm_augment/generalize_llm.py
+         ×6 风格 → ~9000 条 (4固定 + 2随机语气)
+              ↓
+阶段 3: 场景迁移           llm_augment/migrate_scenario.py
+         ×20 场景 → ~30000 条 (CRUD 均衡, 语法检查)
+              ↓
+阶段 4: 数据集合并         llm_augment/merge_dataset.py
+         合并翻译+迁移 → 统一 text2gremlin 数据集
+              ↓
+阶段 5: DPO 偏好数据       llm_augment/generate_dpo_data.py
+         A类(多任务组合) + B类(单任务) + C类(长链拆解)
+```
 
 ---
 
 ## 项目结构
 
 ```text
-├── generate_corpus.py                   # 主程序
-├── gremlin_templates.csv                # 模板文件
-├── config.json                          # 配置
-├── base/
-│   ├── generator.py                     # 解析泛化控制器
-│   ├── Config.py                        # 配置管理模块
-│   ├── Schema.py                        # Schema和数据管理
-│   ├── GremlinParse.py                  # 数据结构定义
-│   ├── GremlinExpr.py                   # 复杂表达式定义(谓词、匿名遍历等)
-│   ├── GremlinTransVisitor.py           # AST解析
-│   ├── TraversalGenerator.py            # 遍历生成器
-│   ├── combination_control_config.json  # 组合控制配置
-│   ├── GremlinBase.py                   # 翻译引擎
-│   ├── gremlin/                         # ANTLR生成的解析器
-│   └── template/                        # 翻译字典
-│       ├── schema_dict.txt              # Schema术语翻译
-│       └── syn_dict.txt                 # 同义词字典
-├── db_data/                             # 数据和 Schema
-└── output/                              # 输出目录
+├── generate_corpus.py          # AST 泛化主程序
+├── run_llm_pipeline.py         # LLM 增强流水线统一入口
+├── analyze_syntax.py           # Gremlin 语法分布分析
+├── gremlin_templates.csv       # 查询模板 (251条)
+├── config.json                 # 配置文件 (gitignored)
+├── config_example.json         # 配置示例
+├── requirements.txt            # Python 依赖
+│
+├── llm_augment/                # LLM 增强数据生成包
+│   ├── __init__.py
+│   ├── generalize_llm.py      # 阶段2: 多风格翻译
+│   ├── migrate_scenario.py    # 阶段3: 场景迁移
+│   ├── merge_dataset.py       # 阶段4: 数据集合并
+│   └── generate_dpo_data.py   # 阶段5: DPO 偏好数据
+│
+├── base/                       # AST 泛化核心引擎
+│   ├── generator.py            # 解析泛化控制器 + 语法检查
+│   ├── Config.py               # 配置管理
+│   ├── Schema.py               # Schema 和数据管理
+│   ├── GremlinParse.py         # 数据结构定义
+│   ├── GremlinExpr.py          # 复杂表达式 (谓词、匿名遍历等)
+│   ├── GremlinTransVisitor.py  # AST 解析
+│   ├── TraversalGenerator.py   # 遍历生成器
+│   ├── GremlinBase.py          # 翻译引擎
+│   ├── gremlin/                # ANTLR 生成的 Gremlin 解析器
+│   └── template/               # 翻译字典
+│
+├── db_data/                    # 数据和 Schema
+│   ├── schema/                 # 图数据库 schema
+│   └── reference/              # 场景迁移用的多领域 schema
+│
+└── output/                     # 输出目录
+    └── preference_data/        # DPO 偏好数据
 ```
 
----
-
-## 使用方式
-
-### 1. 命令行
-
-```bash
-python generate_corpus.py
-```
-
-### 2. Python API
-
-```python
-from base import generate_gremlin_corpus
-
-result = generate_gremlin_corpus(
-    templates='gremlin_templates.csv',
-    config_path='config.json',
-    schema_path='db_data/schema/movie_schema.json',
-    data_path='db_data/'
-)
-
-print(f"生成了 {result['total_unique_queries']} 个查询")
-```
-
-### 3. 添加模板
-
-直接编辑 `gremlin_templates.csv`即可
 
 ---
 
 ## 配置说明
+
+### LLM 配置 (`config.json` → `llm`)
+
+| 字段 | 说明 | 默认值 |
+|------|------|--------|
+| base_url | LLM API 地址 | 必填 |
+| api_key | API 密钥 | 必填 |
+| model | 模型名称 | 必填 |
+| temperature | 采样温度 | 1.0 |
+| max_retries | 单条最大重试次数 | 3 |
+| max_concurrency | 并发请求数 | 5 |
+| save_interval | 增量保存间隔 | 50 |
+| timeout | 单次请求超时 (秒) | 40 |
 
 ### 模板文件 (`gremlin_templates.csv`)
 
@@ -116,30 +159,63 @@ print(f"生成了 {result['total_unique_queries']} 个查询")
 
 ### 组合控制 (`base/combination_control_config.json`)
 
-控制查询生成数量，详见 `COMBINATION_CONTROL_GUIDE.md`
-
-核心参数：
-- **链长度分类**: 短链(≤4步)、中链(5-6步)、长链(7-8步)、超长链(≥9步)
-- **数据值填充**: 中间步骤填1个值，终端步骤填2-3个值
-- **属性泛化**: 根据链长度动态调整泛化程度
-- **查询数量限制**: 中链≤100，长链≤500，超长链≤50
+控制 AST 泛化阶段的查询生成数量：
+- 链长度分类: 短链(≤4步)、中链(5-6步)、长链(7-8步)、超长链(≥9步)
+- 数据值填充: 中间步骤填1个值，终端步骤填2-3个值
+- 属性泛化: 根据链长度动态调整泛化程度
 
 ---
 
 ## 输出格式
 
+### AST 泛化结果 (`generated_corpus_*.json`)
 ```json
 {
-  "metadata": {
-    "total_templates": 198,
-    "successful_templates": 198,
-    "total_unique_queries": 1493,
-    "generation_timestamp": "2025-10-29 19:07:33"
-  },
+  "metadata": { "total_unique_queries": 1564, ... },
+  "corpus": [
+    { "query": "g.V().hasLabel('person')", "description": "..." }
+  ]
+}
+```
+
+### LLM 翻译结果 (`llm_translated_*.json`)
+```json
+{
   "corpus": [
     {
-      "query": "g.V().hasLabel('person').out('acted_in')",
-      "description": "从图中开始查找所有顶点，过滤出'人'类型的顶点，沿'参演'边out方向遍历"
+      "query": "g.V().hasLabel('person')",
+      "translations": [
+        { "style": "zh_formal", "text": "查询所有人类型的顶点" },
+        { "style": "en_casual", "text": "Find all person nodes" }
+      ]
+    }
+  ]
+}
+```
+
+### 场景迁移结果 (`migrated_*.json`)
+```json
+{
+  "migrations": [
+    {
+      "target_domain": "ecommerce",
+      "generated_samples": [
+        { "operation": "read", "query": "g.V()...", "natural_language": "..." }
+      ]
+    }
+  ]
+}
+```
+
+### DPO 偏好数据 (`preference_data/dpo_data_*.json`)
+```json
+{
+  "samples": [
+    {
+      "task_type": "A",
+      "chosen": { "style": "groovy", "code": "..." },
+      "rejected": { "style": "gremlin", "code": "..." },
+      "preference_reason": ["..."]
     }
   ]
 }
@@ -147,50 +223,33 @@ print(f"生成了 {result['total_unique_queries']} 个查询")
 
 ---
 
-## 语法分析
-
-生成语料库后，可以分析语法分布：
-
-```bash
-# 分析语法分布
-python3 analyze_syntax.py
-```
-分析结果：
-- `output/syntax_distribution_stats.json` - 统计数据
-
----
-
 ## 核心特性
 
-### 1. 模板泛化
-从一个模板生成多个变体：
+### AST 泛化
+从一个模板生成多个变体，智能控制组合爆炸，自动去重：
 ```text
 模板: g.V().hasLabel('person').out('acted_in')
-
-泛化:
-→ g.V().hasLabel('movie').out('acted_in')
-→ g.V().hasLabel('person').out('directed')
-→ g.V().hasLabel('genre').out('has_genre')
-...
+  → g.V().hasLabel('movie').out('acted_in')
+  → g.V().hasLabel('person').out('directed')
+  → ...
 ```
 
-### 2. 智能控制
-- **链长度自适应**: 短链多泛化，长链少泛化
-- **位置敏感**: 中间步骤保守，终端步骤充分
-- **类型区分**: Schema 属性积极泛化，数据值保守填充
+### LLM 多风格翻译
+每条查询翻译为 6 种风格（4 固定 + 2 随机）：
+- 中文正式 / 中文口语 / 英文正式 / 英文口语
+- 中英混合 / 省略表达 / 问答式 / 错别字
 
-### 3. 自动去重
-- 查询级去重（完全相同的查询）
-- 语义级去重（等价查询）
-- 保证生成的查询都是唯一的
+### 场景迁移
+将电影领域数据迁移到 20 个业务场景，生成 CRUD 均衡的数据，每条 gremlin 经过 ANTLR 语法检查。
 
-### 4. 中文翻译
-自动生成流畅的中文描述：
-```text
-g.V().hasLabel('person').out('acted_in').has('title', 'Inception')
-↓
-从图中开始查找所有顶点，过滤出'人'类型的顶点，沿'参演'边out方向遍历，其'标题'为'Inception'
-```
+### DPO 偏好数据
+三类任务生成 Groovy vs Gremlin 偏好对：
+- A 类：多任务组合 → Groovy 命令式（chosen）vs 纯 Gremlin（rejected）
+- B 类：单任务 → 纯 Gremlin（chosen）vs 过度包装 Groovy（rejected）
+- C 类：长链拆解 → Groovy 分步（chosen）vs 原始长链（rejected）
 
-
-
+### 流水线特性
+- 并发控制：`asyncio.wait(FIRST_COMPLETED)` + Semaphore
+- 增量保存：每 50 条自动保存，断点可恢复
+- Pydantic 验证：所有 LLM 输出严格校验格式
+- 单条重试：失败自动重试，不影响其他任务
