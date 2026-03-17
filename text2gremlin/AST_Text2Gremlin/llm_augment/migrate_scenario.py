@@ -228,9 +228,9 @@ def build_migration_prompt(source_nl: str, source_query: str, target_schema: dic
    - 自然语言与 query 严格对应
 5. 每条gremlin的自然语言字段随机选择下面的一个语气类型进行生成：
    - zh_formal：中文正式的语气
-   - zh_colloquial：中文口语的语气
+   - zh_casual：中文口语的语气
    - en_formal：英文正式的语气
-   - en_colloquial：英文口语的语气
+   - en_casual：英文口语的语气
 6. 如果某条样本无法高质量生成，请不要编造。
 
 ## 【Gremlin 风格要求】
