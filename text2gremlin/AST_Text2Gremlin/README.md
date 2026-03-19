@@ -90,6 +90,7 @@ python analyze_syntax.py
               ↓
 阶段 5: DPO 偏好数据       llm_augment/generate_dpo_data.py
          A类(多任务组合) + B类(单任务) + C类(长链拆解)
+         → ~8900 条偏好数据 (21 个领域)
 ```
 
 ---
@@ -107,10 +108,10 @@ python analyze_syntax.py
 │
 ├── llm_augment/                # LLM 增强数据生成包
 │   ├── __init__.py
-│   ├── generalize_llm.py      # 阶段2: 多风格翻译
-│   ├── migrate_scenario.py    # 阶段3: 场景迁移
-│   ├── merge_dataset.py       # 阶段4: 数据集合并
-│   └── generate_dpo_data.py   # 阶段5: DPO 偏好数据
+│   ├── generalize_llm.py       # 阶段2: 多风格翻译
+│   ├── migrate_scenario.py     # 阶段3: 场景迁移
+│   ├── merge_dataset.py        # 阶段4: 数据集合并
+│   └── generate_dpo_data.py    # 阶段5: DPO 偏好数据
 │
 ├── base/                       # AST 泛化核心引擎
 │   ├── generator.py            # 解析泛化控制器 + 语法检查
@@ -131,7 +132,6 @@ python analyze_syntax.py
 └── output/                     # 输出目录
     └── preference_data/        # DPO 偏好数据
 ```
-
 
 ---
 
@@ -171,7 +171,7 @@ python analyze_syntax.py
 ### AST 泛化结果 (`generated_corpus_*.json`)
 ```json
 {
-  "metadata": { "total_unique_queries": 1564, ... },
+  "metadata": { "total_unique_queries": 1564, "..." : "..." },
   "corpus": [
     { "query": "g.V().hasLabel('person')", "description": "..." }
   ]
@@ -207,15 +207,28 @@ python analyze_syntax.py
 }
 ```
 
-### DPO 偏好数据 (`preference_data/dpo_data_*.json`)
+### DPO 偏好数据 (`preference_data/dpo_data_merged.json`)
 ```json
 {
+  "metadata": {
+    "total_samples": 8920,
+    "rejected_count": 3032,
+    "type_distribution": { "A": 4380, "B": 2318, "C": 2222 },
+    "domain_distribution": { "movie": 401, "ecommerce": 399, "..." : "..." },
+
+  },
   "samples": [
     {
+      "task_id": "pref_MOVI_A_0001",
       "task_type": "A",
-      "chosen": { "style": "groovy", "code": "..." },
-      "rejected": { "style": "gremlin", "code": "..." },
-      "preference_reason": ["..."]
+      "domain": "movie",
+      "source_queries": [
+        { "text": "查询所有演员", "gremlin": "g.V().hasLabel('person')" }
+      ],
+      "input": { "instruction": "请帮我查询所有演员并更新..." },
+      "chosen": { "style": "groovy", "code": "def actors = g.V()..." },
+      "rejected": { "style": "gremlin", "code": "g.V().hasLabel..." },
+      "preference_reason": ["Groovy 写法更清晰...", "..."]
     }
   ]
 }
@@ -240,16 +253,26 @@ python analyze_syntax.py
 - 中英混合 / 省略表达 / 问答式 / 错别字
 
 ### 场景迁移
-将电影领域数据迁移到 20 个业务场景，生成 CRUD 均衡的数据，每条 gremlin 经过 ANTLR 语法检查。
+将电影领域数据迁移到 20 个业务场景，生成 CRUD 均衡的数据，每条 Gremlin 经过 ANTLR 语法检查。
 
 ### DPO 偏好数据
-三类任务生成 Groovy vs Gremlin 偏好对：
-- A 类：多任务组合 → Groovy 命令式（chosen）vs 纯 Gremlin（rejected）
-- B 类：单任务 → 纯 Gremlin（chosen）vs 过度包装 Groovy（rejected）
-- C 类：长链拆解 → Groovy 分步（chosen）vs 原始长链（rejected）
+三类任务生成 Groovy vs Gremlin 偏好对，覆盖 21 个领域（movie + 20 个迁移领域），合计 8920 条：
+
+- **A 类（多任务组合，4380 条）**：选 2~5 条简单查询组合为复合任务
+  - chosen: Groovy 命令式写法（def 变量、.next()、返回 map）
+  - rejected: 纯 Gremlin 函数式写法（as/select/project 强行单链）
+  - 自动分析命令冲突（如删除后更新），调整执行顺序或拒绝合成
+- **B 类（单任务，2318 条）**：简单查询不需要 Groovy 包装
+  - chosen: 原始纯 Gremlin
+  - rejected: 过度工程化的 Groovy 包装
+- **C 类（长链拆解，2222 条）**：复杂长链查询拆解为多步
+  - chosen: Groovy 分步写法
+  - rejected: 原始长链 Gremlin
 
 ### 流水线特性
-- 并发控制：`asyncio.wait(FIRST_COMPLETED)` + Semaphore
+- 并发控制：`asyncio.wait(FIRST_COMPLETED)` + Semaphore + 批量任务创建
 - 增量保存：每 50 条自动保存，断点可恢复
 - Pydantic 验证：所有 LLM 输出严格校验格式
-- 单条重试：失败自动重试，不影响其他任务
+- ANTLR 语法检查：纯 Gremlin 代码经过语法验证（Groovy 代码跳过，因变量引用不兼容 ANTLR）
+- 单条重试：失败自动重试（指数退避），不影响其他任务
+- 代码无注释：所有生成的 Groovy/Gremlin 代码禁止包含注释
