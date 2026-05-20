@@ -101,9 +101,21 @@ class ResponseValidation:
                 log.info("Resource %s not found (404)", path)
             else:
                 try:
-                    details = response.json().get("exception", "key 'exception' not found")
-                except (ValueError, KeyError):
-                    details = "key 'exception' not found"
+                    body = response.json()
+                    if isinstance(body, dict):
+                        status = body.get("status")
+                        status_message = status.get("message") if isinstance(status, dict) else None
+                        details = (
+                            body.get("exception")
+                            or body.get("message")
+                            or status_message
+                            or response.text
+                            or "unknown error"
+                        )
+                    else:
+                        details = response.text or "unknown error"
+                except (ValueError, KeyError, AttributeError, TypeError):
+                    details = response.text or "unknown error"
 
                 req_body = response.request.body if response.request.body else "Empty body"
                 req_body = req_body.encode("utf-8").decode("unicode_escape")

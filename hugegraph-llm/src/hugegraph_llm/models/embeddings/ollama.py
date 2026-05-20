@@ -75,20 +75,41 @@ class OllamaEmbedding(BaseEmbedding):
         all_embeddings = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            response = self.client.embed(model=self.model, input=batch)["embeddings"]
-            all_embeddings.extend([list(inner_sequence) for inner_sequence in response])
+            response = self.client.embed(model=self.model, input=batch)
+            all_embeddings.extend(self._get_embeddings_from_response(response))
         return all_embeddings
+
+    def _get_embeddings_from_response(self, response) -> List[List[float]]:
+        if "embeddings" not in response:
+            raise ValueError("Ollama embedding response missing 'embeddings'.")
+        embeddings = response["embeddings"]
+        if not embeddings:
+            raise ValueError("Ollama embedding response returned no embeddings.")
+        return [list(inner_sequence) for inner_sequence in embeddings]
 
     async def async_get_text_embedding(self, text: str) -> List[float]:
         """Get embedding for a single text asynchronously."""
-        response = await self.async_client.embeddings(model=self.model, prompt=text)
-        return list(response["embedding"])
+        if not hasattr(self.async_client, "embed"):
+            error_message = (
+                "The required 'embed' method was not found on the Ollama async client. "
+                "Please ensure your ollama library is up-to-date and supports batch embedding. "
+            )
+            raise AttributeError(error_message)
+
+        response = await self.async_client.embed(model=self.model, input=[text])
+        return self._get_embeddings_from_response(response)[0]
 
     async def async_get_texts_embeddings(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
-        # Ollama python client may not provide batch async embeddings; fallback per item
-        # batch_size parameter included for consistency with base class signature
+        if not hasattr(self.async_client, "embed"):
+            error_message = (
+                "The required 'embed' method was not found on the Ollama async client. "
+                "Please ensure your ollama library is up-to-date and supports batch embedding. "
+            )
+            raise AttributeError(error_message)
+
         results: List[List[float]] = []
-        for t in texts:
-            response = await self.async_client.embeddings(model=self.model, prompt=t)
-            results.append(list(response["embedding"]))
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            response = await self.async_client.embed(model=self.model, input=batch)
+            results.extend(self._get_embeddings_from_response(response))
         return results
