@@ -68,6 +68,7 @@ from hugegraph_mcp.schema_tools import (
 )
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
+from hugegraph_mcp.tools.query_graph import query_graph_by_text
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
 # stdout is reserved for MCP JSON protocol only. Windsurf's MCP client
@@ -149,6 +150,32 @@ def generate_gremlin_tool(
         query=query,
         execute=execute,
         output_types=output_types,
+    )
+
+
+@mcp.tool()
+def query_graph_by_text_tool(
+    query: str,
+    mode: str = "graph_only",
+    include_evidence: bool = False,
+) -> dict:
+    """Ask HugeGraph-AI RAG a natural-language question about the graph.
+
+    Args:
+        query: Natural language question to answer from graph knowledge.
+        mode: Query mode. "graph_only" uses graph RAG via /rag/graph;
+            "vector_only" uses pure vector retrieval via /rag.
+        include_evidence: Whether to include supporting evidence from the AI response.
+
+    Returns:
+        dict: Standard envelope with answer, optional evidence, generated Gremlin,
+              source summary, and suggested next actions when no answer is found.
+    """
+
+    return query_graph_by_text(
+        query=query,
+        mode=mode,
+        include_evidence=include_evidence,
     )
 
 
