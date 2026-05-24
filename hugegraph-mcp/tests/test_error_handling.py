@@ -107,7 +107,7 @@ def test_syntax_error_handling():
         mock_client_instance.exec.side_effect = ValueError("Invalid Gremlin syntax")
         mock_client.return_value = mock_client_instance
 
-        result = execute_gremlin_read("g.invalidSyntax()")
+        result = execute_gremlin_read("g.V().count()")
 
         assert result["success"] is False
         assert result["error_type"] == "query_syntax_error"

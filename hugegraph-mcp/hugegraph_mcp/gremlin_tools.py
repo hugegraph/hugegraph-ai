@@ -18,6 +18,7 @@ import requests
 from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.gremlin_safety import classify_gremlin_read_safety
 
 _cfg = MCPConfig.from_env()
 
@@ -67,9 +68,6 @@ def _get_read_client():
 
 def _get_write_client():
     return _executor.get_write_client()
-
-
-_WRITE_KEYWORDS = ("addV", "addE", "dropV", "dropE", "property(")
 
 
 def _execute_gremlin_with_error_handling(
@@ -225,15 +223,18 @@ def _execute_gremlin_with_error_handling(
 def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
     """Execute a read-only Gremlin query and return standardized metadata.
 
-    - Rejects queries that clearly contain write keywords.
+    - Rejects unsafe or ambiguous Gremlin queries.
     - Returns: {data, total, duration_ms, is_read} or structured error information.
     """
 
-    # Validate query doesn't contain write operations
-    lowered = gremlin_query.lower()
-    if any(k.lower() in lowered for k in _WRITE_KEYWORDS):
+    safety = classify_gremlin_read_safety(gremlin_query)
+    if safety == "unsafe":
         # For backward compatibility, raise ValueError as expected by existing tests
         raise ValueError("execute_gremlin_read does not allow write operations")
+    if safety == "uncertain":
+        raise ValueError(
+            "UNSAFE_GREMLIN: execute_gremlin_read only allows known read-only queries"
+        )
 
     client = _get_read_client()
     result = _execute_gremlin_with_error_handling(client, gremlin_query, "read")
