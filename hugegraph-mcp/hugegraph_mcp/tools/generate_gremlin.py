@@ -38,18 +38,21 @@ def generate_gremlin(
     gremlin = ai_data.get("gremlin")
     template_gremlin = ai_data.get("template_gremlin")
     raw_gremlin = ai_data.get("raw_gremlin")
+    requires_index = ai_data.get("requires_index", False)
+    assumptions = ai_data.get("assumptions")
 
     safety = classify_gremlin_read_safety(gremlin)
     is_readonly = safety == "safe"
     risk_level = _risk_level(safety)
 
     data = {
-        "query": query,
         "gremlin": gremlin,
         "template_gremlin": template_gremlin,
         "raw_gremlin": raw_gremlin,
         "is_readonly": is_readonly,
         "risk_level": risk_level,
+        "requires_index": requires_index,
+        "assumptions": assumptions,
         "executed": False,
         "execution_result": None,
     }

@@ -17,14 +17,16 @@ from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.tools import generate_gremlin as generate_gremlin_module
 
 
-def _ai_ok(gremlin: str) -> dict:
-    return envelope_ok(
-        {
-            "gremlin": gremlin,
-            "template_gremlin": gremlin,
-            "raw_gremlin": gremlin,
-        }
-    )
+def _ai_ok(gremlin: str, **extra) -> dict:
+    data = {
+        "gremlin": gremlin,
+        "template_gremlin": gremlin,
+        "raw_gremlin": gremlin,
+        "requires_index": False,
+        "assumptions": None,
+    }
+    data.update(extra)
+    return envelope_ok(data)
 
 
 def test_generate_gremlin_default_no_execute(monkeypatch):
@@ -41,6 +43,8 @@ def test_generate_gremlin_default_no_execute(monkeypatch):
     assert result["data"]["raw_gremlin"] == "g.V().count()"
     assert result["data"]["is_readonly"] is True
     assert result["data"]["risk_level"] == "low"
+    assert result["data"]["requires_index"] is False
+    assert result["data"]["assumptions"] is None
     assert result["data"]["executed"] is False
     assert result["data"]["execution_result"] is None
     post.assert_called_once_with("/text2gremlin", json={"query": "count vertices"})
@@ -59,6 +63,8 @@ def test_generate_gremlin_safe_execute(monkeypatch):
     assert result["ok"] is True
     assert result["data"]["is_readonly"] is True
     assert result["data"]["risk_level"] == "low"
+    assert result["data"]["requires_index"] is False
+    assert result["data"]["assumptions"] is None
     assert result["data"]["executed"] is True
     assert result["data"]["execution_result"] == execution_result
     execute_read.assert_called_once_with("g.V().limit(2)")
