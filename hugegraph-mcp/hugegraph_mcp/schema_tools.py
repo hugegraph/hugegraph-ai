@@ -11,44 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from dataclasses import dataclass
 from typing import Any
 
 from pyhugegraph.client import PyHugeClient
 
+from hugegraph_mcp.config import MCPConfig
 
-@dataclass
-class HugeGraphMCPConfig:
-    graph_url: str = "http://127.0.0.1:8080"
-    graph_name: str = "hugegraph"
-    graph_user: str = "admin"
-    graph_pwd: str = "xxx"  # pragma: allowlist secret - value comes from env
-    graphspace: str | None = "DEFAULT"  # HugeGraph 1.7.0+ enhanced graph space support
-
-    @classmethod
-    def from_env(cls) -> "HugeGraphMCPConfig":
-        # 支持字符串拼接格式：HUGEGRAPH_GRAPH_PATH="DEFAULT/hugegraph"，仅此一种方式
-        graph_path = os.getenv("HUGEGRAPH_GRAPH_PATH") or "DEFAULT/hugegraph"
-
-        if "/" in graph_path:
-            graphspace, graph_name = graph_path.split("/", 1)
-        else:
-            graphspace, graph_name = "DEFAULT", graph_path
-
-        graphspace = (graphspace or "DEFAULT").strip() or "DEFAULT"
-        graph_name = (graph_name or "hugegraph").strip() or "hugegraph"
-
-        return cls(
-            graph_url=os.getenv("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
-            graph_name=graph_name,
-            graph_user=os.getenv("HUGEGRAPH_USER", "admin"),
-            graph_pwd=os.getenv("HUGEGRAPH_PASSWORD", "xxx"),
-            graphspace=graphspace,
-        )
-
-
-_config = HugeGraphMCPConfig.from_env()
+_config = MCPConfig.from_env()
 
 
 def _build_client() -> PyHugeClient:
@@ -57,19 +26,19 @@ def _build_client() -> PyHugeClient:
     # Only pass graphspace if it's not None and not empty string
     if graphspace and graphspace.strip():
         return PyHugeClient(
-            url=_config.graph_url,
-            graph=_config.graph_name,
-            user=_config.graph_user,
-            pwd=_config.graph_pwd,
+            url=_config.url,
+            graph=_config.graph,
+            user=_config.user,
+            pwd=_config.password,
             graphspace=graphspace.strip(),
         )
     else:
         # Default client without graphspace for backward compatibility
         return PyHugeClient(
-            url=_config.graph_url,
-            graph=_config.graph_name,
-            user=_config.graph_user,
-            pwd=_config.graph_pwd,
+            url=_config.url,
+            graph=_config.graph,
+            user=_config.user,
+            pwd=_config.password,
         )
 
 
@@ -128,8 +97,7 @@ def get_live_schema() -> dict[str, Any]:
     if graphspace:
         result["graphspace"] = graphspace
 
-    readonly_env = os.getenv("HUGEGRAPH_MCP_READONLY", "").lower()
-    result["readonly"] = readonly_env in {"1", "true", "yes"}
+    result["readonly"] = MCPConfig.from_env().is_readonly()
 
     return result
 

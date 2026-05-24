@@ -11,46 +11,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import time
-from dataclasses import dataclass
 from typing import Any
 
 import requests
 from pyhugegraph.client import PyHugeClient
 
+from hugegraph_mcp.config import MCPConfig
 
-@dataclass
-class HugeGraphGremlinConfig:
-    url: str = "http://127.0.0.1:8080"
-    graph: str = "hugegraph"
-    user: str = "admin"
-    password: str = "xxx"
-    graphspace: str | None = "DEFAULT"  # HugeGraph 1.7.0+ enhanced graph space support
-
-    @classmethod
-    def from_env(cls) -> "HugeGraphGremlinConfig":
-        # 支持字符串拼接格式：HUGEGRAPH_GRAPH_PATH="DEFAULT/hugegraph"，仅此一种方式
-        graph_path = os.getenv("HUGEGRAPH_GRAPH_PATH") or "DEFAULT/hugegraph"
-
-        if "/" in graph_path:
-            graphspace, graph = graph_path.split("/", 1)
-        else:
-            graphspace, graph = "DEFAULT", graph_path
-
-        graphspace = (graphspace or "DEFAULT").strip() or "DEFAULT"
-        graph = (graph or "hugegraph").strip() or "hugegraph"
-
-        return cls(
-            url=os.getenv("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
-            graph=graph,
-            user=os.getenv("HUGEGRAPH_USER", "admin"),
-            password=os.getenv("HUGEGRAPH_PASSWORD", "xxx"),
-            graphspace=graphspace,
-        )
-
-
-_cfg = HugeGraphGremlinConfig.from_env()
+_cfg = MCPConfig.from_env()
 
 
 class GremlinExecutor:
@@ -60,7 +29,7 @@ class GremlinExecutor:
     Uses HTTP REST + pyhugegraph.gremlin(), ready for WebSocket or URL splitting.
     """
 
-    def __init__(self, cfg: HugeGraphGremlinConfig) -> None:
+    def __init__(self, cfg: MCPConfig) -> None:
         self._cfg = cfg
 
     def _build_client(self) -> PyHugeClient:
@@ -292,7 +261,7 @@ def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
     """
 
     # Global readonly guard for all write operations
-    if os.getenv("HUGEGRAPH_MCP_READONLY", "").lower() in {"1", "true", "yes"}:
+    if MCPConfig.from_env().is_readonly():
         # For backward compatibility with existing tests, raise PermissionError
         raise PermissionError(
             "HugeGraph MCP server is in read-only mode; write queries are disabled"

@@ -60,6 +60,7 @@ logging.handlers.RotatingFileHandler = _patched_rotating_handler
 from fastmcp import FastMCP
 
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
+from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.schema_tools import (
     design_schema,
     execute_schema_operations,
@@ -72,14 +73,7 @@ from hugegraph_mcp.schema_tools import (
 # are mixed in.
 logging.disable(logging.CRITICAL)
 
-
-# Check if server should run in read-only mode
-def _is_readonly():
-    readonly_env = os.getenv("HUGEGRAPH_MCP_READONLY", "").lower()
-    return readonly_env in {"1", "true", "yes"}
-
-
-READONLY = _is_readonly()
+READONLY = MCPConfig.from_env().is_readonly()
 
 mcp = FastMCP("HugeGraph MCP")
 
