@@ -93,12 +93,12 @@ def test_inspect_graph_basic(monkeypatch):
 
     assert result["ok"] is True
     assert result["error"] is None
-    assert result["data"]["server_status"] == "available"
-    assert result["data"]["ai_status"] == "available"
+    assert result["data"]["hugegraph_server_status"] == "available"
+    assert result["data"]["hugegraph_ai_status"] == "available"
     assert result["data"]["schema_summary"]["vertexlabels"][0]["name"] == "person"
     assert result["data"]["vertex_count"] == 3
     assert result["data"]["edge_count"] == 2
-    assert result["data"]["index_count"] == 2
+    assert result["data"]["index_status"] == {"total": 2}
     execute_read.assert_any_call("g.V().count()")
     execute_read.assert_any_call("g.E().count()")
 
@@ -135,7 +135,7 @@ def test_inspect_graph_server_unavailable(monkeypatch):
     result = inspect_graph_module.inspect_graph()
 
     assert result["ok"] is True
-    assert result["data"]["server_status"] == "unavailable"
+    assert result["data"]["hugegraph_server_status"] == "unavailable"
     assert result["data"]["schema_summary"] is None
     assert result["data"]["vertex_count"] is None
     assert result["data"]["edge_count"] is None
@@ -163,8 +163,8 @@ def test_inspect_graph_ai_unavailable(monkeypatch):
     result = inspect_graph_module.inspect_graph()
 
     assert result["ok"] is True
-    assert result["data"]["server_status"] == "available"
-    assert result["data"]["ai_status"] == "unavailable"
+    assert result["data"]["hugegraph_server_status"] == "available"
+    assert result["data"]["hugegraph_ai_status"] == "unavailable"
     assert result["data"]["vid_embedding_status"] == "unknown"
     assert any("HugeGraph-AI is unavailable" in w for w in result["warnings"])
 

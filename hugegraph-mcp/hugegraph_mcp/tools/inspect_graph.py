@@ -116,14 +116,15 @@ def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:
     warnings.extend(ai_warnings)
 
     data: dict[str, Any] = {
-        "server_status": server_status,
-        "ai_status": ai_status,
+        "graph": cfg.graph,
+        "graphspace": cfg.graphspace,
+        "hugegraph_server_status": server_status,
+        "hugegraph_ai_status": ai_status,
         "vid_embedding_status": "available" if graph_index_info is not None else "unknown",
         "schema_summary": schema_summary,
         "vertex_count": vertex_count,
         "edge_count": edge_count,
-        "index_count": _count_indexes(raw_schema),
-        "graph_index_info": graph_index_info,
+        "index_status": {"total": _count_indexes(raw_schema)},
         "readonly": readonly if readonly is not None else cfg.is_readonly(),
     }
     if include_raw_schema:
@@ -153,10 +154,10 @@ def _run_count_query(query: str, label: str, warnings: list[str]) -> int | None:
 
 def _next_actions(data: dict[str, Any]) -> list[str]:
     actions = ["Use get_live_schema_tool for full schema details"]
-    if data.get("server_status") == "available":
+    if data.get("hugegraph_server_status") == "available":
         actions.append("Use execute_gremlin_read_tool for read-only graph exploration")
     else:
         actions.append("Check HugeGraph Server URL, graph name, and credentials")
-    if data.get("ai_status") != "available":
+    if data.get("hugegraph_ai_status") != "available":
         actions.append("Check HugeGraph-AI URL if embedding or graph index features are needed")
     return actions
