@@ -18,7 +18,9 @@ import requests
 from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.envelope import ErrorType, envelope_err
 from hugegraph_mcp.gremlin_safety import classify_gremlin_read_safety
+from hugegraph_mcp.guard import Capability, guard_write
 
 _cfg = MCPConfig.from_env()
 
@@ -229,11 +231,18 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
 
     safety = classify_gremlin_read_safety(gremlin_query)
     if safety == "unsafe":
-        # For backward compatibility, raise ValueError as expected by existing tests
-        raise ValueError("execute_gremlin_read does not allow write operations")
+        return envelope_err(
+            ErrorType.UNSAFE_GREMLIN,
+            "execute_gremlin_read does not allow write operations",
+            suggestion="Use execute_gremlin_write for write operations when write access is enabled.",
+            details={"classification": safety},
+        )
     if safety == "uncertain":
-        raise ValueError(
-            "UNSAFE_GREMLIN: execute_gremlin_read only allows known read-only queries"
+        return envelope_err(
+            ErrorType.UNSAFE_GREMLIN,
+            "execute_gremlin_read only allows known read-only queries",
+            suggestion="Use a clearly read-only Gremlin traversal.",
+            details={"classification": safety},
         )
 
     client = _get_read_client()
@@ -257,16 +266,13 @@ def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
 
     Behaviour as per tests:
     - Uses a dedicated write client.
-    - When HUGEGRAPH_MCP_READONLY is true, raise PermissionError.
+    - When HUGEGRAPH_MCP_READONLY is true, return a structured envelope.
     - Returns structured error information for all failure cases.
     """
 
-    # Global readonly guard for all write operations
-    if MCPConfig.from_env().is_readonly():
-        # For backward compatibility with existing tests, raise PermissionError
-        raise PermissionError(
-            "HugeGraph MCP server is in read-only mode; write queries are disabled"
-        )
+    violation = guard_write(Capability.DEBUG_WRITE)
+    if violation is not None:
+        return violation
 
     client = _get_write_client()
     result = _execute_gremlin_with_error_handling(client, gremlin_query, "write")

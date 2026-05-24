@@ -11,10 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
-
-
-
 def _sample_ops():
     return [
         {"type": "create_property_key", "name": "age"},
@@ -94,5 +90,8 @@ def test_execute_schema_operations_blocked_in_readonly(monkeypatch):
 
     from hugegraph_mcp import schema_tools
 
-    with pytest.raises(PermissionError):
-        schema_tools.execute_schema_operations(_sample_ops())
+    result = schema_tools.execute_schema_operations(_sample_ops())
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "READONLY_VIOLATION"
+    assert result["meta"]["readonly"] is True

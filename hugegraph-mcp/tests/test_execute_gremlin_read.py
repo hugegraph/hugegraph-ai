@@ -13,8 +13,6 @@
 
 import os
 
-import pytest
-
 
 class FakeGremlinClient:
     def __init__(self):
@@ -54,8 +52,11 @@ def test_execute_gremlin_read_rejects_obvious_writes(monkeypatch):
         gremlin_tools, "_get_read_client", lambda: client, raising=False
     )
 
-    with pytest.raises(ValueError):
-        gremlin_tools.execute_gremlin_read("g.addV('person')")
+    result = gremlin_tools.execute_gremlin_read("g.addV('person')")
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "UNSAFE_GREMLIN"
+    assert result["meta"]
 
 
 def test_execute_gremlin_read_respects_readonly_env(monkeypatch):

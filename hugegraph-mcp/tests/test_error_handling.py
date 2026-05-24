@@ -15,7 +15,6 @@
 
 from unittest.mock import Mock, patch
 
-import pytest
 import requests
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
 
@@ -86,18 +85,20 @@ def test_authentication_error_handling():
 def test_readonly_mode_error():
     """Test readonly mode error handling."""
     with patch.dict("os.environ", {"HUGEGRAPH_MCP_READONLY": "true"}):
-        with pytest.raises(PermissionError) as exc_info:
-            execute_gremlin_write("g.addV('test')")
+        result = execute_gremlin_write("g.addV('test')")
 
-        assert "read-only mode" in str(exc_info.value)
+        assert result["ok"] is False
+        assert result["error"]["type"] == "READONLY_VIOLATION"
+        assert result["meta"]["readonly"] is True
 
 
 def test_validation_error_for_read_operations():
     """Test validation error when trying to use write keywords in read operations."""
-    with pytest.raises(ValueError) as exc_info:
-        execute_gremlin_read("g.addV('test')")
+    result = execute_gremlin_read("g.addV('test')")
 
-    assert "write operations" in str(exc_info.value)
+    assert result["ok"] is False
+    assert result["error"]["type"] == "UNSAFE_GREMLIN"
+    assert "write operations" in result["error"]["message"]
 
 
 def test_syntax_error_handling():

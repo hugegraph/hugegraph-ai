@@ -11,9 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
-
-
 class FakeGremlinClient:
     def __init__(self, results):
         self.results = results
@@ -61,5 +58,9 @@ def test_execute_gremlin_write_blocked_in_readonly(monkeypatch):
         gremlin_tools, "_get_write_client", lambda: fake_client, raising=False
     )
 
-    with pytest.raises(PermissionError):
-        gremlin_tools.execute_gremlin_write("g.addV('person')")
+    result = gremlin_tools.execute_gremlin_write("g.addV('person')")
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "READONLY_VIOLATION"
+    assert result["meta"]["readonly"] is True
+    assert fake_client.last_query is None
