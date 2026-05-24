@@ -68,6 +68,7 @@ from hugegraph_mcp.schema_tools import (
 )
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
+from hugegraph_mcp.tools.manage_schema import manage_schema
 from hugegraph_mcp.tools.query_graph import query_graph_by_text
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
@@ -204,6 +205,28 @@ def execute_gremlin_read_tool(gremlin_query: str) -> dict:
     """
 
     return execute_gremlin_read(gremlin_query)
+
+
+@mcp.tool()
+def manage_schema_tool(
+    mode: str,
+    operations: list[dict] | None = None,
+    confirm: bool = False,
+    plan_hash: str | None = None,
+) -> dict:
+    """Unified schema management entry point with design, validation, dry-run, and apply modes.
+
+    This tool is always registered. In apply mode it performs a runtime
+    SCHEMA_WRITE guard, requires confirm=True, and verifies the dry-run plan_hash
+    against the current schema state before executing mutations.
+    """
+
+    return manage_schema(
+        mode=mode,
+        operations=operations,
+        confirm=confirm,
+        plan_hash=plan_hash,
+    )
 
 
 # Write tools - only registered when not in read-only mode

@@ -16,9 +16,24 @@ from typing import Any
 from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.envelope import ErrorType, envelope_err
 from hugegraph_mcp.guard import Capability, guard
 
 _config = MCPConfig.from_env()
+
+ALLOWED_SCHEMA_OPERATION_TYPES = frozenset(
+    {
+        "create_property_key",
+        "create_vertex_label",
+        "create_edge_label",
+        "create_index_label",
+    }
+)
+
+
+def _is_delete_schema_operation(op_type: Any) -> bool:
+    lowered = str(op_type).lower()
+    return "delete" in lowered or "drop" in lowered
 
 
 def _build_client() -> PyHugeClient:
@@ -120,6 +135,13 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
     for idx, op in enumerate(operations):
         op_type = op.get("type")
         try:
+            if _is_delete_schema_operation(op_type):
+                raise ValueError(
+                    f"Delete/drop schema operation is not supported: {op_type}"
+                )
+            if op_type not in ALLOWED_SCHEMA_OPERATION_TYPES:
+                raise ValueError(f"Unsupported schema operation type: {op_type}")
+
             if op_type == "create_property_key":
                 name = op["name"]
                 # Default to TEXT if caller没有指定类型；后续可以扩展 data_type 映射
@@ -199,9 +221,6 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
 
                 il_builder.ifNotExist().create()
 
-            else:
-                raise ValueError(f"Unsupported schema operation type: {op_type}")
-
             results.append({"op": op, "status": "ok"})
         except Exception as exc:  # pragma: no cover - 错误路径由上层聚合
             msg = str(exc)
@@ -222,6 +241,15 @@ def execute_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any
     violation = guard(Capability.DEBUG_WRITE)
     if violation is not None:
         return violation
+
+    for idx, operation in enumerate(operations):
+        op_type = operation.get("type") if isinstance(operation, dict) else None
+        if _is_delete_schema_operation(op_type):
+            return envelope_err(
+                ErrorType.SCHEMA_MISMATCH,
+                f"Delete/drop schema operation is not supported: {op_type}",
+                details={"op_index": idx, "operation": operation},
+            )
 
     result = _run_schema_operations(operations)
 

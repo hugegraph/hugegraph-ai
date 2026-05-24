@@ -95,3 +95,25 @@ def test_execute_schema_operations_blocked_in_readonly(monkeypatch):
     assert result["ok"] is False
     assert result["error"]["type"] == "READONLY_VIOLATION"
     assert result["meta"]["readonly"] is True
+
+
+def test_execute_schema_operations_rejects_delete(monkeypatch):
+    """V1 schema management must reject destructive schema operations."""
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+
+    from hugegraph_mcp import schema_tools
+
+    def fake_runner(_ops):
+        raise AssertionError("delete operations must be rejected before execution")
+
+    monkeypatch.setattr(
+        schema_tools, "_run_schema_operations", fake_runner, raising=False
+    )
+
+    result = schema_tools.execute_schema_operations(
+        [{"type": "delete_vertex_label", "name": "person"}]
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
