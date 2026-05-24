@@ -29,6 +29,7 @@ def query_graph_by_text(
     query: str,
     mode: str = "graph_only",
     include_evidence: bool = False,
+    max_context_items: int = 20,
 ) -> dict[str, Any]:
     """Query graph knowledge with natural language through HugeGraph-AI RAG APIs."""
 
@@ -46,6 +47,7 @@ def query_graph_by_text(
         "query": query,
         "graph": cfg.graph,
         "graphspace": cfg.graphspace,
+        "max_context_items": max_context_items,
     }
 
     ai_result = post(endpoint, json=payload)
@@ -57,18 +59,17 @@ def query_graph_by_text(
         ai_data = {}
 
     answer = ai_data.get("answer")
+    evidence, truncated = _truncate_evidence(
+        ai_data.get("evidence") if include_evidence else None
+    )
     data: dict[str, Any] = {
         "answer": answer,
+        "evidence": evidence,
         "gremlin": ai_data.get("gremlin"),
         "source_summary": ai_data.get("source_summary"),
+        "truncated": truncated,
         "mode": mode,
-        "truncated": False,
     }
-
-    if include_evidence:
-        evidence, truncated = _truncate_evidence(ai_data.get("evidence"))
-        data["evidence"] = evidence
-        data["truncated"] = truncated
 
     return envelope_ok(
         data,
@@ -79,6 +80,8 @@ def query_graph_by_text(
 
 
 def _truncate_evidence(evidence: Any) -> tuple[Any, bool]:
+    if evidence is None:
+        return None, False
     if isinstance(evidence, str) and len(evidence) > _EVIDENCE_LIMIT:
         return f"{evidence[:_EVIDENCE_LIMIT]}...", True
     return evidence, False

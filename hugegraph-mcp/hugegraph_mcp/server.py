@@ -158,6 +158,7 @@ def query_graph_by_text_tool(
     query: str,
     mode: str = "graph_only",
     include_evidence: bool = False,
+    max_context_items: int = 20,
 ) -> dict:
     """Ask HugeGraph-AI RAG a natural-language question about the graph.
 
@@ -166,9 +167,10 @@ def query_graph_by_text_tool(
         mode: Query mode. "graph_only" uses graph RAG via /rag/graph;
             "vector_only" uses pure vector retrieval via /rag.
         include_evidence: Whether to include supporting evidence from the AI response.
+        max_context_items: Maximum number of context items the AI can use.
 
     Returns:
-        dict: Standard envelope with answer, optional evidence, generated Gremlin,
+        dict: Standard envelope with answer, evidence, generated Gremlin,
               source summary, and suggested next actions when no answer is found.
     """
 

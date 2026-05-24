@@ -40,13 +40,14 @@ def test_query_graph_basic(monkeypatch):
     assert result["data"]["source_summary"] == {"sources": 1}
     assert result["data"]["mode"] == "graph_only"
     assert result["data"]["truncated"] is False
-    assert "evidence" not in result["data"]
+    assert result["data"]["evidence"] is None
     post.assert_called_once_with(
         "/rag/graph",
         json={
             "query": "Who does Alice know?",
             "graph": "hugegraph",
             "graphspace": "DEFAULT",
+            "max_context_items": 20,
         },
     )
 
@@ -68,6 +69,7 @@ def test_query_graph_vector_mode(monkeypatch):
             "query": "Who does Alice know?",
             "graph": "hugegraph",
             "graphspace": "DEFAULT",
+            "max_context_items": 20,
         },
     )
 
@@ -146,5 +148,26 @@ def test_query_graph_graph_config(monkeypatch):
             "query": "Who does Alice know?",
             "graph": "graph_a",
             "graphspace": "space_a",
+            "max_context_items": 20,
+        },
+    )
+
+
+def test_query_graph_custom_max_context_items(monkeypatch):
+    post = Mock(return_value=_ai_ok())
+    monkeypatch.setattr(query_graph_module, "post", post)
+
+    query_graph_module.query_graph_by_text(
+        "Who does Alice know?",
+        max_context_items=50,
+    )
+
+    post.assert_called_once_with(
+        "/rag/graph",
+        json={
+            "query": "Who does Alice know?",
+            "graph": "hugegraph",
+            "graphspace": "DEFAULT",
+            "max_context_items": 50,
         },
     )
