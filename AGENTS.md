@@ -46,3 +46,74 @@ uv run ruff check .
 - Root dependency or workspace changes can affect multiple packages; verify the package that consumes the changed dependency.
 - `hugegraph-llm` imports `hugegraph-python-client`; client API changes must preserve or deliberately update those call sites.
 - Do not duplicate README quick-start, Docker, or deployment instructions in AGENTS files.
+
+## MCP V1 Implementation Phase
+
+When working on the `hugegraph-mcp` V1 improvement plan, Codex operates as the **executor** under Claude's orchestration.
+
+### Role definition
+
+| Aspect | Rule |
+|--------|------|
+| Task source | Only accept tasks explicitly assigned by Claude. Do not self-select or expand scope. |
+| Architecture | Do not make architectural decisions independently. Defer uncertain design choices to Claude. |
+| Completion | Wait for Claude's review after each task. Do not self-mark tasks as complete. |
+| Scope | Implement exactly what the task specifies. No opportunistic rewrites or unrelated cleanup. |
+
+### Implementation standards
+
+- **Unified envelope**: All new high-level tools MUST return `{ ok, data, error: { type, message, suggestion, retryable, source, details }, warnings, next_actions, meta: { request_id, graph, graphspace, readonly, duration_ms } }`.
+- **Readonly guard**: Write paths MUST check readonly at runtime, not just at tool registration. `execute_schema_operations` must have a runtime readonly guard.
+- **Write safety chain**: Write/schema-apply operations MUST gate on `dry_run → plan_hash → confirm` before execution.
+- **Gremlin safety**: `execute_gremlin_read` MUST NOT rely solely on keyword matching to reject write statements. When safety cannot be reliably determined, return `UNSAFE_GREMLIN`.
+- **Default password**: Never use `"xxx"` as a real default password in config.
+- **Architecture boundary**: MCP does NOT import `hugegraph-llm` flows directly. Always use HTTP to call HugeGraph-AI APIs.
+- **Old tools preserved**: Existing tool names are retained. New high-level tools are additive. Old write tools must also pass through runtime guards.
+
+### Testing requirements
+
+- Every implementation task MUST include tests that exercise the changed behavior.
+- P0 mandatory test coverage: config parsing, readonly guard enforcement, unified envelope structure, `inspect_graph` degraded behavior, `generate_gremlin` default-no-execute, write-Gremlin rejection.
+- Existing tests MUST NOT regress.
+- Integration tests use a dedicated test graph or fixture, never the user's production graph.
+
+### Quality bar (before handoff)
+
+- `ruff format --check .` and `ruff check .` pass from the repo root.
+- All existing tests still pass.
+- No dead code, no placeholder comments, no unexplained TODO markers.
+
+### Handoff format
+
+Every task completion MUST end with:
+
+```text
+===HANDOFF===
+Completed:
+- Item
+Pending:
+- Item
+Decisions:
+- Item
+Files:
+- path (summary)
+Risks:
+- Item
+Questions:
+- Item
+===END===
+```
+
+### Code anchors for MCP work
+
+- `hugegraph-mcp/hugegraph_mcp/server.py` — FastMCP server bootstrap with 5 tools
+- `hugegraph-mcp/hugegraph_mcp/gremlin_tools.py` — Gremlin executor and `HugeGraphGremlinConfig`
+- `hugegraph-mcp/hugegraph_mcp/schema_tools.py` — Schema design and operations tools
+- `hugegraph-mcp/tests/` — Existing test suite
+- `hugegraph-python-client/src/pyhugegraph/` — HugeGraph REST client (read-only boundary for MCP)
+
+### Environment
+
+- Python `>=3.10` for `hugegraph-mcp`.
+- `hugegraph-mcp` is NOT a uv workspace member; dependencies are managed via its own `pyproject.toml`.
+- Run MCP tests: `cd hugegraph-mcp && uv run pytest`.

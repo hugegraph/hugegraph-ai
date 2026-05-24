@@ -11,13 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 class FakeSchemaManager:
@@ -89,7 +82,7 @@ def test_get_live_schema_basic(monkeypatch):
 
 
 def test_get_live_schema_with_graphspace(monkeypatch):
-    os.environ["HUGEGRAPH_GRAPH_PATH"] = "mcp_space/hugegraph"
+    monkeypatch.setenv("HUGEGRAPH_GRAPH_PATH", "mcp_space/hugegraph")
 
     # Reload the module to pick up the new environment variable
     import importlib
@@ -109,7 +102,7 @@ def test_get_live_schema_with_graphspace(monkeypatch):
 
 
 def test_get_live_schema_respects_readonly_flag(monkeypatch):
-    os.environ["HUGEGRAPH_MCP_READONLY"] = "true"
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
 
     from hugegraph_mcp import schema_tools
 
