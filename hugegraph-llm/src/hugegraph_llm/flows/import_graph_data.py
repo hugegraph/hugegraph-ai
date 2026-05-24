@@ -64,5 +64,8 @@ class ImportGraphDataFlow(BaseFlow):
 
     def post_deal(self, pipeline=None, **kwargs):
         res = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
-        gr.Info("Import graph data successfully!")
+        try:
+            gr.Info("Import graph data successfully!")
+        except Exception:  # pylint: disable=broad-exception-caught
+            log.debug("Skipped Gradio import success notification outside UI context.", exc_info=True)
         return json.dumps(res, ensure_ascii=False, indent=2)

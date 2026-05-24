@@ -25,6 +25,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from hugegraph_llm.api.admin_api import admin_http_api
 from hugegraph_llm.api.rag_api import rag_http_api
+from hugegraph_llm.api.thin_api import thin_router
 from hugegraph_llm.config import admin_settings, huge_settings, prompt
 from hugegraph_llm.demo.rag_demo.admin_block import create_admin_block, log_stream
 from hugegraph_llm.demo.rag_demo.configs_block import (
@@ -178,6 +179,7 @@ def create_app():
         gremlin_generate_selective,
     )
     admin_http_api(api_auth, log_stream)
+    api_auth.include_router(thin_router)
 
     app.include_router(api_auth)
     # Mount Gradio inside FastAPI
