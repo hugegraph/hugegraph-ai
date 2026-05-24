@@ -103,6 +103,9 @@ def envelope_err(
     error_type: ErrorType | str,
     message: str,
     *,
+    suggestion: str | None = None,
+    retryable: bool = False,
+    source: str = "hugegraph-mcp",
     details: Any = None,
     duration_ms: float | int | None = None,
     warnings: list[str] | tuple[str, ...] | None = None,
@@ -120,6 +123,9 @@ def envelope_err(
     error: dict[str, Any] = {
         "type": error_value,
         "message": message,
+        "suggestion": suggestion,
+        "retryable": retryable,
+        "source": source,
     }
     if details is not None:
         error["details"] = details

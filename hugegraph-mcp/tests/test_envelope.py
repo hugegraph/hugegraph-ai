@@ -47,17 +47,29 @@ def test_envelope_err_basic():
     result = envelope_err(
         ErrorType.CONNECTION_FAILED,
         "Cannot connect to HugeGraph server",
+        suggestion="Check if HugeGraph Server is running",
+        retryable=True,
         details={"url": "http://127.0.0.1:8080"},
     )
 
     assert result["ok"] is False
     assert result["data"] is None
-    assert result["error"] == {
-        "type": "CONNECTION_FAILED",
-        "message": "Cannot connect to HugeGraph server",
-        "details": {"url": "http://127.0.0.1:8080"},
-    }
+    assert result["error"]["type"] == "CONNECTION_FAILED"
+    assert result["error"]["message"] == "Cannot connect to HugeGraph server"
+    assert result["error"]["suggestion"] == "Check if HugeGraph Server is running"
+    assert result["error"]["retryable"] is True
+    assert result["error"]["source"] == "hugegraph-mcp"
+    assert result["error"]["details"] == {"url": "http://127.0.0.1:8080"}
     assert result["warnings"] == []
+
+
+def test_envelope_err_defaults():
+    """suggestion defaults to None, retryable to False, source to hugegraph-mcp."""
+    result = envelope_err(ErrorType.TIMEOUT, "Request timed out")
+
+    assert result["error"]["suggestion"] is None
+    assert result["error"]["retryable"] is False
+    assert result["error"]["source"] == "hugegraph-mcp"
 
 
 def test_envelope_err_all_error_types():
