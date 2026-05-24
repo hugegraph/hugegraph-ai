@@ -73,6 +73,21 @@ class TestFetchGraphData(unittest.TestCase):
         self.assertIn("g.V().id().limit(10000).toList()", groovy_code)
         self.assertIn("g.E().id().limit(200).toList()", groovy_code)
 
+    def test_run_with_legacy_ordered_single_field_dicts_result(self):
+        """Test run method with legacy ordered single-field dict rows."""
+        # Setup mock
+        self.mock_gremlin.exec.return_value = self.sample_result
+
+        # Call the method
+        result = self.fetcher.run({})
+
+        # Verify the result
+        self.assertEqual(result["vertex_num"], 100)
+        self.assertEqual(result["edge_num"], 200)
+        self.assertEqual(result["vertices"], ["v1", "v2", "v3"])
+        self.assertEqual(result["edges"], ["e1", "e2"])
+        self.assertEqual(result["note"], "Only ≤10000 VIDs and ≤ 200 EIDs for brief overview .")
+
     def test_run_with_existing_graph_summary(self):
         """Test run method with existing graph_summary."""
         # Setup mock
@@ -96,6 +111,77 @@ class TestFetchGraphData(unittest.TestCase):
         self.assertIn("edges", result)
         self.assertEqual(result["edges"], ["e1", "e2"])
         self.assertIn("note", result)
+
+    def test_run_with_single_summary_dict_result(self):
+        """Test run method with Gremlin map result wrapped as one data row."""
+        # Setup mock
+        self.mock_gremlin.exec.return_value = {
+            "data": [
+                {
+                    "vertex_num": 100,
+                    "edge_num": 200,
+                    "vertices": ["v1", "v2", "v3"],
+                    "edges": ["e1", "e2"],
+                    "note": "Only ≤10000 VIDs and ≤ 200 EIDs for brief overview .",
+                }
+            ]
+        }
+
+        # Call the method
+        result = self.fetcher.run({})
+
+        # Verify the result
+        self.assertEqual(result["vertex_num"], 100)
+        self.assertEqual(result["edge_num"], 200)
+        self.assertEqual(result["vertices"], ["v1", "v2", "v3"])
+        self.assertEqual(result["edges"], ["e1", "e2"])
+        self.assertEqual(result["note"], "Only ≤10000 VIDs and ≤ 200 EIDs for brief overview .")
+
+    def test_run_with_partial_single_summary_dict_result(self):
+        """Test run method handles a single Gremlin map with missing summary fields."""
+        # Setup mock
+        self.mock_gremlin.exec.return_value = {
+            "data": [
+                {
+                    "vertex_num": 100,
+                    "vertices": ["v1", "v2", "v3"],
+                }
+            ]
+        }
+
+        # Call the method
+        result = self.fetcher.run({})
+
+        # Verify the result
+        self.assertEqual(result["vertex_num"], 100)
+        self.assertIsNone(result["edge_num"])
+        self.assertEqual(result["vertices"], ["v1", "v2", "v3"])
+        self.assertIsNone(result["edges"])
+        self.assertIsNone(result["note"])
+
+    def test_run_with_empty_single_summary_dict_result(self):
+        """Test run method treats one empty dict as a summary row."""
+        # Setup mock
+        self.mock_gremlin.exec.return_value = {"data": [{}]}
+
+        # Call the method
+        result = self.fetcher.run({})
+
+        # Verify the result
+        self.assertIsNone(result["vertex_num"])
+        self.assertIsNone(result["edge_num"])
+        self.assertIsNone(result["vertices"])
+        self.assertIsNone(result["edges"])
+        self.assertIsNone(result["note"])
+
+    def test_run_reraises_gremlin_exec_exception(self):
+        """Test run method does not hide Gremlin execution failures."""
+        # Setup mock
+        self.mock_gremlin.exec.side_effect = RuntimeError("Gremlin endpoint unavailable")
+
+        # Call the method and verify the original failure is visible
+        with self.assertRaisesRegex(RuntimeError, "Gremlin endpoint unavailable"):
+            self.fetcher.run({})
 
     def test_run_with_empty_result(self):
         """Test run method with empty result from gremlin."""

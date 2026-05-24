@@ -1,4 +1,4 @@
-# HugeGraph-LLM [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/apache/incubator-hugegraph-ai)
+# HugeGraph-LLM [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/apache/hugegraph-ai)
 
 > **Bridge the gap between Graph Databases and Large Language Models**
 
@@ -12,7 +12,7 @@ HugeGraph-LLM is a comprehensive toolkit that combines the power of graph databa
 - 🗣️ **Natural Language Querying** - Operate graph databases using natural language (Gremlin/Cypher)
 - 🔍 **Graph-Enhanced RAG** - Leverage knowledge graphs to improve answer accuracy (GraphRAG & Graph Agent)
 
-For detailed source code doc, visit our [DeepWiki](https://deepwiki.com/apache/incubator-hugegraph-ai) page. (Recommended)
+For detailed source code doc, visit our [DeepWiki](https://deepwiki.com/apache/hugegraph-ai) page. (Recommended)
 
 ## 📋 Prerequisites
 
@@ -98,8 +98,8 @@ docker run -itd --name=server -p 8080:8080 hugegraph/hugegraph
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 3. Clone and setup project
-git clone https://github.com/apache/incubator-hugegraph-ai.git
-cd incubator-hugegraph-ai
+git clone https://github.com/apache/hugegraph-ai.git
+cd hugegraph-ai
 
 # Configure environment (see config.md for detailed options), .env will auto create if not exists
 
@@ -137,7 +137,7 @@ python -m hugegraph_llm.config.generate --update
 >
 > - `uv sync` automatically creates virtual environment (.venv) and installs all dependencies
 > - Activate once with `source .venv/bin/activate` - all subsequent commands assume this environment
-> - Check our [Quick Start Guide](https://github.com/apache/incubator-hugegraph-ai/blob/main/hugegraph-llm/quick_start.md) for detailed usage examples
+> - Check our [Quick Start Guide](https://github.com/apache/hugegraph-ai/blob/main/hugegraph-llm/quick_start.md) for detailed usage examples
 
 ## 💡 Usage Examples
 
@@ -154,7 +154,7 @@ Use the Gradio interface for visual knowledge graph building:
 
 **Schema Configuration:**
 
-- **Custom Schema**: JSON format following our [template](https://github.com/apache/incubator-hugegraph-ai/blob/aff3bbe25fa91c3414947a196131be812c20ef11/hugegraph-llm/src/hugegraph_llm/config/config_data.py#L125)
+- **Custom Schema**: JSON format following our [template](https://github.com/apache/hugegraph-ai/blob/aff3bbe25fa91c3414947a196131be812c20ef11/hugegraph-llm/src/hugegraph_llm/config/config_data.py#L125)
 - **HugeGraph Schema**: Use existing graph instance schema (e.g., "hugegraph")
 
 ![Knowledge Graph Builder](https://hugegraph.apache.org/docs/images/gradio-kg.png)
