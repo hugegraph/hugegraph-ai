@@ -66,6 +66,7 @@ from hugegraph_mcp.schema_tools import (
     execute_schema_operations,
     get_live_schema,
 )
+from hugegraph_mcp.tools.inspect_graph import inspect_graph
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
 # stdout is reserved for MCP JSON protocol only. Windsurf's MCP client
@@ -97,6 +98,26 @@ def get_live_schema_tool() -> dict:
     """
 
     return get_live_schema()
+
+
+@mcp.tool()
+def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
+    """Inspect HugeGraph server status, schema summary, counts, and AI status.
+
+    This is the recommended first tool after connecting to HugeGraph MCP. It
+    returns a best-effort status envelope and degrades gracefully when HugeGraph
+    Server, Gremlin counts, or HugeGraph-AI are unavailable.
+
+    Args:
+        include_raw_schema: Include the full raw HugeGraph schema in the response.
+
+    Returns:
+        dict: Standard ok envelope with server_status, ai_status, schema_summary,
+              vertex_count, edge_count, index_count, readonly, warnings, and
+              suggested next_actions.
+    """
+
+    return inspect_graph(include_raw_schema=include_raw_schema)
 
 
 @mcp.tool()
