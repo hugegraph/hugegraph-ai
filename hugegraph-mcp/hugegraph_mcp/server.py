@@ -66,6 +66,7 @@ from hugegraph_mcp.schema_tools import (
     execute_schema_operations,
     get_live_schema,
 )
+from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
@@ -118,6 +119,37 @@ def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
     """
 
     return inspect_graph(include_raw_schema=include_raw_schema)
+
+
+@mcp.tool()
+def generate_gremlin_tool(
+    query: str,
+    execute: bool = False,
+    output_types: list[str] | None = None,
+) -> dict:
+    """Generate Gremlin from natural language using HugeGraph-AI.
+
+    The generated Gremlin is safety-classified before any optional execution.
+    By default execute is false, so this tool returns the generated traversal
+    without running it. When execute is true, only confidently read-only Gremlin
+    will be executed automatically.
+
+    Args:
+        query: Natural language question or request to convert to Gremlin.
+        execute: Whether to execute the generated Gremlin when it is read-only.
+        output_types: Reserved for future response filtering. Current responses
+            include gremlin, template_gremlin, and raw_gremlin.
+
+    Returns:
+        dict: Standard envelope with generated Gremlin, safety metadata,
+              execution status, and optional execution_result.
+    """
+
+    return generate_gremlin(
+        query=query,
+        execute=execute,
+        output_types=output_types,
+    )
 
 
 @mcp.tool()
