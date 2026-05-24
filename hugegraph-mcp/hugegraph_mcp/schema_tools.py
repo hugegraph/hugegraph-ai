@@ -16,6 +16,7 @@ from typing import Any
 from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.guard import Capability, require_capability
 
 _config = MCPConfig.from_env()
 
@@ -217,6 +218,8 @@ def execute_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any
     - Delegates actual execution to `_run_schema_operations`.
     - Respects HUGEGRAPH_MCP_READONLY environment variable.
     """
+
+    require_capability(Capability.DEBUG_WRITE)
 
     result = _run_schema_operations(operations)
 

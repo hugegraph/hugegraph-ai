@@ -11,6 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
+
 
 
 def _sample_ops():
@@ -22,6 +24,8 @@ def _sample_ops():
 
 def test_execute_schema_operations_all_success(monkeypatch):
     """All operations succeed → success True, no errors, per-op results preserved."""
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
     from hugegraph_mcp import schema_tools
 
@@ -56,6 +60,8 @@ def test_execute_schema_operations_all_success(monkeypatch):
 def test_execute_schema_operations_collects_errors(monkeypatch):
     """Mixed success/failure → When operations fail, errors are collected and success is False."""
 
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+
     from hugegraph_mcp import schema_tools
 
     def fake_runner(ops):
@@ -79,3 +85,14 @@ def test_execute_schema_operations_collects_errors(monkeypatch):
     assert result["success"] is False
     assert result["errors"]
     assert result["errors"][0]["message"] == "Constraint violation"
+
+
+def test_execute_schema_operations_blocked_in_readonly(monkeypatch):
+    """When HUGEGRAPH_MCP_READONLY is true, schema operations must be blocked."""
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
+
+    from hugegraph_mcp import schema_tools
+
+    with pytest.raises(PermissionError):
+        schema_tools.execute_schema_operations(_sample_ops())
