@@ -11,6 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+
 from hugegraph_mcp.config import MCPConfig
 
 
@@ -56,7 +58,7 @@ def test_basic_config_parsing(monkeypatch):
     assert cfg.password == "secret"
     assert cfg.is_readonly() is True
     assert cfg.ai_url == "http://ai.example:18001"
-    assert cfg.allow_ai is True
+    assert cfg.allow_ai is False
     assert cfg.timeout_seconds == 45
     assert cfg.max_context_items == 250
 
@@ -84,6 +86,34 @@ def test_split_graph_variables_take_priority(monkeypatch):
     assert cfg.warnings == (
         "HUGEGRAPH_GRAPHSPACE/HUGEGRAPH_GRAPH override HUGEGRAPH_GRAPH_PATH",
     )
+
+
+def test_warnings_are_logged(monkeypatch, caplog):
+    clear_config_env(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_GRAPH_PATH", "path_space/path_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "split_space")
+
+    with caplog.at_level(logging.WARNING, logger="hugegraph_mcp.config"):
+        cfg = MCPConfig.from_env()
+
+    assert cfg.warnings == (
+        "HUGEGRAPH_GRAPHSPACE/HUGEGRAPH_GRAPH override HUGEGRAPH_GRAPH_PATH",
+    )
+    assert (
+        "HUGEGRAPH_GRAPHSPACE/HUGEGRAPH_GRAPH override HUGEGRAPH_GRAPH_PATH"
+        in caplog.messages
+    )
+
+
+def test_strictest_policy_readonly_forces_allow_ai_false(monkeypatch):
+    clear_config_env(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
+    monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "true")
+
+    cfg = MCPConfig.from_env()
+
+    assert cfg.is_readonly() is True
+    assert cfg.allow_ai is False
 
 
 def test_readonly_parsing(monkeypatch):

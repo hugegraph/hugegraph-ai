@@ -12,11 +12,13 @@
 # limitations under the License.
 
 import os
+import logging
 from dataclasses import dataclass, field
 from typing import Mapping
 
 
 TRUE_VALUES = {"1", "true", "yes"}
+LOGGER = logging.getLogger("hugegraph_mcp.config")
 
 
 @dataclass
@@ -32,6 +34,10 @@ class MCPConfig:
     timeout_seconds: int = 30
     max_context_items: int = 100
     warnings: tuple[str, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        if self.readonly:
+            self.allow_ai = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "MCPConfig":
@@ -58,7 +64,7 @@ class MCPConfig:
         if split_graph is not None:
             graph = _non_empty(split_graph, "hugegraph")
 
-        return cls(
+        config = cls(
             url=env.get("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
             graph=graph,
             graphspace=graphspace,
@@ -75,6 +81,9 @@ class MCPConfig:
             ),
             warnings=tuple(warnings),
         )
+        for warning in config.warnings:
+            LOGGER.warning(warning)
+        return config
 
     def is_readonly(self) -> bool:
         return self.readonly
