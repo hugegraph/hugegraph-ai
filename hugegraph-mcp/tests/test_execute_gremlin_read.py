@@ -11,8 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-
 
 class FakeGremlinClient:
     def __init__(self):
@@ -62,7 +60,7 @@ def test_execute_gremlin_read_rejects_obvious_writes(monkeypatch):
 def test_execute_gremlin_read_respects_readonly_env(monkeypatch):
     """When HUGEGRAPH_MCP_READONLY is true, execute_gremlin_read should still work (it's read)."""
 
-    os.environ["HUGEGRAPH_MCP_READONLY"] = "true"
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
 
     from hugegraph_mcp import gremlin_tools
 

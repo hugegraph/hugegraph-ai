@@ -126,9 +126,8 @@ def envelope_err(
         "suggestion": suggestion,
         "retryable": retryable,
         "source": source,
+        "details": details if details is not None else {},
     }
-    if details is not None:
-        error["details"] = details
 
     envelope_meta = build_meta(
         duration_ms=duration_ms,

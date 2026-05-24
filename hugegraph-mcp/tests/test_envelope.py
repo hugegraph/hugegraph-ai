@@ -64,12 +64,13 @@ def test_envelope_err_basic():
 
 
 def test_envelope_err_defaults():
-    """suggestion defaults to None, retryable to False, source to hugegraph-mcp."""
+    """suggestion defaults to None, retryable to False, source to hugegraph-mcp, details to {}."""
     result = envelope_err(ErrorType.TIMEOUT, "Request timed out")
 
     assert result["error"]["suggestion"] is None
     assert result["error"]["retryable"] is False
     assert result["error"]["source"] == "hugegraph-mcp"
+    assert result["error"]["details"] == {}
 
 
 def test_envelope_err_all_error_types():
