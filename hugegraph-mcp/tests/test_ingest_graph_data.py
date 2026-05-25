@@ -20,7 +20,10 @@ from hugegraph_mcp.tools import ingest_graph_data as ingest_graph_data_module
 
 def _graph_data():
     return {
-        "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+        "vertices": [
+            {"label": "person", "properties": {"name": "Alice"}},
+            {"label": "person", "properties": {"name": "Bob"}},
+        ],
         "edges": [
             {
                 "label": "knows",
@@ -37,7 +40,11 @@ def _live_schema():
     return {
         "schema": {
             "vertexlabels": [
-                {"name": "person", "properties": [{"name": "name"}, {"name": "age"}]},
+                {
+                    "name": "person",
+                    "properties": [{"name": "name"}, {"name": "age"}],
+                    "primary_keys": ["name"],
+                },
             ],
             "edgelabels": [
                 {"name": "knows", "source_label": "person", "target_label": "person"},
@@ -65,7 +72,8 @@ def test_ingest_graph_data_accepts_string_property_schema(monkeypatch):
     result = ingest_graph_data_module.ingest_graph_data(
         {
             "vertices": [
-                {"label": "person", "properties": {"name": "Alice", "age": 30}}
+                {"label": "person", "properties": {"name": "Alice", "age": 30}},
+                {"label": "person", "properties": {"name": "Bob", "age": 31}},
             ],
             "edges": [
                 {
@@ -90,7 +98,7 @@ def test_ingest_graph_data_dry_run(monkeypatch):
 
     assert result["ok"] is True
     assert re.fullmatch(r"[0-9a-f]{16}", result["data"]["plan_hash"])
-    assert result["data"]["mutation_summary"] == {"vertices": 1, "edges": 1}
+    assert result["data"]["mutation_summary"] == {"vertices": 2, "edges": 1}
     assert any("index" in w for w in result["data"]["warnings"])
 
 
@@ -170,6 +178,129 @@ def test_ingest_graph_data_rejects_property_type_mismatch(monkeypatch):
     assert result["ok"] is False
     assert result["error"]["type"] == "SCHEMA_MISMATCH"
     assert any("property 'age' expects INT" in e for e in result["error"]["details"]["errors"])
+
+
+def test_ingest_graph_data_rejects_missing_schema_primary_key(monkeypatch):
+    _mock_schema(monkeypatch)
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        {"vertices": [{"label": "person", "properties": {"age": 30}}], "edges": []}
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
+    assert any(
+        "vertex 0 missing primary key value for label 'person': name" in e
+        for e in result["error"]["details"]["errors"]
+    )
+
+
+def test_ingest_graph_data_rejects_edge_target_not_in_payload(monkeypatch):
+    _mock_schema(monkeypatch)
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        {
+            "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "target_label": "person",
+                    "source": {"name": "Alice"},
+                    "target": {"name": "Bob"},
+                }
+            ],
+        }
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
+    assert any(
+        "edge 0 target endpoint not found for label 'person': {'name': 'Bob'}" in e
+        for e in result["error"]["details"]["errors"]
+    )
+
+
+def test_ingest_graph_data_rejects_edge_endpoint_missing_primary_key(monkeypatch):
+    _mock_schema(monkeypatch)
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        {
+            "vertices": [
+                {"label": "person", "properties": {"name": "Alice"}},
+                {"label": "person", "properties": {"name": "Bob"}},
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "target_label": "person",
+                    "source": {"name": "Alice"},
+                    "target": {"age": 31},
+                }
+            ],
+        }
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
+    assert any(
+        "edge 0 target endpoint missing primary key for label 'person': name" in e
+        for e in result["error"]["details"]["errors"]
+    )
+
+
+def test_ingest_graph_data_valid_payload_with_primary_key_endpoints(monkeypatch):
+    _mock_schema(monkeypatch)
+
+    result = ingest_graph_data_module.ingest_graph_data(_graph_data())
+
+    assert result["ok"] is True
+    assert result["data"]["mutation_summary"] == {"vertices": 2, "edges": 1}
+
+
+def test_ingest_graph_data_resolves_outv_inv_endpoint_shape(monkeypatch):
+    schema = _live_schema()
+    schema["schema"]["vertexlabels"][0].pop("primary_keys")
+    schema["schema"]["vertexlabels"][0]["primaryKeys"] = ["name"]
+    monkeypatch.setattr(ingest_graph_data_module, "_fetch_live_schema", lambda: schema)
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        {
+            "vertices": [
+                {"label": "person", "properties": {"name": "Alice"}},
+                {"label": "person", "properties": {"name": "Bob"}},
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "outV": "1:Alice",
+                    "outVLabel": "person",
+                    "inV": "1:Bob",
+                    "inVLabel": "person",
+                }
+            ],
+        }
+    )
+
+    assert result["ok"] is True
+
+
+def test_ingest_graph_data_warns_for_duplicate_vertex_identity(monkeypatch):
+    _mock_schema(monkeypatch)
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        {
+            "vertices": [
+                {"label": "person", "properties": {"name": "Alice"}},
+                {"label": "person", "properties": {"name": "Alice"}},
+            ],
+            "edges": [],
+        }
+    )
+
+    assert result["ok"] is True
+    assert "duplicate vertex identity" in result["data"]["warnings"]
 
 
 def test_ingest_graph_data_rejects_edge_label_mismatch(monkeypatch):
@@ -279,7 +410,7 @@ def test_ingest_graph_data_success(monkeypatch):
 
     assert result["ok"] is True
     assert result["data"]["batch_id"].startswith("batch-")
-    assert result["data"]["mutation_summary"] == {"vertices": 1, "edges": 1}
+    assert result["data"]["mutation_summary"] == {"vertices": 2, "edges": 1}
     assert result["data"]["import_result"] == {"inserted": 2}
     post.assert_called_once()
     assert post.call_args.args == ("/graph-import",)
