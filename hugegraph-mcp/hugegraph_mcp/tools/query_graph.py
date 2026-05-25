@@ -225,6 +225,6 @@ def _next_actions(answer: Any) -> list[str]:
         return []
     return [
         "Try mode='vector_only'",
-        "Use generate_gremlin_tool to produce a precise read-only graph traversal",
+        "Use query_graph_tool with mode='generate' to produce a precise read-only graph traversal",
         "Use inspect_graph_tool to confirm HugeGraph Server and HugeGraph-AI status",
     ]

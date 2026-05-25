@@ -61,6 +61,7 @@ from fastmcp import FastMCP
 
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
 from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.envelope import envelope_err, envelope_ok
 from hugegraph_mcp.schema_tools import (
     design_schema,
     execute_schema_operations,
@@ -106,88 +107,80 @@ def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
 
 
 @mcp.tool()
-def generate_gremlin_tool(
-    query: str,
+def query_graph_tool(
+    mode: str,
+    query: str | None = None,
+    gremlin_query: str | None = None,
+    rag_mode: str = "graph_only",
     execute: bool = False,
-    output_types: list[str] | None = None,
-) -> dict:
-    """Generate Gremlin from natural language using HugeGraph-AI.
-
-    The generated Gremlin is safety-classified before any optional execution.
-    By default execute is false, so this tool returns the generated traversal
-    without running it. When execute is true, only confidently read-only Gremlin
-    will be executed automatically.
-
-    Args:
-        query: Natural language question or request to convert to Gremlin.
-        execute: Whether to execute the generated Gremlin when it is read-only.
-        output_types: Reserved for future response filtering. Current responses
-            include gremlin, template_gremlin, and raw_gremlin.
-
-    Returns:
-        dict: Standard envelope with generated Gremlin, safety metadata,
-              execution status, and optional execution_result.
-    """
-
-    return generate_gremlin(
-        query=query,
-        execute=execute,
-        output_types=output_types,
-    )
-
-
-@mcp.tool()
-def query_graph_by_text_tool(
-    query: str,
-    mode: str = "graph_only",
     include_evidence: bool = False,
     max_context_items: int = 20,
 ) -> dict:
-    """Ask HugeGraph-AI RAG a natural-language question about the graph.
+    """Unified graph query entry — the recommended tool for all graph read operations.
+
+    Three modes:
+    - mode="text": Ask a natural-language question and get an AI-powered answer
+      backed by graph data. Uses HugeGraph-AI RAG.
+    - mode="generate": Convert a natural-language question to a Gremlin traversal.
+      By default only generates the query without executing it.
+    - mode="gremlin": Execute a read-only Gremlin query directly against HugeGraph.
+      Only known-safe read traversals are allowed.
 
     Args:
-        query: Natural language question to answer from graph knowledge.
-        mode: Query mode. "graph_only" uses graph RAG via /rag/graph;
-            "vector_only" uses pure vector retrieval via /rag.
-        include_evidence: Whether to include supporting evidence from the AI response.
-        max_context_items: Maximum number of context items the AI can use.
+        mode: Query mode — "text", "generate", or "gremlin".
+        query: Natural language question (required for text and generate modes).
+        gremlin_query: Gremlin query string (required for gremlin mode).
+        rag_mode: RAG mode for text queries — "graph_only" (default) or "vector_only".
+        execute: For generate mode, whether to auto-execute if the Gremlin is read-only.
+        include_evidence: For text mode, include supporting graph evidence in the response.
+        max_context_items: For text mode, max context items the AI can use (default 20).
 
     Returns:
-        dict: Standard envelope with answer, evidence, generated Gremlin,
-              source summary, and suggested next actions when no answer is found.
+        dict: Standard envelope with answer, gremlin, execution results, or error.
     """
 
-    return query_graph_by_text(
-        query=query,
-        mode=mode,
-        include_evidence=include_evidence,
-        max_context_items=max_context_items,
+    if mode == "text":
+        if not query:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "query is required for mode='text'",
+            )
+        return query_graph_by_text(
+            query=query,
+            mode=rag_mode,
+            include_evidence=include_evidence,
+            max_context_items=max_context_items,
+        )
+
+    if mode == "generate":
+        if not query:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "query is required for mode='generate'",
+            )
+        return generate_gremlin(query=query, execute=execute)
+
+    if mode == "gremlin":
+        if not gremlin_query:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "gremlin_query is required for mode='gremlin'",
+            )
+        result = execute_gremlin_read(gremlin_query)
+        if isinstance(result, dict) and result.get("data") is not None and "error" not in result:
+            return envelope_ok({
+                "data": result.get("data"),
+                "total": result.get("total"),
+                "duration_ms": result.get("duration_ms"),
+                "is_read": result.get("is_read", True),
+            })
+        return result
+
+    return envelope_err(
+        "VALIDATION_ERROR",
+        f"Unknown mode: {mode!r}. Use 'text', 'generate', or 'gremlin'.",
+        details={"mode": mode},
     )
-
-
-@mcp.tool()
-def execute_gremlin_read_tool(gremlin_query: str) -> dict:
-    """Execute a read-only Gremlin query and return data/total/duration_ms/is_read.
-
-    This tool allows you to explore and query your graph data safely without
-    making any modifications. Use it for:
-    - Finding vertices and edges
-    - Counting nodes and relationships
-    - Traversing the graph structure
-    - Analyzing graph patterns
-
-    The query will be validated to ensure it only contains read operations.
-
-    Args:
-        gremlin_query: A valid Gremlin query string (e.g., "g.V().count()",
-                      "g.V().hasLabel('person').limit(10)")
-
-    Returns:
-        dict: Contains 'data' (query results), 'total' (result count),
-              'duration_ms' (execution time), and 'is_read' (always true).
-    """
-
-    return execute_gremlin_read(gremlin_query)
 
 
 @mcp.tool()

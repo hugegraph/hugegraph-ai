@@ -162,7 +162,7 @@ def _next_actions(data: dict[str, Any]) -> list[str]:
         "Use inspect_graph_tool with include_raw_schema=true for full schema details"
     ]
     if data.get("hugegraph_server_status") == "available":
-        actions.append("Use execute_gremlin_read_tool for read-only graph exploration")
+        actions.append("Use query_graph_tool with mode='gremlin' for read-only graph exploration")
     else:
         actions.append("Check HugeGraph Server URL, graph name, and credentials")
     if data.get("hugegraph_ai_status") != "available":
