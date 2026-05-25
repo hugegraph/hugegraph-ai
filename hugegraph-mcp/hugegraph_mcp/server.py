@@ -64,7 +64,6 @@ from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.schema_tools import (
     design_schema,
     execute_schema_operations,
-    get_live_schema,
 )
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
@@ -84,26 +83,6 @@ READONLY = MCPConfig.from_env().is_readonly()
 
 mcp = FastMCP("HugeGraph MCP")
 
-
-@mcp.tool()
-def get_live_schema_tool() -> dict:
-    """Fetch live HugeGraph schema via REST and return full & simplified schema.
-
-    This tool provides comprehensive schema information including:
-    - Vertex labels with their properties
-    - Edge labels with source/target relationships
-    - Property keys and their data types
-    - Index labels for search optimization
-
-    The schema is fetched in real-time from your HugeGraph instance.
-    This tool is always available regardless of read-only mode settings.
-
-    Returns:
-        dict: Contains 'schema' (full raw schema), 'simple_schema' (LLM-friendly format),
-              and 'readonly' (boolean indicating if server is in read-only mode).
-    """
-
-    return get_live_schema()
 
 
 @mcp.tool()

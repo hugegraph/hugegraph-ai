@@ -119,7 +119,10 @@ def test_inspect_graph_with_raw_schema(monkeypatch):
 
     result = inspect_graph_module.inspect_graph(include_raw_schema=True)
 
+    assert result["ok"] is True
+    assert result["error"] is None
     assert result["data"]["raw_schema"] == schema["schema"]
+    assert result["data"]["simple_schema"] == schema["simple_schema"]
 
 
 def test_inspect_graph_server_unavailable(monkeypatch):
@@ -218,7 +221,10 @@ def test_inspect_graph_includes_next_actions(monkeypatch):
     result = inspect_graph_module.inspect_graph()
 
     assert result["next_actions"]
-    assert any("get_live_schema_tool" in action for action in result["next_actions"])
+    assert any(
+        "inspect_graph_tool with include_raw_schema=true" in action
+        for action in result["next_actions"]
+    )
 
 
 def test_inspect_graph_readonly_flag(monkeypatch):

@@ -83,7 +83,7 @@ def test_write_tools_disabled_when_readonly(monkeypatch):
     assert "design_schema_tool" in tools
     assert "manage_schema_tool" in tools
     # Read tools should still be available
-    assert "get_live_schema_tool" in tools
+    assert "inspect_graph_tool" in tools
     assert "generate_gremlin_tool" in tools
     assert "query_graph_by_text_tool" in tools
     assert "execute_gremlin_read_tool" in tools

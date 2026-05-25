@@ -95,13 +95,15 @@ def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:
     server_status = "available"
     schema_summary: dict[str, Any] | None = None
     raw_schema: dict[str, Any] | None = None
+    simple_schema: dict[str, Any] | None = None
     readonly: bool | None = None
     vertex_count: int | None = None
     edge_count: int | None = None
 
     try:
         schema_result = get_live_schema()
-        schema_summary = schema_result.get("simple_schema")
+        simple_schema = schema_result.get("simple_schema")
+        schema_summary = simple_schema
         raw_schema = schema_result.get("schema")
         readonly = schema_result.get("readonly")
     except Exception as exc:
@@ -131,6 +133,7 @@ def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:
     }
     if include_raw_schema:
         data["raw_schema"] = raw_schema
+        data["simple_schema"] = simple_schema
 
     duration_ms = (time.time() - start) * 1000.0
     return envelope_ok(
@@ -155,7 +158,9 @@ def _run_count_query(query: str, label: str, warnings: list[str]) -> int | None:
 
 
 def _next_actions(data: dict[str, Any]) -> list[str]:
-    actions = ["Use get_live_schema_tool for full schema details"]
+    actions = [
+        "Use inspect_graph_tool with include_raw_schema=true for full schema details"
+    ]
     if data.get("hugegraph_server_status") == "available":
         actions.append("Use execute_gremlin_read_tool for read-only graph exploration")
     else:
