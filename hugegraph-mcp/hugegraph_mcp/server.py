@@ -65,6 +65,7 @@ from hugegraph_mcp.envelope import envelope_err, envelope_ok
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
 from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
+from hugegraph_mcp.tools.import_table import import_table_data
 from hugegraph_mcp.tools.ingest_graph_data import ingest_graph_data
 from hugegraph_mcp.tools.manage_schema import manage_schema
 from hugegraph_mcp.tools.query_graph import query_graph_by_text
@@ -213,6 +214,8 @@ def import_graph_data_tool(
     schema: dict | None = None,
     example_prompt: str | None = None,
     graph_data: dict | None = None,
+    table_data: dict | None = None,
+    mapping: dict | None = None,
     dry_run: bool = True,
     confirm: bool = False,
     plan_hash: str | None = None,
@@ -226,6 +229,9 @@ def import_graph_data_tool(
     defaults to dry_run=True and returns a deterministic plan_hash. Mutating
     imports require dry_run=False, confirm=True, and a matching plan_hash from a
     previous dry run.
+
+    Use mode="table" to map structured table_data rows into graph_data before
+    routing through the same ingest validation and import flow.
     """
 
     if mode == "extract":
@@ -253,9 +259,28 @@ def import_graph_data_tool(
             plan_hash=plan_hash,
         )
 
+    if mode == "table":
+        if table_data is None:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "table_data is required for mode='table'",
+            )
+        mapped = import_table_data(table_data=table_data, mapping=mapping)
+        if not mapped.get("ok"):
+            return mapped
+        mapped_graph_data = (mapped.get("data") or {}).get("graph_data")
+        if mapped_graph_data is None:
+            return mapped
+        return ingest_graph_data(
+            graph_data=mapped_graph_data,
+            dry_run=dry_run,
+            confirm=confirm,
+            plan_hash=plan_hash,
+        )
+
     return envelope_err(
         "VALIDATION_ERROR",
-        f"Unknown mode: {mode!r}. Use 'extract' or 'ingest'.",
+        f"Unknown mode: {mode!r}. Use 'extract', 'ingest', or 'table'.",
         details={"mode": mode},
     )
 
