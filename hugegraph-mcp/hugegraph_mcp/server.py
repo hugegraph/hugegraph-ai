@@ -68,8 +68,11 @@ from hugegraph_mcp.schema_tools import (
 )
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
+from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
+from hugegraph_mcp.tools.ingest_graph_data import ingest_graph_data
 from hugegraph_mcp.tools.manage_schema import manage_schema
 from hugegraph_mcp.tools.query_graph import query_graph_by_text
+from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
 # stdout is reserved for MCP JSON protocol only. Windsurf's MCP client
@@ -227,6 +230,58 @@ def manage_schema_tool(
         confirm=confirm,
         plan_hash=plan_hash,
     )
+
+
+@mcp.tool()
+def extract_graph_data_tool(
+    text: str,
+    schema: dict | None = None,
+    example_prompt: str | None = None,
+) -> dict:
+    """Extract candidate graph data from text without writing to HugeGraph.
+
+    Calls HugeGraph-AI /graph-extract and returns normalized graph_data with
+    vertices and edges. This tool never mutates graph data.
+    """
+
+    return extract_graph_data(
+        text=text,
+        schema=schema,
+        example_prompt=example_prompt,
+    )
+
+
+@mcp.tool()
+def ingest_graph_data_tool(
+    graph_data: dict,
+    dry_run: bool = True,
+    confirm: bool = False,
+    plan_hash: str | None = None,
+) -> dict:
+    """Validate and import structured graph data with dry-run and plan_hash gating.
+
+    dry_run defaults to true and returns a deterministic plan_hash plus mutation
+    summary. Mutating imports require DATA_WRITE permission, confirm=True, and a
+    matching plan_hash from dry-run.
+    """
+
+    return ingest_graph_data(
+        graph_data=graph_data,
+        dry_run=dry_run,
+        confirm=confirm,
+        plan_hash=plan_hash,
+    )
+
+
+@mcp.tool()
+def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
+    """Manually refresh VID embeddings through HugeGraph-AI.
+
+    This tool is always registered, but mutating refresh requires INDEX_WRITE
+    permission and confirm=True at runtime.
+    """
+
+    return refresh_vid_embeddings(confirm=confirm)
 
 
 # Write tools - only registered when not in read-only mode
