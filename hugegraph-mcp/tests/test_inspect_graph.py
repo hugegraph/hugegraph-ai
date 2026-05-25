@@ -105,6 +105,40 @@ def test_inspect_graph_basic(monkeypatch):
     execute_read.assert_any_call("g.E().count()")
 
 
+def test_inspect_graph_nested_count_result(monkeypatch):
+    from hugegraph_mcp.tools import inspect_graph as inspect_graph_module
+
+    monkeypatch.setattr(
+        inspect_graph_module, "get_live_schema", lambda: _schema_result()
+    )
+    execute_read = Mock(
+        side_effect=[
+            {
+                "data": {"data": [8], "meta": {}},
+                "total": 2,
+                "duration_ms": 1,
+                "is_read": True,
+            },
+            {
+                "data": {"data": [5], "meta": {}},
+                "total": 2,
+                "duration_ms": 1,
+                "is_read": True,
+            },
+        ]
+    )
+    monkeypatch.setattr(inspect_graph_module, "execute_gremlin_read", execute_read)
+    _patch_ai_available(monkeypatch, inspect_graph_module)
+
+    result = inspect_graph_module.inspect_graph()
+
+    assert result["ok"] is True
+    assert result["data"]["vertex_count"] == 8
+    assert result["data"]["edge_count"] == 5
+    assert "Failed to fetch vertex count" not in result["warnings"]
+    assert "Failed to fetch edge count" not in result["warnings"]
+
+
 def test_inspect_graph_with_raw_schema(monkeypatch):
     from hugegraph_mcp.tools import inspect_graph as inspect_graph_module
 

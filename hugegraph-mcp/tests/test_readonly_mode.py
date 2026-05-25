@@ -69,10 +69,11 @@ def test_write_tools_available_when_not_readonly(monkeypatch):
     assert "design_schema_tool" not in tools
     assert "execute_gremlin_write_tool" in tools
     assert "manage_schema_tool" in tools
+    assert "manage_graph_data_tool" in tools
     assert "import_graph_data_tool" in tools
     assert "extract_graph_data_tool" not in tools
     assert "ingest_graph_data_tool" not in tools
-    assert len(tools) == 6
+    assert len(tools) == 7
 
 
 def test_write_tools_disabled_when_readonly(monkeypatch):
@@ -90,10 +91,11 @@ def test_write_tools_disabled_when_readonly(monkeypatch):
     # Read tools should still be available
     assert "inspect_graph_tool" in tools
     assert "query_graph_tool" in tools
+    assert "manage_graph_data_tool" in tools
     assert "import_graph_data_tool" in tools
     assert "extract_graph_data_tool" not in tools
     assert "ingest_graph_data_tool" not in tools
-    assert len(tools) == 6
+    assert len(tools) == 7
 
 
 def test_readonly_mode_default(monkeypatch):
@@ -107,7 +109,8 @@ def test_readonly_mode_default(monkeypatch):
     assert "execute_schema_operations_tool" not in tools
     assert "design_schema_tool" not in tools
     assert "execute_gremlin_write_tool" in tools
+    assert "manage_graph_data_tool" in tools
     assert "import_graph_data_tool" in tools
     assert "extract_graph_data_tool" not in tools
     assert "ingest_graph_data_tool" not in tools
-    assert len(tools) == 6
+    assert len(tools) == 7

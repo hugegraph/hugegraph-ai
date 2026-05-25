@@ -1,6 +1,6 @@
 # HugeGraph MCP
 
-FastMCP-based Model Context Protocol server for HugeGraph. It lets AI assistants inspect graph status, query graph data, manage schema, and import graph data through a small set of high-level tools.
+FastMCP-based Model Context Protocol server for HugeGraph. It lets AI assistants inspect graph status, query graph data, manage schema, and manage graph data through a small set of high-level tools.
 
 ## Quick Start
 
@@ -253,15 +253,15 @@ Apply the exact dry-run plan:
 }
 ```
 
-### 4. Import Graph Data
+### 4. Manage Graph Data
 
-Use `import_graph_data_tool` to extract graph-shaped data from text, ingest structured graph data, or map table rows into graph data. Mutating imports require the safety chain `dry_run -> plan_hash -> confirm`.
+Use `manage_graph_data_tool` to extract graph-shaped data from text, import structured graph data, map table rows into graph data, update graph elements, or delete graph elements. Mutating graph data changes require the safety chain `dry_run -> plan_hash -> confirm`.
 
 Extract candidate graph data from text without writing to HugeGraph:
 
 ```json
 {
-  "tool": "import_graph_data_tool",
+  "tool": "manage_graph_data_tool",
   "arguments": {
     "mode": "extract",
     "text": "Alice works at Acme. Bob knows Alice.",
@@ -277,9 +277,9 @@ Dry-run a structured graph data import:
 
 ```json
 {
-  "tool": "import_graph_data_tool",
+  "tool": "manage_graph_data_tool",
   "arguments": {
-    "mode": "ingest",
+    "mode": "import",
     "dry_run": true,
     "graph_data": {
       "vertices": [
@@ -305,9 +305,9 @@ Apply the exact dry-run import plan:
 
 ```json
 {
-  "tool": "import_graph_data_tool",
+  "tool": "manage_graph_data_tool",
   "arguments": {
-    "mode": "ingest",
+    "mode": "import",
     "dry_run": false,
     "confirm": true,
     "plan_hash": "PLAN_HASH_FROM_DRY_RUN",
@@ -335,7 +335,7 @@ Map table rows into graph data and run the same import safety flow:
 
 ```json
 {
-  "tool": "import_graph_data_tool",
+  "tool": "manage_graph_data_tool",
   "arguments": {
     "mode": "table",
     "dry_run": true,
@@ -379,13 +379,59 @@ Map table rows into graph data and run the same import safety flow:
 }
 ```
 
+Update a graph element with a dry run:
+
+```json
+{
+  "tool": "manage_graph_data_tool",
+  "arguments": {
+    "mode": "update",
+    "dry_run": true,
+    "change_plan": {
+      "operations": [
+        {
+          "op": "update_vertex",
+          "label": "person",
+          "match": {"name": "Alice"},
+          "set": {"age": 31}
+        }
+      ]
+    }
+  }
+}
+```
+
+Delete a graph element with a dry run:
+
+```json
+{
+  "tool": "manage_graph_data_tool",
+  "arguments": {
+    "mode": "delete",
+    "dry_run": true,
+    "change_plan": {
+      "operations": [
+        {
+          "op": "delete_vertex",
+          "label": "person",
+          "match": {"name": "Alice"},
+          "cascade": false
+        }
+      ]
+    }
+  }
+}
+```
+
+`import_graph_data_tool` remains available for compatibility. Prefer `manage_graph_data_tool` for new workflows.
+
 ## Advanced Debug Tools
 
 These tools are available for maintenance and debugging. Prefer the four main tools for normal workflows.
 
 ### `execute_gremlin_write_tool`
 
-Runs a direct Gremlin write query. Prefer `import_graph_data_tool` with `mode="ingest"` for normal graph data writes because it validates data and uses the dry-run safety chain.
+Runs a direct Gremlin write query. Prefer `manage_graph_data_tool` with `mode="import"` for normal graph data writes because it validates data and uses the dry-run safety chain.
 
 ```json
 {

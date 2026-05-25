@@ -26,7 +26,12 @@ def _extract_count(result: dict[str, Any]) -> int | None:
     if result.get("ok") is False or result.get("success") is False:
         return None
 
-    data = result.get("data")
+    return _extract_count_value(result.get("data"))
+
+
+def _extract_count_value(data: Any) -> int | None:
+    if isinstance(data, dict) and "data" in data:
+        return _extract_count_value(data.get("data"))
     if isinstance(data, list):
         if not data:
             return 0

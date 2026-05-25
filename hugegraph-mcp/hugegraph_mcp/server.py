@@ -67,6 +67,10 @@ from hugegraph_mcp.tools.inspect_graph import inspect_graph
 from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
 from hugegraph_mcp.tools.import_table import import_table_data
 from hugegraph_mcp.tools.ingest_graph_data import ingest_graph_data
+from hugegraph_mcp.tools.manage_graph_data import (
+    graph_data_to_change_plan,
+    manage_graph_data,
+)
 from hugegraph_mcp.tools.manage_schema import manage_schema
 from hugegraph_mcp.tools.query_graph import query_graph_by_text
 from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
@@ -208,6 +212,86 @@ def manage_schema_tool(
 
 
 @mcp.tool()
+def manage_graph_data_tool(
+    mode: str,
+    text: str | None = None,
+    schema: dict | None = None,
+    example_prompt: str | None = None,
+    graph_data: dict | None = None,
+    change_plan: dict | list[dict] | None = None,
+    table_data: dict | None = None,
+    mapping: dict | None = None,
+    dry_run: bool = True,
+    confirm: bool = False,
+    plan_hash: str | None = None,
+) -> dict:
+    """Unified graph data management entry point.
+
+    Modes:
+    - mode="extract": turn natural-language text into candidate graph_data.
+    - mode="import": validate and import structured graph_data through the
+      graph change-plan safety chain.
+    - mode="table": map structured table_data rows into graph_data before
+      routing through the import safety chain.
+    - mode="update": update graph elements using a graph change_plan.
+    - mode="delete": delete graph elements using a graph change_plan.
+
+    Mutating graph data changes require dry_run=True first, then dry_run=False
+    with confirm=True and the matching plan_hash.
+    """
+
+    if mode == "extract":
+        if not text:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "text is required for mode='extract'",
+            )
+        return extract_graph_data(
+            text=text,
+            schema=schema,
+            example_prompt=example_prompt,
+        )
+
+    if mode == "table":
+        if table_data is None:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "table_data is required for mode='table'",
+            )
+        mapped = import_table_data(table_data=table_data, mapping=mapping)
+        if not mapped.get("ok"):
+            return mapped
+        mapped_graph_data = (mapped.get("data") or {}).get("graph_data")
+        if mapped_graph_data is None:
+            return mapped
+        change_plan = graph_data_to_change_plan(mapped_graph_data)
+        return manage_graph_data(
+            mode="import",
+            graph_data=mapped_graph_data,
+            change_plan=change_plan,
+            dry_run=dry_run,
+            confirm=confirm,
+            plan_hash=plan_hash,
+        )
+
+    if mode in {"import", "update", "delete"}:
+        return manage_graph_data(
+            mode=mode,
+            graph_data=graph_data,
+            change_plan=change_plan,
+            dry_run=dry_run,
+            confirm=confirm,
+            plan_hash=plan_hash,
+        )
+
+    return envelope_err(
+        "VALIDATION_ERROR",
+        f"Unknown mode: {mode!r}. Use 'extract', 'import', 'table', 'update', or 'delete'.",
+        details={"mode": mode},
+    )
+
+
+@mcp.tool()
 def import_graph_data_tool(
     mode: str,
     text: str | None = None,
@@ -220,7 +304,7 @@ def import_graph_data_tool(
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict:
-    """Unified graph data import entry for extraction and ingestion workflows.
+    """Compatibility graph data import entry; prefer manage_graph_data_tool.
 
     Use mode="extract" to turn natural-language text into candidate graph_data
     without writing to HugeGraph. Then inspect or edit the returned graph_data.
@@ -300,7 +384,7 @@ def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
 def execute_gremlin_write_tool(gremlin_query: str) -> dict:
     """Execute a Gremlin write query directly.
 
-    ⚠️ DEBUG TOOL — prefer import_graph_data_tool mode="ingest" for graph data writes.
+    ⚠️ DEBUG TOOL — prefer manage_graph_data_tool mode="import" for graph data writes.
     This low-level tool is always registered but returns a structured
     READONLY_VIOLATION when the server runs in read-only mode.
 
