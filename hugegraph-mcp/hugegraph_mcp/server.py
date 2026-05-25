@@ -285,11 +285,11 @@ def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
     return refresh_vid_embeddings(confirm=confirm)
 
 
-# Write tools - only registered when not in read-only mode
-if not READONLY:
+# Old write tools — always registered, runtime-guarded via envelope on readonly.
+# When readonly, these return structured READONLY_VIOLATION instead of executing.
 
-    @mcp.tool()
-    def design_schema_tool(
+@mcp.tool()
+def design_schema_tool(
         thought: str,
         thought_number: int,
         total_thoughts: int = 4,
@@ -343,67 +343,40 @@ if not READONLY:
             revision_of=revision_of,
         )
 
-    @mcp.tool()
-    def execute_schema_operations_tool(operations: list[dict]) -> dict:
-        """Execute schema operations (create/modify vertex labels, edge labels, property keys, indexes).
+@mcp.tool()
+def execute_schema_operations_tool(operations: list[dict]) -> dict:
+    """Execute schema operations (create vertex labels, edge labels, property keys, indexes).
 
-        This tool allows you to modify your graph schema by:
-        - Creating new property keys with specified data types
-        - Creating vertex and edge labels with defined properties
-        - Creating index labels for query optimization
+    ⚠️ DEBUG TOOL — prefer manage_schema_tool for everyday schema operations.
+    This low-level tool is always registered but returns a structured
+    READONLY_VIOLATION when the server runs in read-only mode.
 
-        【Prerequisite - Must Read】
+    Args:
+        operations: List of schema operation dicts (see manage_schema_tool docs).
 
-        ⚠️ Before using this tool, you MUST use design_schema_tool first if ANY of the following applies:
-        - User's design intent is not clear or obvious
-        - User's request lacks sufficient schema details (entities, properties, relationships)
-        - User is designing a new schema but has not gone through the interactive design process
-        - You are uncertain about the appropriate schema structure
+    Returns:
+        dict: Execution result or structured readonly rejection.
+    """
 
-        If any of the above conditions are true, call design_schema_tool first to interactively
-        gather the required information, then use this tool to execute the operations.
+    return execute_schema_operations(operations)
 
-        ⚠️ WRITE TOOL - Only available when HUGEGRAPH_MCP_READONLY is false/undefined.
 
-        Args:
-            operations: List of schema operation dictionaries, each containing:
-                       - type: Operation type ("create_property_key", "create_vertex_label",
-                               "create_edge_label", "create_index_label")
-                       - Additional fields specific to each operation type
+@mcp.tool()
+def execute_gremlin_write_tool(gremlin_query: str) -> dict:
+    """Execute a Gremlin write query directly.
 
-        Returns:
-            dict: Contains 'success' (boolean), 'results' (per-operation status),
-                  and 'errors' (list of any failures).
-        """
+    ⚠️ DEBUG TOOL — prefer ingest_graph_data_tool for graph data writes.
+    This low-level tool is always registered but returns a structured
+    READONLY_VIOLATION when the server runs in read-only mode.
 
-        return execute_schema_operations(operations)
+    Args:
+        gremlin_query: A valid Gremlin write query string.
 
-    @mcp.tool()
-    def execute_gremlin_write_tool(gremlin_query: str) -> dict:
-        """Execute a Gremlin write query and return affected/duration_ms/is_write.
+    Returns:
+        dict: Write result or structured readonly rejection.
+    """
 
-        ⚠️ WRITE TOOL - Only available when HUGEGRAPH_MCP_READONLY is false/undefined.
-
-        This tool allows you to modify your graph data by:
-        - Adding new vertices and edges
-        - Updating vertex and edge properties
-        - Deleting graph elements
-        - Performing bulk data operations
-
-        Use with caution - write operations cannot be undone and will permanently
-        modify your graph data.
-
-        Args:
-            gremlin_query: A valid Gremlin write query string (e.g.,
-                          "g.addV('person').property('name', 'Alice')",
-                          "g.V().has('name', 'Alice').property('age', 30)")
-
-        Returns:
-            dict: Contains 'affected' (number of elements modified),
-                  'duration_ms' (execution time), and 'is_write' (always true).
-        """
-
-        return execute_gremlin_write(gremlin_query)
+    return execute_gremlin_write(gremlin_query)
 
 
 def main() -> None:

@@ -35,13 +35,14 @@ def generate_gremlin(
         return ai_result
 
     ai_data = ai_result.get("data") or {}
-    gremlin = ai_data.get("gremlin")
     template_gremlin = ai_data.get("template_gremlin")
     raw_gremlin = ai_data.get("raw_gremlin")
+    # /text2gremlin returns template_gremlin/raw_gremlin; use template as primary
+    gremlin = template_gremlin or raw_gremlin or ai_data.get("gremlin")
     requires_index = ai_data.get("requires_index", False)
     assumptions = ai_data.get("assumptions")
 
-    safety = classify_gremlin_read_safety(gremlin)
+    safety = classify_gremlin_read_safety(gremlin) if gremlin else "uncertain"
     is_readonly = safety == "safe"
     risk_level = _risk_level(safety)
 

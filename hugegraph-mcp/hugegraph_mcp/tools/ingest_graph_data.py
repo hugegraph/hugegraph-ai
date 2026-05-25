@@ -305,12 +305,18 @@ def ingest_graph_data(
     plan_hash: str | None = None,
 ) -> dict[str, Any]:
     live_schema = _fetch_live_schema()
+    if live_schema is None:
+        return envelope_err(
+            ErrorType.CONNECTION_FAILED,
+            "Cannot read live schema from HugeGraph Server. Schema validation is required before import.",
+            suggestion="Ensure HugeGraph Server is running and accessible, then retry.",
+            retryable=True,
+        )
     validation = validate_graph_payload(graph_data, live_schema=live_schema)
     if not validation["valid"]:
-        error_type = ErrorType.SCHEMA_MISMATCH if live_schema else ErrorType.INVALID_GRAPH_DATA
         return envelope_err(
-            error_type,
-            "Graph data payload is invalid." if not live_schema else "Graph data does not match live schema.",
+            ErrorType.SCHEMA_MISMATCH,
+            "Graph data does not match live schema.",
             details={"errors": validation["errors"]},
         )
 

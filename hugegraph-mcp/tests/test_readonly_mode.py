@@ -70,15 +70,17 @@ def test_write_tools_available_when_not_readonly(monkeypatch):
 
 
 def test_write_tools_disabled_when_readonly(monkeypatch):
-    """Test that write tools are NOT registered when in readonly mode."""
+    """Test that old write tools remain registered in readonly mode (runtime-guarded)."""
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
 
     import hugegraph_mcp.server
 
     importlib.reload(hugegraph_mcp.server)
     tools = get_registered_tools()
-    assert "execute_schema_operations_tool" not in tools
-    assert "execute_gremlin_write_tool" not in tools
+    # Old write tools now always registered — reject via structured envelope at runtime
+    assert "execute_schema_operations_tool" in tools
+    assert "execute_gremlin_write_tool" in tools
+    assert "design_schema_tool" in tools
     assert "manage_schema_tool" in tools
     # Read tools should still be available
     assert "get_live_schema_tool" in tools

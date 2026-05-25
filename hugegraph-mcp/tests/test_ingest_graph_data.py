@@ -125,13 +125,14 @@ def test_ingest_graph_data_validate_invalid(monkeypatch):
     assert "missing required field: label" in result["error"]["details"]["errors"][0]
 
 
-def test_ingest_graph_data_invalid_without_live_schema_is_invalid_graph_data(monkeypatch):
+def test_ingest_graph_data_rejects_when_live_schema_unavailable(monkeypatch):
     monkeypatch.setattr(ingest_graph_data_module, "_fetch_live_schema", lambda: None)
 
-    result = ingest_graph_data_module.ingest_graph_data({"vertices": [{}], "edges": []})
+    result = ingest_graph_data_module.ingest_graph_data({"vertices": [{"label":"x"}], "edges": []})
 
     assert result["ok"] is False
-    assert result["error"]["type"] == "INVALID_GRAPH_DATA"
+    assert result["error"]["type"] == "CONNECTION_FAILED"
+    assert "Cannot read live schema" in result["error"]["message"]
 
 
 def test_ingest_graph_data_schema_mismatch(monkeypatch):

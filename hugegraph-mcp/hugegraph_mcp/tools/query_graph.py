@@ -58,18 +58,36 @@ def query_graph_by_text(
     if not isinstance(ai_data, dict):
         ai_data = {}
 
-    answer = ai_data.get("answer")
-    evidence, truncated = _truncate_evidence(
-        ai_data.get("evidence") if include_evidence else None
-    )
-    data: dict[str, Any] = {
-        "answer": answer,
-        "evidence": evidence,
-        "gremlin": ai_data.get("gremlin"),
-        "source_summary": ai_data.get("source_summary"),
-        "truncated": truncated,
-        "mode": mode,
-    }
+    # /rag/graph returns {graph_recall: {...}} wrapper
+    if mode == "graph_only" and "graph_recall" in ai_data:
+        recall = ai_data["graph_recall"]
+        if isinstance(recall, dict):
+            answer = _format_graph_recall_answer(recall)
+            gremlin_val = recall.get("gremlin")
+            evidence = recall if include_evidence else None
+            data = {
+                "answer": answer,
+                "evidence": evidence,
+                "gremlin": gremlin_val,
+                "source_summary": "GraphRAG via graph_only",
+                "truncated": False,
+                "mode": mode,
+            }
+        else:
+            data = _empty_result(mode)
+    else:
+        answer = ai_data.get("answer")
+        evidence, truncated = _truncate_evidence(
+            ai_data.get("evidence") if include_evidence else None
+        )
+        data = {
+            "answer": answer,
+            "evidence": evidence,
+            "gremlin": ai_data.get("gremlin"),
+            "source_summary": ai_data.get("source_summary"),
+            "truncated": truncated,
+            "mode": mode,
+        }
 
     return envelope_ok(
         data,
@@ -85,6 +103,25 @@ def _truncate_evidence(evidence: Any) -> tuple[Any, bool]:
     if isinstance(evidence, str) and len(evidence) > _EVIDENCE_LIMIT:
         return f"{evidence[:_EVIDENCE_LIMIT]}...", True
     return evidence, False
+
+
+def _format_graph_recall_answer(recall: dict) -> str | None:
+    if recall.get("graph_result"):
+        return str(recall["graph_result"])
+    if recall.get("keywords"):
+        return f"Keywords: {recall['keywords']}"
+    return None
+
+
+def _empty_result(mode: str) -> dict[str, Any]:
+    return {
+        "answer": None,
+        "evidence": None,
+        "gremlin": None,
+        "source_summary": f"No results from {mode}",
+        "truncated": False,
+        "mode": mode,
+    }
 
 
 def _next_actions(answer: Any) -> list[str]:
