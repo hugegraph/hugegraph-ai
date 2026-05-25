@@ -44,14 +44,14 @@
 
 | # | 任务 | 涉及文件 | 状态 |
 |----|------|---------|------|
-| T6 | 结构化表格导入模块 (CSV/JSON → graph payload) | 新建 tools/import_table.py, tests | todo |
+| T6 | 结构化表格导入模块 (CSV/JSON → graph payload) | 新建 tools/import_table.py, tests | done |
 
 ### Phase 4：文档与验收
 
 | # | 任务 | 涉及文件 | 状态 |
 |----|------|---------|------|
 | T7 | README 按四主功能重写 | README.md | todo |
-| T8 | 测试补全 + 全量回归 | tests/ | todo |
+| T8 | 测试补全 + 全量回归 | tests/ | done |
 
 ## 验收标准 (PRD 对应)
 

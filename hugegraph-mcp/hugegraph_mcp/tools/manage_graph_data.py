@@ -537,18 +537,12 @@ def _edge_match_query(operation: dict[str, Any]) -> str:
 
 def _source_vertex_match_query(operation: dict[str, Any]) -> str:
     source_label = operation.get("source_label") or operation.get("outVLabel")
-    return (
-        f"g.V().hasLabel({_g(source_label)})"
-        f"{_has_steps(operation['source_match'])}"
-    )
+    return f"g.V().hasLabel({_g(source_label)}){_has_steps(operation['source_match'])}"
 
 
 def _target_vertex_match_query(operation: dict[str, Any]) -> str:
     target_label = operation.get("target_label") or operation.get("inVLabel")
-    return (
-        f"g.V().hasLabel({_g(target_label)})"
-        f"{_has_steps(operation['target_match'])}"
-    )
+    return f"g.V().hasLabel({_g(target_label)}){_has_steps(operation['target_match'])}"
 
 
 def _read_count(gremlin_query: str) -> dict[str, Any]:
@@ -644,7 +638,7 @@ def dry_run_graph_change_plan(
             preview.append(item)
             continue
 
-        if op == "update_edge":
+        if op in {"update_edge", "delete_edge"}:
             endpoint_failed = False
             for endpoint, endpoint_query in (
                 ("source", _source_vertex_match_query(operation)),
@@ -669,7 +663,7 @@ def dry_run_graph_change_plan(
                         _validation_error(
                             idx,
                             operation,
-                            f"update_edge {endpoint} endpoint matched_count must be 1, got {endpoint_count}",
+                            f"{op} {endpoint} endpoint matched_count must be 1, got {endpoint_count}",
                             "Narrow the endpoint match criteria so exactly one vertex is selected.",
                         )
                     )
@@ -866,7 +860,7 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
     for idx, operation in enumerate(operations):
         op = str(operation.get("op") or operation.get("type"))
         if op in WRITE_OPS:
-            if op == "update_edge":
+            if op in {"update_edge", "delete_edge"}:
                 for endpoint, endpoint_query in (
                     ("source", _source_vertex_match_query(operation)),
                     ("target", _target_vertex_match_query(operation)),
@@ -878,7 +872,7 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                     if endpoint_count != 1:
                         return envelope_err(
                             ErrorType.INVALID_GRAPH_DATA,
-                            f"update_edge {endpoint} endpoint matched_count must be 1 before execution.",
+                            f"{op} {endpoint} endpoint matched_count must be 1 before execution.",
                             details={
                                 "operation_index": idx,
                                 "matched_count": endpoint_count,
