@@ -30,8 +30,43 @@ def _empty_schema():
     }
 
 
+def _schema(
+    *,
+    propertykeys=None,
+    vertexlabels=None,
+    edgelabels=None,
+    indexlabels=None,
+):
+    return {
+        "schema": {
+            "propertykeys": propertykeys or [],
+            "vertexlabels": vertexlabels or [],
+            "edgelabels": edgelabels or [],
+            "indexlabels": indexlabels or [],
+        },
+        "simple_schema": {},
+        "readonly": False,
+    }
+
+
 def _property_key(name="age"):
     return {"type": "create_property_key", "name": name, "data_type": "INT"}
+
+
+def _live_pk(name):
+    return {"name": name, "data_type": "TEXT"}
+
+
+def _live_vertex(name, properties=None):
+    return {"name": name, "properties": properties or []}
+
+
+def _live_edge(name, source_label="person", target_label="software"):
+    return {
+        "name": name,
+        "source_label": source_label,
+        "target_label": target_label,
+    }
 
 
 def test_manage_schema_design():
@@ -53,7 +88,11 @@ def test_manage_schema_design():
     assert result["data"]["next_thought_needed"] is True
 
 
-def test_manage_schema_validate_valid():
+def test_manage_schema_validate_valid(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
     result = manage_schema(mode="validate", operations=[_property_key()])
 
     assert result["ok"] is True
@@ -61,18 +100,27 @@ def test_manage_schema_validate_valid():
     assert result["data"]["errors"] == []
 
 
-def test_manage_schema_validate_invalid_missing_name():
+def test_manage_schema_validate_invalid_missing_name(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
     result = manage_schema(
         mode="validate",
-        operations=[{"type": "create_property_key"}],
+        operations=[{"type": "create_property_key", "data_type": "TEXT"}],
     )
 
     assert result["ok"] is True
     assert result["data"]["valid"] is False
-    assert "missing required field: name" in result["data"]["errors"][0]
+    assert result["data"]["errors"][0]["operation_index"] == 0
+    assert "missing required field: name" in result["data"]["errors"][0]["reason"]
 
 
-def test_manage_schema_validate_rejects_delete():
+def test_manage_schema_validate_rejects_delete(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
     result = manage_schema(
         mode="validate",
         operations=[{"type": "delete_vertex_label", "name": "person"}],
@@ -80,7 +128,108 @@ def test_manage_schema_validate_rejects_delete():
 
     assert result["ok"] is True
     assert result["data"]["valid"] is False
-    assert "unsupported delete/drop type" in result["data"]["errors"][0]
+    assert "unsupported delete/drop type" in result["data"]["errors"][0]["reason"]
+
+
+def test_manage_schema_validate_rejects_unknown_property_key(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools,
+        "get_live_schema",
+        lambda: _schema(propertykeys=[_live_pk("name")]),
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[
+            {
+                "type": "create_vertex_label",
+                "name": "person",
+                "properties": ["name", "age"],
+                "primary_keys": ["name"],
+            }
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is False
+    error = result["data"]["errors"][0]
+    assert error["operation_index"] == 0
+    assert "undefined property key" in error["reason"]
+    assert "age" in error["reason"]
+
+
+def test_manage_schema_validate_rejects_unknown_edge_endpoint(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools,
+        "get_live_schema",
+        lambda: _schema(vertexlabels=[_live_vertex("person")]),
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[
+            {
+                "type": "create_edge_label",
+                "name": "created",
+                "source_label": "person",
+                "target_label": "software",
+            }
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is False
+    error = result["data"]["errors"][0]
+    assert error["operation_index"] == 0
+    assert "target_label references undefined vertex label: software" == error["reason"]
+
+
+def test_manage_schema_validate_rejects_duplicate_vertex_label(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools,
+        "get_live_schema",
+        lambda: _schema(vertexlabels=[_live_vertex("person")]),
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[{"type": "create_vertex_label", "name": "person"}],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is False
+    error = result["data"]["errors"][0]
+    assert error["operation_index"] == 0
+    assert error["reason"] == "vertex label already exists: person"
+
+
+def test_manage_schema_validate_accepts_semantically_valid_operations(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools,
+        "get_live_schema",
+        lambda: _schema(
+            propertykeys=[_live_pk("name")],
+            vertexlabels=[_live_vertex("person")],
+            edgelabels=[_live_edge("created")],
+        ),
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[
+            {
+                "type": "create_index_label",
+                "name": "personByName",
+                "base_type": "VERTEX",
+                "base_label": "person",
+                "fields": ["name"],
+            }
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is True
+    assert result["data"]["errors"] == []
 
 
 def test_manage_schema_dry_run(monkeypatch):
@@ -95,6 +244,29 @@ def test_manage_schema_dry_run(monkeypatch):
     assert re.fullmatch(r"[0-9a-f]{16}", result["data"]["plan_hash"])
     assert "mutation_summary" in result["data"]
     assert isinstance(result["data"]["warnings"], list)
+
+
+def test_manage_schema_dry_run_invalid_schema_has_no_plan_hash(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools,
+        "get_live_schema",
+        lambda: _schema(propertykeys=[_live_pk("name")]),
+    )
+
+    result = manage_schema(
+        mode="dry_run",
+        operations=[
+            {
+                "type": "create_vertex_label",
+                "name": "person",
+                "properties": ["age"],
+            }
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is False
+    assert "plan_hash" not in result["data"]
 
 
 def test_manage_schema_dry_run_same_ops_same_hash(monkeypatch):
@@ -173,7 +345,11 @@ def test_manage_schema_apply_success(monkeypatch):
     dry_run = manage_schema(mode="dry_run", operations=operations)
 
     def fake_execute(ops):
-        return {"success": True, "results": [{"op": ops[0], "status": "ok"}], "errors": []}
+        return {
+            "success": True,
+            "results": [{"op": ops[0], "status": "ok"}],
+            "errors": [],
+        }
 
     monkeypatch.setattr(
         manage_schema_module.schema_tools,
