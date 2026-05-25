@@ -25,6 +25,7 @@ CONFIG_ENV_VARS = (
     "HUGEGRAPH_PASSWORD",
     "HUGEGRAPH_MCP_READONLY",
     "HUGEGRAPH_AI_URL",
+    "HUGEGRAPH_AI_GRAPH_URL",
     "HUGEGRAPH_MCP_ALLOW_AI",
     "HUGEGRAPH_MCP_TIMEOUT_SECONDS",
     "HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS",
@@ -45,6 +46,7 @@ def test_basic_config_parsing(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_PASSWORD", "secret")
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
     monkeypatch.setenv("HUGEGRAPH_AI_URL", "http://ai.example:18001")
+    monkeypatch.setenv("HUGEGRAPH_AI_GRAPH_URL", "http://graph-internal:8080")
     monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "yes")
     monkeypatch.setenv("HUGEGRAPH_MCP_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS", "250")
@@ -58,6 +60,7 @@ def test_basic_config_parsing(monkeypatch):
     assert cfg.password == "secret"
     assert cfg.is_readonly() is True
     assert cfg.ai_url == "http://ai.example:18001"
+    assert cfg.ai_graph_url == "http://graph-internal:8080"
     assert cfg.allow_ai is False
     assert cfg.timeout_seconds == 45
     assert cfg.max_context_items == 250
@@ -151,6 +154,7 @@ def test_default_values(monkeypatch):
     assert cfg.password == ""
     assert cfg.is_readonly() is False
     assert cfg.ai_url == "http://127.0.0.1:8001"
+    assert cfg.ai_graph_url is None
     assert cfg.allow_ai is False
     assert cfg.timeout_seconds == 30
     assert cfg.max_context_items == 100

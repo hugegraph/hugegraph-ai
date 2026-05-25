@@ -33,6 +33,7 @@ def _expected_payload(
     *,
     graph: str = "hugegraph",
     graphspace: str = "DEFAULT",
+    graph_url: str = "http://127.0.0.1:8080",
     max_context_items: int = 20,
     mode: str = "graph_only",
 ) -> dict:
@@ -49,7 +50,7 @@ def _expected_payload(
         "gremlin_prompt": None,
         "get_vertex_only": False,
         "client_config": {
-            "url": "http://127.0.0.1:8080",
+            "url": graph_url,
             "graph": graph,
             "user": "admin",
             "pwd": "",
@@ -177,6 +178,21 @@ def test_query_graph_graph_config(monkeypatch):
     post.assert_called_once_with(
         "/rag/graph",
         json=_expected_payload(graph="graph_a", graphspace="space_a"),
+    )
+
+
+def test_query_graph_uses_ai_graph_url_for_backend_client_config(monkeypatch):
+    post = Mock(return_value=_ai_ok())
+    monkeypatch.setenv("HUGEGRAPH_URL", "http://127.0.0.1:8080")
+    monkeypatch.setenv("HUGEGRAPH_AI_GRAPH_URL", "http://server:8080")
+    monkeypatch.setattr(query_graph_module, "post", post)
+
+    result = query_graph_module.query_graph_by_text("Who does Alice know?")
+
+    assert result["ok"] is True
+    post.assert_called_once_with(
+        "/rag/graph",
+        json=_expected_payload(graph_url="http://server:8080"),
     )
 
 

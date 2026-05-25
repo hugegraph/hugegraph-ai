@@ -30,6 +30,7 @@ class MCPConfig:
     password: str = ""
     readonly: bool = False
     ai_url: str = "http://127.0.0.1:8001"
+    ai_graph_url: str | None = None
     allow_ai: bool = False
     timeout_seconds: int = 30
     max_context_items: int = 100
@@ -72,6 +73,7 @@ class MCPConfig:
             password=env.get("HUGEGRAPH_PASSWORD", ""),
             readonly=_parse_bool(env.get("HUGEGRAPH_MCP_READONLY", "")),
             ai_url=env.get("HUGEGRAPH_AI_URL", "http://127.0.0.1:8001"),
+            ai_graph_url=_optional_non_empty(env.get("HUGEGRAPH_AI_GRAPH_URL")),
             allow_ai=_parse_bool(env.get("HUGEGRAPH_MCP_ALLOW_AI", "")),
             timeout_seconds=_parse_int(
                 env.get("HUGEGRAPH_MCP_TIMEOUT_SECONDS"), 30
@@ -110,6 +112,13 @@ def _parse_int(value: str | None, default: int) -> int:
 
 def _non_empty(value: str, default: str) -> str:
     return value.strip() or default
+
+
+def _optional_non_empty(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 config = MCPConfig.from_env()

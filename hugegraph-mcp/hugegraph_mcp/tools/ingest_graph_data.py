@@ -13,6 +13,7 @@
 
 import hashlib
 import json
+from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
@@ -165,6 +166,171 @@ def _schema_plan_summary(live_schema: dict[str, Any] | None) -> dict[str, Any] |
         "edgelabels": raw.get("edgelabels", []),
         "propertykeys": raw.get("propertykeys", []),
     }
+
+
+def _schema_vertex_info(raw_schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    info: dict[str, dict[str, Any]] = {}
+    for vertex_label in raw_schema.get("vertexlabels", []):
+        if not isinstance(vertex_label, dict):
+            continue
+        name = vertex_label.get("name")
+        if isinstance(name, str):
+            info[name] = {
+                "id": vertex_label.get("id"),
+                "primary_keys": _primary_key_names(vertex_label),
+            }
+    return info
+
+
+def _canonical_primary_key_id(
+    label: str,
+    values: tuple[Any, ...],
+    vertex_info: dict[str, dict[str, Any]],
+) -> str | None:
+    label_id = vertex_info.get(label, {}).get("id")
+    if label_id is None:
+        return None
+    return f"{label_id}:{'!'.join(str(value) for value in values)}"
+
+
+def _vertex_backend_id(
+    vertex: dict[str, Any],
+    vertex_info: dict[str, dict[str, Any]],
+) -> Any:
+    explicit_id = vertex.get("id")
+    if _identity_value_present(explicit_id):
+        return explicit_id
+
+    label = vertex.get("label")
+    props = vertex.get("properties")
+    if not isinstance(label, str) or not isinstance(props, dict):
+        return None
+
+    primary_keys = vertex_info.get(label, {}).get("primary_keys", [])
+    if not primary_keys:
+        return None
+    if not all(pk in props and _identity_value_present(props.get(pk)) for pk in primary_keys):
+        return None
+
+    values = tuple(props.get(pk) for pk in primary_keys)
+    return _canonical_primary_key_id(label, values, vertex_info)
+
+
+def _vertex_identity_map(
+    vertices: list[Any],
+    raw_schema: dict[str, Any],
+) -> tuple[dict[tuple[str, str, Any], Any], dict[str, list[str]]]:
+    vertex_info = _schema_vertex_info(raw_schema)
+    schema_primary_keys = {
+        label: info.get("primary_keys", [])
+        for label, info in vertex_info.items()
+    }
+    identities: dict[tuple[str, str, Any], Any] = {}
+
+    for vertex in vertices:
+        if not isinstance(vertex, dict):
+            continue
+        label = vertex.get("label")
+        if not isinstance(label, str):
+            continue
+
+        backend_id = _vertex_backend_id(vertex, vertex_info)
+        if _identity_value_present(backend_id):
+            vertex.setdefault("id", backend_id)
+            identities[(label, "id", backend_id)] = backend_id
+
+        explicit_id = vertex.get("id")
+        if _identity_value_present(explicit_id):
+            identities[(label, "id", explicit_id)] = backend_id or explicit_id
+
+        props = vertex.get("properties")
+        primary_keys = schema_primary_keys.get(label, [])
+        if isinstance(props, dict) and primary_keys:
+            if all(pk in props and _identity_value_present(props.get(pk)) for pk in primary_keys):
+                values = tuple(props.get(pk) for pk in primary_keys)
+                identities[(label, "pk", values)] = backend_id or explicit_id
+
+    return identities, schema_primary_keys
+
+
+def _endpoint_backend_id(
+    label: str,
+    value: Any,
+    identities: dict[tuple[str, str, Any], Any],
+    schema_primary_keys: dict[str, list[str]],
+    vertex_info: dict[str, dict[str, Any]],
+) -> Any:
+    endpoint_identities, _missing_pk = _endpoint_identities(
+        label,
+        value,
+        schema_primary_keys,
+    )
+    for identity in endpoint_identities:
+        if identity in identities:
+            return identities[identity]
+
+    if isinstance(value, dict):
+        explicit_id = value.get("id")
+        if _identity_value_present(explicit_id):
+            return explicit_id
+
+        primary_keys = schema_primary_keys.get(label, [])
+        if primary_keys and all(
+            pk in value and _identity_value_present(value.get(pk))
+            for pk in primary_keys
+        ):
+            values = tuple(value.get(pk) for pk in primary_keys)
+            return _canonical_primary_key_id(label, values, vertex_info)
+        return None
+
+    if _identity_value_present(value):
+        return value
+    return None
+
+
+def _prepare_graph_import_data(
+    graph_data: dict[str, Any],
+    live_schema: dict[str, Any],
+) -> dict[str, Any]:
+    prepared = deepcopy(graph_data)
+    raw_schema = _schema_payload(live_schema) or {}
+    vertex_info = _schema_vertex_info(raw_schema)
+    vertices = prepared.get("vertices") or []
+    edges = prepared.get("edges") or []
+    identities, schema_primary_keys = _vertex_identity_map(vertices, raw_schema)
+
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        src_label, source = _edge_endpoint(edge, "source")
+        tgt_label, target = _edge_endpoint(edge, "target")
+        edge.setdefault("properties", {})
+
+        if isinstance(src_label, str):
+            source_id = _endpoint_backend_id(
+                src_label,
+                source,
+                identities,
+                schema_primary_keys,
+                vertex_info,
+            )
+            if _identity_value_present(source_id):
+                edge["outV"] = source_id
+            edge.setdefault("outVLabel", src_label)
+
+        if isinstance(tgt_label, str):
+            target_id = _endpoint_backend_id(
+                tgt_label,
+                target,
+                identities,
+                schema_primary_keys,
+                vertex_info,
+            )
+            if _identity_value_present(target_id):
+                edge["inV"] = target_id
+            edge.setdefault("inVLabel", tgt_label)
+
+    return prepared
 
 
 def validate_graph_payload(
@@ -463,9 +629,11 @@ def ingest_graph_data(
         )
 
     batch_id = f"batch-{uuid4().hex[:12]}"
+    cfg = MCPConfig.from_env()
+    import_data = _prepare_graph_import_data(graph_data, live_schema)
     ai_result = post(
         "/graph-import",
-        json={"data": json.dumps(graph_data, sort_keys=True), "schema": None},
+        json={"data": json.dumps(import_data, sort_keys=True), "schema": cfg.graph},
     )
     if not ai_result.get("ok"):
         return ai_result

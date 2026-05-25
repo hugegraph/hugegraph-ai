@@ -53,8 +53,51 @@ def test_extract_graph_data_basic(monkeypatch):
         "/graph-extract",
         json={
             "text": "Alice knows Bob.",
-            "schema": {"vertexlabels": ["person"]},
+            "schema": json.dumps({"vertexlabels": ["person"]}, sort_keys=True),
             "example_prompt": "extract people",
+            "language": "zh",
+        },
+    )
+
+
+def test_extract_graph_data_uses_graph_schema_by_default(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_GRAPH_PATH", "DEFAULT/hugegraph")
+    graph_data = {"vertices": [], "edges": []}
+    post = Mock(return_value=envelope_ok({"ok": True, "data": json.dumps(graph_data)}))
+    monkeypatch.setattr(extract_graph_data_module, "post", post)
+
+    result = extract_graph_data_module.extract_graph_data("Alice knows Bob.")
+
+    assert result["ok"] is True
+    post.assert_called_once_with(
+        "/graph-extract",
+        json={
+            "text": "Alice knows Bob.",
+            "schema": "hugegraph",
+            "example_prompt": extract_graph_data_module.DEFAULT_GRAPH_EXTRACT_PROMPT_ZH,
+            "language": "zh",
+        },
+    )
+
+
+def test_extract_graph_data_preserves_explicit_string_schema_and_prompt(monkeypatch):
+    graph_data = {"vertices": [], "edges": []}
+    post = Mock(return_value=envelope_ok({"ok": True, "data": json.dumps(graph_data)}))
+    monkeypatch.setattr(extract_graph_data_module, "post", post)
+
+    result = extract_graph_data_module.extract_graph_data(
+        "Alice knows Bob.",
+        schema="custom_graph",
+        example_prompt="custom prompt",
+    )
+
+    assert result["ok"] is True
+    post.assert_called_once_with(
+        "/graph-extract",
+        json={
+            "text": "Alice knows Bob.",
+            "schema": "custom_graph",
+            "example_prompt": "custom prompt",
             "language": "zh",
         },
     )

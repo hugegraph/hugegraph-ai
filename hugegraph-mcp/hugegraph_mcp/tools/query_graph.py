@@ -117,7 +117,7 @@ def _build_rag_payload(
         "gremlin_prompt": None,
         "get_vertex_only": False,
         "client_config": {
-            "url": cfg.url,
+            "url": cfg.ai_graph_url or cfg.url,
             "graph": cfg.graph,
             "user": cfg.user,
             "pwd": cfg.password,

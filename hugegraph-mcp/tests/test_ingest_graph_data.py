@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import re
 from unittest.mock import Mock
 
@@ -41,6 +42,7 @@ def _live_schema():
         "schema": {
             "vertexlabels": [
                 {
+                    "id": 1,
                     "name": "person",
                     "properties": [{"name": "name"}, {"name": "age"}],
                     "primary_keys": ["name"],
@@ -414,4 +416,12 @@ def test_ingest_graph_data_success(monkeypatch):
     assert result["data"]["import_result"] == {"inserted": 2}
     post.assert_called_once()
     assert post.call_args.args == ("/graph-import",)
-    assert post.call_args.kwargs["json"]["schema"] is None
+    assert post.call_args.kwargs["json"]["schema"] == "hugegraph"
+    import_payload = json.loads(post.call_args.kwargs["json"]["data"])
+    assert import_payload["vertices"][0]["id"] == "1:Alice"
+    assert import_payload["vertices"][1]["id"] == "1:Bob"
+    assert import_payload["edges"][0]["outV"] == "1:Alice"
+    assert import_payload["edges"][0]["outVLabel"] == "person"
+    assert import_payload["edges"][0]["inV"] == "1:Bob"
+    assert import_payload["edges"][0]["inVLabel"] == "person"
+    assert import_payload["edges"][0]["properties"] == {}

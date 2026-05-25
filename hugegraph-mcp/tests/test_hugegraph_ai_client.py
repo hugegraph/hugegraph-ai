@@ -146,16 +146,44 @@ def test_get_convenience(monkeypatch):
 
 
 def test_health_check(monkeypatch):
-    http_request = Mock(return_value=FakeResponse({"status": "ok"}))
+    http_request = Mock(return_value=FakeResponse({"ok": True, "data": "ready"}))
     monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", http_request)
 
     result = health_check(cfg=_cfg())
 
     assert result["ok"] is True
+    assert result["data"]["status"] == "available"
+    assert result["data"]["health_endpoint"] == "/graph-index-info"
     http_request.assert_called_once_with(
         "GET",
-        "http://ai.example:8001/health",
+        "http://ai.example:8001/graph-index-info",
         params=None,
         headers=None,
         timeout=7,
+    )
+
+
+def test_health_check_falls_back_to_openapi(monkeypatch):
+    http_request = Mock(
+        side_effect=[
+            FakeResponse({"detail": "missing"}, status_code=404),
+            FakeResponse({"openapi": "3.1.0"}),
+        ]
+    )
+    monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", http_request)
+
+    result = health_check(cfg=_cfg())
+
+    assert result["ok"] is True
+    assert result["data"]["status"] == "available"
+    assert result["data"]["health_endpoint"] == "/openapi.json"
+    assert result["data"]["openapi"] == "3.1.0"
+    assert len(result["warnings"]) == 1
+    assert http_request.call_args_list[0].args[:2] == (
+        "GET",
+        "http://ai.example:8001/graph-index-info",
+    )
+    assert http_request.call_args_list[1].args[:2] == (
+        "GET",
+        "http://ai.example:8001/openapi.json",
     )

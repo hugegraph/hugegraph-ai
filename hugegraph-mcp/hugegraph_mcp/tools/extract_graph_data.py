@@ -19,19 +19,38 @@ from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.hugegraph_ai_client import post
 
 
+DEFAULT_GRAPH_EXTRACT_PROMPT_ZH = """## 主要任务
+只抽取输入文本和给定图谱 schema 共同支持的顶点与边。只返回合法 JSON。
+
+## 输出格式
+必须返回唯一 JSON 对象：{"vertices": [...], "edges": [...]}。
+顶点对象：{"id":"顶点 id","label":"顶点标签","properties":{"属性名":"属性值", ...}}。
+边对象：{"label":"边标签","outV":"源顶点 id","outVLabel":"源顶点标签","inV":"目标顶点 id","inVLabel":"目标顶点标签","properties":{"属性名":"属性值", ...}}。
+
+## 抽取规则
+1. 只能使用 schema 中已经存在的 vertex label、edge label 和 property key。
+2. 可以把中文关系语义映射到 schema 中已有的英文标签，例如“同事”可映射为 schema 中的 colleague；但不要创造 schema 中不存在的标签。
+3. 顶点 id 必须按 schema 的 vertexlabels[].id 与 primary_keys 生成；单主键格式为 "{vertexLabelID}:{properties.<primary_key>}"。
+4. outV 和 inV 必须引用本次输出 vertices 中的 id，outVLabel/inVLabel 必须匹配边 schema 的 source_label/target_label。
+5. 保持属性类型，移除空属性，不要编造文本中没有的事实。
+6. 不要输出 Markdown、解释、注释或额外文本。"""
+
+
 def extract_graph_data(
     text: str,
-    schema: dict[str, Any] | None = None,
+    schema: dict[str, Any] | str | None = None,
     example_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Extract candidate graph data from text without writing to HugeGraph."""
 
+    schema_message = _schema_message(schema)
+    prompt_message = _example_prompt_message(example_prompt)
     ai_result = post(
         "/graph-extract",
         json={
             "text": text,
-            "schema": schema,
-            "example_prompt": example_prompt,
+            "schema": schema_message,
+            "example_prompt": prompt_message,
             "language": "zh",
         },
     )
@@ -67,6 +86,20 @@ def extract_graph_data(
         "raw_summary": graph_data.get("raw_summary"),
         "schema_warnings": graph_data.get("schema_warnings", []),
     })
+
+
+def _schema_message(schema: Any) -> str:
+    if schema is None:
+        return MCPConfig.from_env().graph
+    if isinstance(schema, str):
+        return schema
+    return json.dumps(schema, sort_keys=True, default=str)
+
+
+def _example_prompt_message(example_prompt: str | None) -> str:
+    if example_prompt is None:
+        return DEFAULT_GRAPH_EXTRACT_PROMPT_ZH
+    return example_prompt
 
 
 def _unwrap_ai_payload(data: Any) -> Any:

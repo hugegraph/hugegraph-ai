@@ -118,7 +118,46 @@ def post(
 
 
 def health_check(*, cfg: MCPConfig | None = None) -> dict[str, Any]:
-    return get("/health", cfg=cfg)
+    """Best-effort HugeGraph-AI readiness check.
+
+    Some HugeGraph-AI deployments expose no /health route. Prefer a lightweight
+    thin API endpoint and fall back to OpenAPI metadata before reporting the
+    service unavailable.
+    """
+
+    attempts: list[str] = []
+    last_result: dict[str, Any] | None = None
+    for path in ("/graph-index-info", "/openapi.json"):
+        result = get(path, cfg=cfg)
+        if result.get("ok"):
+            data = result.get("data")
+            if isinstance(data, dict):
+                result["data"] = {
+                    "status": "available",
+                    "health_endpoint": path,
+                    **data,
+                }
+            else:
+                result["data"] = {
+                    "status": "available",
+                    "health_endpoint": path,
+                    "response": data,
+                }
+            if attempts:
+                result["warnings"] = [*result.get("warnings", []), *attempts]
+            return result
+
+        last_result = result
+        error = result.get("error") or {}
+        details = error.get("details") or {}
+        status_code = details.get("status_code")
+        attempts.append(f"{path}: {error.get('message', 'unavailable')}")
+        if status_code in {401, 403}:
+            return result
+
+    if last_result is not None and attempts:
+        last_result["warnings"] = [*last_result.get("warnings", []), *attempts]
+    return last_result or get("/openapi.json", cfg=cfg)
 
 
 def _build_url(base_url: str, path: str) -> str:
