@@ -13,6 +13,8 @@
 
 from unittest.mock import Mock
 
+import requests
+
 
 def _schema_result(readonly: bool = False):
     raw_schema = {
@@ -167,6 +169,37 @@ def test_inspect_graph_ai_unavailable(monkeypatch):
     assert result["data"]["hugegraph_ai_status"] == "unavailable"
     assert result["data"]["vid_embedding_status"] == "unknown"
     assert any("HugeGraph-AI is unavailable" in w for w in result["warnings"])
+
+
+def test_inspect_graph_ai_available_when_openapi_fallback_works(monkeypatch):
+    from hugegraph_mcp.tools import inspect_graph as inspect_graph_module
+
+    monkeypatch.setattr(
+        inspect_graph_module, "get_live_schema", lambda: _schema_result()
+    )
+    monkeypatch.setattr(
+        inspect_graph_module,
+        "execute_gremlin_read",
+        Mock(return_value={"data": [1], "total": 1, "duration_ms": 1, "is_read": True}),
+    )
+
+    def fake_get(url, timeout):
+        if url.endswith("/graph-index-info"):
+            return FakeResponse(
+                status_error=requests.exceptions.HTTPError("HTTP 404")
+            )
+        if url.endswith("/openapi.json"):
+            return FakeResponse({"openapi": "3.1.0"})
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(inspect_graph_module.requests, "get", fake_get)
+
+    result = inspect_graph_module.inspect_graph()
+
+    assert result["ok"] is True
+    assert result["data"]["hugegraph_ai_status"] == "available"
+    assert result["data"]["vid_embedding_status"] == "unknown"
+    assert any("graph index info is unavailable" in w for w in result["warnings"])
 
 
 def test_inspect_graph_includes_next_actions(monkeypatch):

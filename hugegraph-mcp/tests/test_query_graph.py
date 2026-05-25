@@ -19,13 +19,54 @@ from hugegraph_mcp.tools import query_graph as query_graph_module
 
 def _ai_ok(**extra) -> dict:
     data = {
-        "answer": "Alice knows Bob.",
+        "graph_only": "Alice knows Bob.",
         "evidence": "Alice -> knows -> Bob",
         "gremlin": "g.V().has('name', 'Alice').out('knows')",
         "source_summary": {"sources": 1},
     }
     data.update(extra)
     return envelope_ok(data)
+
+
+def _expected_payload(
+    query: str = "Who does Alice know?",
+    *,
+    graph: str = "hugegraph",
+    graphspace: str = "DEFAULT",
+    max_context_items: int = 20,
+    mode: str = "graph_only",
+) -> dict:
+    payload = {
+        "query": query,
+        "max_graph_items": max_context_items,
+        "topk_return_results": max_context_items,
+        "vector_dis_threshold": 0.9,
+        "topk_per_keyword": 1,
+        "gremlin_tmpl_num": -1,
+        "rerank_method": "bleu",
+        "near_neighbor_first": False,
+        "custom_priority_info": "",
+        "gremlin_prompt": None,
+        "get_vertex_only": False,
+        "client_config": {
+            "url": "http://127.0.0.1:8080",
+            "graph": graph,
+            "user": "admin",
+            "pwd": "",
+            "gs": graphspace,
+        },
+    }
+    if mode == "vector_only":
+        payload.update(
+            {
+                "raw_answer": False,
+                "vector_only": True,
+                "graph_only": False,
+                "graph_vector_answer": False,
+            }
+        )
+        payload.pop("get_vertex_only")
+    return payload
 
 
 def test_query_graph_basic(monkeypatch):
@@ -43,17 +84,12 @@ def test_query_graph_basic(monkeypatch):
     assert result["data"]["evidence"] is None
     post.assert_called_once_with(
         "/rag/graph",
-        json={
-            "query": "Who does Alice know?",
-            "graph": "hugegraph",
-            "graphspace": "DEFAULT",
-            "max_context_items": 20,
-        },
+        json=_expected_payload(),
     )
 
 
 def test_query_graph_vector_mode(monkeypatch):
-    post = Mock(return_value=_ai_ok())
+    post = Mock(return_value=_ai_ok(vector_only="Vector says Bob.", graph_only=None))
     monkeypatch.setattr(query_graph_module, "post", post)
 
     result = query_graph_module.query_graph_by_text(
@@ -62,15 +98,11 @@ def test_query_graph_vector_mode(monkeypatch):
     )
 
     assert result["ok"] is True
+    assert result["data"]["answer"] == "Vector says Bob."
     assert result["data"]["mode"] == "vector_only"
     post.assert_called_once_with(
         "/rag",
-        json={
-            "query": "Who does Alice know?",
-            "graph": "hugegraph",
-            "graphspace": "DEFAULT",
-            "max_context_items": 20,
-        },
+        json=_expected_payload(mode="vector_only"),
     )
 
 
@@ -144,12 +176,7 @@ def test_query_graph_graph_config(monkeypatch):
     assert result["ok"] is True
     post.assert_called_once_with(
         "/rag/graph",
-        json={
-            "query": "Who does Alice know?",
-            "graph": "graph_a",
-            "graphspace": "space_a",
-            "max_context_items": 20,
-        },
+        json=_expected_payload(graph="graph_a", graphspace="space_a"),
     )
 
 
@@ -164,10 +191,41 @@ def test_query_graph_custom_max_context_items(monkeypatch):
 
     post.assert_called_once_with(
         "/rag/graph",
-        json={
-            "query": "Who does Alice know?",
-            "graph": "hugegraph",
-            "graphspace": "DEFAULT",
-            "max_context_items": 50,
-        },
+        json=_expected_payload(max_context_items=50),
     )
+
+
+def test_query_graph_raw_rag_fields(monkeypatch):
+    post = Mock(
+        return_value=envelope_ok(
+            {
+                "raw_answer": "Raw answer.",
+                "vector_only": "Vector answer.",
+                "graph_only": "Graph answer.",
+                "graph_vector_answer": "Hybrid answer.",
+            }
+        )
+    )
+    monkeypatch.setattr(query_graph_module, "post", post)
+
+    result = query_graph_module.query_graph_by_text("Who does Alice know?")
+
+    assert result["ok"] is True
+    assert result["data"]["answer"] == (
+        "graph_only: Graph answer.\n\n"
+        "vector_only: Vector answer.\n\n"
+        "graph_vector: Hybrid answer."
+    )
+
+
+def test_query_graph_empty_result_warning(monkeypatch):
+    post = Mock(return_value=envelope_ok({"graph_only": ""}))
+    monkeypatch.setattr(query_graph_module, "post", post)
+
+    result = query_graph_module.query_graph_by_text("Unknown?")
+
+    assert result["ok"] is True
+    assert result["data"]["answer"] is None
+    assert result["data"]["warning"] == "No matching graph data found"
+    assert "No matching graph data found" in result["warnings"]
+    assert "Try mode='vector_only'" in result["next_actions"]

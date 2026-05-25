@@ -66,6 +66,17 @@ def _check_ai_status(ai_url: str, timeout_seconds: int) -> tuple[str, Any, list[
             graph_index_info = index_info.text
         return "available", graph_index_info, warnings
     except Exception as exc:
+        index_warning = _warning_from_exception(
+            "HugeGraph-AI graph index info is unavailable", exc
+        )
+
+    try:
+        openapi = requests.get(f"{base_url}/openapi.json", timeout=timeout_seconds)
+        openapi.raise_for_status()
+        warnings.append(index_warning)
+        return "available", None, warnings
+    except Exception as exc:
+        warnings.append(index_warning)
         warnings.append(_warning_from_exception("HugeGraph-AI is unavailable", exc))
         return "unavailable", None, warnings
 
