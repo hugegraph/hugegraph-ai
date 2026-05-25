@@ -139,13 +139,17 @@ def _validation_error(
     operation: Any,
     reason: str,
     suggestion: str,
+    error_type: str | None = None,
 ) -> ValidationError:
-    return {
+    error = {
         "operation_index": operation_index,
         "operation": operation,
         "reason": reason,
         "suggestion": suggestion,
     }
+    if error_type is not None:
+        error["error_type"] = error_type
+    return error
 
 
 def _validate_field_map(
@@ -452,6 +456,29 @@ def validate_graph_change_plan(
                             "Provide at least one edge property to update.",
                         )
                     )
+                elif any(
+                    endpoint in set_values
+                    for endpoint in (
+                        "source",
+                        "target",
+                        "source_label",
+                        "target_label",
+                        "source_match",
+                        "target_match",
+                        "outV",
+                        "inV",
+                        "outVLabel",
+                        "inVLabel",
+                    )
+                ):
+                    errors.append(
+                        _validation_error(
+                            idx,
+                            operation,
+                            "update_edge set must not include source/target endpoint fields",
+                            "Endpoints identify the edge and cannot be updated.",
+                        )
+                    )
             if isinstance(source_label, str) and source_label in vertex_labels:
                 _validate_primary_key_match(
                     idx=idx,
@@ -508,6 +535,22 @@ def _edge_match_query(operation: dict[str, Any]) -> str:
     )
 
 
+def _source_vertex_match_query(operation: dict[str, Any]) -> str:
+    source_label = operation.get("source_label") or operation.get("outVLabel")
+    return (
+        f"g.V().hasLabel({_g(source_label)})"
+        f"{_has_steps(operation['source_match'])}"
+    )
+
+
+def _target_vertex_match_query(operation: dict[str, Any]) -> str:
+    target_label = operation.get("target_label") or operation.get("inVLabel")
+    return (
+        f"g.V().hasLabel({_g(target_label)})"
+        f"{_has_steps(operation['target_match'])}"
+    )
+
+
 def _read_count(gremlin_query: str) -> dict[str, Any]:
     result = gremlin_tools.execute_gremlin_read(f"{gremlin_query}.count()")
     if isinstance(result, dict) and result.get("ok") is False:
@@ -533,6 +576,21 @@ def _read_count(gremlin_query: str) -> dict[str, Any]:
             details={"query": gremlin_query, "data": data},
         )
     return envelope_ok({"matched_count": matched_count})
+
+
+def _read_values(gremlin_query: str) -> dict[str, Any]:
+    result = gremlin_tools.execute_gremlin_read(gremlin_query)
+    if isinstance(result, dict) and result.get("ok") is False:
+        return result
+    if isinstance(result, dict) and result.get("success") is False:
+        return envelope_err(
+            ErrorType.CONNECTION_FAILED,
+            "HugeGraph read query failed during graph change dry run.",
+            details=result,
+            retryable=True,
+        )
+    data = result.get("data") if isinstance(result, dict) else result
+    return envelope_ok({"values": data if isinstance(data, list) else [data]})
 
 
 def _mutation_summary(operations: list[dict[str, Any]]) -> dict[str, int]:
@@ -585,6 +643,40 @@ def dry_run_graph_change_plan(
             item["matched_count"] = None
             preview.append(item)
             continue
+
+        if op == "update_edge":
+            endpoint_failed = False
+            for endpoint, endpoint_query in (
+                ("source", _source_vertex_match_query(operation)),
+                ("target", _target_vertex_match_query(operation)),
+            ):
+                endpoint_count_result = _read_count(endpoint_query)
+                if not endpoint_count_result.get("ok"):
+                    errors.append(
+                        _validation_error(
+                            idx,
+                            operation,
+                            f"{endpoint} endpoint count query failed",
+                            "Verify HugeGraph Server is available and retry the dry run.",
+                        )
+                    )
+                    endpoint_failed = True
+                    continue
+                endpoint_count = endpoint_count_result["data"]["matched_count"]
+                item[f"{endpoint}_matched_count"] = endpoint_count
+                if endpoint_count != 1:
+                    errors.append(
+                        _validation_error(
+                            idx,
+                            operation,
+                            f"update_edge {endpoint} endpoint matched_count must be 1, got {endpoint_count}",
+                            "Narrow the endpoint match criteria so exactly one vertex is selected.",
+                        )
+                    )
+                    endpoint_failed = True
+            if endpoint_failed:
+                preview.append(item)
+                continue
 
         match_query = (
             _edge_match_query(operation)
@@ -643,8 +735,31 @@ def dry_run_graph_change_plan(
                             operation,
                             "delete_vertex cascade=false but vertex has associated edges",
                             "Set cascade=true or delete associated edges first.",
+                            "BLOCKED_BY_RELATIONSHIPS",
                         )
                     )
+        elif op == "delete_vertex" and operation.get("cascade", False) is True:
+            edge_result = _read_values(f"{match_query}.bothE().elementMap()")
+            if not edge_result.get("ok"):
+                errors.append(
+                    _validation_error(
+                        idx,
+                        operation,
+                        "associated edge preview query failed",
+                        "Verify HugeGraph Server is available and retry the dry run.",
+                    )
+                )
+            else:
+                item["associated_edges"] = edge_result["data"]["values"]
+                errors.append(
+                    _validation_error(
+                        idx,
+                        operation,
+                        "delete_vertex cascade=true is not enabled in this phase",
+                        "Delete associated edges explicitly, then delete the vertex with cascade=false.",
+                        "CASCADE_NOT_ENABLED",
+                    )
+                )
         preview.append(item)
 
     if errors:
@@ -751,6 +866,24 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
     for idx, operation in enumerate(operations):
         op = str(operation.get("op") or operation.get("type"))
         if op in WRITE_OPS:
+            if op == "update_edge":
+                for endpoint, endpoint_query in (
+                    ("source", _source_vertex_match_query(operation)),
+                    ("target", _target_vertex_match_query(operation)),
+                ):
+                    endpoint_count_result = _read_count(endpoint_query)
+                    if not endpoint_count_result.get("ok"):
+                        return endpoint_count_result
+                    endpoint_count = endpoint_count_result["data"]["matched_count"]
+                    if endpoint_count != 1:
+                        return envelope_err(
+                            ErrorType.INVALID_GRAPH_DATA,
+                            f"update_edge {endpoint} endpoint matched_count must be 1 before execution.",
+                            details={
+                                "operation_index": idx,
+                                "matched_count": endpoint_count,
+                            },
+                        )
             match_query = (
                 _edge_match_query(operation)
                 if op in {"update_edge", "delete_edge"}
@@ -769,6 +902,28 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                         "matched_count": matched_count,
                     },
                 )
+            if op == "delete_vertex" and operation.get("cascade", False) is False:
+                edge_count_result = _read_count(f"{match_query}.bothE()")
+                if not edge_count_result.get("ok"):
+                    return edge_count_result
+                edge_count = edge_count_result["data"]["matched_count"]
+                if edge_count > 0:
+                    return envelope_err(
+                        "BLOCKED_BY_RELATIONSHIPS",
+                        "delete_vertex cascade=false but vertex has associated edges.",
+                        suggestion="Delete associated edges first, then retry the vertex delete.",
+                        details={
+                            "operation_index": idx,
+                            "associated_edge_count": edge_count,
+                        },
+                    )
+            if op == "delete_vertex" and operation.get("cascade", False) is True:
+                return envelope_err(
+                    "CASCADE_NOT_ENABLED",
+                    "delete_vertex cascade=true is not enabled in this phase.",
+                    suggestion="Delete associated edges explicitly, then delete the vertex with cascade=false.",
+                    details={"operation_index": idx},
+                )
         write_result = gremlin_tools.execute_gremlin_write(_write_query(operation))
         if isinstance(write_result, dict) and write_result.get("ok") is False:
             return write_result
@@ -779,6 +934,20 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                 details=write_result,
                 retryable=True,
             )
+        if op == "delete_vertex":
+            verify_result = _read_count(_vertex_match_query(operation))
+            if not verify_result.get("ok"):
+                return verify_result
+            if verify_result["data"]["matched_count"] != 0:
+                return envelope_err(
+                    ErrorType.INVALID_GRAPH_DATA,
+                    "delete_vertex execution did not remove the matched vertex.",
+                    suggestion="Inspect the graph state and retry after confirming the vertex match criteria.",
+                    details={
+                        "operation_index": idx,
+                        "matched_count": verify_result["data"]["matched_count"],
+                    },
+                )
         results.append(
             {
                 "operation_index": idx,
@@ -900,10 +1069,19 @@ def manage_graph_data(
 
     dry_run_result = dry_run_graph_change_plan(plan, live_schema)
     if not dry_run_result["valid"]:
-        return envelope_err(
+        errors = dry_run_result["errors"]
+        error_type = next(
+            (
+                error["error_type"]
+                for error in errors
+                if isinstance(error, dict) and error.get("error_type")
+            ),
             ErrorType.INVALID_GRAPH_DATA,
+        )
+        return envelope_err(
+            error_type,
             "Graph change plan is invalid.",
-            details={"errors": dry_run_result["errors"]},
+            details={"errors": errors},
             warnings=dry_run_result.get("warnings", []),
         )
 
