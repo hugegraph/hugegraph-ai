@@ -81,7 +81,6 @@ READONLY = MCPConfig.from_env().is_readonly()
 mcp = FastMCP("HugeGraph MCP")
 
 
-
 @mcp.tool()
 def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
     """Inspect HugeGraph server status, schema summary, counts, and AI status.
@@ -163,13 +162,19 @@ def query_graph_tool(
                 "gremlin_query is required for mode='gremlin'",
             )
         result = execute_gremlin_read(gremlin_query)
-        if isinstance(result, dict) and result.get("data") is not None and "error" not in result:
-            return envelope_ok({
-                "data": result.get("data"),
-                "total": result.get("total"),
-                "duration_ms": result.get("duration_ms"),
-                "is_read": result.get("is_read", True),
-            })
+        if (
+            isinstance(result, dict)
+            and result.get("data") is not None
+            and "error" not in result
+        ):
+            return envelope_ok(
+                {
+                    "data": result.get("data"),
+                    "total": result.get("total"),
+                    "duration_ms": result.get("duration_ms"),
+                    "is_read": result.get("is_read", True),
+                }
+            )
         return result
 
     return envelope_err(
@@ -202,43 +207,56 @@ def manage_schema_tool(
 
 
 @mcp.tool()
-def extract_graph_data_tool(
-    text: str,
+def import_graph_data_tool(
+    mode: str,
+    text: str | None = None,
     schema: dict | None = None,
     example_prompt: str | None = None,
-) -> dict:
-    """Extract candidate graph data from text without writing to HugeGraph.
-
-    Calls HugeGraph-AI /graph-extract and returns normalized graph_data with
-    vertices and edges. This tool never mutates graph data.
-    """
-
-    return extract_graph_data(
-        text=text,
-        schema=schema,
-        example_prompt=example_prompt,
-    )
-
-
-@mcp.tool()
-def ingest_graph_data_tool(
-    graph_data: dict,
+    graph_data: dict | None = None,
     dry_run: bool = True,
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict:
-    """Validate and import structured graph data with dry-run and plan_hash gating.
+    """Unified graph data import entry for extraction and ingestion workflows.
 
-    dry_run defaults to true and returns a deterministic plan_hash plus mutation
-    summary. Mutating imports require DATA_WRITE permission, confirm=True, and a
-    matching plan_hash from dry-run.
+    Use mode="extract" to turn natural-language text into candidate graph_data
+    without writing to HugeGraph. Then inspect or edit the returned graph_data.
+
+    Use mode="ingest" to validate structured graph_data and import it. Ingest
+    defaults to dry_run=True and returns a deterministic plan_hash. Mutating
+    imports require dry_run=False, confirm=True, and a matching plan_hash from a
+    previous dry run.
     """
 
-    return ingest_graph_data(
-        graph_data=graph_data,
-        dry_run=dry_run,
-        confirm=confirm,
-        plan_hash=plan_hash,
+    if mode == "extract":
+        if not text:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "text is required for mode='extract'",
+            )
+        return extract_graph_data(
+            text=text,
+            schema=schema,
+            example_prompt=example_prompt,
+        )
+
+    if mode == "ingest":
+        if graph_data is None:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "graph_data is required for mode='ingest'",
+            )
+        return ingest_graph_data(
+            graph_data=graph_data,
+            dry_run=dry_run,
+            confirm=confirm,
+            plan_hash=plan_hash,
+        )
+
+    return envelope_err(
+        "VALIDATION_ERROR",
+        f"Unknown mode: {mode!r}. Use 'extract' or 'ingest'.",
+        details={"mode": mode},
     )
 
 
@@ -257,7 +275,7 @@ def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
 def execute_gremlin_write_tool(gremlin_query: str) -> dict:
     """Execute a Gremlin write query directly.
 
-    ⚠️ DEBUG TOOL — prefer ingest_graph_data_tool for graph data writes.
+    ⚠️ DEBUG TOOL — prefer import_graph_data_tool mode="ingest" for graph data writes.
     This low-level tool is always registered but returns a structured
     READONLY_VIOLATION when the server runs in read-only mode.
 
