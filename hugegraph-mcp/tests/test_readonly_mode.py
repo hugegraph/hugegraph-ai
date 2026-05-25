@@ -58,33 +58,36 @@ def test_readonly_env_parsing():
 
 
 def test_write_tools_available_when_not_readonly(monkeypatch):
-    """Test that write tools are registered when not in readonly mode."""
+    """Test that public write tools are registered when not in readonly mode."""
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
     import hugegraph_mcp.server
 
     importlib.reload(hugegraph_mcp.server)
     tools = get_registered_tools()
-    assert "execute_schema_operations_tool" in tools
+    assert "execute_schema_operations_tool" not in tools
+    assert "design_schema_tool" not in tools
     assert "execute_gremlin_write_tool" in tools
+    assert "manage_schema_tool" in tools
+    assert len(tools) == 7
 
 
 def test_write_tools_disabled_when_readonly(monkeypatch):
-    """Test that old write tools remain registered in readonly mode (runtime-guarded)."""
+    """Test that only public tools remain registered in readonly mode."""
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
 
     import hugegraph_mcp.server
 
     importlib.reload(hugegraph_mcp.server)
     tools = get_registered_tools()
-    # Old write tools now always registered — reject via structured envelope at runtime
-    assert "execute_schema_operations_tool" in tools
+    assert "execute_schema_operations_tool" not in tools
+    assert "design_schema_tool" not in tools
     assert "execute_gremlin_write_tool" in tools
-    assert "design_schema_tool" in tools
     assert "manage_schema_tool" in tools
     # Read tools should still be available
     assert "inspect_graph_tool" in tools
     assert "query_graph_tool" in tools
+    assert len(tools) == 7
 
 
 def test_readonly_mode_default(monkeypatch):
@@ -95,5 +98,7 @@ def test_readonly_mode_default(monkeypatch):
 
     importlib.reload(hugegraph_mcp.server)
     tools = get_registered_tools()
-    assert "execute_schema_operations_tool" in tools
+    assert "execute_schema_operations_tool" not in tools
+    assert "design_schema_tool" not in tools
     assert "execute_gremlin_write_tool" in tools
+    assert len(tools) == 7
