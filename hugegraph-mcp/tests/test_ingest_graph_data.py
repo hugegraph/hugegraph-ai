@@ -33,7 +33,32 @@ def _graph_data():
     }
 
 
-def test_ingest_graph_data_dry_run():
+def _live_schema():
+    return {
+        "schema": {
+            "vertexlabels": [
+                {"name": "person", "properties": [{"name": "name"}, {"name": "age"}]},
+            ],
+            "edgelabels": [
+                {"name": "knows", "source_label": "person", "target_label": "person"},
+            ],
+            "propertykeys": [
+                {"name": "name", "data_type": "TEXT"},
+                {"name": "age", "data_type": "INT"},
+            ],
+        },
+    }
+
+
+def _mock_schema(monkeypatch):
+    monkeypatch.setattr(
+        ingest_graph_data_module, "_fetch_live_schema", lambda: _live_schema()
+    )
+
+
+def test_ingest_graph_data_dry_run(monkeypatch):
+    _mock_schema(monkeypatch)
+
     result = ingest_graph_data_module.ingest_graph_data(_graph_data())
 
     assert result["ok"] is True
@@ -42,22 +67,49 @@ def test_ingest_graph_data_dry_run():
     assert any("index" in w for w in result["data"]["warnings"])
 
 
-def test_ingest_graph_data_dry_run_same_input_same_hash():
+def test_ingest_graph_data_dry_run_same_input_same_hash(monkeypatch):
+    _mock_schema(monkeypatch)
+
     first = ingest_graph_data_module.ingest_graph_data(_graph_data())
     second = ingest_graph_data_module.ingest_graph_data(_graph_data())
 
     assert first["data"]["plan_hash"] == second["data"]["plan_hash"]
 
 
-def test_ingest_graph_data_validate_invalid():
+def test_ingest_graph_data_validate_invalid(monkeypatch):
+    _mock_schema(monkeypatch)
+
     result = ingest_graph_data_module.ingest_graph_data({"vertices": [{}], "edges": []})
 
     assert result["ok"] is False
-    assert result["error"]["type"] == "INVALID_GRAPH_DATA"
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
     assert "missing required field: label" in result["error"]["details"]["errors"][0]
 
 
+def test_ingest_graph_data_schema_mismatch(monkeypatch):
+    _mock_schema(monkeypatch)
+
+    # Edge source_label='ghost' does not exist in schema
+    bad_data = {
+        "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+        "edges": [
+            {
+                "label": "knows",
+                "source_label": "ghost",
+                "target_label": "person",
+            }
+        ],
+    }
+
+    result = ingest_graph_data_module.ingest_graph_data(bad_data)
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
+    assert any("source_label 'ghost'" in e for e in result["error"]["details"]["errors"])
+
+
 def test_ingest_graph_data_missing_confirm(monkeypatch):
+    _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
     result = ingest_graph_data_module.ingest_graph_data(
@@ -71,6 +123,7 @@ def test_ingest_graph_data_missing_confirm(monkeypatch):
 
 
 def test_ingest_graph_data_plan_hash_mismatch(monkeypatch):
+    _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
     result = ingest_graph_data_module.ingest_graph_data(
@@ -85,6 +138,7 @@ def test_ingest_graph_data_plan_hash_mismatch(monkeypatch):
 
 
 def test_ingest_graph_data_readonly(monkeypatch):
+    _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
 
     result = ingest_graph_data_module.ingest_graph_data(
@@ -99,6 +153,7 @@ def test_ingest_graph_data_readonly(monkeypatch):
 
 
 def test_ingest_graph_data_success(monkeypatch):
+    _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     post = Mock(return_value=envelope_ok({"ok": True, "data": {"inserted": 2}}))
     monkeypatch.setattr(ingest_graph_data_module, "post", post)

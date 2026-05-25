@@ -22,7 +22,10 @@ from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.hugegraph_ai_client import post
 
 
-def validate_graph_payload(graph_data: Any) -> dict[str, Any]:
+def validate_graph_payload(
+    graph_data: Any,
+    live_schema: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -41,6 +44,16 @@ def validate_graph_payload(graph_data: Any) -> dict[str, Any]:
     if not isinstance(edges, list):
         errors.append("edges must be a list")
 
+    schema_vlabels: set[str] = set()
+    schema_props: dict[str, set[str]] = {}
+    if live_schema:
+        raw = live_schema.get("schema") or live_schema
+        for vl in raw.get("vertexlabels", []):
+            name = vl.get("name")
+            if name:
+                schema_vlabels.add(name)
+                schema_props[name] = {p.get("name") for p in vl.get("properties", []) if p.get("name")}
+
     vertex_labels: set[str] = set()
     if isinstance(vertices, list):
         for idx, vertex in enumerate(vertices):
@@ -52,11 +65,19 @@ def validate_graph_payload(graph_data: Any) -> dict[str, Any]:
                 errors.append(f"vertex {idx} missing required field: label")
                 continue
             vertex_labels.add(label)
+            if schema_vlabels and label not in schema_vlabels:
+                errors.append(f"vertex {idx} label '{label}' does not exist in schema")
+
             props = vertex.get("properties")
             if isinstance(props, dict):
+                schema_prop_names = schema_props.get(label, set())
                 for prop_name, prop_value in props.items():
                     if prop_value is None or prop_value == "":
                         warnings.append(f"vertex {idx} property '{prop_name}' has empty value")
+                    if schema_prop_names and prop_name not in schema_prop_names:
+                        errors.append(
+                            f"vertex {idx} property '{prop_name}' does not exist on label '{label}'"
+                        )
             primary_keys = vertex.get("primary_keys")
             if primary_keys is not None and isinstance(props, dict):
                 for pk in primary_keys:
@@ -75,6 +96,17 @@ def validate_graph_payload(graph_data: Any) -> dict[str, Any]:
             label = edge.get("label")
             if label:
                 edge_labels.add(label)
+            src_label = edge.get("source_label")
+            tgt_label = edge.get("target_label")
+            if schema_vlabels:
+                if src_label and src_label not in schema_vlabels:
+                    errors.append(
+                        f"edge {idx} source_label '{src_label}' does not exist in schema"
+                    )
+                if tgt_label and tgt_label not in schema_vlabels:
+                    errors.append(
+                        f"edge {idx} target_label '{tgt_label}' does not exist in schema"
+                    )
             source = edge.get("source")
             target = edge.get("target")
             if source is None and target is None:
@@ -84,18 +116,19 @@ def validate_graph_payload(graph_data: Any) -> dict[str, Any]:
             if target is None:
                 errors.append(f"edge {idx} has source but missing target")
 
-    # Duplicate detection warnings
     if isinstance(vertices, list) and len(vertex_labels) < len(vertices):
         warnings.append("duplicate vertex labels detected")
     if isinstance(edges, list):
         edge_pairs = []
         for e in edges:
             if isinstance(e, dict):
-                edge_pairs.append((e.get("label"), e.get("source_label"), e.get("target_label"), e.get("source"), e.get("target")))
+                edge_pairs.append(
+                    (e.get("label"), e.get("source_label"), e.get("target_label"),
+                     e.get("source"), e.get("target"))
+                )
         if len(edge_pairs) > len(set(str(p) for p in edge_pairs)):
             warnings.append("potential duplicate edges detected")
 
-    # Index risk warning
     if vertex_labels or edge_labels:
         warnings.append("verify that appropriate indexes exist for queried properties")
 
@@ -117,17 +150,27 @@ def calculate_plan_hash(graph_data: dict[str, Any]) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
+def _fetch_live_schema() -> dict[str, Any] | None:
+    try:
+        from hugegraph_mcp.schema_tools import get_live_schema
+        return get_live_schema()
+    except Exception:
+        return None
+
+
 def ingest_graph_data(
     graph_data: dict[str, Any],
     dry_run: bool = True,
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict[str, Any]:
-    validation = validate_graph_payload(graph_data)
+    live_schema = _fetch_live_schema()
+    validation = validate_graph_payload(graph_data, live_schema=live_schema)
     if not validation["valid"]:
+        error_type = ErrorType.SCHEMA_MISMATCH if live_schema else ErrorType.INVALID_GRAPH_DATA
         return envelope_err(
-            ErrorType.INVALID_GRAPH_DATA,
-            "Graph data payload is invalid.",
+            error_type,
+            "Graph data payload is invalid." if not live_schema else "Graph data does not match live schema.",
             details={"errors": validation["errors"]},
         )
 
