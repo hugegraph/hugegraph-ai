@@ -34,13 +34,30 @@ def _client(monkeypatch, scheduler):
     return TestClient(app)
 
 
+def _assert_envelope(response_json: dict, expected_ok: bool):
+    assert response_json["ok"] is expected_ok
+    assert "data" in response_json
+    assert "error" in response_json
+    assert "warnings" in response_json
+    assert "next_actions" in response_json
+    assert "meta" in response_json
+    assert response_json["meta"]["request_id"].startswith("req-")
+    assert isinstance(response_json["meta"]["duration_ms"], (int, float))
+    if expected_ok:
+        assert response_json["error"] is None
+    else:
+        assert response_json["error"] is not None
+        assert "type" in response_json["error"]
+        assert "message" in response_json["error"]
+
+
 def test_graph_extract_api_calls_flow(monkeypatch):
     scheduler = Mock()
     scheduler.schedule_flow.return_value = '{"vertices": [], "edges": []}'
     client = _client(monkeypatch, scheduler)
 
     response = client.post(
-        "/thin/graph-extract",
+        "/graph-extract",
         json={
             "text": "Alice knows Bob.",
             "schema": "{}",
@@ -50,11 +67,9 @@ def test_graph_extract_api_calls_flow(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "ok": True,
-        "data": '{"vertices": [], "edges": []}',
-        "error": None,
-    }
+    json_body = response.json()
+    _assert_envelope(json_body, expected_ok=True)
+    assert json_body["data"] == '{"vertices": [], "edges": []}'
     scheduler.schedule_flow.assert_called_once_with(
         FlowName.GRAPH_EXTRACT,
         "{}",
@@ -70,11 +85,12 @@ def test_graph_import_api_calls_flow(monkeypatch):
     scheduler.schedule_flow.return_value = '{"imported": true}'
     client = _client(monkeypatch, scheduler)
 
-    response = client.post("/thin/graph-import", json={"data": "{}", "schema": None})
+    response = client.post("/graph-import", json={"data": "{}", "schema": None})
 
     assert response.status_code == 200
-    assert response.json()["ok"] is True
-    assert response.json()["data"] == '{"imported": true}'
+    json_body = response.json()
+    _assert_envelope(json_body, expected_ok=True)
+    assert json_body["data"] == '{"imported": true}'
     scheduler.schedule_flow.assert_called_once_with(FlowName.IMPORT_GRAPH_DATA, "{}", None)
 
 
@@ -83,11 +99,12 @@ def test_vid_embeddings_refresh_api_calls_flow(monkeypatch):
     scheduler.schedule_flow.return_value = "Removed 0 vectors, added 1 vectors."
     client = _client(monkeypatch, scheduler)
 
-    response = client.post("/thin/vid-embeddings/refresh", json={})
+    response = client.post("/vid-embeddings/refresh", json={})
 
     assert response.status_code == 200
-    assert response.json()["ok"] is True
-    assert response.json()["data"] == "Removed 0 vectors, added 1 vectors."
+    json_body = response.json()
+    _assert_envelope(json_body, expected_ok=True)
+    assert json_body["data"] == "Removed 0 vectors, added 1 vectors."
     scheduler.schedule_flow.assert_called_once_with(FlowName.UPDATE_VID_EMBEDDINGS)
 
 
@@ -96,11 +113,12 @@ def test_graph_index_info_api_calls_flow(monkeypatch):
     scheduler.schedule_flow.return_value = '{"vertices": 1}'
     client = _client(monkeypatch, scheduler)
 
-    response = client.get("/thin/graph-index-info")
+    response = client.get("/graph-index-info")
 
     assert response.status_code == 200
-    assert response.json()["ok"] is True
-    assert response.json()["data"] == '{"vertices": 1}'
+    json_body = response.json()
+    _assert_envelope(json_body, expected_ok=True)
+    assert json_body["data"] == '{"vertices": 1}'
     scheduler.schedule_flow.assert_called_once_with(FlowName.GET_GRAPH_INDEX_INFO)
 
 
@@ -109,14 +127,13 @@ def test_thin_api_returns_flow_execution_failed(monkeypatch):
     scheduler.schedule_flow.side_effect = RuntimeError("boom")
     client = _client(monkeypatch, scheduler)
 
-    response = client.get("/thin/graph-index-info")
+    response = client.get("/graph-index-info")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "ok": False,
-        "data": None,
-        "error": {
-            "type": "FLOW_EXECUTION_FAILED",
-            "message": "boom",
-        },
-    }
+    json_body = response.json()
+    _assert_envelope(json_body, expected_ok=False)
+    assert json_body["data"] is None
+    assert json_body["error"]["type"] == "FLOW_EXECUTION_FAILED"
+    assert json_body["error"]["message"] == "boom"
+    assert json_body["error"]["source"] == "hugegraph-llm"
+    assert "details" in json_body["error"]
