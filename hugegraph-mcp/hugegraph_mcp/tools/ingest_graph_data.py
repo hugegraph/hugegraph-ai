@@ -22,6 +22,86 @@ from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.hugegraph_ai_client import post
 
 
+def _schema_name(item: Any) -> str | None:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        name = item.get("name")
+        return name if isinstance(name, str) else None
+    return None
+
+
+def _property_names(properties: Any) -> set[str]:
+    if not isinstance(properties, list):
+        return set()
+    return {name for prop in properties if (name := _schema_name(prop))}
+
+
+def _schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not live_schema:
+        return None
+    raw = live_schema.get("schema") or live_schema
+    return raw if isinstance(raw, dict) else None
+
+
+def _property_types(raw_schema: dict[str, Any]) -> dict[str, str]:
+    types: dict[str, str] = {}
+    for prop in raw_schema.get("propertykeys", []):
+        if not isinstance(prop, dict):
+            continue
+        name = prop.get("name")
+        data_type = prop.get("data_type")
+        if isinstance(name, str) and isinstance(data_type, str):
+            types[name] = data_type.upper()
+    return types
+
+
+def _value_matches_type(value: Any, data_type: str) -> bool:
+    if value is None:
+        return True
+    if data_type in {"TEXT", "UUID"}:
+        return isinstance(value, str)
+    if data_type in {"INT", "LONG", "BYTE"}:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if data_type in {"FLOAT", "DOUBLE"}:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if data_type == "BOOLEAN":
+        return isinstance(value, bool)
+    if data_type in {"DATE", "BLOB"}:
+        return isinstance(value, str)
+    return True
+
+
+def _indexed_labels(raw_schema: dict[str, Any]) -> dict[str, set[str]]:
+    indexed = {"VERTEX": set(), "EDGE": set()}
+    for index in raw_schema.get("indexlabels", []):
+        if not isinstance(index, dict):
+            continue
+        base_label = index.get("base_label") or index.get("baseLabel")
+        if not isinstance(base_label, str):
+            continue
+        base_type = str(index.get("base_type") or index.get("baseType") or "").upper()
+        if base_type in {"VERTEX", "VERTEX_LABEL"}:
+            indexed["VERTEX"].add(base_label)
+        elif base_type in {"EDGE", "EDGE_LABEL"}:
+            indexed["EDGE"].add(base_label)
+    return indexed
+
+
+def _schema_plan_summary(live_schema: dict[str, Any] | None) -> dict[str, Any] | None:
+    raw = _schema_payload(live_schema)
+    if raw is None:
+        return None
+    simple = live_schema.get("simple_schema") if isinstance(live_schema, dict) else None
+    if isinstance(simple, dict):
+        return simple
+    return {
+        "vertexlabels": raw.get("vertexlabels", []),
+        "edgelabels": raw.get("edgelabels", []),
+        "propertykeys": raw.get("propertykeys", []),
+    }
+
+
 def validate_graph_payload(
     graph_data: Any,
     live_schema: dict[str, Any] | None = None,
@@ -46,13 +126,28 @@ def validate_graph_payload(
 
     schema_vlabels: set[str] = set()
     schema_props: dict[str, set[str]] = {}
+    schema_property_types: dict[str, str] = {}
+    schema_elabels: dict[str, dict[str, Any]] = {}
+    schema_eprops: dict[str, set[str]] = {}
+    indexed_labels = {"VERTEX": set(), "EDGE": set()}
     if live_schema:
-        raw = live_schema.get("schema") or live_schema
+        raw = _schema_payload(live_schema) or {}
+        schema_property_types = _property_types(raw)
         for vl in raw.get("vertexlabels", []):
+            if not isinstance(vl, dict):
+                continue
             name = vl.get("name")
             if name:
                 schema_vlabels.add(name)
-                schema_props[name] = {p.get("name") for p in vl.get("properties", []) if p.get("name")}
+                schema_props[name] = _property_names(vl.get("properties", []))
+        for el in raw.get("edgelabels", []):
+            if not isinstance(el, dict):
+                continue
+            name = el.get("name")
+            if isinstance(name, str):
+                schema_elabels[name] = el
+                schema_eprops[name] = _property_names(el.get("properties", []))
+        indexed_labels = _indexed_labels(raw)
 
     vertex_labels: set[str] = set()
     if isinstance(vertices, list):
@@ -78,6 +173,11 @@ def validate_graph_payload(
                         errors.append(
                             f"vertex {idx} property '{prop_name}' does not exist on label '{label}'"
                         )
+                    data_type = schema_property_types.get(prop_name)
+                    if data_type and not _value_matches_type(prop_value, data_type):
+                        errors.append(
+                            f"vertex {idx} property '{prop_name}' expects {data_type}, got {type(prop_value).__name__}"
+                        )
             primary_keys = vertex.get("primary_keys")
             if primary_keys is not None and isinstance(props, dict):
                 for pk in primary_keys:
@@ -96,6 +196,8 @@ def validate_graph_payload(
             label = edge.get("label")
             if label:
                 edge_labels.add(label)
+                if schema_elabels and label not in schema_elabels:
+                    errors.append(f"edge {idx} label '{label}' does not exist in schema")
             src_label = edge.get("source_label")
             tgt_label = edge.get("target_label")
             if schema_vlabels:
@@ -107,6 +209,33 @@ def validate_graph_payload(
                     errors.append(
                         f"edge {idx} target_label '{tgt_label}' does not exist in schema"
                     )
+            if label and label in schema_elabels:
+                schema_edge = schema_elabels[label]
+                expected_src = schema_edge.get("source_label")
+                expected_tgt = schema_edge.get("target_label")
+                if src_label and expected_src and src_label != expected_src:
+                    errors.append(
+                        f"edge {idx} source_label '{src_label}' does not match edge label '{label}' source_label '{expected_src}'"
+                    )
+                if tgt_label and expected_tgt and tgt_label != expected_tgt:
+                    errors.append(
+                        f"edge {idx} target_label '{tgt_label}' does not match edge label '{label}' target_label '{expected_tgt}'"
+                    )
+            props = edge.get("properties")
+            if isinstance(props, dict):
+                schema_prop_names = schema_eprops.get(label, set())
+                for prop_name, prop_value in props.items():
+                    if prop_value is None or prop_value == "":
+                        warnings.append(f"edge {idx} property '{prop_name}' has empty value")
+                    if schema_prop_names and prop_name not in schema_prop_names:
+                        errors.append(
+                            f"edge {idx} property '{prop_name}' does not exist on label '{label}'"
+                        )
+                    data_type = schema_property_types.get(prop_name)
+                    if data_type and not _value_matches_type(prop_value, data_type):
+                        errors.append(
+                            f"edge {idx} property '{prop_name}' expects {data_type}, got {type(prop_value).__name__}"
+                        )
             source = edge.get("source")
             target = edge.get("target")
             if source is None and target is None:
@@ -129,7 +258,12 @@ def validate_graph_payload(
         if len(edge_pairs) > len(set(str(p) for p in edge_pairs)):
             warnings.append("potential duplicate edges detected")
 
-    if vertex_labels or edge_labels:
+    if indexed_labels["VERTEX"] or indexed_labels["EDGE"]:
+        for label in sorted(vertex_labels - indexed_labels["VERTEX"]):
+            warnings.append(f"no vertex index found in schema for label: {label}")
+        for label in sorted(edge_labels - indexed_labels["EDGE"]):
+            warnings.append(f"no edge index found in schema for label: {label}")
+    elif vertex_labels or edge_labels:
         warnings.append("verify that appropriate indexes exist for queried properties")
 
     return {
@@ -139,13 +273,19 @@ def validate_graph_payload(
     }
 
 
-def calculate_plan_hash(graph_data: dict[str, Any]) -> str:
+def calculate_plan_hash(
+    graph_data: dict[str, Any],
+    live_schema: dict[str, Any] | None = None,
+) -> str:
     cfg = MCPConfig.from_env()
     payload = {
         "graph_data": graph_data,
         "graph": cfg.graph,
         "graphspace": cfg.graphspace,
     }
+    schema_summary = _schema_plan_summary(live_schema)
+    if schema_summary is not None:
+        payload["schema_summary"] = schema_summary
     encoded = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
@@ -174,7 +314,7 @@ def ingest_graph_data(
             details={"errors": validation["errors"]},
         )
 
-    expected_plan_hash = calculate_plan_hash(graph_data)
+    expected_plan_hash = calculate_plan_hash(graph_data, live_schema=live_schema)
     mutation_summary = _mutation_summary(graph_data)
     warnings = validation["warnings"]
 

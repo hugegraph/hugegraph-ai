@@ -78,6 +78,20 @@ After the command completes, restart your IDE or assistant.
 - **📝 Gremlin Writes**: Execute data modification queries
 - **🔐 Security Controls**: Read-only mode protection
 
+### V1 高层工具
+
+| 工具 | 功能 | 安全 |
+|------|------|------|
+| inspect_graph | 查看图和服务状态 | 始终可用 |
+| generate_gremlin | 自然语言生成 Gremlin | 默认不执行，只读安全 |
+| query_graph_by_text | 自然语言查询图数据库 | 读操作 |
+| manage_schema | 统一 schema 设计/校验/dry_run/apply | dry_run+plan_hash+confirm |
+| extract_graph_data | 从文本抽取候选图数据 | 不写库 |
+| ingest_graph_data | 导入结构化图数据 | dry_run+confirm+plan_hash |
+| refresh_vid_embeddings | 手动刷新 VID embedding | confirm 门控 |
+
+所有写操作受 readonly 守卫保护。dry_run/confirm/plan_hash 流程确保安全写入。
+
 ## Usage
 
 When chatting with Claude or other AI assistants, tell it to **"use hugegraph-mcp"** to enable the MCP server. Then you can ask it to:

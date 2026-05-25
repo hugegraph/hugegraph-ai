@@ -56,6 +56,33 @@ def _mock_schema(monkeypatch):
     )
 
 
+def test_ingest_graph_data_accepts_string_property_schema(monkeypatch):
+    schema = _live_schema()
+    schema["schema"]["vertexlabels"][0]["properties"] = ["name", "age"]
+    schema["schema"]["edgelabels"][0]["properties"] = ["since"]
+    monkeypatch.setattr(ingest_graph_data_module, "_fetch_live_schema", lambda: schema)
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        {
+            "vertices": [
+                {"label": "person", "properties": {"name": "Alice", "age": 30}}
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "target_label": "person",
+                    "source": {"name": "Alice"},
+                    "target": {"name": "Bob"},
+                    "properties": {"since": 2020},
+                }
+            ],
+        }
+    )
+
+    assert result["ok"] is True
+
+
 def test_ingest_graph_data_dry_run(monkeypatch):
     _mock_schema(monkeypatch)
 
@@ -76,6 +103,18 @@ def test_ingest_graph_data_dry_run_same_input_same_hash(monkeypatch):
     assert first["data"]["plan_hash"] == second["data"]["plan_hash"]
 
 
+def test_ingest_graph_data_plan_hash_includes_schema(monkeypatch):
+    graph_data = _graph_data()
+    schema = _live_schema()
+    schema_with_age_text = _live_schema()
+    schema_with_age_text["schema"]["propertykeys"][1]["data_type"] = "TEXT"
+
+    first = ingest_graph_data_module.calculate_plan_hash(graph_data, schema)
+    second = ingest_graph_data_module.calculate_plan_hash(graph_data, schema_with_age_text)
+
+    assert first != second
+
+
 def test_ingest_graph_data_validate_invalid(monkeypatch):
     _mock_schema(monkeypatch)
 
@@ -84,6 +123,15 @@ def test_ingest_graph_data_validate_invalid(monkeypatch):
     assert result["ok"] is False
     assert result["error"]["type"] == "SCHEMA_MISMATCH"
     assert "missing required field: label" in result["error"]["details"]["errors"][0]
+
+
+def test_ingest_graph_data_invalid_without_live_schema_is_invalid_graph_data(monkeypatch):
+    monkeypatch.setattr(ingest_graph_data_module, "_fetch_live_schema", lambda: None)
+
+    result = ingest_graph_data_module.ingest_graph_data({"vertices": [{}], "edges": []})
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "INVALID_GRAPH_DATA"
 
 
 def test_ingest_graph_data_schema_mismatch(monkeypatch):
@@ -106,6 +154,67 @@ def test_ingest_graph_data_schema_mismatch(monkeypatch):
     assert result["ok"] is False
     assert result["error"]["type"] == "SCHEMA_MISMATCH"
     assert any("source_label 'ghost'" in e for e in result["error"]["details"]["errors"])
+
+
+def test_ingest_graph_data_rejects_property_type_mismatch(monkeypatch):
+    _mock_schema(monkeypatch)
+
+    bad_data = {
+        "vertices": [{"label": "person", "properties": {"name": "Alice", "age": "30"}}],
+        "edges": [],
+    }
+
+    result = ingest_graph_data_module.ingest_graph_data(bad_data)
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
+    assert any("property 'age' expects INT" in e for e in result["error"]["details"]["errors"])
+
+
+def test_ingest_graph_data_rejects_edge_label_mismatch(monkeypatch):
+    _mock_schema(monkeypatch)
+
+    bad_data = {
+        "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+        "edges": [
+            {
+                "label": "likes",
+                "source_label": "person",
+                "target_label": "person",
+                "source": {"name": "Alice"},
+                "target": {"name": "Bob"},
+            },
+            {
+                "label": "knows",
+                "source_label": "person",
+                "target_label": "ghost",
+                "source": {"name": "Alice"},
+                "target": {"name": "Bob"},
+            },
+        ],
+    }
+
+    result = ingest_graph_data_module.ingest_graph_data(bad_data)
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
+    errors = result["error"]["details"]["errors"]
+    assert any("edge 0 label 'likes' does not exist in schema" in e for e in errors)
+    assert any("edge 1 target_label 'ghost'" in e for e in errors)
+    assert any("does not match edge label 'knows' target_label 'person'" in e for e in errors)
+
+
+def test_ingest_graph_data_warns_for_labels_without_schema_index(monkeypatch):
+    schema = _live_schema()
+    schema["schema"]["indexlabels"] = [
+        {"name": "personByName", "base_type": "VERTEX", "base_label": "person"},
+    ]
+    monkeypatch.setattr(ingest_graph_data_module, "_fetch_live_schema", lambda: schema)
+
+    result = ingest_graph_data_module.ingest_graph_data(_graph_data())
+
+    assert result["ok"] is True
+    assert "no edge index found in schema for label: knows" in result["data"]["warnings"]
 
 
 def test_ingest_graph_data_missing_confirm(monkeypatch):
