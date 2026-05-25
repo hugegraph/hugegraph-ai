@@ -14,6 +14,7 @@
 import json
 from typing import Any
 
+from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.hugegraph_ai_client import post
 
@@ -49,7 +50,21 @@ def extract_graph_data(
             details={"data": payload},
         )
 
-    return envelope_ok({"graph_data": graph_data})
+    cfg = MCPConfig.from_env()
+    return envelope_ok({
+        "schema_ref": {
+            "schema_source": "graph",
+            "graph": cfg.graph,
+            "graphspace": cfg.graphspace,
+            "version": None,
+        },
+        "vertices": graph_data.get("vertices", []),
+        "edges": graph_data.get("edges", []),
+        "warnings": graph_data.get("warnings", []),
+        "raw": graph_data.get("raw"),
+        "raw_summary": graph_data.get("raw_summary"),
+        "schema_warnings": graph_data.get("schema_warnings", []),
+    })
 
 
 def _unwrap_ai_payload(data: Any) -> Any:

@@ -40,14 +40,12 @@ def refresh_vid_embeddings(confirm: bool = False) -> dict[str, Any]:
     if isinstance(data, dict) and data.get("ok") is False:
         return data
 
-    if not isinstance(data, dict):
-        data = {}
-
+    added, removed, summary = _parse_refresh_result(data)
     return envelope_ok(
         {
-            "added": data.get("added", 0),
-            "removed": data.get("removed", 0),
-            "summary": data.get("summary"),
+            "added": added,
+            "removed": removed,
+            "summary": summary,
         }
     )
 
@@ -58,3 +56,11 @@ def _unwrap_ai_payload(data: Any) -> Any:
             return data
         return data.get("data")
     return data
+
+
+def _parse_refresh_result(data: Any) -> tuple[int, int, Any]:
+    if isinstance(data, dict):
+        return data.get("added", 0), data.get("removed", 0), data.get("summary")
+    if isinstance(data, str):
+        return 0, 0, data
+    return 0, 0, str(data) if data is not None else None

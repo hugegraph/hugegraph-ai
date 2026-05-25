@@ -56,13 +56,6 @@ def _check_ai_status(ai_url: str, timeout_seconds: int) -> tuple[str, Any, list[
     base_url = ai_url.rstrip("/")
 
     try:
-        health = requests.get(f"{base_url}/health", timeout=timeout_seconds)
-        health.raise_for_status()
-    except Exception as exc:
-        warnings.append(_warning_from_exception("HugeGraph-AI is unavailable", exc))
-        return "unavailable", None, warnings
-
-    try:
         index_info = requests.get(
             f"{base_url}/graph-index-info", timeout=timeout_seconds
         )
@@ -73,10 +66,8 @@ def _check_ai_status(ai_url: str, timeout_seconds: int) -> tuple[str, Any, list[
             graph_index_info = index_info.text
         return "available", graph_index_info, warnings
     except Exception as exc:
-        warnings.append(
-            _warning_from_exception("HugeGraph-AI graph index info is unavailable", exc)
-        )
-        return "available", None, warnings
+        warnings.append(_warning_from_exception("HugeGraph-AI is unavailable", exc))
+        return "unavailable", None, warnings
 
 
 def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:

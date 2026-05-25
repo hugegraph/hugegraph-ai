@@ -14,6 +14,7 @@
 import hashlib
 import json
 from typing import Any
+from uuid import uuid4
 
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
@@ -125,6 +126,7 @@ def ingest_graph_data(
             },
         )
 
+    batch_id = f"batch-{uuid4().hex[:12]}"
     ai_result = post(
         "/graph-import",
         json={"data": json.dumps(graph_data, sort_keys=True), "schema": None},
@@ -132,11 +134,17 @@ def ingest_graph_data(
     if not ai_result.get("ok"):
         return ai_result
 
-    data = _unwrap_ai_payload(ai_result.get("data"))
-    if isinstance(data, dict) and data.get("ok") is False:
-        return data
+    import_result = _unwrap_ai_payload(ai_result.get("data"))
+    if isinstance(import_result, dict) and import_result.get("ok") is False:
+        return import_result
 
-    return envelope_ok(data)
+    return envelope_ok(
+        {
+            "batch_id": batch_id,
+            "mutation_summary": mutation_summary,
+            "import_result": import_result,
+        }
+    )
 
 
 def _mutation_summary(graph_data: dict[str, Any]) -> dict[str, int]:

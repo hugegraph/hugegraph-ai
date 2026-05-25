@@ -182,6 +182,7 @@ def query_graph_by_text_tool(
         query=query,
         mode=mode,
         include_evidence=include_evidence,
+        max_context_items=max_context_items,
     )
 
 

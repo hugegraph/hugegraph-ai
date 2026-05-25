@@ -113,7 +113,9 @@ def test_ingest_graph_data_success(monkeypatch):
     )
 
     assert result["ok"] is True
-    assert result["data"] == {"inserted": 2}
+    assert result["data"]["batch_id"].startswith("batch-")
+    assert result["data"]["mutation_summary"] == {"vertices": 1, "edges": 1}
+    assert result["data"]["import_result"] == {"inserted": 2}
     post.assert_called_once()
     assert post.call_args.args == ("/graph-import",)
     assert post.call_args.kwargs["json"]["schema"] is None
