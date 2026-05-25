@@ -39,7 +39,7 @@ def test_ingest_graph_data_dry_run():
     assert result["ok"] is True
     assert re.fullmatch(r"[0-9a-f]{16}", result["data"]["plan_hash"])
     assert result["data"]["mutation_summary"] == {"vertices": 1, "edges": 1}
-    assert result["data"]["warnings"] == []
+    assert any("index" in w for w in result["data"]["warnings"])
 
 
 def test_ingest_graph_data_dry_run_same_input_same_hash():

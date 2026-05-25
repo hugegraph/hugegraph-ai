@@ -41,14 +41,29 @@ def validate_graph_payload(graph_data: Any) -> dict[str, Any]:
     if not isinstance(edges, list):
         errors.append("edges must be a list")
 
+    vertex_labels: set[str] = set()
     if isinstance(vertices, list):
         for idx, vertex in enumerate(vertices):
             if not isinstance(vertex, dict):
                 errors.append(f"vertex {idx} must be an object")
                 continue
-            if vertex.get("label") in (None, ""):
+            label = vertex.get("label")
+            if label in (None, ""):
                 errors.append(f"vertex {idx} missing required field: label")
+                continue
+            vertex_labels.add(label)
+            props = vertex.get("properties")
+            if isinstance(props, dict):
+                for prop_name, prop_value in props.items():
+                    if prop_value is None or prop_value == "":
+                        warnings.append(f"vertex {idx} property '{prop_name}' has empty value")
+            primary_keys = vertex.get("primary_keys")
+            if primary_keys is not None and isinstance(props, dict):
+                for pk in primary_keys:
+                    if pk not in props or props.get(pk) in (None, ""):
+                        errors.append(f"vertex {idx} missing primary key value for: {pk}")
 
+    edge_labels: set[str] = set()
     if isinstance(edges, list):
         for idx, edge in enumerate(edges):
             if not isinstance(edge, dict):
@@ -57,6 +72,32 @@ def validate_graph_payload(graph_data: Any) -> dict[str, Any]:
             for field in ("label", "source_label", "target_label"):
                 if edge.get(field) in (None, ""):
                     errors.append(f"edge {idx} missing required field: {field}")
+            label = edge.get("label")
+            if label:
+                edge_labels.add(label)
+            source = edge.get("source")
+            target = edge.get("target")
+            if source is None and target is None:
+                continue
+            if source is None:
+                errors.append(f"edge {idx} has target but missing source")
+            if target is None:
+                errors.append(f"edge {idx} has source but missing target")
+
+    # Duplicate detection warnings
+    if isinstance(vertices, list) and len(vertex_labels) < len(vertices):
+        warnings.append("duplicate vertex labels detected")
+    if isinstance(edges, list):
+        edge_pairs = []
+        for e in edges:
+            if isinstance(e, dict):
+                edge_pairs.append((e.get("label"), e.get("source_label"), e.get("target_label"), e.get("source"), e.get("target")))
+        if len(edge_pairs) > len(set(str(p) for p in edge_pairs)):
+            warnings.append("potential duplicate edges detected")
+
+    # Index risk warning
+    if vertex_labels or edge_labels:
+        warnings.append("verify that appropriate indexes exist for queried properties")
 
     return {
         "valid": not bool(errors),

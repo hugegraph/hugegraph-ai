@@ -41,12 +41,14 @@ def test_extract_graph_data_basic(monkeypatch):
     )
 
     assert result["ok"] is True
-    assert result["data"]["vertices"] == graph_data["vertices"]
-    assert result["data"]["edges"] == graph_data["edges"]
-    assert "schema_ref" in result["data"]
-    assert result["data"]["schema_ref"]["graph"] is not None
-    assert result["data"]["warnings"] == []
+    gd = result["data"]["graph_data"]
+    assert gd["vertices"] == graph_data["vertices"]
+    assert gd["edges"] == graph_data["edges"]
+    assert "schema_ref" in gd
+    assert gd["schema_ref"]["graph"] is not None
+    assert gd["warnings"] == []
     assert result["data"]["schema_warnings"] == []
+    assert "raw_summary" in result["data"]
     post.assert_called_once_with(
         "/graph-extract",
         json={

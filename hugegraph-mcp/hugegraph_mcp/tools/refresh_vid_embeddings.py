@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from typing import Any
 
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
@@ -62,5 +63,18 @@ def _parse_refresh_result(data: Any) -> tuple[int, int, Any]:
     if isinstance(data, dict):
         return data.get("added", 0), data.get("removed", 0), data.get("summary")
     if isinstance(data, str):
-        return 0, 0, data
+        added, removed = _parse_numbers_from_string(data)
+        return added, removed, data
     return 0, 0, str(data) if data is not None else None
+
+
+def _parse_numbers_from_string(text: str) -> tuple[int, int]:
+    added = 0
+    removed = 0
+    match = re.search(r"(?:added|add)\s+(\d+)", text, re.IGNORECASE)
+    if match:
+        added = int(match.group(1))
+    match = re.search(r"(?:removed|removed)\s+(\d+)", text, re.IGNORECASE)
+    if match:
+        removed = int(match.group(1))
+    return added, removed
