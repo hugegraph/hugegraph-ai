@@ -1,0 +1,117 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Gremlin query generation for graph data change operations.
+
+Uses JSON-escaped values for injection prevention.
+"""
+
+import json
+from typing import Any
+
+
+# ---- Gremlin 查询生成 — JSON 转义值防注入 ----
+
+
+def _g(value: Any) -> str:
+    return json.dumps(value, sort_keys=True)
+
+
+def _has_steps(match: dict[str, Any]) -> str:
+    return "".join(f".has({_g(key)},{_g(value)})" for key, value in match.items())
+
+
+def _vertex_match_query(operation: dict[str, Any]) -> str:
+    return f"g.V().hasLabel({_g(operation['label'])}){_has_steps(operation['match'])}"
+
+
+def _edge_match_query(operation: dict[str, Any]) -> str:
+    source_label = operation.get("source_label") or operation.get("outVLabel")
+    target_label = operation.get("target_label") or operation.get("inVLabel")
+    return (
+        f"g.V().hasLabel({_g(source_label)}){_has_steps(operation['source_match'])}"
+        f".outE({_g(operation['label'])})"
+        f".where(inV().hasLabel({_g(target_label)}){_has_steps(operation['target_match'])})"
+    )
+
+
+def _source_vertex_match_query(operation: dict[str, Any]) -> str:
+    source_label = operation.get("source_label") or operation.get("outVLabel")
+    return f"g.V().hasLabel({_g(source_label)}){_has_steps(operation['source_match'])}"
+
+
+def _target_vertex_match_query(operation: dict[str, Any]) -> str:
+    target_label = operation.get("target_label") or operation.get("inVLabel")
+    return f"g.V().hasLabel({_g(target_label)}){_has_steps(operation['target_match'])}"
+
+# ---- Gremlin 写入语句生成 — label 和 values 均为 schema 约束值 + JSON 转义 ----
+
+
+def _create_vertex_query(operation: dict[str, Any]) -> str:
+    query = f"g.addV({_g(operation['label'])})"
+    for prop, value in (operation.get("properties") or {}).items():
+        query += f".property({_g(prop)},{_g(value)})"
+    return query
+
+
+def _create_edge_query(operation: dict[str, Any]) -> str:
+    source_label = operation.get("source_label") or operation.get("outVLabel")
+    target_label = operation.get("target_label") or operation.get("inVLabel")
+    query = (
+        f"g.V().hasLabel({_g(source_label)}){_has_steps(operation['source_match'])}.as('s')"
+        f".V().hasLabel({_g(target_label)}){_has_steps(operation['target_match'])}"
+        f".addE({_g(operation['label'])}).from('s')"
+    )
+    for prop, value in (operation.get("properties") or {}).items():
+        query += f".property({_g(prop)},{_g(value)})"
+    return query
+
+
+def _update_vertex_query(operation: dict[str, Any]) -> str:
+    query = _vertex_match_query(operation)
+    for prop, value in operation["set"].items():
+        query += f".property({_g(prop)},{_g(value)})"
+    return query
+
+
+def _update_edge_query(operation: dict[str, Any]) -> str:
+    query = _edge_match_query(operation)
+    for prop, value in operation["set"].items():
+        query += f".property({_g(prop)},{_g(value)})"
+    return query
+
+
+def _delete_vertex_query(operation: dict[str, Any]) -> str:
+    return f"{_vertex_match_query(operation)}.drop()"
+
+
+def _delete_edge_query(operation: dict[str, Any]) -> str:
+    return f"{_edge_match_query(operation)}.drop()"
+
+
+def _write_query(operation: dict[str, Any]) -> str:
+    op = str(operation.get("op") or operation.get("type"))
+    if op == "create_vertex":
+        return _create_vertex_query(operation)
+    if op == "create_edge":
+        return _create_edge_query(operation)
+    if op == "update_vertex":
+        return _update_vertex_query(operation)
+    if op == "update_edge":
+        return _update_edge_query(operation)
+    if op == "delete_vertex":
+        return _delete_vertex_query(operation)
+    if op == "delete_edge":
+        return _delete_edge_query(operation)
+    raise ValueError(f"Unsupported op: {op}")
+

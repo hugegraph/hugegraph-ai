@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
 import re
 
 from hugegraph_mcp.tools import manage_graph_data as manage_graph_data_module
@@ -799,6 +800,72 @@ def test_manage_graph_data_dry_run_returns_plan_hash(monkeypatch):
 
     assert result["ok"] is True
     assert re.fullmatch(r"[0-9a-f]{16}", result["data"]["plan_hash"])
+
+
+def test_manage_graph_data_plan_hash_schema_field_order_same_hash():
+    plan = _update_vertex_plan()
+    schema = _live_schema()
+    reordered_schema = _live_schema()
+    reordered_schema["schema"]["propertykeys"] = list(
+        reversed(reordered_schema["schema"]["propertykeys"])
+    )
+    reordered_schema["schema"]["vertexlabels"][0]["properties"] = ["age", "name"]
+    reordered_schema["schema"]["vertexlabels"][0]["primaryKeys"] = ["name"]
+    reordered_schema["schema"]["vertexlabels"][0].pop("primary_keys")
+    reordered_schema["schema"]["edgelabels"][0]["sourceLabel"] = "person"
+    reordered_schema["schema"]["edgelabels"][0]["targetLabel"] = "person"
+    reordered_schema["schema"]["edgelabels"][0].pop("source_label")
+    reordered_schema["schema"]["edgelabels"][0].pop("target_label")
+
+    first = manage_graph_data_module.calculate_graph_change_plan_hash(
+        plan,
+        schema_summary=manage_graph_data_module._schema_summary(schema),
+    )
+    second = manage_graph_data_module.calculate_graph_change_plan_hash(
+        plan,
+        schema_summary=manage_graph_data_module._schema_summary(reordered_schema),
+    )
+
+    assert first == second
+
+
+def test_manage_graph_data_plan_hash_schema_primary_key_change_different_hash():
+    plan = _update_vertex_plan()
+    schema = _live_schema()
+    changed_schema = deepcopy(schema)
+    changed_schema["schema"]["vertexlabels"][0]["primary_keys"] = ["age"]
+
+    first = manage_graph_data_module.calculate_graph_change_plan_hash(
+        plan,
+        schema_summary=manage_graph_data_module._schema_summary(schema),
+    )
+    second = manage_graph_data_module.calculate_graph_change_plan_hash(
+        plan,
+        schema_summary=manage_graph_data_module._schema_summary(changed_schema),
+    )
+
+    assert first != second
+
+
+def test_manage_graph_data_plan_hash_schema_metadata_ignored_same_hash():
+    plan = _update_vertex_plan()
+    schema = _live_schema()
+    schema_with_metadata = deepcopy(schema)
+    schema_with_metadata["server_time"] = "2026-05-26T00:00:00Z"
+    schema_with_metadata["schema"]["vertexlabels"][0]["id"] = 99
+    schema_with_metadata["schema"]["vertexlabels"][0]["user_data"] = {"x": "y"}
+    schema_with_metadata["simple_schema"] = {"unrelated": ["metadata"]}
+
+    first = manage_graph_data_module.calculate_graph_change_plan_hash(
+        plan,
+        schema_summary=manage_graph_data_module._schema_summary(schema),
+    )
+    second = manage_graph_data_module.calculate_graph_change_plan_hash(
+        plan,
+        schema_summary=manage_graph_data_module._schema_summary(schema_with_metadata),
+    )
+
+    assert first == second
 
 
 def test_manage_graph_data_readonly_rejects_execution(monkeypatch):

@@ -568,7 +568,7 @@ def test_manage_schema_plan_hash_schema_metadata_ignored_same_hash():
     assert first == second
 
 
-def test_manage_schema_plan_hash_operation_order_same_hash():
+def test_manage_schema_plan_hash_operation_order_different_hash():
     schema = _empty_schema()
     operations = [_property_key("age"), _property_key("score")]
     reordered_operations = [_property_key("score"), _property_key("age")]
@@ -576,7 +576,7 @@ def test_manage_schema_plan_hash_operation_order_same_hash():
     first = manage_schema_module.calculate_plan_hash(operations, schema)
     second = manage_schema_module.calculate_plan_hash(reordered_operations, schema)
 
-    assert first == second
+    assert first != second
 
 
 def test_manage_schema_apply_missing_confirm(monkeypatch):

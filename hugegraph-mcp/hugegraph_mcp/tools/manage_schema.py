@@ -11,21 +11,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
-import json
-from copy import deepcopy
-from typing import Any
-
-from hugegraph_mcp.config import MCPConfig
-from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
-from hugegraph_mcp.guard import Capability, guard
 """Schema 管理统一入口 — design / validate / dry_run / apply 四种模式。
 
 安全链：validate → dry_run(生成 plan_hash) → confirm check → plan_hash match → execute
 apply 前必须 dry_run 获取 plan_hash，防止 schema 在审核期间被变更。
 """
 
+import hashlib
+import json
+from copy import deepcopy
+from typing import Any
+
 from hugegraph_mcp import schema_tools
+from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
+from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.tools.ingest_graph_data import normalized_schema_summary
 
 
@@ -219,7 +219,6 @@ def validate_schema_operations(
     property_keys = live_property_keys | planned_creates["property_keys"]
     vertex_labels = live_vertex_labels | planned_creates["vertex_labels"]
     edge_labels = live_edge_labels | planned_creates["edge_labels"]
-    index_labels = live_index_labels | planned_creates["index_labels"]
 
     for idx, operation in enumerate(operations):
         if not isinstance(operation, dict):
@@ -388,16 +387,8 @@ def _current_plan_context(
 ) -> dict[str, Any]:
     cfg = MCPConfig.from_env()
     live_schema = live_schema or schema_tools.get_live_schema()
-    normalized_operations = sorted(
-        deepcopy(operations),
-        key=lambda operation: (
-            str(operation.get("type", "")) if isinstance(operation, dict) else "",
-            str(operation.get("name", "")) if isinstance(operation, dict) else "",
-            json.dumps(operation, sort_keys=True, default=str),
-        ),
-    )
     return {
-        "operations": normalized_operations,
+        "operations": deepcopy(operations),
         "graph": cfg.graph,
         "graphspace": cfg.graphspace,
         "schema_summary": normalized_schema_summary(live_schema),
