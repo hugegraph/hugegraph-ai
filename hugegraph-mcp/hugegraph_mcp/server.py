@@ -77,7 +77,7 @@ from fastmcp import FastMCP
 
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
 from hugegraph_mcp.config import MCPConfig
-from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
+from hugegraph_mcp.envelope import ErrorType, envelope_err
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
 from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
@@ -172,19 +172,6 @@ def query_graph_tool(
         if not gremlin_query:
             return envelope_err("VALIDATION_ERROR", "gremlin_query is required for mode='gremlin'")
         result = execute_gremlin_read(gremlin_query)
-        if (
-            isinstance(result, dict)
-            and result.get("data") is not None
-            and "error" not in result
-        ):
-            return envelope_ok(
-                {
-                    "data": result.get("data"),
-                    "total": result.get("total"),
-                    "duration_ms": result.get("duration_ms"),
-                    "is_read": result.get("is_read", True),
-                }
-            )
         return result
 
     return envelope_err(

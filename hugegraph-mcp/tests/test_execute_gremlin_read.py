@@ -35,9 +35,12 @@ def test_execute_gremlin_read_basic(monkeypatch):
     result = gremlin_tools.execute_gremlin_read("g.V().limit(2)")
 
     assert client.last_query == "g.V().limit(2)"
-    assert result["is_read"] is True
-    assert result["total"] == 2
-    assert isinstance(result["duration_ms"], (int, float))
+    assert result["ok"] is True
+    assert result["error"] is None
+    assert result["data"]["is_read"] is True
+    assert result["data"]["total"] == 2
+    assert isinstance(result["data"]["duration_ms"], (int, float))
+    assert result["meta"]["duration_ms"] == result["data"]["duration_ms"]
 
 
 def test_execute_gremlin_read_rejects_obvious_writes(monkeypatch):
@@ -71,5 +74,6 @@ def test_execute_gremlin_read_respects_readonly_env(monkeypatch):
 
     result = gremlin_tools.execute_gremlin_read("g.V().count()")
 
-    assert result["is_read"] is True
-    assert "total" in result
+    assert result["ok"] is True
+    assert result["data"]["is_read"] is True
+    assert "total" in result["data"]

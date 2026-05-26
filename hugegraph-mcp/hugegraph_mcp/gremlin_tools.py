@@ -24,7 +24,7 @@ import requests
 from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp.config import MCPConfig
-from hugegraph_mcp.envelope import ErrorType, envelope_err
+from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.gremlin_safety import classify_gremlin_read_safety
 from hugegraph_mcp.guard import Capability, guard_write
 
@@ -68,6 +68,13 @@ class GremlinExecutor:
 # 模块级单例，避免重复构建客户端
 _executor = GremlinExecutor(_cfg)
 
+_GREMLIN_ERROR_TYPE_MAP = {
+    "connection_error": ErrorType.CONNECTION_FAILED,
+    "authentication_error": ErrorType.AUTHENTICATION_FAILED,
+    "authorization_error": ErrorType.AUTHORIZATION_FAILED,
+    "query_syntax_error": ErrorType.UNSAFE_GREMLIN,
+}
+
 
 def _get_read_client():
     return _executor.get_read_client()
@@ -75,6 +82,22 @@ def _get_read_client():
 
 def _get_write_client():
     return _executor.get_write_client()
+
+
+def _gremlin_error_envelope(result: dict[str, Any]) -> dict[str, Any]:
+    error_type = _GREMLIN_ERROR_TYPE_MAP.get(
+        result.get("error_type"),
+        ErrorType.CONNECTION_FAILED,
+    )
+    suggestions = result.get("suggestions") or []
+    suggestion = "; ".join(suggestions) if suggestions else None
+    return envelope_err(
+        error_type,
+        result.get("message", "Gremlin query failed"),
+        suggestion=suggestion,
+        details=result,
+        duration_ms=result.get("duration_ms"),
+    )
 
 
 def _execute_gremlin_with_error_handling(
@@ -247,14 +270,18 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
     result = _execute_gremlin_with_error_handling(client, gremlin_query, "read")
 
     if result.get("success"):
-        return {
-            "data": result["data"],
-            "total": result["count"],
-            "duration_ms": result["duration_ms"],
-            "is_read": True,
-        }
+        duration_ms = result["duration_ms"]
+        return envelope_ok(
+            {
+                "data": result["data"],
+                "total": result["count"],
+                "duration_ms": duration_ms,
+                "is_read": True,
+            },
+            duration_ms=duration_ms,
+        )
     else:
-        return result
+        return _gremlin_error_envelope(result)
 
 
 def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
@@ -272,11 +299,14 @@ def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
     result = _execute_gremlin_with_error_handling(client, gremlin_query, "write")
 
     if result.get("success"):
-        return {
-            "success": True,
-            "affected": result["count"],
-            "duration_ms": result["duration_ms"],
-            "is_write": True,
-        }
+        duration_ms = result["duration_ms"]
+        return envelope_ok(
+            {
+                "affected": result["count"],
+                "duration_ms": duration_ms,
+                "is_write": True,
+            },
+            duration_ms=duration_ms,
+        )
     else:
-        return result
+        return _gremlin_error_envelope(result)

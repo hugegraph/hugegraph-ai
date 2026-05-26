@@ -40,9 +40,12 @@ def test_execute_gremlin_write_basic(monkeypatch):
 
     assert fake_client.last_query is not None
     assert fake_client.last_query.startswith("g.addV")
-    assert res["is_write"] is True
-    assert res["affected"] == 2
-    assert isinstance(res["duration_ms"], (int, float))
+    assert res["ok"] is True
+    assert res["error"] is None
+    assert res["data"]["is_write"] is True
+    assert res["data"]["affected"] == 2
+    assert isinstance(res["data"]["duration_ms"], (int, float))
+    assert res["meta"]["duration_ms"] == res["data"]["duration_ms"]
 
 
 def test_execute_gremlin_write_blocked_in_readonly(monkeypatch):

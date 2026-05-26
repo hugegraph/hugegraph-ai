@@ -81,3 +81,30 @@ def test_query_graph_generate_mode_is_unchanged(monkeypatch):
 
     assert result == expected
     generate_gremlin.assert_called_once_with(query="count vertices", execute=True)
+
+
+def test_query_graph_gremlin_mode_returns_execute_envelope_directly(monkeypatch):
+    server = _reload_server(monkeypatch, graphrag_enabled=False)
+    expected = {
+        "ok": True,
+        "data": {
+            "data": ["alice", "bob"],
+            "total": 2,
+            "duration_ms": 1.5,
+            "is_read": True,
+        },
+        "error": None,
+        "warnings": [],
+        "next_actions": [],
+        "meta": {"duration_ms": 1.5},
+    }
+    execute_gremlin_read = Mock(return_value=expected)
+    monkeypatch.setattr(server, "execute_gremlin_read", execute_gremlin_read)
+
+    result = server.query_graph_tool(
+        mode="gremlin",
+        gremlin_query="g.V().limit(2)",
+    )
+
+    assert result == expected
+    execute_gremlin_read.assert_called_once_with("g.V().limit(2)")

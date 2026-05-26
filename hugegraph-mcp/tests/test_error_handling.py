@@ -30,11 +30,14 @@ def test_connection_error_handling():
 
         result = execute_gremlin_read("g.V().count()")
 
-        assert result["success"] is False
-        assert result["error_type"] == "connection_error"
-        assert "Cannot connect to HugeGraph server" in result["message"]
-        assert len(result["suggestions"]) > 0
-        assert "Check if HugeGraph server is running" in result["suggestions"]
+        assert result["ok"] is False
+        assert result["error"]["type"] == "CONNECTION_FAILED"
+        assert "Cannot connect to HugeGraph server" in result["error"]["message"]
+        assert (
+            "Check if HugeGraph server is running"
+            in result["error"]["suggestion"]
+        )
+        assert result["error"]["details"]["error_type"] == "connection_error"
 
 
 def test_http_500_error_handling():
@@ -53,11 +56,12 @@ def test_http_500_error_handling():
 
         result = execute_gremlin_write("g.addV('test')")
 
-        assert result["success"] is False
-        assert result["error_type"] == "server_error"
-        assert "HugeGraph server internal error" in result["message"]
-        assert result["status_code"] == 500
-        assert "Check the Gremlin query syntax" in result["suggestions"]
+        assert result["ok"] is False
+        assert result["error"]["type"] == "CONNECTION_FAILED"
+        assert "HugeGraph server internal error" in result["error"]["message"]
+        assert result["error"]["details"]["error_type"] == "server_error"
+        assert result["error"]["details"]["status_code"] == 500
+        assert "Check the Gremlin query syntax" in result["error"]["suggestion"]
 
 
 def test_authentication_error_handling():
@@ -74,12 +78,11 @@ def test_authentication_error_handling():
 
         result = execute_gremlin_read("g.V().limit(10)")
 
-        assert result["success"] is False
-        assert result["error_type"] == "authentication_error"
-        assert "Authentication failed" in result["message"]
-        assert any(
-            "Check HUGEGRAPH_USER" in suggestion for suggestion in result["suggestions"]
-        )
+        assert result["ok"] is False
+        assert result["error"]["type"] == "AUTHENTICATION_FAILED"
+        assert "Authentication failed" in result["error"]["message"]
+        assert "Check HUGEGRAPH_USER" in result["error"]["suggestion"]
+        assert result["error"]["details"]["error_type"] == "authentication_error"
 
 
 def test_readonly_mode_error():
@@ -110,9 +113,10 @@ def test_syntax_error_handling():
 
         result = execute_gremlin_read("g.V().count()")
 
-        assert result["success"] is False
-        assert result["error_type"] == "query_syntax_error"
-        assert "syntax error" in result["message"]
+        assert result["ok"] is False
+        assert result["error"]["type"] == "UNSAFE_GREMLIN"
+        assert "syntax error" in result["error"]["message"]
+        assert result["error"]["details"]["error_type"] == "query_syntax_error"
 
 
 def test_unknown_error_handling():
@@ -124,9 +128,10 @@ def test_unknown_error_handling():
 
         result = execute_gremlin_read("g.V().count()")
 
-        assert result["success"] is False
-        assert result["error_type"] == "unknown_error"
-        assert "Unexpected error" in result["message"]
+        assert result["ok"] is False
+        assert result["error"]["type"] == "CONNECTION_FAILED"
+        assert "Unexpected error" in result["error"]["message"]
+        assert result["error"]["details"]["error_type"] == "unknown_error"
 
 
 def test_successful_execution_preserves_format():
@@ -138,9 +143,9 @@ def test_successful_execution_preserves_format():
 
         result = execute_gremlin_read("g.V().limit(1)")
 
-        # Successful execution returns the original format without success field
-        assert "data" in result
-        assert "total" in result
-        assert "duration_ms" in result
-        assert result["is_read"] is True
-        assert result["total"] == 1
+        assert result["ok"] is True
+        assert result["error"] is None
+        assert result["data"]["is_read"] is True
+        assert result["data"]["total"] == 1
+        assert result["data"]["data"] == [{"id": "1", "label": "person"}]
+        assert isinstance(result["meta"]["duration_ms"], (int, float))
