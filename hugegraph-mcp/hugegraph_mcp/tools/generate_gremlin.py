@@ -11,6 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""NL-to-Gremlin 生成 — 通过 HugeGraph-AI /text2gremlin 将自然语言转为 Gremlin。
+
+默认只返回生成的 Gremlin + 安全元数据，不自动执行。
+execute=True 且安全分类为 safe 时才自动执行，不安全查询只返回不执行。
+"""
+
 from typing import Any
 
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
@@ -24,10 +30,10 @@ def generate_gremlin(
     execute: bool = False,
     output_types: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Generate Gremlin from natural language via HugeGraph-AI.
+    """将自然语言转为 Gremlin — 默认只生成不执行。
 
-    By default this tool only returns generated Gremlin and safety metadata.
-    Automatic execution is allowed only for confidently read-only traversals.
+    execute=True 时会自动检查安全性：只有 classify_gremlin_read_safety 返回 safe
+    的查询才会执行，其他情况返回 UNSAFE_GREMLIN 错误。
     """
 
     ai_result = post("/text2gremlin", json={"query": query})
@@ -37,7 +43,6 @@ def generate_gremlin(
     ai_data = ai_result.get("data") or {}
     template_gremlin = ai_data.get("template_gremlin")
     raw_gremlin = ai_data.get("raw_gremlin")
-    # /text2gremlin returns template_gremlin/raw_gremlin; use template as primary
     gremlin = template_gremlin or raw_gremlin or ai_data.get("gremlin")
     requires_index = ai_data.get("requires_index", False)
     assumptions = ai_data.get("assumptions")

@@ -17,6 +17,13 @@ import re
 import sqlite3
 from typing import Any
 
+"""SQLite 适配层 — SQL 数据源的安全访问。
+
+所有 SQL 操作通过只读连接执行：uri mode=ro, PRAGMA query_only=ON, authorizer 拦截写入。
+只允许 SELECT/WITH...SELECT/EXPLAIN/只读 PRAGMA，拒绝 DML/DDL。
+BLOB 和不可序列化值替换为人类可读摘要。
+"""
+
 from hugegraph_mcp.config import config
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 
@@ -174,6 +181,7 @@ def preview_sql(
     table_name: str | None = None,
     sql_query: str | None = None,
 ) -> dict[str, Any]:
+    """预览 SQLite 表结构或 SELECT 查询结果 — 通过只读连接执行。"""
     source_err = validate_sqlite_source(sql_source)
     if source_err is not None:
         return source_err
@@ -197,6 +205,7 @@ def execute_select_to_table_data(
     table_name: str | None = None,
     max_rows: int | None = None,
 ) -> dict[str, Any]:
+    """执行只读 SELECT 并将结果转为 table_data 格式 — 供后续 import_table_data 使用。"""
     source_err = validate_sqlite_source(sql_source)
     if source_err is not None:
         return source_err

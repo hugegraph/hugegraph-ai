@@ -13,9 +13,12 @@
 
 import os
 import logging
+"""统一配置层 — 所有 MCP 工具通过 MCPConfig.from_env() 获取配置。
+
+环境变量优先级高于默认值，避免硬编码连接信息。"""
+
 from dataclasses import dataclass, field
 from typing import Mapping
-
 
 TRUE_VALUES = {"1", "true", "yes"}
 LOGGER = logging.getLogger("hugegraph_mcp.config")
@@ -23,6 +26,8 @@ LOGGER = logging.getLogger("hugegraph_mcp.config")
 
 @dataclass
 class MCPConfig:
+    """MCP 服务器统一配置，所有字段从环境变量读取，有合理默认值。"""
+
     url: str = "http://127.0.0.1:8080"
     graph: str = "hugegraph"
     graphspace: str | None = "DEFAULT"
@@ -147,4 +152,4 @@ def _parse_semicolon_tuple(value: str) -> tuple[str, ...]:
     )
 
 
-config = MCPConfig.from_env()
+config = MCPConfig.from_env()  # 模块级单例，一次解析避免重复读环境变量

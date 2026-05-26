@@ -11,6 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Gremlin 执行层 — 封装 HugeGraph Gremlin 读写客户端。
+
+所有 Gremlin 查询统一通过 GremlinExecutor 执行，对连接失败/认证错误/
+HTTP 错误/语法错误做结构化错误收集，不抛异常到上层。
+"""
+
 import time
 from typing import Any
 
@@ -26,17 +32,16 @@ _cfg = MCPConfig.from_env()
 
 
 class GremlinExecutor:
-    """Encapsulate HugeGraph Gremlin read/write clients.
+    """封装 HugeGraph Gremlin 读写客户端，自动处理 graphspace 兼容性。
 
-    HugeGraph 1.7.0+ compatible with enhanced graph space support.
-    Uses HTTP REST + pyhugegraph.gremlin(), ready for WebSocket or URL splitting.
+    HugeGraph 1.7.0+ 支持 graph space，配置为空时回退到默认客户端。
     """
 
     def __init__(self, cfg: MCPConfig) -> None:
         self._cfg = cfg
 
     def _build_client(self) -> PyHugeClient:
-        # HugeGraph 1.7.0+ graph space support - only use if explicitly set
+        # graphspace 为空时跳过，保持与旧版 HugeGraph 的兼容性
         if self._cfg.graphspace and self._cfg.graphspace.strip():
             return PyHugeClient(
                 url=self._cfg.url,
@@ -46,7 +51,6 @@ class GremlinExecutor:
                 graphspace=self._cfg.graphspace.strip(),
             )
         else:
-            # Default client without graphspace for 1.7.0 compatibility
             return PyHugeClient(
                 url=self._cfg.url,
                 graph=self._cfg.graph,
@@ -61,6 +65,7 @@ class GremlinExecutor:
         return self._build_client().gremlin()
 
 
+# 模块级单例，避免重复构建客户端
 _executor = GremlinExecutor(_cfg)
 
 
@@ -75,15 +80,10 @@ def _get_write_client():
 def _execute_gremlin_with_error_handling(
     client, gremlin_query: str, operation_type: str = "read"
 ) -> dict[str, Any]:
-    """Execute Gremlin query with comprehensive error handling.
+    """执行 Gremlin 查询并做结构化错误处理。
 
-    Args:
-        client: The Gremlin client instance
-        gremlin_query: The Gremlin query to execute
-        operation_type: "read" or "write" for context in error messages
-
-    Returns:
-        Dict containing either successful result or structured error information
+    连接失败、HTTP 错误、语法错误等均返回结构化 dict 而非抛异常，
+    便于上层统一处理。区分 401/403/404/500 等状态码给出针对性建议。
     """
     start = time.time()
 
@@ -91,7 +91,6 @@ def _execute_gremlin_with_error_handling(
         data = client.exec(gremlin_query)
         duration_ms = (time.time() - start) * 1000.0
 
-        # Try to count results
         try:
             count = len(data)  # type: ignore[arg-type]
         except TypeError:
@@ -150,15 +149,13 @@ def _execute_gremlin_with_error_handling(
             ]
         elif status_code == 500:
             error_type = "server_error"
-            # Try to extract detailed error message from response body
+            # 尝试从响应体中提取 HugeGraph 详细错误信息
             detail_message = ""
             try:
                 if hasattr(e, "response") and e.response is not None:
                     error_json = e.response.json()
-                    # HugeGraph returns error in format: {"exception": "detailed message"}
                     detail_message = error_json.get("exception") or ""
                     if not detail_message:
-                        # Try other common fields
                         detail_message = (
                             error_json.get("message")
                             or error_json.get("detail")
@@ -166,7 +163,7 @@ def _execute_gremlin_with_error_handling(
                             or str(error_json)
                         )
             except Exception:
-                pass  # Use default message if extraction fails
+                pass
 
             if detail_message:
                 message = f"HugeGraph server internal error: {detail_message}"
@@ -223,10 +220,11 @@ def _execute_gremlin_with_error_handling(
 
 
 def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
-    """Execute a read-only Gremlin query and return standardized metadata.
+    """执行只读 Gremlin 查询。
 
-    - Rejects unsafe or ambiguous Gremlin queries.
-    - Returns: {data, total, duration_ms, is_read} or structured error information.
+    先通过安全分类器检查查询是否为已知只读遍历，
+    拒绝写入类和无法确定的查询，只放行明确安全的遍历。
+    返回 {data, total, duration_ms, is_read}。
     """
 
     safety = classify_gremlin_read_safety(gremlin_query)
@@ -248,7 +246,6 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
     client = _get_read_client()
     result = _execute_gremlin_with_error_handling(client, gremlin_query, "read")
 
-    # Transform successful result to match expected format
     if result.get("success"):
         return {
             "data": result["data"],
@@ -257,17 +254,14 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
             "is_read": True,
         }
     else:
-        # Return error result as-is (already structured)
         return result
 
 
 def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
-    """Execute a Gremlin write query and return affected count & metadata.
+    """执行 Gremlin 写查询。
 
-    Behaviour as per tests:
-    - Uses a dedicated write client.
-    - When HUGEGRAPH_MCP_READONLY is true, return a structured envelope.
-    - Returns structured error information for all failure cases.
+    readonly 模式下通过 guard_write 拒绝执行，
+    正常模式返回 {success, affected, duration_ms, is_write}。
     """
 
     violation = guard_write(Capability.DEBUG_WRITE)
@@ -277,7 +271,6 @@ def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
     client = _get_write_client()
     result = _execute_gremlin_with_error_handling(client, gremlin_query, "write")
 
-    # Transform successful result to match expected format
     if result.get("success"):
         return {
             "success": True,
@@ -286,5 +279,4 @@ def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
             "is_write": True,
         }
     else:
-        # Return error result as-is (already structured)
         return result

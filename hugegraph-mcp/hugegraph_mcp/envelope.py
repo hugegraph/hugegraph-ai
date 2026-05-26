@@ -11,6 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""统一响应信封 — 所有 MCP 工具通过 envelope_ok/envelope_err 返回一致结构。
+
+强制格式: {ok, data, error, warnings, next_actions, meta}
+前端/Agent 无需猜测返回形状，始终可安全解析。"""
+
 from enum import Enum
 from typing import Any
 from uuid import uuid4
@@ -19,6 +24,7 @@ from hugegraph_mcp.config import MCPConfig
 
 
 class ErrorType(str, Enum):
+    """标准化错误类型枚举 — 按能力域划分，便于 Agent 分类处理。"""
     CONNECTION_FAILED = "CONNECTION_FAILED"
     AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
     AUTHORIZATION_FAILED = "AUTHORIZATION_FAILED"
@@ -152,6 +158,7 @@ def envelope_err(
     }
 
 
+# 向后兼容别名 — 旧代码可通过多种名称引用同一函数
 make_ok_envelope = envelope_ok
 make_err_envelope = envelope_err
 ok_envelope = envelope_ok

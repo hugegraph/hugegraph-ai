@@ -11,7 +11,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Safety classifier for Gremlin queries accepted by the read tool."""
+"""Gremlin 安全分类器 — 保守的只读检测。
+
+不是完整的 Gremlin parser，而是保守的安全门：
+- safe: 明确只读遍历（g.V()/g.E() + 已知只读方法）
+- unsafe: 检测到 write/mutate 方法或模式
+- uncertain: 无法确定 → 拒绝执行
+
+宁可误拒 ambiguous 查询，也不放行潜在写操作。
+"""
 
 from __future__ import annotations
 

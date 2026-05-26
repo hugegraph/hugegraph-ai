@@ -11,6 +11,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""图数据管理核心 — CRUD 安全链。
+
+manage_graph_data() 是统一入口，提供 import/update/delete 三种模式。
+安全链：validate → dry_run → confirm check → plan_hash match → execute
+
+写入链路：
+- import: graph_data → change_plan (create_*) → 安全链
+- update: change_plan (update_*) → 安全链
+- delete: change_plan (delete_*) → 安全链
+"""
+
 import hashlib
 import json
 from typing import Any
@@ -41,6 +52,7 @@ ALLOWED_OPS = frozenset(
 VERTEX_OPS = frozenset({"create_vertex", "update_vertex", "delete_vertex"})
 EDGE_OPS = frozenset({"create_edge", "update_edge", "delete_edge"})
 WRITE_OPS = frozenset({"update_vertex", "update_edge", "delete_vertex", "delete_edge"})
+# 每种 mode 只允许特定操作类型，防止错误使用
 MODE_OPS = {
     "import": frozenset({"create_vertex", "create_edge"}),
     "update": frozenset({"update_vertex", "update_edge"}),
@@ -49,6 +61,8 @@ MODE_OPS = {
 
 ValidationError = dict[str, Any]
 
+
+# ---- Schema 辅助函数 ----
 
 def _schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(live_schema, dict):
@@ -152,6 +166,8 @@ def _validation_error(
     return error
 
 
+# ---- 校验辅助 ----
+
 def _validate_field_map(
     *,
     idx: int,
@@ -218,10 +234,17 @@ def _validate_primary_key_match(
         )
 
 
+# ---- 变更计划校验 ----
+
 def validate_graph_change_plan(
     change_plan: Any,
     live_schema: dict[str, Any],
 ) -> dict[str, Any]:
+    """校验 change_plan 中的操作是否与 live schema 兼容。
+
+    检查项：op 类型白名单、label 存在性、properties/set/match 字段合法性、
+    主键匹配、边端点合法性。
+    """
     errors: list[ValidationError] = []
     warnings: list[str] = []
 
@@ -513,6 +536,8 @@ def validate_graph_change_plan(
     return {"valid": not bool(errors), "errors": errors, "warnings": warnings}
 
 
+# ---- Gremlin 查询生成 — JSON 转义值防注入 ----
+
 def _g(value: Any) -> str:
     return json.dumps(value, sort_keys=True)
 
@@ -544,6 +569,8 @@ def _target_vertex_match_query(operation: dict[str, Any]) -> str:
     target_label = operation.get("target_label") or operation.get("inVLabel")
     return f"g.V().hasLabel({_g(target_label)}){_has_steps(operation['target_match'])}"
 
+
+# ---- Gremlin 执行辅助 ----
 
 def _read_count(gremlin_query: str) -> dict[str, Any]:
     result = gremlin_tools.execute_gremlin_read(f"{gremlin_query}.count()")
@@ -602,6 +629,8 @@ def _mutation_summary(operations: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+# ---- Plan Hash 计算 — 防篡改校验 ----
+
 def calculate_graph_change_plan_hash(
     change_plan: Any,
     graph: str | None = None,
@@ -609,6 +638,10 @@ def calculate_graph_change_plan_hash(
     schema_summary: dict[str, Any] | None = None,
     extra_hash_context: dict[str, Any] | None = None,
 ) -> str:
+    """基于 change_plan + graph/schema 上下文计算确定性哈希。
+
+    用于防篡改安全链：dry_run 返回 plan_hash，执行时校验匹配。
+    """
     cfg = MCPConfig.from_env()
     payload: dict[str, Any] = {
         "change_plan": change_plan,
@@ -623,11 +656,18 @@ def calculate_graph_change_plan_hash(
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
+# ---- 干跑预览 ----
+
 def dry_run_graph_change_plan(
     change_plan: Any,
     live_schema: dict[str, Any],
     extra_hash_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """干跑 — 校验 + 预览每个操作的影响（matched_count），不执行写入。
+
+    update/delete 操作通过只读 Gremlin 查询验证 matched_count==1，
+    delete_vertex cascade=false 时检查关联边。
+    """
     validation = validate_graph_change_plan(change_plan, live_schema)
     if not validation["valid"]:
         return validation
@@ -788,6 +828,8 @@ def dry_run_graph_change_plan(
     }
 
 
+# ---- Gremlin 写入语句生成 — label 和 values 均为 schema 约束值 + JSON 转义 ----
+
 def _create_vertex_query(operation: dict[str, Any]) -> str:
     query = f"g.addV({_g(operation['label'])})"
     for prop, value in (operation.get("properties") or {}).items():
@@ -847,9 +889,12 @@ def _write_query(operation: dict[str, Any]) -> str:
     raise ValueError(f"Unsupported op: {op}")
 
 
+# ---- Mode 操作约束校验 ----
+
 def _validate_mode_operations(
     mode: str, change_plan: GraphChangePlan
 ) -> dict[str, Any]:
+    """确保 mode 下的所有操作类型匹配，例如 import 模式不允许 update/delete。"""
     allowed = MODE_OPS[mode]
     errors = []
     for idx, operation in enumerate(_operations(change_plan)):
@@ -866,7 +911,13 @@ def _validate_mode_operations(
     return {"valid": not bool(errors), "errors": errors, "warnings": []}
 
 
+# ---- 执行 — 写入前再次校验 matched_count ----
+
 def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
+    """执行变更计划 — 写入前对每个操作再次校验 matched_count。
+
+    防止 dry_run 和 execute 之间状态变化导致的误操作。
+    """
     operations = _operations(change_plan)
     results: list[dict[str, Any]] = []
     for idx, operation in enumerate(operations):
@@ -969,12 +1020,16 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
     }
 
 
+# ---- Live Schema 获取 ----
+
 def _fetch_live_schema() -> dict[str, Any] | None:
     try:
         return schema_tools.get_live_schema()
     except Exception:
         return None
 
+
+# ---- 统一入口 ----
 
 def manage_graph_data(
     mode: str,
@@ -985,6 +1040,11 @@ def manage_graph_data(
     plan_hash: str | None = None,
     extra_hash_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """统一图数据管理入口。
+
+    安全链：validate → dry_run → confirm check → plan_hash match → execute
+    每个环节失败均返回结构化错误，不抛异常。
+    """
     if mode == "import":
         if graph_data is None:
             return envelope_err(

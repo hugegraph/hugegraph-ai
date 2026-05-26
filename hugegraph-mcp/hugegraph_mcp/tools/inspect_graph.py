@@ -11,6 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""图状态检视 — Agent 连接后的首个推荐工具。
+
+inspect_graph() 做尽力而为的状态检查：HugeGraph Server 连接、schema 摘要、
+点边计数、HugeGraph-AI 可用性。任何环节失败都不抛异常，
+而是作为 warning 包含在 ok 信封中返回。
+"""
+
 import time
 from typing import Any
 
@@ -57,6 +64,7 @@ def _warning_from_exception(prefix: str, exc: Exception) -> str:
 
 
 def _check_ai_status(ai_url: str, timeout_seconds: int) -> tuple[str, Any, list[str]]:
+    """探测 HugeGraph-AI 是否可用 — 先查 graph-index-info，失败回退到 openapi.json。"""
     warnings: list[str] = []
     base_url = ai_url.rstrip("/")
 
@@ -87,10 +95,10 @@ def _check_ai_status(ai_url: str, timeout_seconds: int) -> tuple[str, Any, list[
 
 
 def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:
-    """Inspect HugeGraph server, schema, counts, and optional HugeGraph-AI status.
+    """检视 HugeGraph 服务器状态、schema 摘要、点边计数和 AI 状态。
 
-    This high-level entry point is intentionally best-effort: connection and
-    query failures are reported as warnings in a successful envelope.
+    这是 Agent 连接后的推荐第一个工具。全部失败信息作为 warnings 包含在 ok 信封中，
+    不会因为某个组件不可用而阻断整体返回。
     """
 
     start = time.time()
@@ -163,6 +171,7 @@ def _run_count_query(query: str, label: str, warnings: list[str]) -> int | None:
 
 
 def _next_actions(data: dict[str, Any]) -> list[str]:
+    """根据当前状态给出下一步建议，引导 Agent 使用正确的后续工具。"""
     actions = [
         "Use inspect_graph_tool with include_raw_schema=true for full schema details"
     ]

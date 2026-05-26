@@ -11,6 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""HugeGraph-AI HTTP 客户端 — 统一请求层。
+
+所有 AI 调用经 request() 统一处理：allow_ai 开关检查、超时控制、
+Basic Auth 注入、结构化错误返回。不抛异常。
+"""
+
 import time
 from typing import Any
 
@@ -29,7 +35,11 @@ def request(
     params: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Call HugeGraph-AI and return a standardized envelope."""
+    """调用 HugeGraph-AI 并返回标准化信封。
+
+    allow_ai=False 时直接拒绝，连接超时/HTTP 错误/JSON 解析失败均返回
+    HUGEGRAPH_AI_UNAVAILABLE 信封，不抛异常。
+    """
 
     start = time.time()
     cfg = cfg or MCPConfig.from_env()
@@ -118,11 +128,10 @@ def post(
 
 
 def health_check(*, cfg: MCPConfig | None = None) -> dict[str, Any]:
-    """Best-effort HugeGraph-AI readiness check.
+    """尽力而为的 AI 健康检查 — 尝试多个端点探测 HugeGraph-AI 可用性。
 
-    Some HugeGraph-AI deployments expose no /health route. Prefer a lightweight
-    thin API endpoint and fall back to OpenAPI metadata before reporting the
-    service unavailable.
+    优先探查 /graph-index-info，失败时回退到 /openapi.json，
+    401/403 立即返回不重试。
     """
 
     attempts: list[str] = []

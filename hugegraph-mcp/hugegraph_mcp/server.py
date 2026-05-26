@@ -11,25 +11,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# FastMCP server bootstrap for HugeGraph MCP
+"""FastMCP 服务器入口 — MCP 工具注册和轻量 mode 路由。
+
+每个 @mcp.tool() 装饰的函数就是一个对外暴露的 MCP 工具。
+server.py 只负责参数校验和 mode 分发，具体业务逻辑委托给 tools/ 下的模块。
+"""
 
 import logging
 import logging.handlers
 import os
 from logging.handlers import RotatingFileHandler
 
-# MUST patch BEFORE importing any module that triggers pyhugegraph
-# pyhugegraph initializes logging at module level and tries to create 'logs' directory
-# We intercept both os.makedirs and RotatingFileHandler to prevent file logging in MCP context
+# ---- 启动时 patch：阻止 pyhugegraph 模块级日志初始化写入文件 ----
+# pyhugegraph 在 import 时会创建 RotatingFileHandler 写入 'logs/' 目录，
+# 在 MCP stdio 模式下这会破坏 JSON 协议流，因此拦截 makedirs 和 RotatingFileHandler。
 
-# 1. Patch os.makedirs to silently skip 'logs' directory creation
 _original_makedirs = os.makedirs
 
 
 def _safe_makedirs(name, mode=0o777, exist_ok=False):
-    # Silently succeed only for a directory whose final path component is 'logs'.
     if _is_logs_dir(name):
-        return None  # Pretend success
+        return None
     return _original_makedirs(name, mode, exist_ok)
 
 
@@ -43,20 +45,17 @@ def _is_logs_dir(name) -> bool:
 
 os.makedirs = _safe_makedirs
 
-# 2. Patch RotatingFileHandler to return NullHandler for 'logs/' files
 _OriginalRotatingFileHandler = RotatingFileHandler
 
 
 class _NoOpFileHandler(logging.NullHandler):
-    """A no-op handler that silently ignores all log records (used to disable file logging in MCP)."""
+    """无操作日志处理器 — 用于禁用文件日志记录。"""
 
     def __init__(self, *args, **kwargs):
-        # Ignore all arguments (filename, maxBytes, etc.) and just create a NullHandler
         super().__init__()
 
 
 def _patched_rotating_handler(filename, *args, **kwargs):
-    # If the file is under a 'logs' directory, disable file logging.
     if _is_logs_file(filename):
         return _NoOpFileHandler()
     return _OriginalRotatingFileHandler(filename, *args, **kwargs)
@@ -72,7 +71,8 @@ def _is_logs_file(filename) -> bool:
 
 logging.handlers.RotatingFileHandler = _patched_rotating_handler
 
-# Now safe to import modules that use pyhugegraph
+# ---- patch 完成，安全导入依赖 pyhugegraph 的模块 ----
+
 from fastmcp import FastMCP
 
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
@@ -94,10 +94,7 @@ from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
 
 os.makedirs = _original_makedirs
 
-# Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
-# stdout is reserved for MCP JSON protocol only. Windsurf's MCP client
-# reads stdout as a pure JSON stream and will fail if human-readable logs
-# are mixed in.
+# 抑制 FastMCP info 日志 — stdout 必须保留为纯 JSON 协议流
 logging.disable(logging.CRITICAL)
 
 READONLY = MCPConfig.from_env().is_readonly()
@@ -105,25 +102,18 @@ READONLY = MCPConfig.from_env().is_readonly()
 mcp = FastMCP("HugeGraph MCP")
 
 
+# ========== 工具 1：检视图状态和 schema ==========
+
 @mcp.tool()
 def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
-    """Inspect HugeGraph server status, schema summary, counts, and AI status.
+    """检视 HugeGraph 服务器状态、schema 摘要、点边计数和 AI 状态。
 
-    This is the recommended first tool after connecting to HugeGraph MCP. It
-    returns a best-effort status envelope and degrades gracefully when HugeGraph
-    Server, Gremlin counts, or HugeGraph-AI are unavailable.
-
-    Args:
-        include_raw_schema: Include the full raw HugeGraph schema in the response.
-
-    Returns:
-        dict: Standard ok envelope with server_status, ai_status, schema_summary,
-              vertex_count, edge_count, index_count, readonly, warnings, and
-              suggested next_actions.
+    推荐作为连接后第一个调用的工具。
     """
-
     return inspect_graph(include_raw_schema=include_raw_schema)
 
+
+# ========== 工具 2：查询图 ==========
 
 @mcp.tool()
 def query_graph_tool(
@@ -135,35 +125,15 @@ def query_graph_tool(
     include_evidence: bool = False,
     max_context_items: int = 20,
 ) -> dict:
-    """Unified graph query entry — the recommended tool for all graph read operations.
+    """统一图查询入口 — 三种模式：
 
-    Three modes:
-    - mode="text": Ask a natural-language question and get an AI-powered answer
-      backed by graph data. Uses HugeGraph-AI RAG.
-    - mode="generate": Convert a natural-language question to a Gremlin traversal.
-      By default only generates the query without executing it.
-    - mode="gremlin": Execute a read-only Gremlin query directly against HugeGraph.
-      Only known-safe read traversals are allowed.
-
-    Args:
-        mode: Query mode — "text", "generate", or "gremlin".
-        query: Natural language question (required for text and generate modes).
-        gremlin_query: Gremlin query string (required for gremlin mode).
-        rag_mode: RAG mode for text queries — "graph_only" (default) or "vector_only".
-        execute: For generate mode, whether to auto-execute if the Gremlin is read-only.
-        include_evidence: For text mode, include supporting graph evidence in the response.
-        max_context_items: For text mode, max context items the AI can use (default 20).
-
-    Returns:
-        dict: Standard envelope with answer, gremlin, execution results, or error.
+    - mode="text": 自然语言问图（通过 HugeGraph-AI RAG）
+    - mode="generate": NL → Gremlin 生成（默认不执行）
+    - mode="gremlin": 执行只读 Gremlin 遍历
     """
-
     if mode == "text":
         if not query:
-            return envelope_err(
-                "VALIDATION_ERROR",
-                "query is required for mode='text'",
-            )
+            return envelope_err("VALIDATION_ERROR", "query is required for mode='text'")
         return query_graph_by_text(
             query=query,
             mode=rag_mode,
@@ -173,18 +143,12 @@ def query_graph_tool(
 
     if mode == "generate":
         if not query:
-            return envelope_err(
-                "VALIDATION_ERROR",
-                "query is required for mode='generate'",
-            )
+            return envelope_err("VALIDATION_ERROR", "query is required for mode='generate'")
         return generate_gremlin(query=query, execute=execute)
 
     if mode == "gremlin":
         if not gremlin_query:
-            return envelope_err(
-                "VALIDATION_ERROR",
-                "gremlin_query is required for mode='gremlin'",
-            )
+            return envelope_err("VALIDATION_ERROR", "gremlin_query is required for mode='gremlin'")
         result = execute_gremlin_read(gremlin_query)
         if (
             isinstance(result, dict)
@@ -208,6 +172,8 @@ def query_graph_tool(
     )
 
 
+# ========== 工具 3：设计和管理 schema ==========
+
 @mcp.tool()
 def manage_schema_tool(
     mode: str,
@@ -215,11 +181,9 @@ def manage_schema_tool(
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict:
-    """Unified schema management entry point with design, validation, dry-run, and apply modes.
+    """统一 schema 管理入口 — design / validate / dry_run / apply 四种模式。
 
-    This tool is always registered. In apply mode it performs a runtime
-    SCHEMA_WRITE guard, requires confirm=True, and verifies the dry-run plan_hash
-    against the current schema state before executing mutations.
+    apply 模式需 dry_run 返回的 plan_hash + confirm=True。
     """
 
     return manage_schema(
@@ -229,6 +193,8 @@ def manage_schema_tool(
         plan_hash=plan_hash,
     )
 
+
+# ========== 工具 4：导入和管理图数据 ==========
 
 @mcp.tool()
 def manage_graph_data_tool(
@@ -247,32 +213,20 @@ def manage_graph_data_tool(
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict:
-    """Unified graph data management entry point.
+    """统一图数据管理入口。
 
-    Modes:
-    - mode="extract": turn natural-language text into candidate graph_data.
-    - mode="import": validate and import structured graph_data through the
-      graph change-plan safety chain.
-    - mode="table": map structured table_data rows into graph_data before
-      routing through the import safety chain.
-    - mode="sql_preview": preview SQLite table structure or SELECT query results.
-    - mode="sql_mapping_suggest": generate an editable mapping suggestion from
-      SQL columns and live HugeGraph schema.
-    - mode="sql_import": execute a SQL query, convert rows to table_data, map to
-      graph_data, and route through the import safety chain.
-    - mode="update": update graph elements using a graph change_plan.
-    - mode="delete": delete graph elements using a graph change_plan.
+    - extract: 自然语言 → 候选 graph_data（不写入）
+    - import: 结构化 graph_data → 校验+导入
+    - table: 表格数据 → graph_data → 导入
+    - sql_preview / sql_mapping_suggest / sql_import: SQLite 数据源
+    - update / delete: 变更计划 → 安全链执行
 
-    Mutating graph data changes require dry_run=True first, then dry_run=False
-    with confirm=True and the matching plan_hash.
+    写入操作需要 dry_run=True 确认 → plan_hash + confirm=True 执行。
     """
 
     if mode == "extract":
         if not text:
-            return envelope_err(
-                "VALIDATION_ERROR",
-                "text is required for mode='extract'",
-            )
+            return envelope_err("VALIDATION_ERROR", "text is required for mode='extract'")
         return extract_graph_data(
             text=text,
             schema=schema,
@@ -281,10 +235,7 @@ def manage_graph_data_tool(
 
     if mode == "table":
         if table_data is None:
-            return envelope_err(
-                "VALIDATION_ERROR",
-                "table_data is required for mode='table'",
-            )
+            return envelope_err("VALIDATION_ERROR", "table_data is required for mode='table'")
         mapped = import_table_data(table_data=table_data, mapping=mapping)
         if not mapped.get("ok"):
             return mapped
@@ -332,6 +283,7 @@ def manage_graph_data_tool(
     )
 
 
+# ========== 兼容入口：import_graph_data_tool ==========
 
 @mcp.tool()
 def import_graph_data_tool(
@@ -346,26 +298,16 @@ def import_graph_data_tool(
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict:
-    """Compatibility graph data import entry; prefer manage_graph_data_tool.
+    """兼容图数据导入入口 — 推荐使用 manage_graph_data_tool。
 
-    Use mode="extract" to turn natural-language text into candidate graph_data
-    without writing to HugeGraph. Then inspect or edit the returned graph_data.
-
-    Use mode="ingest" to validate structured graph_data and import it. Ingest
-    defaults to dry_run=True and returns a deterministic plan_hash. Mutating
-    imports require dry_run=False, confirm=True, and a matching plan_hash from a
-    previous dry run.
-
-    Use mode="table" to map structured table_data rows into graph_data before
-    routing through the same ingest validation and import flow.
+    mode="extract": 自然语言文本 → 候选 graph_data
+    mode="ingest": 校验+导入 graph_data
+    mode="table": 表格映射 → 导入
     """
 
     if mode == "extract":
         if not text:
-            return envelope_err(
-                "VALIDATION_ERROR",
-                "text is required for mode='extract'",
-            )
+            return envelope_err("VALIDATION_ERROR", "text is required for mode='extract'")
         return extract_graph_data(
             text=text,
             schema=schema,
@@ -374,10 +316,7 @@ def import_graph_data_tool(
 
     if mode == "ingest":
         if graph_data is None:
-            return envelope_err(
-                "VALIDATION_ERROR",
-                "graph_data is required for mode='ingest'",
-            )
+            return envelope_err("VALIDATION_ERROR", "graph_data is required for mode='ingest'")
         return ingest_graph_data(
             graph_data=graph_data,
             dry_run=dry_run,
@@ -387,10 +326,7 @@ def import_graph_data_tool(
 
     if mode == "table":
         if table_data is None:
-            return envelope_err(
-                "VALIDATION_ERROR",
-                "table_data is required for mode='table'",
-            )
+            return envelope_err("VALIDATION_ERROR", "table_data is required for mode='table'")
         mapped = import_table_data(table_data=table_data, mapping=mapping)
         if not mapped.get("ok"):
             return mapped
@@ -411,39 +347,25 @@ def import_graph_data_tool(
     )
 
 
+# ========== 高级调试工具 ==========
+
 @mcp.tool()
 def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
-    """Manually refresh VID embeddings through HugeGraph-AI.
-
-    This tool is always registered, but mutating refresh requires INDEX_WRITE
-    permission and confirm=True at runtime.
-    """
-
+    """手动刷新 VID 嵌入 — 需要 INDEX_WRITE 权限和 confirm=True。"""
     return refresh_vid_embeddings(confirm=confirm)
 
 
 @mcp.tool()
 def execute_gremlin_write_tool(gremlin_query: str) -> dict:
-    """Execute a Gremlin write query directly.
+    """执行 Gremlin 写查询 — 高级调试工具。
 
-    ⚠️ DEBUG TOOL — prefer manage_graph_data_tool mode="import" for graph data writes.
-    This low-level tool is always registered but returns a structured
-    READONLY_VIOLATION when the server runs in read-only mode.
-
-    Args:
-        gremlin_query: A valid Gremlin write query string.
-
-    Returns:
-        dict: Write result or structured readonly rejection.
+    readonly 模式下返回 READONLY_VIOLATION。推荐使用 manage_graph_data_tool。
     """
-
     return execute_gremlin_write(gremlin_query)
 
 
 def main() -> None:
-    """CLI entry point used by console_scripts."""
-
-    # Default to stdio; callers can also use `uv run fastmcp run` style entry.
+    """CLI 入口 — 默认 stdio 模式。"""
     mcp.run()
 
 

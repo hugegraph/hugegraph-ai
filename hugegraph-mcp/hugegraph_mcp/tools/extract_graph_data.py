@@ -11,6 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""自然语言抽取图数据 — 从文本中提取候选 vertices/edges，不写入 HugeGraph。
+
+通过 HugeGraph-AI /graph-extract 端点将自然语言描述转为结构化的
+{vertices: [...], edges: [...]} 图数据，供用户审阅后再导入。
+"""
+
 import json
 from typing import Any
 
@@ -29,7 +35,7 @@ DEFAULT_GRAPH_EXTRACT_PROMPT_ZH = """## 主要任务
 
 ## 抽取规则
 1. 只能使用 schema 中已经存在的 vertex label、edge label 和 property key。
-2. 可以把中文关系语义映射到 schema 中已有的英文标签，例如“同事”可映射为 schema 中的 colleague；但不要创造 schema 中不存在的标签。
+2. 可以把中文关系语义映射到 schema 中已有的英文标签，例如"同事"可映射为 schema 中的 colleague；但不要创造 schema 中不存在的标签。
 3. 顶点 id 必须按 schema 的 vertexlabels[].id 与 primary_keys 生成；单主键格式为 "{vertexLabelID}:{properties.<primary_key>}"。
 4. outV 和 inV 必须引用本次输出 vertices 中的 id，outVLabel/inVLabel 必须匹配边 schema 的 source_label/target_label。
 5. 保持属性类型，移除空属性，不要编造文本中没有的事实。
@@ -41,7 +47,10 @@ def extract_graph_data(
     schema: dict[str, Any] | str | None = None,
     example_prompt: str | None = None,
 ) -> dict[str, Any]:
-    """Extract candidate graph data from text without writing to HugeGraph."""
+    """从自然语言文本中抽取候选图数据 — 不写入 HugeGraph。
+
+    返回 standard envelope，其中 graph_data 含 vertices/edges 供用户审阅。
+    """
 
     schema_message = _schema_message(schema)
     prompt_message = _example_prompt_message(example_prompt)
@@ -103,6 +112,7 @@ def _example_prompt_message(example_prompt: str | None) -> str:
 
 
 def _unwrap_ai_payload(data: Any) -> Any:
+    """解包 AI 返回的双层信封 {ok, data} -> 内层 data。"""
     if isinstance(data, dict) and "ok" in data and "data" in data:
         if data.get("ok") is False:
             return data
@@ -134,6 +144,7 @@ def _extract_graph_data(data: Any) -> dict[str, Any] | None:
 
 
 def _parse_json_if_needed(data: Any) -> Any:
+    """AI 可能返回 JSON 字符串而非已解析对象，这里做兼容处理。"""
     if not isinstance(data, str):
         return data
 

@@ -20,6 +20,17 @@ from uuid import uuid4
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
+"""图数据导入 — 结构化 graph_data 校验+写入链路。
+
+ingest_graph_data() 提供 dry_run → confirm → plan_hash → execute 安全链。
+validate_graph_payload() 对 vertices/edges 做全面 schema 校验：
+- label 是否存在于 live schema
+- properties 字段是否在对应 label 中定义
+- 主键是否提供
+- 边端点是否可解析
+- 类型匹配
+"""
+
 from hugegraph_mcp.hugegraph_ai_client import post
 
 
@@ -337,6 +348,11 @@ def validate_graph_payload(
     graph_data: Any,
     live_schema: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """校验 graph_data (vertices/edges) 与 live schema 的兼容性。
+
+    覆盖：label 存在性、properties 字段合法性、主键完整性、
+    边端点可解析性、类型匹配、重复检测、索引建议。
+    """
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -576,6 +592,11 @@ def ingest_graph_data(
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict[str, Any]:
+    """导入图数据 — 安全链入口。
+
+    dry_run=True: schema 校验 + plan_hash 生成，不写入
+    dry_run=False + confirm=True + plan_hash 匹配: 执行写入
+    """
     live_schema = _fetch_live_schema()
     if live_schema is None:
         return envelope_err(

@@ -11,6 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""权限守卫 — 统一的能力检查入口。
+
+readonly 模式下只允许 READ + GENERATE 能力，其他操作返回 READONLY_VIOLATION 信封。
+不抛异常：调用方检查返回值是否是 envelope_err 即可。"""
+
 from enum import Enum
 from typing import Any
 

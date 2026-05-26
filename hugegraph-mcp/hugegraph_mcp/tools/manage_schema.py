@@ -18,6 +18,12 @@ from typing import Any
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
+"""Schema 管理统一入口 — design / validate / dry_run / apply 四种模式。
+
+安全链：validate → dry_run(生成 plan_hash) → confirm check → plan_hash match → execute
+apply 前必须 dry_run 获取 plan_hash，防止 schema 在审核期间被变更。
+"""
+
 from hugegraph_mcp import schema_tools
 
 
@@ -124,6 +130,11 @@ def _validation_warnings(operations: list[dict[str, Any]]) -> list[str]:
 def validate_schema_operations(
     operations: list[dict[str, Any]], live_schema: dict[str, Any] | None = None
 ) -> dict[str, Any]:
+    """校验 schema 操作与 live schema 的兼容性。
+
+    检查操作类型白名单、必填字段、property key 存在性、
+    边端点 label 存在性、索引 base_label 存在性、重复定义检测。
+    """
     errors: list[ValidationError] = []
 
     if not isinstance(operations, list):
@@ -409,6 +420,13 @@ def manage_schema(
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict[str, Any]:
+    """统一 schema 管理入口 — 四种模式。
+
+    - design: 获取分步 schema 设计引导
+    - validate: 基于 live schema 校验操作合法性
+    - dry_run: 校验 + 生成 plan_hash + 风险警告
+    - apply: dry_run 通过后，confirm=True + plan_hash 匹配 → 执行
+    """
     operations = operations or []
 
     if mode == "design":

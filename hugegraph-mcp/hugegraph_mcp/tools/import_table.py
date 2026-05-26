@@ -13,6 +13,13 @@
 
 from typing import Any
 
+"""表格数据映射 — 将结构化 rows/columns 转为图数据 {vertices, edges}。
+
+import_table_data() 根据 mapping 将表行映射为顶点和边，
+suggest_table_mapping() 基于列名启发式生成可编辑的映射建议。
+映射缺失时返回建议而不执行导入，用户审阅后可编辑映射重试。
+"""
+
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 
 

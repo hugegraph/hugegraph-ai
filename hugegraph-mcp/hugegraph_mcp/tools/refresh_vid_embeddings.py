@@ -11,6 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""VID 嵌入刷新 — 手动触发 HugeGraph-AI 重新索引顶点嵌入。
+
+需要 INDEX_WRITE 权限 + confirm=True，readonly 模式下拒绝执行。
+"""
+
 import re
 from typing import Any
 
@@ -20,7 +25,10 @@ from hugegraph_mcp.hugegraph_ai_client import post
 
 
 def refresh_vid_embeddings(confirm: bool = False) -> dict[str, Any]:
-    """Manually refresh VID embeddings through HugeGraph-AI."""
+    """手动刷新 VID 嵌入 — 需要 confirm=True 确认。
+
+    readonly 模式通过 guard(Capability.INDEX_WRITE) 拒绝。
+    """
 
     violation = guard(Capability.INDEX_WRITE)
     if violation is not None:

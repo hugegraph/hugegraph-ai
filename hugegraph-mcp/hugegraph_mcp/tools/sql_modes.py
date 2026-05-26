@@ -11,6 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""SQL 模式编排 — 将 sql_preview / sql_mapping_suggest / sql_import 三种模式
+统一路由到对应的 SQL 适配层和导入链。
+
+从 server.py 抽取出来的纯编排函数，不依赖 FastMCP。
+"""
+
 from hugegraph_mcp.envelope import envelope_err, envelope_ok
 from hugegraph_mcp.tools.import_table import import_table_data, suggest_table_mapping
 from hugegraph_mcp.tools.manage_graph_data import (
@@ -33,6 +39,12 @@ def _handle_sql_mode(
     confirm: bool,
     plan_hash: str | None,
 ) -> dict:
+    """SQL 三种模式的统一路由。
+
+    - sql_preview: 预览 SQLite 表结构或 SELECT 结果
+    - sql_mapping_suggest: 生成 SQL 列到图 schema 的映射建议
+    - sql_import: 执行 SQL → table_data → graph_data → manage_graph_data 导入链
+    """
     if sql_source is None:
         return envelope_err(
             "VALIDATION_ERROR",

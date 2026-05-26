@@ -11,6 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""自然语言问图 — 通过 HugeGraph-AI RAG API 实现 NL-to-Answer。
+
+支持 graph_only（图谱 RAG）和 vector_only（向量 RAG）两种模式，
+结果包含 answer、evidence、gremlin 等结构化字段。
+"""
+
 from typing import Any
 
 from hugegraph_mcp.config import MCPConfig
@@ -32,7 +38,7 @@ def query_graph_by_text(
     include_evidence: bool = False,
     max_context_items: int = 20,
 ) -> dict[str, Any]:
-    """Query graph knowledge with natural language through HugeGraph-AI RAG APIs."""
+    """自然语言问图 — 通过 HugeGraph-AI RAG 搜索图谱知识并返回答案。"""
 
     endpoint = _MODE_ENDPOINTS.get(mode)
     if endpoint is None:
@@ -56,7 +62,7 @@ def query_graph_by_text(
     if not isinstance(ai_data, dict):
         ai_data = {}
 
-    # /rag/graph returns {graph_recall: {...}} wrapper
+    # /rag/graph 返回 {graph_recall: {...}} 包裹格式
     if mode == "graph_only" and "graph_recall" in ai_data:
         recall = ai_data["graph_recall"]
         if isinstance(recall, dict):
@@ -103,6 +109,7 @@ def query_graph_by_text(
 def _build_rag_payload(
     query: str, cfg: MCPConfig, max_context_items: int, mode: str
 ) -> dict[str, Any]:
+    """构建 RAG 请求体 — 设置检索参数和 client_config 用于连接 HugeGraph。"""
     limit = max_context_items or _DEFAULT_GRAPH_RAG_ITEMS
     payload: dict[str, Any] = {
         "query": query,
