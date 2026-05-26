@@ -129,18 +129,6 @@ def validate_readonly_sql(sql_query: str) -> dict[str, Any] | None:
             ),
         )
 
-    upper = query.upper()
-    if not (
-        upper.startswith("SELECT")
-        or upper.startswith("WITH ")
-        or upper.startswith("EXPLAIN ")
-    ):
-        return envelope_err(
-            ErrorType.UNSAFE_SQL,
-            "Only SELECT, WITH ... SELECT, and EXPLAIN queries are allowed.",
-            suggestion="Rewrite the query as a read-only SELECT statement.",
-        )
-
     if re.search(r"\bPRAGMA\b", query, re.IGNORECASE):
         pragma_match = re.search(
             r"\bPRAGMA\s+(\w+)", query, re.IGNORECASE
@@ -157,6 +145,19 @@ def validate_readonly_sql(sql_query: str) -> dict[str, Any] | None:
                     ),
                     details={"pragma": pragma_name},
                 )
+        return None
+
+    upper = query.upper()
+    if not (
+        upper.startswith("SELECT")
+        or upper.startswith("WITH ")
+        or upper.startswith("EXPLAIN ")
+    ):
+        return envelope_err(
+            ErrorType.UNSAFE_SQL,
+            "Only SELECT, WITH ... SELECT, EXPLAIN, and informational PRAGMA queries are allowed.",
+            suggestion="Rewrite the query as a read-only SELECT statement.",
+        )
 
     return None
 
@@ -511,7 +512,7 @@ def _add_limit(normalized_sql: str, limit: int) -> str:
         return normalized_sql
 
     without_semicolon = normalized_sql.rstrip(";").rstrip()
-    return f"{without_semicolon} LIMIT {limit};"
+    return f"{without_semicolon} LIMIT {limit + 1};"
 
 
 def _derive_table_name(sql_query: str) -> str:

@@ -557,10 +557,7 @@ def _read_count(gremlin_query: str) -> dict[str, Any]:
             retryable=True,
         )
     data = result.get("data") if isinstance(result, dict) else result
-    if isinstance(data, list):
-        count = data[0] if data else 0
-    else:
-        count = data
+    count = _extract_count_value(data)
     try:
         matched_count = int(count)
     except (TypeError, ValueError):
@@ -570,6 +567,16 @@ def _read_count(gremlin_query: str) -> dict[str, Any]:
             details={"query": gremlin_query, "data": data},
         )
     return envelope_ok({"matched_count": matched_count})
+
+
+def _extract_count_value(data: Any) -> Any:
+    if isinstance(data, dict) and "data" in data:
+        return _extract_count_value(data.get("data"))
+    if isinstance(data, list):
+        if not data:
+            return 0
+        return _extract_count_value(data[0])
+    return data
 
 
 def _read_values(gremlin_query: str) -> dict[str, Any]:
@@ -600,15 +607,18 @@ def calculate_graph_change_plan_hash(
     graph: str | None = None,
     graphspace: str | None = None,
     schema_summary: dict[str, Any] | None = None,
+    extra_hash_context: dict[str, Any] | None = None,
 ) -> str:
     cfg = MCPConfig.from_env()
-    payload = {
+    payload: dict[str, Any] = {
         "change_plan": change_plan,
         "graph": cfg.graph if graph is None else graph,
         "graphspace": cfg.graphspace if graphspace is None else graphspace,
     }
     if schema_summary is not None:
         payload["schema_summary"] = schema_summary
+    if extra_hash_context is not None:
+        payload["extra_hash_context"] = extra_hash_context
     encoded = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
@@ -616,6 +626,7 @@ def calculate_graph_change_plan_hash(
 def dry_run_graph_change_plan(
     change_plan: Any,
     live_schema: dict[str, Any],
+    extra_hash_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     validation = validate_graph_change_plan(change_plan, live_schema)
     if not validation["valid"]:
@@ -769,6 +780,7 @@ def dry_run_graph_change_plan(
         "plan_hash": calculate_graph_change_plan_hash(
             change_plan,
             schema_summary=_schema_summary(live_schema),
+            extra_hash_context=extra_hash_context,
         ),
         "mutation_summary": _mutation_summary(operations),
         "preview": preview,
@@ -1006,6 +1018,7 @@ def manage_graph_data(
     dry_run: bool = True,
     confirm: bool = False,
     plan_hash: str | None = None,
+    extra_hash_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if mode == "import":
         if graph_data is None:
@@ -1061,7 +1074,9 @@ def manage_graph_data(
                 details={"errors": payload_validation["errors"]},
             )
 
-    dry_run_result = dry_run_graph_change_plan(plan, live_schema)
+    dry_run_result = dry_run_graph_change_plan(
+        plan, live_schema, extra_hash_context=extra_hash_context
+    )
     if not dry_run_result["valid"]:
         errors = dry_run_result["errors"]
         error_type = next(
