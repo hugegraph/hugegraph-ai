@@ -288,7 +288,7 @@ def test_ingest_graph_data_resolves_outv_inv_endpoint_shape(monkeypatch):
     assert result["ok"] is True
 
 
-def test_ingest_graph_data_warns_for_duplicate_vertex_identity(monkeypatch):
+def test_ingest_graph_data_rejects_duplicate_vertex_identity(monkeypatch):
     _mock_schema(monkeypatch)
 
     result = ingest_graph_data_module.ingest_graph_data(
@@ -301,8 +301,8 @@ def test_ingest_graph_data_warns_for_duplicate_vertex_identity(monkeypatch):
         }
     )
 
-    assert result["ok"] is True
-    assert "duplicate vertex identity" in result["data"]["warnings"]
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
 
 
 def test_ingest_graph_data_rejects_edge_label_mismatch(monkeypatch):

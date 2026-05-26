@@ -440,14 +440,21 @@ def validate_graph_payload(
                 if all(pk in props and _identity_value_present(props.get(pk)) for pk in primary_keys):
                     identity = (label, "pk", tuple(props.get(pk) for pk in primary_keys))
                     if identity in vertex_identity_index:
-                        warnings.append("duplicate vertex identity")
+                        errors.append(
+                            f"vertex {idx} duplicate primary key identity for label '{label}': "
+                            f"values={tuple(props.get(pk) for pk in primary_keys)} "
+                            f"already used by vertex {vertex_identity_index[identity]}"
+                        )
                     else:
                         vertex_identity_index[identity] = idx
             explicit_id = vertex.get("id")
             if _identity_value_present(explicit_id):
                 identity = (label, "id", explicit_id)
                 if identity in vertex_identity_index:
-                    warnings.append("duplicate vertex identity")
+                    errors.append(
+                        f"vertex {idx} duplicate id '{explicit_id}' for label '{label}' "
+                        f"already used by vertex {vertex_identity_index[identity]}"
+                    )
                 else:
                     vertex_identity_index[identity] = idx
 
