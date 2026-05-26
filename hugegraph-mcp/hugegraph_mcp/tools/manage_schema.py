@@ -26,7 +26,7 @@ from hugegraph_mcp import schema_tools
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
-from hugegraph_mcp.tools.ingest_graph_data import normalized_schema_summary
+from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
 
 
 ALLOWED_OPERATION_TYPES = frozenset(

@@ -11,15 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
-import json
-from copy import deepcopy
-from typing import Any
-from uuid import uuid4
-
-from hugegraph_mcp.config import MCPConfig
-from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
-from hugegraph_mcp.guard import Capability, guard
 """图数据导入 — 结构化 graph_data 校验+写入链路。
 
 ingest_graph_data() 提供 dry_run → confirm → plan_hash → execute 安全链。
@@ -31,38 +22,23 @@ validate_graph_payload() 对 vertices/edges 做全面 schema 校验：
 - 类型匹配
 """
 
+import hashlib
+import json
+from copy import deepcopy
+from typing import Any
+from uuid import uuid4
+
+from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
+from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.hugegraph_ai_client import post
-
-
-def _schema_name(item: Any) -> str | None:
-    if isinstance(item, str):
-        return item
-    if isinstance(item, dict):
-        name = item.get("name")
-        return name if isinstance(name, str) else None
-    return None
-
-
-def _property_names(properties: Any) -> set[str]:
-    if not isinstance(properties, list):
-        return set()
-    return {name for prop in properties if (name := _schema_name(prop))}
-
-
-def _primary_key_names(vertex_label: dict[str, Any]) -> list[str]:
-    primary_keys = vertex_label.get("primary_keys")
-    if primary_keys is None:
-        primary_keys = vertex_label.get("primaryKeys")
-    if not isinstance(primary_keys, list):
-        return []
-    return [name for pk in primary_keys if (name := _schema_name(pk))]
-
-
-def _schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not live_schema:
-        return None
-    raw = live_schema.get("schema") or live_schema
-    return raw if isinstance(raw, dict) else None
+from hugegraph_mcp.tools.schema_utils import (
+    edge_schema_endpoint_label as _edge_schema_endpoint_label,
+    normalized_schema_summary,
+    primary_key_names as _primary_key_names,
+    property_names as _property_names,
+    schema_payload as _schema_payload,
+)
 
 
 def _property_types(raw_schema: dict[str, Any]) -> dict[str, str]:
@@ -109,12 +85,6 @@ def _indexed_labels(raw_schema: dict[str, Any]) -> dict[str, set[str]]:
     return indexed
 
 
-def _edge_schema_endpoint_label(edge_schema: dict[str, Any], endpoint: str) -> Any:
-    if endpoint == "source":
-        return edge_schema.get("source_label") or edge_schema.get("sourceLabel")
-    return edge_schema.get("target_label") or edge_schema.get("targetLabel")
-
-
 def _edge_endpoint(edge: dict[str, Any], endpoint: str) -> tuple[Any, Any]:
     if endpoint == "source":
         label = edge.get("source_label") or edge.get("outVLabel")
@@ -147,12 +117,15 @@ def _endpoint_identities(
             identities.append((label, "id", explicit_id))
         if primary_keys:
             missing = [
-                pk for pk in primary_keys
+                pk
+                for pk in primary_keys
                 if pk not in value or not _identity_value_present(value.get(pk))
             ]
             if missing:
                 return identities, missing[0]
-            identities.append((label, "pk", tuple(value.get(pk) for pk in primary_keys)))
+            identities.append(
+                (label, "pk", tuple(value.get(pk) for pk in primary_keys))
+            )
         return identities, None
 
     if _identity_value_present(value):
@@ -174,99 +147,6 @@ def _schema_plan_summary(live_schema: dict[str, Any] | None) -> dict[str, Any] |
         "edgelabels": raw.get("edgelabels", []),
         "propertykeys": raw.get("propertykeys", []),
         "indexlabels": raw.get("indexlabels", []),
-    }
-
-
-def _field_value(item: dict[str, Any], *names: str) -> Any:
-    for name in names:
-        if name in item:
-            return item.get(name)
-    return None
-
-
-def _normalize_named_list(values: Any) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    names = [name for value in values if (name := _schema_name(value))]
-    return sorted(names)
-
-
-def _normalize_schema_items(
-    items: Any,
-    field_aliases: list[tuple[str, tuple[str, ...]]],
-) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
-    if not isinstance(items, list):
-        return normalized
-
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        name = item.get("name")
-        if not isinstance(name, str):
-            continue
-        result: dict[str, Any] = {"name": name}
-        for output_name, aliases in field_aliases:
-            value = _field_value(item, *aliases)
-            if value is None:
-                continue
-            if output_name in {
-                "fields",
-                "nullable_keys",
-                "primary_keys",
-                "properties",
-            }:
-                value = _normalize_named_list(value)
-            result[output_name] = value
-        normalized.append(result)
-
-    return sorted(normalized, key=lambda value: value["name"])
-
-
-def normalized_schema_summary(
-    live_schema: dict[str, Any] | None,
-) -> dict[str, Any] | None:
-    """Return the security-relevant schema subset used for plan hashes."""
-    raw = _schema_payload(live_schema)
-    if raw is None:
-        return None
-
-    return {
-        "propertykeys": _normalize_schema_items(
-            raw.get("propertykeys"),
-            [
-                ("data_type", ("data_type", "dataType")),
-                ("cardinality", ("cardinality",)),
-            ],
-        ),
-        "vertexlabels": _normalize_schema_items(
-            raw.get("vertexlabels"),
-            [
-                ("properties", ("properties",)),
-                ("primary_keys", ("primary_keys", "primaryKeys")),
-                ("nullable_keys", ("nullable_keys", "nullableKeys")),
-            ],
-        ),
-        "edgelabels": _normalize_schema_items(
-            raw.get("edgelabels"),
-            [
-                ("source_label", ("source_label", "sourceLabel")),
-                ("target_label", ("target_label", "targetLabel")),
-                ("properties", ("properties",)),
-                ("nullable_keys", ("nullable_keys", "nullableKeys")),
-                ("frequency", ("frequency",)),
-            ],
-        ),
-        "indexlabels": _normalize_schema_items(
-            raw.get("indexlabels"),
-            [
-                ("base_type", ("base_type", "baseType")),
-                ("base_label", ("base_label", "baseLabel")),
-                ("index_type", ("index_type", "indexType")),
-                ("fields", ("fields",)),
-                ("unique", ("unique",)),
-            ],
-        ),
     }
 
 
@@ -398,7 +278,9 @@ def _vertex_backend_id(
     primary_keys = vertex_info.get(label, {}).get("primary_keys", [])
     if not primary_keys:
         return None
-    if not all(pk in props and _identity_value_present(props.get(pk)) for pk in primary_keys):
+    if not all(
+        pk in props and _identity_value_present(props.get(pk)) for pk in primary_keys
+    ):
         return None
 
     values = tuple(props.get(pk) for pk in primary_keys)
@@ -411,8 +293,7 @@ def _vertex_identity_map(
 ) -> tuple[dict[tuple[str, str, Any], Any], dict[str, list[str]]]:
     vertex_info = _schema_vertex_info(raw_schema)
     schema_primary_keys = {
-        label: info.get("primary_keys", [])
-        for label, info in vertex_info.items()
+        label: info.get("primary_keys", []) for label, info in vertex_info.items()
     }
     identities: dict[tuple[str, str, Any], Any] = {}
 
@@ -435,7 +316,10 @@ def _vertex_identity_map(
         props = vertex.get("properties")
         primary_keys = schema_primary_keys.get(label, [])
         if isinstance(props, dict) and primary_keys:
-            if all(pk in props and _identity_value_present(props.get(pk)) for pk in primary_keys):
+            if all(
+                pk in props and _identity_value_present(props.get(pk))
+                for pk in primary_keys
+            ):
                 values = tuple(props.get(pk) for pk in primary_keys)
                 identities[(label, "pk", values)] = backend_id or explicit_id
 
@@ -596,7 +480,9 @@ def validate_graph_payload(
                 schema_prop_names = schema_props.get(label, set())
                 for prop_name, prop_value in props.items():
                     if prop_value is None or prop_value == "":
-                        warnings.append(f"vertex {idx} property '{prop_name}' has empty value")
+                        warnings.append(
+                            f"vertex {idx} property '{prop_name}' has empty value"
+                        )
                     if schema_prop_names and prop_name not in schema_prop_names:
                         errors.append(
                             f"vertex {idx} property '{prop_name}' does not exist on label '{label}'"
@@ -615,8 +501,15 @@ def validate_graph_payload(
                         errors.append(
                             f"vertex {idx} missing primary key value for label '{label}': {pk}"
                         )
-                if all(pk in props and _identity_value_present(props.get(pk)) for pk in primary_keys):
-                    identity = (label, "pk", tuple(props.get(pk) for pk in primary_keys))
+                if all(
+                    pk in props and _identity_value_present(props.get(pk))
+                    for pk in primary_keys
+                ):
+                    identity = (
+                        label,
+                        "pk",
+                        tuple(props.get(pk) for pk in primary_keys),
+                    )
                     if identity in vertex_identity_index:
                         errors.append(
                             f"vertex {idx} duplicate primary key identity for label '{label}': "
@@ -654,7 +547,9 @@ def validate_graph_payload(
             if label:
                 edge_labels.add(label)
                 if schema_elabels and label not in schema_elabels:
-                    errors.append(f"edge {idx} label '{label}' does not exist in schema")
+                    errors.append(
+                        f"edge {idx} label '{label}' does not exist in schema"
+                    )
             if schema_vlabels:
                 if src_label and src_label not in schema_vlabels:
                     errors.append(
@@ -681,7 +576,9 @@ def validate_graph_payload(
                 schema_prop_names = schema_eprops.get(label, set())
                 for prop_name, prop_value in props.items():
                     if prop_value is None or prop_value == "":
-                        warnings.append(f"edge {idx} property '{prop_name}' has empty value")
+                        warnings.append(
+                            f"edge {idx} property '{prop_name}' has empty value"
+                        )
                     if schema_prop_names and prop_name not in schema_prop_names:
                         errors.append(
                             f"edge {idx} property '{prop_name}' does not exist on label '{label}'"
@@ -713,7 +610,9 @@ def validate_graph_payload(
                         f"edge {idx} {endpoint_name} endpoint missing primary key for label '{endpoint_label}': {missing_pk}"
                     )
                     continue
-                if identities and not any(identity in vertex_identity_index for identity in identities):
+                if identities and not any(
+                    identity in vertex_identity_index for identity in identities
+                ):
                     errors.append(
                         f"edge {idx} {endpoint_name} endpoint not found for label '{endpoint_label}': {_format_endpoint_value(endpoint_value)}"
                     )
@@ -725,8 +624,13 @@ def validate_graph_payload(
         for e in edges:
             if isinstance(e, dict):
                 edge_pairs.append(
-                    (e.get("label"), e.get("source_label"), e.get("target_label"),
-                     e.get("source"), e.get("target"))
+                    (
+                        e.get("label"),
+                        e.get("source_label"),
+                        e.get("target_label"),
+                        e.get("source"),
+                        e.get("target"),
+                    )
                 )
         if len(edge_pairs) > len(set(str(p) for p in edge_pairs)):
             warnings.append("potential duplicate edges detected")
@@ -766,6 +670,7 @@ def calculate_plan_hash(
 def _fetch_live_schema() -> dict[str, Any] | None:
     try:
         from hugegraph_mcp.schema_tools import get_live_schema
+
         return get_live_schema()
     except Exception:
         return None

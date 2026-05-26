@@ -18,8 +18,15 @@ Schema checks, property field validation, primary key match verification.
 
 from typing import Any
 
-from hugegraph_mcp.tools import ingest_graph_data
 from hugegraph_mcp.tools.graph_data_mapping import GraphChangePlan
+from hugegraph_mcp.tools.schema_utils import (
+    edge_schema_endpoint_label as _edge_schema_endpoint_label,
+    normalized_schema_summary,
+    primary_key_names as _primary_key_names,
+    property_names as _property_names,
+    schema_name,
+    schema_payload,
+)
 
 
 ALLOWED_OPS = frozenset(
@@ -50,34 +57,11 @@ ValidationError = dict[str, Any]
 
 
 def _schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(live_schema, dict):
-        return {}
-    raw = live_schema.get("schema") or live_schema
-    return raw if isinstance(raw, dict) else {}
+    return schema_payload(live_schema) or {}
 
 
 def _schema_name(item: Any) -> str | None:
-    if isinstance(item, str):
-        return item
-    if isinstance(item, dict):
-        name = item.get("name")
-        return name if isinstance(name, str) else None
-    return None
-
-
-def _property_names(properties: Any) -> set[str]:
-    if not isinstance(properties, list):
-        return set()
-    return {name for prop in properties if (name := _schema_name(prop))}
-
-
-def _primary_key_names(vertex_label: dict[str, Any]) -> list[str]:
-    primary_keys = vertex_label.get("primary_keys")
-    if primary_keys is None:
-        primary_keys = vertex_label.get("primaryKeys")
-    if not isinstance(primary_keys, list):
-        return []
-    return [name for pk in primary_keys if (name := _schema_name(pk))]
+    return schema_name(item)
 
 
 def _vertex_labels(raw_schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -102,14 +86,8 @@ def _edge_labels(raw_schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return labels
 
 
-def _edge_schema_endpoint_label(edge_schema: dict[str, Any], endpoint: str) -> Any:
-    if endpoint == "source":
-        return edge_schema.get("source_label") or edge_schema.get("sourceLabel")
-    return edge_schema.get("target_label") or edge_schema.get("targetLabel")
-
-
 def _schema_summary(live_schema: dict[str, Any] | None) -> dict[str, Any] | None:
-    return ingest_graph_data.normalized_schema_summary(live_schema)
+    return normalized_schema_summary(live_schema)
 
 
 def _operations(change_plan: Any) -> list[dict[str, Any]]:
@@ -137,6 +115,8 @@ def _validation_error(
     if error_type is not None:
         error["error_type"] = error_type
     return error
+
+
 # ---- 校验辅助 ----
 
 
@@ -507,6 +487,8 @@ def validate_graph_change_plan(
                 )
 
     return {"valid": not bool(errors), "errors": errors, "warnings": warnings}
+
+
 # ---- Mode 操作约束校验 ----
 
 

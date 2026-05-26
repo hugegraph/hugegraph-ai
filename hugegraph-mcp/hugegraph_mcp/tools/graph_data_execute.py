@@ -35,10 +35,10 @@ from hugegraph_mcp.tools.graph_data_validate import (
     WRITE_OPS,
     ValidationError,
     _operations,
-    _schema_summary,
     _validation_error,
     validate_graph_change_plan,
 )
+from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
 
 
 # ---- Gremlin 执行辅助 ----
@@ -293,13 +293,15 @@ def dry_run_graph_change_plan(
         "valid": True,
         "plan_hash": calculate_graph_change_plan_hash(
             change_plan,
-            schema_summary=_schema_summary(live_schema),
+            schema_summary=normalized_schema_summary(live_schema),
             extra_hash_context=extra_hash_context,
         ),
         "mutation_summary": _mutation_summary(operations),
         "preview": preview,
         "warnings": validation.get("warnings", []),
     }
+
+
 # ---- 执行 — 写入前再次校验 matched_count ----
 
 
