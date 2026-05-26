@@ -20,6 +20,11 @@ from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.tools import ingest_graph_data
+from hugegraph_mcp.tools.graph_data_mapping import (
+    GraphChangePlan,
+    _change_plan_from_operations,
+    graph_data_to_change_plan,
+)
 
 
 ALLOWED_OPS = frozenset(
@@ -42,7 +47,6 @@ MODE_OPS = {
     "delete": frozenset({"delete_vertex", "delete_edge"}),
 }
 
-GraphChangePlan = dict[str, list[dict[str, Any]]]
 ValidationError = dict[str, Any]
 
 
@@ -128,10 +132,6 @@ def _operations(change_plan: Any) -> list[dict[str, Any]]:
         return []
     operations = change_plan.get("operations")
     return operations if isinstance(operations, list) else []
-
-
-def _change_plan_from_operations(operations: list[dict[str, Any]]) -> GraphChangePlan:
-    return {"operations": operations}
 
 
 def _validation_error(
@@ -967,91 +967,6 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
         "results": results,
         "mutation_summary": _mutation_summary(operations),
     }
-
-
-def graph_data_to_change_plan(graph_data: dict[str, Any]) -> GraphChangePlan:
-    operations: list[dict[str, Any]] = []
-    vertex_matches = _vertex_matches_by_id(graph_data)
-    for vertex in graph_data.get("vertices") or []:
-        if not isinstance(vertex, dict):
-            continue
-        operations.append(
-            {
-                "op": "create_vertex",
-                "label": vertex.get("label"),
-                "properties": vertex.get("properties") or {},
-            }
-        )
-    for edge in graph_data.get("edges") or []:
-        if not isinstance(edge, dict):
-            continue
-        source_label = edge.get("source_label") or edge.get("outVLabel")
-        target_label = edge.get("target_label") or edge.get("inVLabel")
-        operations.append(
-            {
-                "op": "create_edge",
-                "label": edge.get("label"),
-                "source_label": source_label,
-                "target_label": target_label,
-                "source_match": _edge_endpoint_match(
-                    edge=edge,
-                    endpoint="source",
-                    endpoint_label=source_label,
-                    vertex_matches=vertex_matches,
-                ),
-                "target_match": _edge_endpoint_match(
-                    edge=edge,
-                    endpoint="target",
-                    endpoint_label=target_label,
-                    vertex_matches=vertex_matches,
-                ),
-                "properties": edge.get("properties") or {},
-            }
-        )
-    return _change_plan_from_operations(operations)
-
-
-def _vertex_matches_by_id(
-    graph_data: dict[str, Any],
-) -> dict[tuple[str, Any], dict[str, Any]]:
-    matches: dict[tuple[str, Any], dict[str, Any]] = {}
-    for vertex in graph_data.get("vertices") or []:
-        if not isinstance(vertex, dict):
-            continue
-        label = vertex.get("label")
-        vertex_id = vertex.get("id")
-        properties = vertex.get("properties")
-        if (
-            isinstance(label, str)
-            and vertex_id not in (None, "")
-            and isinstance(properties, dict)
-            and properties
-        ):
-            matches[(label, str(vertex_id))] = dict(properties)
-    return matches
-
-
-def _edge_endpoint_match(
-    *,
-    edge: dict[str, Any],
-    endpoint: str,
-    endpoint_label: str | None,
-    vertex_matches: dict[tuple[str, Any], dict[str, Any]],
-) -> dict[str, Any]:
-    if endpoint == "source":
-        explicit = edge.get("source")
-        vertex_id = edge.get("outV")
-    else:
-        explicit = edge.get("target")
-        vertex_id = edge.get("inV")
-
-    if isinstance(explicit, dict):
-        return explicit
-    if isinstance(endpoint_label, str) and vertex_id not in (None, ""):
-        match = vertex_matches.get((endpoint_label, str(vertex_id)))
-        if match is not None:
-            return match
-    return {"id": explicit or vertex_id}
 
 
 def _fetch_live_schema() -> dict[str, Any] | None:
