@@ -473,6 +473,112 @@ def test_manage_schema_dry_run_different_ops_different_hash(monkeypatch):
     assert first["data"]["plan_hash"] != second["data"]["plan_hash"]
 
 
+def test_manage_schema_plan_hash_schema_field_order_same_hash():
+    operations = [_property_key()]
+    schema = _schema(
+        propertykeys=[
+            {"name": "name", "data_type": "TEXT"},
+            {"name": "age", "data_type": "INT"},
+        ],
+        vertexlabels=[
+            {
+                "name": "person",
+                "properties": [{"name": "name"}, {"name": "age"}],
+                "primary_keys": ["name"],
+            },
+        ],
+        edgelabels=[
+            {"name": "knows", "source_label": "person", "target_label": "person"},
+        ],
+    )
+    reordered_schema = _schema(
+        propertykeys=[
+            {"name": "age", "data_type": "INT"},
+            {"name": "name", "data_type": "TEXT"},
+        ],
+        vertexlabels=[
+            {
+                "name": "person",
+                "properties": [{"name": "age"}, {"name": "name"}],
+                "primaryKeys": ["name"],
+            },
+        ],
+        edgelabels=[
+            {"name": "knows", "sourceLabel": "person", "targetLabel": "person"},
+        ],
+    )
+
+    first = manage_schema_module.calculate_plan_hash(operations, schema)
+    second = manage_schema_module.calculate_plan_hash(operations, reordered_schema)
+
+    assert first == second
+
+
+def test_manage_schema_plan_hash_schema_primary_key_change_different_hash():
+    operations = [_property_key()]
+    schema = _schema(
+        vertexlabels=[
+            {"name": "person", "properties": ["name", "age"], "primary_keys": ["name"]},
+        ],
+    )
+    changed_schema = _schema(
+        vertexlabels=[
+            {"name": "person", "properties": ["name", "age"], "primary_keys": ["age"]},
+        ],
+    )
+
+    first = manage_schema_module.calculate_plan_hash(operations, schema)
+    second = manage_schema_module.calculate_plan_hash(operations, changed_schema)
+
+    assert first != second
+
+
+def test_manage_schema_plan_hash_schema_metadata_ignored_same_hash():
+    operations = [_property_key()]
+    schema = _schema(
+        propertykeys=[{"name": "name", "data_type": "TEXT"}],
+        vertexlabels=[
+            {"name": "person", "properties": ["name"], "primary_keys": ["name"]}
+        ],
+    )
+    schema_with_metadata = _schema(
+        propertykeys=[
+            {
+                "id": 1,
+                "name": "name",
+                "data_type": "TEXT",
+                "user_data": {"x": "y"},
+            }
+        ],
+        vertexlabels=[
+            {
+                "id": 99,
+                "name": "person",
+                "properties": ["name"],
+                "primary_keys": ["name"],
+                "user_data": {"x": "y"},
+            }
+        ],
+    )
+    schema_with_metadata["server_time"] = "2026-05-26T00:00:00Z"
+
+    first = manage_schema_module.calculate_plan_hash(operations, schema)
+    second = manage_schema_module.calculate_plan_hash(operations, schema_with_metadata)
+
+    assert first == second
+
+
+def test_manage_schema_plan_hash_operation_order_same_hash():
+    schema = _empty_schema()
+    operations = [_property_key("age"), _property_key("score")]
+    reordered_operations = [_property_key("score"), _property_key("age")]
+
+    first = manage_schema_module.calculate_plan_hash(operations, schema)
+    second = manage_schema_module.calculate_plan_hash(reordered_operations, schema)
+
+    assert first == second
+
+
 def test_manage_schema_apply_missing_confirm(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 

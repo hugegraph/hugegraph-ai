@@ -125,6 +125,78 @@ def test_ingest_graph_data_plan_hash_includes_schema(monkeypatch):
     assert first != second
 
 
+def test_ingest_plan_hash_schema_field_order_same_hash():
+    graph_data = _graph_data()
+    schema = _live_schema()
+    reordered_schema = _live_schema()
+    reordered_schema["schema"]["propertykeys"] = list(
+        reversed(reordered_schema["schema"]["propertykeys"])
+    )
+    reordered_schema["schema"]["vertexlabels"][0]["properties"] = [
+        {"name": "age"},
+        {"name": "name"},
+    ]
+
+    first = ingest_graph_data_module.calculate_plan_hash(graph_data, schema)
+    second = ingest_graph_data_module.calculate_plan_hash(graph_data, reordered_schema)
+
+    assert first == second
+
+
+def test_ingest_plan_hash_schema_primary_key_change_different_hash():
+    graph_data = _graph_data()
+    schema = _live_schema()
+    changed_schema = _live_schema()
+    changed_schema["schema"]["vertexlabels"][0]["primary_keys"] = ["age"]
+
+    first = ingest_graph_data_module.calculate_plan_hash(graph_data, schema)
+    second = ingest_graph_data_module.calculate_plan_hash(graph_data, changed_schema)
+
+    assert first != second
+
+
+def test_ingest_plan_hash_schema_metadata_ignored_same_hash():
+    graph_data = _graph_data()
+    schema = _live_schema()
+    schema_with_metadata = _live_schema()
+    schema_with_metadata["schema"]["propertykeys"][0]["id"] = 1
+    schema_with_metadata["schema"]["propertykeys"][0]["user_data"] = {"x": "y"}
+    schema_with_metadata["schema"]["vertexlabels"][0]["id"] = 99
+    schema_with_metadata["server_time"] = "2026-05-26T00:00:00Z"
+
+    first = ingest_graph_data_module.calculate_plan_hash(graph_data, schema)
+    second = ingest_graph_data_module.calculate_plan_hash(graph_data, schema_with_metadata)
+
+    assert first == second
+
+
+def test_ingest_plan_hash_graph_data_order_same_hash():
+    graph_data = _graph_data()
+    reordered_graph_data = {
+        "edges": [
+            {
+                "target": {"name": "Bob"},
+                "source": {"name": "Alice"},
+                "target_label": "person",
+                "source_label": "person",
+                "label": "knows",
+            }
+        ],
+        "vertices": [
+            {"properties": {"name": "Bob"}, "label": "person"},
+            {"properties": {"name": "Alice"}, "label": "person"},
+        ],
+    }
+
+    first = ingest_graph_data_module.calculate_plan_hash(graph_data, _live_schema())
+    second = ingest_graph_data_module.calculate_plan_hash(
+        reordered_graph_data,
+        _live_schema(),
+    )
+
+    assert first == second
+
+
 def test_ingest_graph_data_validate_invalid(monkeypatch):
     _mock_schema(monkeypatch)
 

@@ -13,6 +13,7 @@
 
 import hashlib
 import json
+from copy import deepcopy
 from typing import Any
 
 from hugegraph_mcp.config import MCPConfig
@@ -25,6 +26,7 @@ apply 前必须 dry_run 获取 plan_hash，防止 schema 在审核期间被变�
 """
 
 from hugegraph_mcp import schema_tools
+from hugegraph_mcp.tools.ingest_graph_data import normalized_schema_summary
 
 
 ALLOWED_OPERATION_TYPES = frozenset(
@@ -386,11 +388,19 @@ def _current_plan_context(
 ) -> dict[str, Any]:
     cfg = MCPConfig.from_env()
     live_schema = live_schema or schema_tools.get_live_schema()
+    normalized_operations = sorted(
+        deepcopy(operations),
+        key=lambda operation: (
+            str(operation.get("type", "")) if isinstance(operation, dict) else "",
+            str(operation.get("name", "")) if isinstance(operation, dict) else "",
+            json.dumps(operation, sort_keys=True, default=str),
+        ),
+    )
     return {
-        "operations": operations,
+        "operations": normalized_operations,
         "graph": cfg.graph,
         "graphspace": cfg.graphspace,
-        "schema_version": live_schema,
+        "schema_summary": normalized_schema_summary(live_schema),
     }
 
 

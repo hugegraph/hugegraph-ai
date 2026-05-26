@@ -169,14 +169,192 @@ def _schema_plan_summary(live_schema: dict[str, Any] | None) -> dict[str, Any] |
     raw = _schema_payload(live_schema)
     if raw is None:
         return None
-    simple = live_schema.get("simple_schema") if isinstance(live_schema, dict) else None
-    if isinstance(simple, dict):
-        return simple
     return {
         "vertexlabels": raw.get("vertexlabels", []),
         "edgelabels": raw.get("edgelabels", []),
         "propertykeys": raw.get("propertykeys", []),
+        "indexlabels": raw.get("indexlabels", []),
     }
+
+
+def _field_value(item: dict[str, Any], *names: str) -> Any:
+    for name in names:
+        if name in item:
+            return item.get(name)
+    return None
+
+
+def _normalize_named_list(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    names = [name for value in values if (name := _schema_name(value))]
+    return sorted(names)
+
+
+def _normalize_schema_items(
+    items: Any,
+    field_aliases: list[tuple[str, tuple[str, ...]]],
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    if not isinstance(items, list):
+        return normalized
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str):
+            continue
+        result: dict[str, Any] = {"name": name}
+        for output_name, aliases in field_aliases:
+            value = _field_value(item, *aliases)
+            if value is None:
+                continue
+            if output_name in {
+                "fields",
+                "nullable_keys",
+                "primary_keys",
+                "properties",
+            }:
+                value = _normalize_named_list(value)
+            result[output_name] = value
+        normalized.append(result)
+
+    return sorted(normalized, key=lambda value: value["name"])
+
+
+def normalized_schema_summary(
+    live_schema: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return the security-relevant schema subset used for plan hashes."""
+    raw = _schema_payload(live_schema)
+    if raw is None:
+        return None
+
+    return {
+        "propertykeys": _normalize_schema_items(
+            raw.get("propertykeys"),
+            [
+                ("data_type", ("data_type", "dataType")),
+                ("cardinality", ("cardinality",)),
+            ],
+        ),
+        "vertexlabels": _normalize_schema_items(
+            raw.get("vertexlabels"),
+            [
+                ("properties", ("properties",)),
+                ("primary_keys", ("primary_keys", "primaryKeys")),
+                ("nullable_keys", ("nullable_keys", "nullableKeys")),
+            ],
+        ),
+        "edgelabels": _normalize_schema_items(
+            raw.get("edgelabels"),
+            [
+                ("source_label", ("source_label", "sourceLabel")),
+                ("target_label", ("target_label", "targetLabel")),
+                ("properties", ("properties",)),
+                ("nullable_keys", ("nullable_keys", "nullableKeys")),
+                ("frequency", ("frequency",)),
+            ],
+        ),
+        "indexlabels": _normalize_schema_items(
+            raw.get("indexlabels"),
+            [
+                ("base_type", ("base_type", "baseType")),
+                ("base_label", ("base_label", "baseLabel")),
+                ("index_type", ("index_type", "indexType")),
+                ("fields", ("fields",)),
+                ("unique", ("unique",)),
+            ],
+        ),
+    }
+
+
+def _canonical_json_key(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, default=str, separators=(",", ":"))
+
+
+def _normalize_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _normalize_value(value[key])
+            for key in sorted(value, key=lambda item: str(item))
+        }
+    if isinstance(value, list):
+        return [_normalize_value(item) for item in value]
+    return value
+
+
+def _vertex_sort_key(
+    vertex: Any,
+    schema_primary_keys: dict[str, list[str]],
+) -> tuple[str, str]:
+    if not isinstance(vertex, dict):
+        return ("", _canonical_json_key(vertex))
+    label = str(vertex.get("label") or "")
+    if _identity_value_present(vertex.get("id")):
+        identity = vertex.get("id")
+    else:
+        props = vertex.get("properties")
+        primary_keys = schema_primary_keys.get(label, [])
+        if isinstance(props, dict) and primary_keys:
+            identity = props.get(primary_keys[0])
+        elif isinstance(props, dict) and props:
+            first_key = sorted(props, key=lambda item: str(item))[0]
+            identity = props.get(first_key)
+        else:
+            identity = None
+    return (label, _canonical_json_key(identity))
+
+
+def _edge_sort_key(edge: Any) -> tuple[str, str, str, str]:
+    if not isinstance(edge, dict):
+        return ("", "", "", _canonical_json_key(edge))
+    source_label, source = _edge_endpoint(edge, "source")
+    target_label, target = _edge_endpoint(edge, "target")
+    return (
+        str(edge.get("label") or ""),
+        str(source_label or ""),
+        str(target_label or ""),
+        _canonical_json_key(
+            {
+                "source": source,
+                "target": target,
+                "properties": edge.get("properties", {}),
+            }
+        ),
+    )
+
+
+def _normalize_graph_data(
+    graph_data: dict[str, Any],
+    schema_summary: dict[str, Any] | None,
+) -> dict[str, Any]:
+    normalized = _normalize_value(graph_data)
+    if not isinstance(normalized, dict):
+        return normalized
+
+    schema_primary_keys: dict[str, list[str]] = {}
+    if schema_summary:
+        for vertex_label in schema_summary.get("vertexlabels", []):
+            if isinstance(vertex_label, dict):
+                name = vertex_label.get("name")
+                primary_keys = vertex_label.get("primary_keys")
+                if isinstance(name, str) and isinstance(primary_keys, list):
+                    schema_primary_keys[name] = primary_keys
+
+    vertices = normalized.get("vertices")
+    if isinstance(vertices, list):
+        normalized["vertices"] = sorted(
+            vertices,
+            key=lambda vertex: _vertex_sort_key(vertex, schema_primary_keys),
+        )
+
+    edges = normalized.get("edges")
+    if isinstance(edges, list):
+        normalized["edges"] = sorted(edges, key=_edge_sort_key)
+
+    return normalized
 
 
 def _schema_vertex_info(raw_schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -573,12 +751,12 @@ def calculate_plan_hash(
     live_schema: dict[str, Any] | None = None,
 ) -> str:
     cfg = MCPConfig.from_env()
+    schema_summary = normalized_schema_summary(live_schema)
     payload = {
-        "graph_data": graph_data,
+        "graph_data": _normalize_graph_data(graph_data, schema_summary),
         "graph": cfg.graph,
         "graphspace": cfg.graphspace,
     }
-    schema_summary = _schema_plan_summary(live_schema)
     if schema_summary is not None:
         payload["schema_summary"] = schema_summary
     encoded = json.dumps(payload, sort_keys=True, default=str)
