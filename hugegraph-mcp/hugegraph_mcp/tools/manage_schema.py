@@ -79,6 +79,61 @@ def _schema_items(live_schema: dict[str, Any], key: str) -> set[str]:
     }
 
 
+def _collect_planned_creates(
+    operations: list[dict[str, Any]],
+) -> tuple[dict[str, set[str]], list[ValidationError]]:
+    planned = {
+        "property_keys": set(),
+        "vertex_labels": set(),
+        "edge_labels": set(),
+        "index_labels": set(),
+    }
+    errors: list[ValidationError] = []
+    create_type_to_key = {
+        "create_property_key": "property_keys",
+        "create_vertex_label": "vertex_labels",
+        "create_edge_label": "edge_labels",
+        "create_index_label": "index_labels",
+    }
+    create_type_to_label = {
+        "create_property_key": "property_key",
+        "create_vertex_label": "vertex_label",
+        "create_edge_label": "edge_label",
+        "create_index_label": "index_label",
+    }
+
+    for idx, operation in enumerate(operations):
+        if not isinstance(operation, dict):
+            continue
+
+        op_type = _operation_type(operation)
+        planned_key = create_type_to_key.get(op_type)
+        if planned_key is None:
+            continue
+
+        name = operation.get("name")
+        if not name:
+            continue
+
+        if name in planned[planned_key]:
+            errors.append(
+                _validation_error(
+                    idx,
+                    operation,
+                    f"duplicate {op_type} name {name} within the same batch",
+                    (
+                        f"Define each {create_type_to_label[op_type]} only once "
+                        "per schema operation batch."
+                    ),
+                )
+            )
+            continue
+
+        planned[planned_key].add(name)
+
+    return planned, errors
+
+
 def _validate_property_references(
     *,
     idx: int,
@@ -152,10 +207,17 @@ def validate_schema_operations(
         }
 
     live_schema = live_schema or schema_tools.get_live_schema()
-    property_keys = _schema_items(live_schema, "propertykeys")
-    vertex_labels = _schema_items(live_schema, "vertexlabels")
-    edge_labels = _schema_items(live_schema, "edgelabels")
-    index_labels = _schema_items(live_schema, "indexlabels")
+    live_property_keys = _schema_items(live_schema, "propertykeys")
+    live_vertex_labels = _schema_items(live_schema, "vertexlabels")
+    live_edge_labels = _schema_items(live_schema, "edgelabels")
+    live_index_labels = _schema_items(live_schema, "indexlabels")
+    planned_creates, duplicate_errors = _collect_planned_creates(operations)
+    errors.extend(duplicate_errors)
+
+    property_keys = live_property_keys | planned_creates["property_keys"]
+    vertex_labels = live_vertex_labels | planned_creates["vertex_labels"]
+    edge_labels = live_edge_labels | planned_creates["edge_labels"]
+    index_labels = live_index_labels | planned_creates["index_labels"]
 
     for idx, operation in enumerate(operations):
         if not isinstance(operation, dict):
@@ -209,7 +271,7 @@ def validate_schema_operations(
             continue
 
         name = operation.get("name")
-        if op_type == "create_property_key" and name in property_keys:
+        if op_type == "create_property_key" and name in live_property_keys:
             errors.append(
                 _validation_error(
                     idx,
@@ -219,7 +281,7 @@ def validate_schema_operations(
                 )
             )
         elif op_type == "create_vertex_label":
-            if name in vertex_labels:
+            if name in live_vertex_labels:
                 errors.append(
                     _validation_error(
                         idx,
@@ -236,7 +298,7 @@ def validate_schema_operations(
                 errors=errors,
             )
         elif op_type == "create_edge_label":
-            if name in edge_labels:
+            if name in live_edge_labels:
                 errors.append(
                     _validation_error(
                         idx,
@@ -256,8 +318,15 @@ def validate_schema_operations(
                             "Create the referenced vertex label first and rerun validation after it exists in the live schema.",
                         )
                     )
+            _validate_property_references(
+                idx=idx,
+                operation=operation,
+                field="properties",
+                property_keys=property_keys,
+                errors=errors,
+            )
         elif op_type == "create_index_label":
-            if name in index_labels:
+            if name in live_index_labels:
                 errors.append(
                     _validation_error(
                         idx,
@@ -342,13 +411,10 @@ def _risk_warnings(
     vertex_labels = _schema_items(live_schema, "vertexlabels")
     edge_labels = _schema_items(live_schema, "edgelabels")
     index_labels = _schema_items(live_schema, "indexlabels")
+    planned_creates, _ = _collect_planned_creates(operations)
 
-    created_vertex_labels = [
-        op["name"] for op in operations if op.get("type") == "create_vertex_label"
-    ]
-    created_edge_labels = [
-        op["name"] for op in operations if op.get("type") == "create_edge_label"
-    ]
+    created_vertex_labels = planned_creates["vertex_labels"]
+    created_edge_labels = planned_creates["edge_labels"]
     indexed_labels = {
         op.get("base_label")
         for op in operations
@@ -367,7 +433,7 @@ def _risk_warnings(
         elif op_type == "create_index_label" and name in index_labels:
             warnings.append(f"index label already exists: {name}")
 
-    for label in created_vertex_labels + created_edge_labels:
+    for label in created_vertex_labels | created_edge_labels:
         if label not in indexed_labels:
             warnings.append(f"no index operation included for label: {label}")
 

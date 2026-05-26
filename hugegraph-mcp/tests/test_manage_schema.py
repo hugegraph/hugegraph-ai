@@ -53,6 +53,43 @@ def _property_key(name="age"):
     return {"type": "create_property_key", "name": name, "data_type": "INT"}
 
 
+def _vertex_label(name="person", properties=None, primary_keys=None):
+    operation = {"type": "create_vertex_label", "name": name}
+    if properties is not None:
+        operation["properties"] = properties
+    if primary_keys is not None:
+        operation["primary_keys"] = primary_keys
+    return operation
+
+
+def _edge_label(
+    name="knows", source_label="person", target_label="person", properties=None
+):
+    operation = {
+        "type": "create_edge_label",
+        "name": name,
+        "source_label": source_label,
+        "target_label": target_label,
+    }
+    if properties is not None:
+        operation["properties"] = properties
+    return operation
+
+
+def _index_label(
+    name="personByAge", base_type="VERTEX", base_label="person", fields=None
+):
+    operation = {
+        "type": "create_index_label",
+        "name": name,
+        "base_type": base_type,
+        "base_label": base_label,
+    }
+    if fields is not None:
+        operation["fields"] = fields
+    return operation
+
+
 def _live_pk(name):
     return {"name": name, "data_type": "TEXT"}
 
@@ -230,6 +267,151 @@ def test_manage_schema_validate_accepts_semantically_valid_operations(monkeypatc
     assert result["ok"] is True
     assert result["data"]["valid"] is True
     assert result["data"]["errors"] == []
+
+
+def test_same_batch_pk_to_vertex_label(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[
+            _property_key("age"),
+            _vertex_label("person", properties=["age"], primary_keys=["age"]),
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is True
+    assert result["data"]["errors"] == []
+
+
+def test_same_batch_vertex_to_edge_label(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[
+            _vertex_label("person"),
+            _vertex_label("software"),
+            _edge_label("created", source_label="person", target_label="software"),
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is True
+    assert result["data"]["errors"] == []
+
+
+def test_same_batch_label_to_index(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[
+            _property_key("name"),
+            _vertex_label("person", properties=["name"], primary_keys=["name"]),
+            _index_label("personByName", base_label="person", fields=["name"]),
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is True
+    assert result["data"]["errors"] == []
+
+
+def test_same_batch_full_chain(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[
+            _property_key("name"),
+            _property_key("weight"),
+            _vertex_label("person", properties=["name"], primary_keys=["name"]),
+            _vertex_label("software", properties=["name"], primary_keys=["name"]),
+            _edge_label(
+                "created",
+                source_label="person",
+                target_label="software",
+                properties=["weight"],
+            ),
+            _index_label(
+                "createdByWeight",
+                base_type="EDGE",
+                base_label="created",
+                fields=["weight"],
+            ),
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is True
+    assert result["data"]["errors"] == []
+
+
+def test_same_batch_unknown_reference(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[_vertex_label("person", properties=["missing"])],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is False
+    error = result["data"]["errors"][0]
+    assert error["operation_index"] == 0
+    assert "undefined property key" in error["reason"]
+    assert "missing" in error["reason"]
+
+
+def test_same_batch_duplicate_definition(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[_property_key("age"), _property_key("age")],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is False
+    error = result["data"]["errors"][0]
+    assert error["operation_index"] == 1
+    assert error["reason"] == (
+        "duplicate create_property_key name age within the same batch"
+    )
+
+
+def test_same_batch_edge_missing_endpoint(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="validate",
+        operations=[
+            _vertex_label("person"),
+            _edge_label("created", source_label="person", target_label="software"),
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["valid"] is False
+    error = result["data"]["errors"][0]
+    assert error["operation_index"] == 1
+    assert error["reason"] == "target_label references undefined vertex label: software"
 
 
 def test_manage_schema_dry_run(monkeypatch):
