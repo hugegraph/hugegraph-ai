@@ -74,7 +74,7 @@ def test_envelope_err_defaults():
 
 
 def test_envelope_err_all_error_types():
-    assert len(ErrorType) == 15
+    assert len(ErrorType) == 18
 
     for error_type in ErrorType:
         result = envelope_err(error_type, f"{error_type.value} failed")
