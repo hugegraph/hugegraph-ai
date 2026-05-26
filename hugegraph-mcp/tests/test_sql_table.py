@@ -266,6 +266,17 @@ class TestPreviewSql:
         data = result["data"]
         assert len(data["rows"]) == 2
 
+    def test_preview_query_duplicate_columns_returns_envelope_error(self, sql_config):
+        path = sql_config.sqlite_allowlist[0]
+        result = preview_sql(
+            sql_source={"type": "sqlite", "path": path},
+            sql_query="SELECT 1 AS x, 2 AS x",
+        )
+
+        assert result["ok"] is False
+        assert result["error"]["type"] == ErrorType.UNSAFE_SQL.value
+        assert "duplicate column names" in result["error"]["message"]
+
     def test_preview_query_auto_limits(self, sql_config):
         sql_config.sql_max_preview_rows = 1
         path = sql_config.sqlite_allowlist[0]
@@ -321,6 +332,17 @@ class TestExecuteSelectToTableData:
         assert result["ok"] is True
         assert result["data"]["row_count"] == 0
         assert any("zero rows" in w.lower() for w in result.get("warnings", []))
+
+    def test_duplicate_columns_returns_envelope_error(self, sql_config):
+        path = sql_config.sqlite_allowlist[0]
+        result = execute_select_to_table_data(
+            sql_source={"type": "sqlite", "path": path},
+            sql_query="SELECT 1 AS x, 2 AS x",
+        )
+
+        assert result["ok"] is False
+        assert result["error"]["type"] == ErrorType.UNSAFE_SQL.value
+        assert "duplicate column names" in result["error"]["message"]
 
     def test_custom_table_name(self, sql_config):
         path = sql_config.sqlite_allowlist[0]

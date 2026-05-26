@@ -61,7 +61,7 @@ def test_basic_config_parsing(monkeypatch):
     assert cfg.is_readonly() is True
     assert cfg.ai_url == "http://ai.example:18001"
     assert cfg.ai_graph_url == "http://graph-internal:8080"
-    assert cfg.allow_ai is False
+    assert cfg.allow_ai is True
     assert cfg.timeout_seconds == 45
     assert cfg.max_context_items == 250
 
@@ -108,7 +108,7 @@ def test_warnings_are_logged(monkeypatch, caplog):
     )
 
 
-def test_strictest_policy_readonly_forces_allow_ai_false(monkeypatch):
+def test_readonly_and_allow_ai_are_controlled_independently(monkeypatch):
     clear_config_env(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
     monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "true")
@@ -116,7 +116,7 @@ def test_strictest_policy_readonly_forces_allow_ai_false(monkeypatch):
     cfg = MCPConfig.from_env()
 
     assert cfg.is_readonly() is True
-    assert cfg.allow_ai is False
+    assert cfg.allow_ai is True
 
 
 def test_readonly_parsing(monkeypatch):

@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
-from hugegraph_mcp.config import config
+from hugegraph_mcp.config import MCPConfig
 
 
 class ErrorType(str, Enum):
@@ -53,11 +53,12 @@ def build_meta(
     extra_meta: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
+    cfg = MCPConfig.from_env()
     meta = {
         "request_id": request_id or generate_request_id(),
-        "graph": config.graph if graph is None else graph,
-        "graphspace": config.graphspace if graphspace is None else graphspace,
-        "readonly": config.readonly if readonly is None else readonly,
+        "graph": cfg.graph if graph is None else graph,
+        "graphspace": cfg.graphspace if graphspace is None else graphspace,
+        "readonly": cfg.readonly if readonly is None else readonly,
     }
 
     if duration_ms is not None:
@@ -157,4 +158,3 @@ ok_envelope = envelope_ok
 err_envelope = envelope_err
 ok = envelope_ok
 err = envelope_err
-

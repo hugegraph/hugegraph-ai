@@ -27,10 +27,18 @@ _original_makedirs = os.makedirs
 
 
 def _safe_makedirs(name, mode=0o777, exist_ok=False):
-    # Silently succeed for 'logs' directory (don't actually create it)
-    if isinstance(name, str) and ("logs" in name or name == "logs"):
+    # Silently succeed only for a directory whose final path component is 'logs'.
+    if _is_logs_dir(name):
         return None  # Pretend success
     return _original_makedirs(name, mode, exist_ok)
+
+
+def _is_logs_dir(name) -> bool:
+    try:
+        path = os.fspath(name)
+    except TypeError:
+        return False
+    return os.path.basename(os.path.normpath(path)).lower() == "logs"
 
 
 os.makedirs = _safe_makedirs
@@ -48,10 +56,18 @@ class _NoOpFileHandler(logging.NullHandler):
 
 
 def _patched_rotating_handler(filename, *args, **kwargs):
-    # If the filename contains 'logs', disable file logging by returning a no-op handler
-    if "logs" in str(filename):
+    # If the file is under a 'logs' directory, disable file logging.
+    if _is_logs_file(filename):
         return _NoOpFileHandler()
     return _OriginalRotatingFileHandler(filename, *args, **kwargs)
+
+
+def _is_logs_file(filename) -> bool:
+    try:
+        path = os.path.normpath(os.fspath(filename))
+    except TypeError:
+        return False
+    return any(part.lower() == "logs" for part in path.split(os.sep))
 
 
 logging.handlers.RotatingFileHandler = _patched_rotating_handler
@@ -78,6 +94,8 @@ from hugegraph_mcp.tools.sql_table import (
 from hugegraph_mcp.tools.manage_schema import manage_schema
 from hugegraph_mcp.tools.query_graph import query_graph_by_text
 from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
+
+os.makedirs = _original_makedirs
 
 # Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
 # stdout is reserved for MCP JSON protocol only. Windsurf's MCP client

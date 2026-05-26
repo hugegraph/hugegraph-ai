@@ -262,7 +262,7 @@ def execute_select_to_table_data(
             },
             warnings=warnings,
         )
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, ValueError) as exc:
         return envelope_err(
             ErrorType.UNSAFE_SQL,
             f"SQL execution failed: {exc}",
@@ -335,7 +335,7 @@ def _preview_table(source_path: str, table_name: str) -> dict[str, Any]:
             },
             warnings=blob_warnings,
         )
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, ValueError) as exc:
         return envelope_err(
             ErrorType.UNSAFE_SQL,
             f"Failed to preview table '{table_name}': {exc}",
@@ -393,7 +393,7 @@ def _preview_query(source_path: str, sql_query: str) -> dict[str, Any]:
             },
             warnings=warnings,
         )
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, ValueError) as exc:
         return envelope_err(
             ErrorType.UNSAFE_SQL,
             f"SQL execution failed: {exc}",

@@ -1,5 +1,7 @@
 # HugeGraph MCP
 
+[中文文档](README.zh-CN.md)
+
 FastMCP-based Model Context Protocol server for HugeGraph. It lets AI assistants inspect graph status, query graph data, manage schema, and manage graph data through a small set of high-level tools.
 
 ## Quick Start
@@ -43,8 +45,19 @@ All environment variables are optional:
 - `HUGEGRAPH_USER` (default: `admin`)
 - `HUGEGRAPH_PASSWORD` (default: empty string)
 - `HUGEGRAPH_MCP_READONLY` (default: `false`)
+- `HUGEGRAPH_MCP_ALLOW_AI` (default: `false`)
+- `HUGEGRAPH_AI_URL` (default: `http://127.0.0.1:8001`)
+- `HUGEGRAPH_AI_GRAPH_URL` (default: unset)
+- `HUGEGRAPH_MCP_TIMEOUT_SECONDS` (default: `30`)
+- `HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS` (default: `100`)
 
 `HUGEGRAPH_GRAPH_PATH` uses the format `GRAPH_SPACE/GRAPH_NAME`, for example `DEFAULT/hugegraph`.
+
+`HUGEGRAPH_MCP_READONLY` and `HUGEGRAPH_MCP_ALLOW_AI` are controlled independently:
+
+- `HUGEGRAPH_MCP_READONLY=true` blocks mutating schema, graph data, index, and direct write operations.
+- `HUGEGRAPH_MCP_ALLOW_AI=true` allows calls to HugeGraph-AI, including natural-language Gremlin generation, GraphRAG, and graph data extraction.
+- You can set both to `true` to allow AI-assisted read/query/extraction workflows while still blocking all writes.
 
 If first-run dependency installation is slow, pre-install the MCP server locally:
 
@@ -185,13 +198,13 @@ Validate operations before planning an apply:
     "mode": "validate",
     "operations": [
       {
-        "type": "property_key",
+        "type": "create_property_key",
         "name": "name",
         "data_type": "TEXT",
         "cardinality": "SINGLE"
       },
       {
-        "type": "vertex_label",
+        "type": "create_vertex_label",
         "name": "person",
         "properties": ["name"],
         "primary_keys": ["name"]
@@ -210,13 +223,13 @@ Create a dry-run plan and capture the returned `plan_hash`:
     "mode": "dry_run",
     "operations": [
       {
-        "type": "property_key",
+        "type": "create_property_key",
         "name": "name",
         "data_type": "TEXT",
         "cardinality": "SINGLE"
       },
       {
-        "type": "vertex_label",
+        "type": "create_vertex_label",
         "name": "person",
         "properties": ["name"],
         "primary_keys": ["name"]
@@ -237,13 +250,13 @@ Apply the exact dry-run plan:
     "plan_hash": "PLAN_HASH_FROM_DRY_RUN",
     "operations": [
       {
-        "type": "property_key",
+        "type": "create_property_key",
         "name": "name",
         "data_type": "TEXT",
         "cardinality": "SINGLE"
       },
       {
-        "type": "vertex_label",
+        "type": "create_vertex_label",
         "name": "person",
         "properties": ["name"],
         "primary_keys": ["name"]
@@ -264,14 +277,12 @@ Extract candidate graph data from text without writing to HugeGraph:
   "tool": "manage_graph_data_tool",
   "arguments": {
     "mode": "extract",
-    "text": "Alice works at Acme. Bob knows Alice.",
-    "schema": {
-      "vertices": ["person", "company"],
-      "edges": ["knows", "works_at"]
-    }
+    "text": "Alice works at Acme. Bob knows Alice."
   }
 }
 ```
+
+The `schema` argument is optional. In normal usage, omit it so HugeGraph-AI can use the current graph schema. If you pass `schema`, provide a backend-compatible live schema shape instead of a simplified label list.
 
 Dry-run a structured graph data import:
 
@@ -455,11 +466,43 @@ Refreshes VID embeddings through HugeGraph-AI. This is a mutating index operatio
 }
 ```
 
+## Permission Model
+
+The MCP server uses environment switches plus runtime capability guards. It does not provide per-user RBAC.
+
+`HUGEGRAPH_MCP_READONLY` and `HUGEGRAPH_MCP_ALLOW_AI` are intentionally independent:
+
+- `HUGEGRAPH_MCP_READONLY=true` blocks graph-side mutations.
+- `HUGEGRAPH_MCP_ALLOW_AI=true` allows HugeGraph-AI calls for natural-language query generation, GraphRAG, and graph data extraction.
+- Setting both to `true` allows AI-assisted read/query/extraction workflows while still rejecting graph writes.
+
+| Capability | Used By | `readonly=true` Behavior |
+| --- | --- | --- |
+| `READ` | Graph status, schema inspection, direct read-only graph queries | Allowed |
+| `GENERATE` | Generation-only planning paths | Allowed |
+| `DATA_WRITE` | Graph data import, update, and delete apply paths | Rejected |
+| `SCHEMA_WRITE` | Schema apply paths | Rejected |
+| `INDEX_WRITE` | VID embedding refresh | Rejected |
+| `DEBUG_WRITE` | Direct Gremlin write debugging tool | Rejected |
+
+Tool behavior under this model:
+
+| Tool | Behavior |
+| --- | --- |
+| `inspect_graph_tool` | Always allowed. Returns graph status, schema summary, counts when available, and AI status. |
+| `query_graph_tool` | Read-only Gremlin execution is allowed. AI-backed generation and GraphRAG modes require `HUGEGRAPH_MCP_ALLOW_AI=true`. |
+| `manage_schema_tool` | Design, validation, and dry runs are allowed. Apply requires `readonly=false`, a previous dry run, matching `plan_hash`, and `confirm=true`. |
+| `manage_graph_data_tool` | Natural-language extraction, table mapping, and dry runs are allowed subject to AI availability where applicable. Import, update, and delete apply paths require `readonly=false`, a previous dry run, matching `plan_hash`, and `confirm=true`. |
+| `import_graph_data_tool` | Compatibility wrapper for graph data import. Prefer `manage_graph_data_tool` for new workflows. |
+| `refresh_vid_embeddings_tool` | Requires `readonly=false` and `confirm=true`. |
+| `execute_gremlin_write_tool` | Requires `readonly=false`. Intended for debugging and admin maintenance, not routine data loading. |
+
 ## Safety Notes
 
 - Set `HUGEGRAPH_MCP_READONLY=true` for exploration, demos, and production read-only assistant access.
-- Readonly mode is enforced at runtime for write paths, including schema changes, data imports, direct write queries, and embedding refresh.
-- Schema apply and data ingest require a previous dry run, a matching `plan_hash`, and `confirm=true`.
+- Set `HUGEGRAPH_MCP_ALLOW_AI=true` only when the deployment should call HugeGraph-AI.
+- Readonly mode is enforced at runtime for write paths, including schema changes, graph data import/update/delete apply paths, direct write queries, and embedding refresh.
+- Schema apply and graph data import/update/delete apply paths require a previous dry run, a matching `plan_hash`, and `confirm=true`.
 - `query_graph_tool` with `mode="generate"` does not execute generated Gremlin unless `execute=true`.
 - Direct Gremlin reads are allowed only when the traversal can be treated as read-only. Unsafe or uncertain traversals are rejected.
 - Do not use direct write debugging tools for routine data loading.

@@ -108,6 +108,15 @@ def _mock_schema(monkeypatch):
     )
 
 
+def _nested_count_result(count):
+    return {
+        "data": {"data": [count], "meta": {}},
+        "total": 1,
+        "duration_ms": 1,
+        "is_read": True,
+    }
+
+
 def test_validate_graph_change_plan_rejects_unknown_op():
     result = manage_graph_data_module.validate_graph_change_plan(
         {"operations": [{"op": "merge_vertex", "label": "person"}]},
@@ -200,6 +209,22 @@ def test_dry_run_update_vertex_returns_preview_and_hash(monkeypatch):
     assert queries == ['g.V().hasLabel("person").has("name","Alice").count()']
 
 
+def test_dry_run_update_vertex_accepts_nested_count_result(monkeypatch):
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: _nested_count_result(1),
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(
+        _update_vertex_plan(),
+        _live_schema(),
+    )
+
+    assert result["valid"] is True
+    assert result["preview"][0]["matched_count"] == 1
+
+
 def test_dry_run_delete_edge_rejects_non_single_match(monkeypatch):
     counts = iter([1, 1, 2])
 
@@ -255,6 +280,26 @@ def test_dry_run_delete_edge_returns_preview_and_hash(monkeypatch):
         'g.V().hasLabel("person").has("name","Bob").count()',
         'g.V().hasLabel("person").has("name","Alice").outE("knows").where(inV().hasLabel("person").has("name","Bob")).count()',
     ]
+
+
+def test_dry_run_delete_edge_accepts_nested_count_result(monkeypatch):
+    counts = iter([1, 1, 1])
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: _nested_count_result(next(counts)),
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(
+        _delete_edge_plan(),
+        _live_schema(),
+    )
+
+    assert result["valid"] is True
+    assert result["preview"][0]["source_matched_count"] == 1
+    assert result["preview"][0]["target_matched_count"] == 1
+    assert result["preview"][0]["matched_count"] == 1
 
 
 def test_dry_run_delete_edge_rejects_missing_source(monkeypatch):
@@ -412,6 +457,25 @@ def test_dry_run_delete_vertex_allows_no_edges_when_not_cascade(monkeypatch):
 
     assert result["valid"] is True
     assert re.fullmatch(r"[0-9a-f]{16}", result["plan_hash"])
+    assert result["preview"][0]["matched_count"] == 1
+    assert result["preview"][0]["associated_edge_count"] == 0
+
+
+def test_dry_run_delete_vertex_accepts_nested_count_result(monkeypatch):
+    counts = iter([1, 0])
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: _nested_count_result(next(counts)),
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(
+        _delete_vertex_plan(),
+        _live_schema(),
+    )
+
+    assert result["valid"] is True
     assert result["preview"][0]["matched_count"] == 1
     assert result["preview"][0]["associated_edge_count"] == 0
 
@@ -612,6 +676,55 @@ def test_graph_data_to_change_plan_maps_create_operations():
 
     assert [op["op"] for op in result["operations"]] == ["create_vertex", "create_edge"]
     assert result["operations"][1]["source_match"] == {"name": "Alice"}
+
+
+def test_graph_data_to_change_plan_maps_outv_inv_to_vertex_properties():
+    result = manage_graph_data_module.graph_data_to_change_plan(
+        {
+            "vertices": [
+                {"id": "1:Alice", "label": "person", "properties": {"name": "Alice"}},
+                {"id": "1:Bob", "label": "person", "properties": {"name": "Bob"}},
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "outV": "1:Alice",
+                    "outVLabel": "person",
+                    "inV": "1:Bob",
+                    "inVLabel": "person",
+                    "properties": {"since": 2024},
+                }
+            ],
+        }
+    )
+
+    edge_op = result["operations"][2]
+    assert edge_op["source_match"] == {"name": "Alice"}
+    assert edge_op["target_match"] == {"name": "Bob"}
+
+
+def test_graph_data_to_change_plan_normalizes_vertex_id_lookup():
+    result = manage_graph_data_module.graph_data_to_change_plan(
+        {
+            "vertices": [
+                {"id": 123, "label": "person", "properties": {"name": "Alice"}},
+                {"id": 456, "label": "person", "properties": {"name": "Bob"}},
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "outV": "123",
+                    "outVLabel": "person",
+                    "inV": "456",
+                    "inVLabel": "person",
+                }
+            ],
+        }
+    )
+
+    edge_op = result["operations"][2]
+    assert edge_op["source_match"] == {"name": "Alice"}
+    assert edge_op["target_match"] == {"name": "Bob"}
 
 
 def test_manage_graph_data_requires_confirm(monkeypatch):

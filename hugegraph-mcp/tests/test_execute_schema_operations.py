@@ -95,6 +95,7 @@ def test_execute_schema_operations_blocked_in_readonly(monkeypatch):
     assert result["ok"] is False
     assert result["error"]["type"] == "READONLY_VIOLATION"
     assert result["meta"]["readonly"] is True
+    assert result["meta"]["capability"] == "SCHEMA_WRITE"
 
 
 def test_execute_schema_operations_rejects_delete(monkeypatch):

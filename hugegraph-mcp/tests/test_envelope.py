@@ -99,8 +99,19 @@ def test_meta_includes_config_fields():
     assert result["meta"]["readonly"] == config.readonly
 
 
+def test_meta_reads_current_env(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "runtime_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "runtime_space")
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
+
+    result = envelope_ok("ok")
+
+    assert result["meta"]["graph"] == "runtime_graph"
+    assert result["meta"]["graphspace"] == "runtime_space"
+    assert result["meta"]["readonly"] is True
+
+
 def test_duration_ms_passthrough():
     result = envelope_ok("ok", duration_ms=123)
 
     assert result["meta"]["duration_ms"] == 123
-

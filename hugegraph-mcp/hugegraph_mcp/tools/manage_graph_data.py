@@ -971,6 +971,7 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
 
 def graph_data_to_change_plan(graph_data: dict[str, Any]) -> GraphChangePlan:
     operations: list[dict[str, Any]] = []
+    vertex_matches = _vertex_matches_by_id(graph_data)
     for vertex in graph_data.get("vertices") or []:
         if not isinstance(vertex, dict):
             continue
@@ -992,16 +993,65 @@ def graph_data_to_change_plan(graph_data: dict[str, Any]) -> GraphChangePlan:
                 "label": edge.get("label"),
                 "source_label": source_label,
                 "target_label": target_label,
-                "source_match": edge.get("source")
-                if isinstance(edge.get("source"), dict)
-                else {"id": edge.get("source") or edge.get("outV")},
-                "target_match": edge.get("target")
-                if isinstance(edge.get("target"), dict)
-                else {"id": edge.get("target") or edge.get("inV")},
+                "source_match": _edge_endpoint_match(
+                    edge=edge,
+                    endpoint="source",
+                    endpoint_label=source_label,
+                    vertex_matches=vertex_matches,
+                ),
+                "target_match": _edge_endpoint_match(
+                    edge=edge,
+                    endpoint="target",
+                    endpoint_label=target_label,
+                    vertex_matches=vertex_matches,
+                ),
                 "properties": edge.get("properties") or {},
             }
         )
     return _change_plan_from_operations(operations)
+
+
+def _vertex_matches_by_id(
+    graph_data: dict[str, Any],
+) -> dict[tuple[str, Any], dict[str, Any]]:
+    matches: dict[tuple[str, Any], dict[str, Any]] = {}
+    for vertex in graph_data.get("vertices") or []:
+        if not isinstance(vertex, dict):
+            continue
+        label = vertex.get("label")
+        vertex_id = vertex.get("id")
+        properties = vertex.get("properties")
+        if (
+            isinstance(label, str)
+            and vertex_id not in (None, "")
+            and isinstance(properties, dict)
+            and properties
+        ):
+            matches[(label, str(vertex_id))] = dict(properties)
+    return matches
+
+
+def _edge_endpoint_match(
+    *,
+    edge: dict[str, Any],
+    endpoint: str,
+    endpoint_label: str | None,
+    vertex_matches: dict[tuple[str, Any], dict[str, Any]],
+) -> dict[str, Any]:
+    if endpoint == "source":
+        explicit = edge.get("source")
+        vertex_id = edge.get("outV")
+    else:
+        explicit = edge.get("target")
+        vertex_id = edge.get("inV")
+
+    if isinstance(explicit, dict):
+        return explicit
+    if isinstance(endpoint_label, str) and vertex_id not in (None, ""):
+        match = vertex_matches.get((endpoint_label, str(vertex_id)))
+        if match is not None:
+            return match
+    return {"id": explicit or vertex_id}
 
 
 def _fetch_live_schema() -> dict[str, Any] | None:

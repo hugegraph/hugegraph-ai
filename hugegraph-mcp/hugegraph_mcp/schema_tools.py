@@ -144,7 +144,7 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
 
             if op_type == "create_property_key":
                 name = op["name"]
-                # Default to TEXT if caller没有指定类型；后续可以扩展 data_type 映射
+                # Default to TEXT when callers omit data_type.
                 data_type = op.get("data_type", "TEXT").upper()
                 pk_builder = schema.propertyKey(name)
                 if data_type == "INT":
@@ -161,7 +161,6 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
                 vl_builder = schema.vertexLabel(name)
                 if properties:
                     vl_builder = vl_builder.properties(*properties)
-                # 使用 primaryKeys(name) 作为默认主键策略，后续可按需扩展
                 if op.get("primary_keys"):
                     vl_builder = vl_builder.primaryKeys(*op["primary_keys"])
                 vl_builder.ifNotExist().create()
@@ -222,7 +221,7 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
                 il_builder.ifNotExist().create()
 
             results.append({"op": op, "status": "ok"})
-        except Exception as exc:  # pragma: no cover - 错误路径由上层聚合
+        except Exception as exc:  # pragma: no cover - errors are aggregated above
             msg = str(exc)
             results.append({"op": op, "status": "failed", "error": msg})
             errors.append({"op_index": idx, "message": msg})
@@ -238,7 +237,7 @@ def execute_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any
     - Respects HUGEGRAPH_MCP_READONLY environment variable.
     """
 
-    violation = guard(Capability.DEBUG_WRITE)
+    violation = guard(Capability.SCHEMA_WRITE)
     if violation is not None:
         return violation
 
