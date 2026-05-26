@@ -46,6 +46,7 @@ All environment variables are optional:
 - `HUGEGRAPH_PASSWORD` (default: empty string)
 - `HUGEGRAPH_MCP_READONLY` (default: `false`)
 - `HUGEGRAPH_MCP_ALLOW_AI` (default: `false`)
+- `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL` (default: `false`)
 - `HUGEGRAPH_AI_URL` (default: `http://127.0.0.1:8001`)
 - `HUGEGRAPH_AI_GRAPH_URL` (default: unset)
 - `HUGEGRAPH_MCP_TIMEOUT_SECONDS` (default: `30`)
@@ -56,7 +57,8 @@ All environment variables are optional:
 `HUGEGRAPH_MCP_READONLY` and `HUGEGRAPH_MCP_ALLOW_AI` are controlled independently:
 
 - `HUGEGRAPH_MCP_READONLY=true` blocks mutating schema, graph data, index, and direct write operations.
-- `HUGEGRAPH_MCP_ALLOW_AI=true` allows calls to HugeGraph-AI, including natural-language Gremlin generation, GraphRAG, and graph data extraction.
+- `HUGEGRAPH_MCP_ALLOW_AI=true` allows calls to HugeGraph-AI, including natural-language Gremlin generation and graph data extraction.
+- `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true` enables the experimental GraphRAG text-query path for debugging. It is disabled by default and is not the primary user query path.
 - You can set both to `true` to allow AI-assisted read/query/extraction workflows while still blocking all writes.
 
 If first-run dependency installation is slow, pre-install the MCP server locally:
@@ -116,26 +118,14 @@ Include the full raw schema when planning schema changes or debugging mismatches
 
 ### 2. Query The Graph
 
-Use `query_graph_tool` for graph reads. It supports three modes:
+Use `query_graph_tool` for graph reads. It exposes two stable user modes:
 
-- `text`: ask a natural-language question through HugeGraph-AI RAG.
 - `generate`: convert a natural-language question to Gremlin. By default this only generates the traversal and does not execute it.
 - `gremlin`: execute a known-safe read-only Gremlin traversal directly.
 
-Natural-language graph question:
-
-```json
-{
-  "tool": "query_graph_tool",
-  "arguments": {
-    "mode": "text",
-    "query": "Which people does Alice know?",
-    "rag_mode": "graph_only",
-    "include_evidence": true,
-    "max_context_items": 20
-  }
-}
-```
+The old `text` GraphRAG mode is kept as an experimental/debug path behind
+`HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true`. By default, callers should use
+`mode="generate"` with `execute=true` for natural-language graph questions.
 
 Generate Gremlin without executing it:
 
@@ -473,7 +463,8 @@ The MCP server uses environment switches plus runtime capability guards. It does
 `HUGEGRAPH_MCP_READONLY` and `HUGEGRAPH_MCP_ALLOW_AI` are intentionally independent:
 
 - `HUGEGRAPH_MCP_READONLY=true` blocks graph-side mutations.
-- `HUGEGRAPH_MCP_ALLOW_AI=true` allows HugeGraph-AI calls for natural-language query generation, GraphRAG, and graph data extraction.
+- `HUGEGRAPH_MCP_ALLOW_AI=true` allows HugeGraph-AI calls for natural-language query generation and graph data extraction.
+- `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true` additionally exposes the experimental GraphRAG text-query path for debugging.
 - Setting both to `true` allows AI-assisted read/query/extraction workflows while still rejecting graph writes.
 
 | Capability | Used By | `readonly=true` Behavior |
@@ -490,7 +481,7 @@ Tool behavior under this model:
 | Tool | Behavior |
 | --- | --- |
 | `inspect_graph_tool` | Always allowed. Returns graph status, schema summary, counts when available, and AI status. |
-| `query_graph_tool` | Read-only Gremlin execution is allowed. AI-backed generation and GraphRAG modes require `HUGEGRAPH_MCP_ALLOW_AI=true`. |
+| `query_graph_tool` | Read-only Gremlin execution is allowed. AI-backed Gremlin generation requires `HUGEGRAPH_MCP_ALLOW_AI=true`. GraphRAG text mode is disabled unless `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true` is also set. |
 | `manage_schema_tool` | Design, validation, and dry runs are allowed. Apply requires `readonly=false`, a previous dry run, matching `plan_hash`, and `confirm=true`. |
 | `manage_graph_data_tool` | Natural-language extraction, table mapping, and dry runs are allowed subject to AI availability where applicable. Import, update, and delete apply paths require `readonly=false`, a previous dry run, matching `plan_hash`, and `confirm=true`. |
 | `import_graph_data_tool` | Compatibility wrapper for graph data import. Prefer `manage_graph_data_tool` for new workflows. |
@@ -501,6 +492,7 @@ Tool behavior under this model:
 
 - Set `HUGEGRAPH_MCP_READONLY=true` for exploration, demos, and production read-only assistant access.
 - Set `HUGEGRAPH_MCP_ALLOW_AI=true` only when the deployment should call HugeGraph-AI.
+- Keep `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=false` for normal user-facing deployments; enable it only while debugging GraphRAG.
 - Readonly mode is enforced at runtime for write paths, including schema changes, graph data import/update/delete apply paths, direct write queries, and embedding refresh.
 - Schema apply and graph data import/update/delete apply paths require a previous dry run, a matching `plan_hash`, and `confirm=true`.
 - `query_graph_tool` with `mode="generate"` does not execute generated Gremlin unless `execute=true`.

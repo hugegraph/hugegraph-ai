@@ -37,6 +37,7 @@ class MCPConfig:
     ai_url: str = "http://127.0.0.1:8001"
     ai_graph_url: str | None = None
     allow_ai: bool = False
+    enable_graphrag_experimental: bool = False
     timeout_seconds: int = 30
     max_context_items: int = 100
     sql_enabled: bool = False
@@ -81,6 +82,9 @@ class MCPConfig:
             ai_url=env.get("HUGEGRAPH_AI_URL", "http://127.0.0.1:8001"),
             ai_graph_url=_optional_non_empty(env.get("HUGEGRAPH_AI_GRAPH_URL")),
             allow_ai=_parse_bool(env.get("HUGEGRAPH_MCP_ALLOW_AI", "")),
+            enable_graphrag_experimental=_parse_bool(
+                env.get("HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL", "")
+            ),
             timeout_seconds=_parse_int(
                 env.get("HUGEGRAPH_MCP_TIMEOUT_SECONDS"), 30
             ),

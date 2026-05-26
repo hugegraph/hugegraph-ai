@@ -77,7 +77,7 @@ from fastmcp import FastMCP
 
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
 from hugegraph_mcp.config import MCPConfig
-from hugegraph_mcp.envelope import envelope_err, envelope_ok
+from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
 from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
@@ -125,13 +125,35 @@ def query_graph_tool(
     include_evidence: bool = False,
     max_context_items: int = 20,
 ) -> dict:
-    """统一图查询入口 — 三种模式：
+    """统一图查询入口 — 稳定用户路径包括两种模式：
 
-    - mode="text": 自然语言问图（通过 HugeGraph-AI RAG）
     - mode="generate": NL → Gremlin 生成（默认不执行）
     - mode="gremlin": 执行只读 Gremlin 遍历
+
+    mode="text" 是保留给 GraphRAG 调试的实验路径，默认不对用户启用。
     """
     if mode == "text":
+        cfg = MCPConfig.from_env()
+        if not cfg.enable_graphrag_experimental:
+            return envelope_err(
+                ErrorType.FEATURE_DISABLED,
+                "GraphRAG text query mode is experimental and disabled by default",
+                suggestion=(
+                    "Use mode='generate' with execute=true for the stable "
+                    "natural-language graph query path, or enable "
+                    "HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true for "
+                    "GraphRAG debugging."
+                ),
+                details={
+                    "mode": mode,
+                    "feature": "GraphRAG",
+                    "enable_env": "HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL",
+                },
+                next_actions=[
+                    "Use query_graph_tool with mode='generate' and execute=true",
+                    "Enable HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true only for experimental GraphRAG debugging",
+                ],
+            )
         if not query:
             return envelope_err("VALIDATION_ERROR", "query is required for mode='text'")
         return query_graph_by_text(
@@ -167,8 +189,12 @@ def query_graph_tool(
 
     return envelope_err(
         "VALIDATION_ERROR",
-        f"Unknown mode: {mode!r}. Use 'text', 'generate', or 'gremlin'.",
-        details={"mode": mode},
+        f"Unknown mode: {mode!r}. Use 'generate' or 'gremlin'.",
+        details={
+            "mode": mode,
+            "stable_modes": ["generate", "gremlin"],
+            "experimental_modes": ["text"],
+        },
     )
 
 
