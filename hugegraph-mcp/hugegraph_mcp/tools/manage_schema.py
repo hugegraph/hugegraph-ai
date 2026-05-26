@@ -213,6 +213,9 @@ def validate_schema_operations(
     live_vertex_labels = _schema_items(live_schema, "vertexlabels")
     live_edge_labels = _schema_items(live_schema, "edgelabels")
     live_index_labels = _schema_items(live_schema, "indexlabels")
+    # 同一批 schema 操作允许前面的 create 被后续操作引用，例如先创建
+    # property key，再创建使用它的 vertex label。planned_creates 用来模拟
+    # 批内依赖，避免合法 migration 被误判为引用不存在。
     planned_creates, duplicate_errors = _collect_planned_creates(operations)
     errors.extend(duplicate_errors)
 
@@ -387,6 +390,8 @@ def _current_plan_context(
 ) -> dict[str, Any]:
     cfg = MCPConfig.from_env()
     live_schema = live_schema or schema_tools.get_live_schema()
+    # plan_hash 只绑定写入语义相关的 schema 摘要，不绑定 id/status/create_time
+    # 等元数据，减少 dry-run 到 apply 之间的无关字段抖动。
     return {
         "operations": deepcopy(operations),
         "graph": cfg.graph,
@@ -510,6 +515,8 @@ def manage_schema(
         if violation is not None:
             return violation
 
+        # schema apply 比数据写入影响更大，必须走 confirm + plan_hash。
+        # 这里再次计算 hash，确保用户确认的是当前 schema 快照下的同一批操作。
         if not confirm:
             return envelope_err(
                 ErrorType.CONFIRM_REQUIRED,

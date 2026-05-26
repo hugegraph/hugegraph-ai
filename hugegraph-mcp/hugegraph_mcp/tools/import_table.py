@@ -11,14 +11,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any
-
 """表格数据映射 — 将结构化 rows/columns 转为图数据 {vertices, edges}。
 
 import_table_data() 根据 mapping 将表行映射为顶点和边，
 suggest_table_mapping() 基于列名启发式生成可编辑的映射建议。
 映射缺失时返回建议而不执行导入，用户审阅后可编辑映射重试。
 """
+
+from typing import Any
 
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 
@@ -34,6 +34,8 @@ def import_table_data(
         return _validation_error(table_validation)
 
     if not _is_complete_mapping(mapping):
+        # 缺 mapping 时只返回建议，不猜测写入。表格列名启发式很容易误判，
+        # 必须让用户/Agent 审阅后再进入真实图数据导入链。
         return envelope_ok(
             {
                 "graph_data": None,
@@ -65,6 +67,8 @@ def suggest_table_mapping(
     columns = _columns(table_data)
     table_label = _normalize_label(str(table_data.get("table_name") or "row"))
     existing = mapping if isinstance(mapping, dict) else {}
+    # 传入的 mapping 可能是用户已经部分编辑过的草稿；建议逻辑只补缺失部分，
+    # 不覆盖已有 vertex/edge 映射，避免破坏用户意图。
     suggested = {
         "vertex_mappings": list(existing.get("vertex_mappings") or []),
         "edge_mappings": list(existing.get("edge_mappings") or []),
@@ -239,6 +243,8 @@ def _table_to_graph_data(
             vertex = _build_vertex(row, vertex_mapping)
             identity = _vertex_identity(vertex, vertex_mapping)
             if identity in seen_vertices:
+                # 多行表格经常共享同一个端点顶点；顶点去重只按 label + 主键，
+                # 边仍逐行生成，避免把多条关系误合并。
                 continue
             seen_vertices.add(identity)
             vertices.append(vertex)
@@ -309,6 +315,8 @@ def _endpoint_properties(
     endpoint_mapping: dict[str, Any],
     vertex_mappings: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    # endpoint 只需要主键字段。这里把 endpoint 的列名映射回顶点属性名，
+    # 让表格中的 source_id 能正确变成 {"id": ...} 或 {"name": ...}。
     column_to_property = _column_to_property(endpoint_mapping, vertex_mappings)
     return {
         column_to_property.get(column, column): row.get(column)
@@ -371,6 +379,7 @@ def _columns(table_data: dict[str, Any]) -> list[str]:
 
 def _infer_primary_key_columns(columns: list[str], label: str) -> list[str]:
     normalized_columns = {column.lower(): column for column in columns}
+    # 仅做启发式建议：真实导入前仍会由 mapping 校验和 live schema 校验兜底。
     for candidate in ("id", f"{label}_id", "uuid", "key"):
         if candidate in normalized_columns:
             return [normalized_columns[candidate]]

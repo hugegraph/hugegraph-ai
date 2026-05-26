@@ -108,6 +108,9 @@ def _endpoint_identities(
     value: Any,
     schema_primary_keys: dict[str, list[str]],
 ) -> tuple[list[tuple[str, str, Any]], str | None]:
+    # 边端点支持两种写法：直接给后端 id，或按顶点主键给对象。
+    # 返回多个候选身份，是为了兼容用户传入 "1:alice" 这类后端 id
+    # 和 {"name": "alice"} 这类主键对象两种输入。
     identities: list[tuple[str, str, Any]] = []
     primary_keys = schema_primary_keys.get(label, [])
 
@@ -210,6 +213,8 @@ def _normalize_graph_data(
     graph_data: dict[str, Any],
     schema_summary: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    # plan_hash 需要对输入顺序不敏感：同一批顶点/边即使 JSON 数组顺序不同，
+    # 也应得到同一个 hash；但属性值、schema 主键等安全相关内容必须参与 hash。
     normalized = _normalize_value(graph_data)
     if not isinstance(normalized, dict):
         return normalized
@@ -266,6 +271,8 @@ def _vertex_backend_id(
     vertex: dict[str, Any],
     vertex_info: dict[str, dict[str, Any]],
 ) -> Any:
+    # HugeGraph PRIMARY_KEY 顶点的后端 id 由 label id 和主键值拼接而成。
+    # 在导入前补齐 id，能让边端点在同一批 payload 内稳定引用刚创建的顶点。
     explicit_id = vertex.get("id")
     if _identity_value_present(explicit_id):
         return explicit_id
@@ -291,6 +298,9 @@ def _vertex_identity_map(
     vertices: list[Any],
     raw_schema: dict[str, Any],
 ) -> tuple[dict[tuple[str, str, Any], Any], dict[str, list[str]]]:
+    # 建立“用户可表达的身份”到 HugeGraph 后端 id 的映射。
+    # 同一顶点可能同时拥有显式 id、PRIMARY_KEY 后端 id 和主键 tuple，
+    # 边端点解析时任意一种命中都应该指向同一个后端顶点。
     vertex_info = _schema_vertex_info(raw_schema)
     schema_primary_keys = {
         label: info.get("primary_keys", []) for label, info in vertex_info.items()
@@ -333,6 +343,8 @@ def _endpoint_backend_id(
     schema_primary_keys: dict[str, list[str]],
     vertex_info: dict[str, dict[str, Any]],
 ) -> Any:
+    # 边端点优先解析为本批 payload 中的顶点，保证“先创建顶点再创建边”
+    # 的批量导入场景不需要用户提前知道 HugeGraph 后端 id。
     endpoint_identities, _missing_pk = _endpoint_identities(
         label,
         value,
@@ -365,6 +377,8 @@ def _prepare_graph_import_data(
     graph_data: dict[str, Any],
     live_schema: dict[str, Any],
 ) -> dict[str, Any]:
+    # HugeGraph-AI 的 graph-import 接口需要 outV/inV/outVLabel/inVLabel。
+    # MCP 对用户暴露更友好的 source/target，因此这里在写入前做一次格式转换。
     prepared = deepcopy(graph_data)
     raw_schema = _schema_payload(live_schema) or {}
     vertex_info = _schema_vertex_info(raw_schema)
@@ -442,6 +456,8 @@ def validate_graph_payload(
     indexed_labels = {"VERTEX": set(), "EDGE": set()}
     if live_schema:
         raw = _schema_payload(live_schema) or {}
+        # 把 live schema 摘成 label -> 属性/主键/类型表，后续校验只依赖这份快照。
+        # 这避免遍历过程中 schema 被重复读取导致前后判断不一致。
         schema_property_types = _property_types(raw)
         for vl in raw.get("vertexlabels", []):
             if not isinstance(vl, dict):
@@ -494,6 +510,8 @@ def validate_graph_payload(
                         )
             primary_keys = schema_primary_keys.get(label, [])
             if primary_keys:
+                # PRIMARY_KEY label 必须提供完整主键；否则 HugeGraph 无法构造稳定 id，
+                # 后续边端点也无法可靠解析到这个顶点。
                 if not isinstance(props, dict):
                     props = {}
                 for pk in primary_keys:
@@ -520,6 +538,7 @@ def validate_graph_payload(
                         vertex_identity_index[identity] = idx
             explicit_id = vertex.get("id")
             if _identity_value_present(explicit_id):
+                # 同一个 payload 内不允许重复 id 或重复主键身份，避免边端点解析到多义目标。
                 identity = (label, "id", explicit_id)
                 if identity in vertex_identity_index:
                     errors.append(
@@ -606,6 +625,8 @@ def validate_graph_payload(
                     schema_primary_keys,
                 )
                 if missing_pk:
+                    # 端点对象缺主键时直接报错，不退化为字符串匹配；
+                    # 退化匹配会把错误数据静默写成悬空边。
                     errors.append(
                         f"edge {idx} {endpoint_name} endpoint missing primary key for label '{endpoint_label}': {missing_pk}"
                     )
@@ -662,6 +683,8 @@ def calculate_plan_hash(
         "graphspace": cfg.graphspace,
     }
     if schema_summary is not None:
+        # schema 摘要参与 hash：同一 payload 在不同主键/属性类型/schema 下
+        # 可能具有不同语义，不能复用旧 dry-run 的确认结果。
         payload["schema_summary"] = schema_summary
     encoded = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
@@ -708,6 +731,8 @@ def ingest_graph_data(
     warnings = validation["warnings"]
 
     if dry_run:
+        # dry_run 是唯一生成 plan_hash 的入口；真实写入必须带回这个 hash，
+        # 形成“用户审核过的计划”和“即将执行的计划”之间的绑定。
         return envelope_ok(
             {
                 "plan_hash": expected_plan_hash,
@@ -742,6 +767,8 @@ def ingest_graph_data(
     batch_id = f"batch-{uuid4().hex[:12]}"
     cfg = MCPConfig.from_env()
     import_data = _prepare_graph_import_data(graph_data, live_schema)
+    # 真实写入仍走 HugeGraph-AI 的 graph-import HTTP 接口；MCP 只负责
+    # schema 校验、安全确认和 payload 规范化，不直接导入 hugegraph-llm 流程。
     ai_result = post(
         "/graph-import",
         json={"data": json.dumps(import_data, sort_keys=True), "schema": cfg.graph},

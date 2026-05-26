@@ -46,6 +46,8 @@ from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
 
 def _read_count(gremlin_query: str) -> dict[str, Any]:
     result = gremlin_tools.execute_gremlin_read(f"{gremlin_query}.count()")
+    # execute_gremlin_read 已逐步迁移到统一 envelope，但这里仍兼容旧的
+    # success=false 形状，避免低层工具格式差异破坏 dry-run 安全链。
     if isinstance(result, dict) and result.get("ok") is False:
         return result
     if isinstance(result, dict) and result.get("success") is False:
@@ -124,6 +126,8 @@ def calculate_graph_change_plan_hash(
     if schema_summary is not None:
         payload["schema_summary"] = schema_summary
     if extra_hash_context is not None:
+        # SQL 导入等上游链路会把来源 SQL、映射配置放进额外上下文。
+        # 同一个 change_plan 如果来自不同 SQL 或 mapping，不能复用确认 hash。
         payload["extra_hash_context"] = extra_hash_context
     encoded = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
@@ -159,11 +163,15 @@ def dry_run_graph_change_plan(
             "action": op,
         }
         if op not in WRITE_OPS:
+            # create 操作没有“必须命中唯一旧数据”的要求；真正的 schema/payload
+            # 合法性已经在 validate 阶段检查，因此 dry-run 只展示计划。
             item["matched_count"] = None
             preview.append(item)
             continue
 
         if op in {"update_edge", "delete_edge"}:
+            # 边的 update/delete 先分别确认两个端点唯一，再确认边本身唯一。
+            # 这样错误能定位到 source/target，而不是只得到一条模糊的边匹配失败。
             endpoint_failed = False
             for endpoint, endpoint_query in (
                 ("source", _source_vertex_match_query(operation)),
@@ -234,6 +242,8 @@ def dry_run_graph_change_plan(
             and operation.get("cascade", False) is False
             and matched_count == 1
         ):
+            # 默认禁止删除带边的顶点，避免 HugeGraph 侧级联行为造成不可预期的数据损失。
+            # 用户需要先显式删除关联边，再删除顶点。
             edge_count_result = _read_count(f"{match_query}.bothE()")
             if not edge_count_result.get("ok"):
                 errors.append(
@@ -270,6 +280,8 @@ def dry_run_graph_change_plan(
                 )
             else:
                 item["associated_edges"] = edge_result["data"]["values"]
+                # 目前 cascade=true 只做关联边预览，不执行级联删除。
+                # 这是有意的保守策略：真实级联删除需要单独的产品决策和测试覆盖。
                 errors.append(
                     _validation_error(
                         idx,
@@ -315,6 +327,8 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
     for idx, operation in enumerate(operations):
         op = str(operation.get("op") or operation.get("type"))
         if op in WRITE_OPS:
+            # 执行前再次读取 matched_count，处理 dry-run 和 confirm 之间图状态变化
+            # 的 TOCTOU 风险；只要匹配不再唯一，就拒绝写入。
             if op in {"update_edge", "delete_edge"}:
                 for endpoint, endpoint_query in (
                     ("source", _source_vertex_match_query(operation)),
@@ -384,6 +398,8 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                 retryable=True,
             )
         if op == "delete_vertex":
+            # 删除顶点后立即反查，确保 HugeGraph 已经实际移除目标。
+            # 这能捕获后端静默失败或异步状态异常，而不是只信任写接口返回。
             verify_result = _read_count(_vertex_match_query(operation))
             if not verify_result.get("ok"):
                 return verify_result

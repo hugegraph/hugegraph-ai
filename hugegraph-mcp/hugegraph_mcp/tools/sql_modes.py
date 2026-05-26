@@ -76,11 +76,14 @@ def _handle_sql_mode(
         if not preview_result.get("ok"):
             return preview_result
 
+        # 映射建议只基于 SQL 预览结果生成，不触碰 HugeGraph 写入链。
+        # 用户可以先检查列名、样例行和 mapping，再决定是否进入 sql_import。
         preview_data = preview_result.get("data") or {}
         columns = preview_data.get("columns", [])
         rows = preview_data.get("rows", [])
         derived_table_name = (
-            table_name or f"{preview_data.get('source_ref', {}).get('path', 'sql')}_preview"
+            table_name
+            or f"{preview_data.get('source_ref', {}).get('path', 'sql')}_preview"
         )
 
         mock_table_data = {
@@ -126,6 +129,9 @@ def _handle_sql_mode(
         if mapped_graph_data is None:
             return mapped
 
+        # SQL 导入最终仍复用 graph_data 的安全链：先生成 change_plan，
+        # 再 dry-run/confirm/plan_hash。SQL 来源和 mapping 会进入 hash 上下文，
+        # 防止同一 change_plan 被不同 SQL 结果复用确认。
         change_plan = graph_data_to_change_plan(mapped_graph_data)
         sql_hash_context = {
             "sql_source": sql_source,

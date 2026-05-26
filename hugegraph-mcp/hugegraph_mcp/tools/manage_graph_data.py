@@ -77,7 +77,8 @@ from hugegraph_mcp.tools.graph_data_validate import (
     validate_graph_change_plan,
 )
 
-
+# 这里保留一批下划线 helper 的 re-export，是为了兼容既有测试和旧调用方。
+# 新代码应优先直接依赖 graph_data_* 子模块，避免继续扩大这个兼容面。
 __all__ = [
     "ALLOWED_OPS",
     "EDGE_OPS",
@@ -152,6 +153,8 @@ def manage_graph_data(
                 "VALIDATION_ERROR",
                 "graph_data is required for mode='import'",
             )
+        # import 模式以用户友好的 graph_data 为输入，但后续安全链统一处理
+        # change_plan；这样 import/update/delete 能共享 dry-run、hash 和执行逻辑。
         plan = graph_data_to_change_plan(graph_data)
     elif mode in {"update", "delete"}:
         if change_plan is None:
@@ -171,6 +174,8 @@ def manage_graph_data(
             details={"mode": mode},
         )
 
+    # mode 和 op 的关系是第一道边界：import 只能 create，update/delete
+    # 只能执行对应操作，避免用户把高风险操作塞进低风险入口。
     mode_validation = _validate_mode_operations(mode, plan)
     if not mode_validation["valid"]:
         return envelope_err(
@@ -179,6 +184,8 @@ def manage_graph_data(
             details={"errors": mode_validation["errors"]},
         )
 
+    # 写入前必须读取 live schema。这里不允许在 schema 缺失时降级执行，
+    # 因为主键、端点和属性合法性都依赖当前图的真实 schema。
     live_schema = _fetch_live_schema()
     if live_schema is None:
         return envelope_err(
@@ -189,6 +196,8 @@ def manage_graph_data(
         )
 
     if mode == "import" and graph_data is not None:
+        # import 额外校验原始 graph_data，覆盖 change_plan 不容易表达的规则：
+        # 顶点主键是否齐全、边端点是否能解析、payload 内部是否有重复身份。
         payload_validation = ingest_graph_data.validate_graph_payload(
             graph_data,
             live_schema=live_schema,
@@ -223,6 +232,8 @@ def manage_graph_data(
     if dry_run:
         return envelope_ok(dry_run_result, warnings=dry_run_result.get("warnings", []))
 
+    # readonly 需要在执行期再检查，不能只依赖 server 注册时隐藏写工具；
+    # 长运行进程和测试中都可能动态切换配置或直接调用内部函数。
     violation = guard(Capability.DATA_WRITE)
     if violation is not None:
         return violation
@@ -235,6 +246,8 @@ def manage_graph_data(
         )
 
     expected_plan_hash = dry_run_result["plan_hash"]
+    # plan_hash 绑定 change_plan、graph/graphspace、schema 摘要和额外上下文，
+    # 防止用户 dry-run 后修改 payload，或 schema/SQL 来源发生变化后继续执行旧确认。
     if plan_hash != expected_plan_hash:
         return envelope_err(
             ErrorType.PLAN_HASH_MISMATCH,

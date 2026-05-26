@@ -51,6 +51,8 @@ def primary_key_names(vertex_label: dict[str, Any]) -> list[str]:
 
 
 def schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any] | None:
+    # inspect_graph/get_live_schema 可能返回 {"schema": {...}}，也可能直接返回
+    # schema 本体；共享入口统一解包，避免各工具各自判断格式。
     if not live_schema:
         return None
     raw = live_schema.get("schema") or live_schema
@@ -117,6 +119,9 @@ def normalized_schema_summary(
     if raw is None:
         return None
 
+    # plan hash 只关心会影响写入语义的 schema 字段：
+    # 属性类型、label 的属性/主键/端点、索引定义。id、状态、创建时间等
+    # 元数据被刻意忽略，防止无关字段变化导致 confirm 阶段误拒。
     return {
         "propertykeys": _normalize_schema_items(
             raw.get("propertykeys"),

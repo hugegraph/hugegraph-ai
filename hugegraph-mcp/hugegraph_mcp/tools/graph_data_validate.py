@@ -57,10 +57,12 @@ ValidationError = dict[str, Any]
 
 
 def _schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any]:
+    # 兼容旧测试对私有 helper 的直接引用；真实实现集中在 schema_utils。
     return schema_payload(live_schema) or {}
 
 
 def _schema_name(item: Any) -> str | None:
+    # 兼容 HugeGraph schema 中字符串/对象两种属性表示方式。
     return schema_name(item)
 
 
@@ -233,6 +235,8 @@ def validate_graph_change_plan(
 
     operations = _operations(change_plan)
     raw_schema = _schema_payload(live_schema)
+    # 先把 live schema 建成按 label/name 查找的索引，后续每个操作只做 O(1)
+    # 查找；同时保证校验依据始终来自同一份 schema 快照。
     vertex_labels = _vertex_labels(raw_schema)
     edge_labels = _edge_labels(raw_schema)
     vertex_properties = {
@@ -300,6 +304,8 @@ def validate_graph_change_plan(
                 warnings.append(
                     f"operation {idx} references vertex label '{label}' with no primary_keys"
                 )
+            # properties/match/set 都只能引用该 label 已定义的属性。
+            # 这里先做字段白名单检查，再按 op 做更严格的业务约束。
             _validate_field_map(
                 idx=idx,
                 operation=operation,
@@ -333,6 +339,8 @@ def validate_graph_change_plan(
                         )
                     )
                 elif any(pk in set_values for pk in pks):
+                    # 主键是顶点身份的一部分，更新主键等价于换一个顶点；
+                    # 这种操作必须拆成显式 delete + create。
                     errors.append(
                         _validation_error(
                             idx,
@@ -370,6 +378,9 @@ def validate_graph_change_plan(
             edge_schema = edge_labels[label]
             source_label = operation.get("source_label") or operation.get("outVLabel")
             target_label = operation.get("target_label") or operation.get("inVLabel")
+            # 边操作必须同时满足两层约束：
+            # 1. 请求里的端点 label 存在；
+            # 2. 请求里的端点方向与 edge label 在 schema 中定义的方向一致。
             for endpoint_name, endpoint_label in (
                 ("source_label", source_label),
                 ("target_label", target_label),
@@ -447,6 +458,8 @@ def validate_graph_change_plan(
                         "inVLabel",
                     )
                 ):
+                    # 边端点决定边身份，不能作为 update 的 set 字段修改。
+                    # 如果要迁移边，应显式删除旧边并创建新边。
                     errors.append(
                         _validation_error(
                             idx,
