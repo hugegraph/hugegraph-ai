@@ -20,7 +20,9 @@ server.py 只负责参数校验和 mode 分发，具体业务逻辑委托给 too
 import logging
 import logging.handlers
 import os
+import time
 from logging.handlers import RotatingFileHandler
+from typing import Any
 
 # ---- 启动时 patch：阻止 pyhugegraph 模块级日志初始化写入文件 ----
 # pyhugegraph 在 import 时会创建 RotatingFileHandler 写入 'logs/' 目录，
@@ -81,13 +83,8 @@ from hugegraph_mcp.envelope import ErrorType, envelope_err
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
 from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
-from hugegraph_mcp.tools.import_table import import_table_data
 from hugegraph_mcp.tools.ingest_graph_data import ingest_graph_data
-from hugegraph_mcp.tools.manage_graph_data import (
-    graph_data_to_change_plan,
-    manage_graph_data,
-)
-from hugegraph_mcp.tools.sql_modes import _handle_sql_mode
+from hugegraph_mcp.tools.manage_graph_data import manage_graph_data
 from hugegraph_mcp.tools.manage_schema import manage_schema
 from hugegraph_mcp.tools.query_graph import query_graph_by_text
 from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
@@ -98,9 +95,50 @@ os.makedirs = _original_makedirs
 logging.disable(logging.CRITICAL)
 
 READONLY = MCPConfig.from_env().is_readonly()
-ADMIN_MODE = os.environ.get("HUGEGRAPH_MCP_ADMIN_MODE", "").strip().lower() in TRUE_VALUES
+ADMIN_MODE = (
+    os.environ.get("HUGEGRAPH_MCP_ADMIN_MODE", "").strip().lower() in TRUE_VALUES
+)
 
 mcp = FastMCP("HugeGraph MCP")
+
+
+def _align_public_tool_envelope(
+    result: dict[str, Any],
+    *,
+    tool_name: str,
+    duration_ms: float,
+) -> dict[str, Any]:
+    """Add public wrapper metadata without changing the inner tool payload."""
+    aligned = dict(result)
+    meta = dict(aligned.get("meta") or {})
+    meta.setdefault("duration_ms", duration_ms)
+    aligned["meta"] = meta
+
+    if aligned.get("ok") is False and isinstance(aligned.get("error"), dict):
+        error = dict(aligned["error"])
+        error["source"] = tool_name
+        aligned["error"] = error
+
+    return aligned
+
+
+def _call_public_tool(tool_name: str, func, *args, **kwargs) -> dict[str, Any]:
+    start = time.perf_counter()
+    try:
+        result = func(*args, **kwargs)
+    except Exception as exc:
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            f"{tool_name} failed: {exc!s}",
+            source=tool_name,
+            details={"tool": tool_name},
+            duration_ms=(time.perf_counter() - start) * 1000.0,
+        )
+    return _align_public_tool_envelope(
+        result,
+        tool_name=tool_name,
+        duration_ms=(time.perf_counter() - start) * 1000.0,
+    )
 
 
 def _admin_gate(tool_name: str) -> dict | None:
@@ -111,11 +149,13 @@ def _admin_gate(tool_name: str) -> dict | None:
         ErrorType.FEATURE_DISABLED,
         f"{tool_name} is disabled by default in V1. Enable with HUGEGRAPH_MCP_ADMIN_MODE=true.",
         suggestion="Set HUGEGRAPH_MCP_ADMIN_MODE=true to enable this tool.",
+        source=tool_name,
         details={"tool": tool_name, "enable_env": "HUGEGRAPH_MCP_ADMIN_MODE"},
     )
 
 
 # ========== 工具 1：检视图状态和 schema ==========
+
 
 @mcp.tool()
 def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
@@ -123,10 +163,15 @@ def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
 
     推荐作为连接后第一个调用的工具。
     """
-    return inspect_graph(include_raw_schema=include_raw_schema)
+    return _call_public_tool(
+        "inspect_graph_tool",
+        inspect_graph,
+        include_raw_schema=include_raw_schema,
+    )
 
 
 # ========== V1 稳定工具 ==========
+
 
 @mcp.tool()
 def generate_gremlin_tool(
@@ -138,7 +183,12 @@ def generate_gremlin_tool(
     默认不执行（execute=false），返回生成的 Gremlin 查询。
     设置 execute=true 可执行生成的只读 Gremlin。
     """
-    return generate_gremlin(query=query, execute=execute)
+    return _call_public_tool(
+        "generate_gremlin_tool",
+        generate_gremlin,
+        query=query,
+        execute=execute,
+    )
 
 
 @mcp.tool()
@@ -147,7 +197,11 @@ def execute_gremlin_read_tool(gremlin_query: str) -> dict:
 
     经过 GremlinPolicy 安全检查后执行。
     """
-    return execute_gremlin_read(gremlin_query)
+    return _call_public_tool(
+        "execute_gremlin_read_tool",
+        execute_gremlin_read,
+        gremlin_query,
+    )
 
 
 @mcp.tool()
@@ -160,7 +214,13 @@ def extract_graph_data_tool(
 
     返回提取的顶点和边数据，供后续导入使用。
     """
-    return extract_graph_data(text=text, schema=schema, example_prompt=example_prompt)
+    return _call_public_tool(
+        "extract_graph_data_tool",
+        extract_graph_data,
+        text=text,
+        schema=schema,
+        example_prompt=example_prompt,
+    )
 
 
 @mcp.tool()
@@ -169,7 +229,12 @@ def design_schema_tool(operations: list[dict] | None = None) -> dict:
 
     提供 schema 设计建议和最佳实践。
     """
-    return manage_schema(mode="design", operations=operations)
+    return _call_public_tool(
+        "design_schema_tool",
+        manage_schema,
+        mode="design",
+        operations=operations,
+    )
 
 
 @mcp.tool()
@@ -183,17 +248,28 @@ def apply_schema_tool(
 
     支持 validate 和 dry_run 模式。apply 模式在 V1 中返回 FEATURE_DISABLED。
     """
+    start = time.perf_counter()
     if mode == "apply":
         return envelope_err(
             ErrorType.FEATURE_DISABLED,
             "Schema apply is disabled in V1. Use validate or dry_run mode.",
             suggestion="Use mode='validate' or mode='dry_run' to preview schema changes.",
+            source="apply_schema_tool",
             details={"mode": mode, "tool": "apply_schema_tool"},
+            duration_ms=(time.perf_counter() - start) * 1000.0,
         )
-    return manage_schema(mode=mode, operations=operations, confirm=confirm, plan_hash=plan_hash)
+    return _call_public_tool(
+        "apply_schema_tool",
+        manage_schema,
+        mode=mode,
+        operations=operations,
+        confirm=confirm,
+        plan_hash=plan_hash,
+    )
 
 
 # ========== 兼容工具：查询图 ==========
+
 
 @mcp.tool()
 def query_graph_tool(
@@ -244,12 +320,16 @@ def query_graph_tool(
 
     if mode == "generate":
         if not query:
-            return envelope_err("VALIDATION_ERROR", "query is required for mode='generate'")
+            return envelope_err(
+                "VALIDATION_ERROR", "query is required for mode='generate'"
+            )
         return generate_gremlin(query=query, execute=execute)
 
     if mode == "gremlin":
         if not gremlin_query:
-            return envelope_err("VALIDATION_ERROR", "gremlin_query is required for mode='gremlin'")
+            return envelope_err(
+                "VALIDATION_ERROR", "gremlin_query is required for mode='gremlin'"
+            )
         result = execute_gremlin_read(gremlin_query)
         return result
 
@@ -266,6 +346,7 @@ def query_graph_tool(
 
 # ========== 工具 3：设计和管理 schema ==========
 
+
 @mcp.tool()
 def manage_schema_tool(
     mode: str,
@@ -278,6 +359,14 @@ def manage_schema_tool(
     apply 模式需 dry_run 返回的 plan_hash + confirm=True。
     """
 
+    if mode == "apply":
+        return envelope_err(
+            ErrorType.FEATURE_DISABLED,
+            "Schema apply is disabled in V1. Use validate or dry_run mode.",
+            suggestion="Use mode='validate' or mode='dry_run' to preview schema changes.",
+            details={"mode": mode, "tool": "manage_schema_tool"},
+        )
+
     return manage_schema(
         mode=mode,
         operations=operations,
@@ -287,6 +376,7 @@ def manage_schema_tool(
 
 
 # ========== 工具 4：导入和管理图数据 ==========
+
 
 @mcp.tool()
 def manage_graph_data_tool(
@@ -319,7 +409,9 @@ def manage_graph_data_tool(
 
     if mode == "extract":
         if not text:
-            return envelope_err("VALIDATION_ERROR", "text is required for mode='extract'")
+            return envelope_err(
+                "VALIDATION_ERROR", "text is required for mode='extract'"
+            )
         return extract_graph_data(
             text=text,
             schema=schema,
@@ -362,13 +454,13 @@ def manage_graph_data_tool(
 
     return envelope_err(
         "VALIDATION_ERROR",
-        f"Unknown mode: {mode!r}. "
-        "Use 'extract' or 'import'.",
+        f"Unknown mode: {mode!r}. Use 'extract' or 'import'.",
         details={"mode": mode},
     )
 
 
 # ========== 兼容入口：import_graph_data_tool ==========
+
 
 @mcp.tool()
 def import_graph_data_tool(
@@ -394,7 +486,9 @@ def import_graph_data_tool(
 
     if mode == "extract":
         if not text:
-            return envelope_err("VALIDATION_ERROR", "text is required for mode='extract'")
+            return envelope_err(
+                "VALIDATION_ERROR", "text is required for mode='extract'"
+            )
         return extract_graph_data(
             text=text,
             schema=schema,
@@ -403,7 +497,9 @@ def import_graph_data_tool(
 
     if mode == "ingest":
         if graph_data is None:
-            return envelope_err("VALIDATION_ERROR", "graph_data is required for mode='ingest'")
+            return envelope_err(
+                "VALIDATION_ERROR", "graph_data is required for mode='ingest'"
+            )
         return ingest_graph_data(
             graph_data=graph_data,
             dry_run=dry_run,
@@ -429,6 +525,7 @@ def import_graph_data_tool(
 
 
 # ========== 高级调试工具 ==========
+
 
 @mcp.tool()
 def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:

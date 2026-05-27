@@ -2,7 +2,7 @@
 
 [中文文档](README.zh-CN.md)
 
-FastMCP-based Model Context Protocol server for HugeGraph. It lets AI assistants inspect graph status, query graph data, manage schema, and manage graph data through a small set of high-level tools.
+FastMCP-based Model Context Protocol server for HugeGraph. It lets AI assistants inspect graph status, generate and run read-only Gremlin, extract candidate graph data, and design or preview schema changes through a small set of V1 stable tools.
 
 ## Quick Start
 
@@ -44,9 +44,11 @@ All environment variables are optional:
 - `HUGEGRAPH_GRAPH_PATH` (default: `DEFAULT/hugegraph`)
 - `HUGEGRAPH_USER` (default: `admin`)
 - `HUGEGRAPH_PASSWORD` (default: empty string)
-- `HUGEGRAPH_MCP_READONLY` (default: `false`)
+- `HUGEGRAPH_MCP_READONLY` (default: `true`)
 - `HUGEGRAPH_MCP_ALLOW_AI` (default: `false`)
+- `HUGEGRAPH_MCP_ADMIN_MODE` (default: `false`)
 - `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL` (default: `false`)
+- `HUGEGRAPH_MCP_SQL_ENABLED` (default: `false`)
 - `HUGEGRAPH_AI_URL` (default: `http://127.0.0.1:8001`)
 - `HUGEGRAPH_AI_GRAPH_URL` (default: unset)
 - `HUGEGRAPH_MCP_TIMEOUT_SECONDS` (default: `30`)
@@ -58,8 +60,12 @@ All environment variables are optional:
 
 - `HUGEGRAPH_MCP_READONLY=true` blocks mutating schema, graph data, index, and direct write operations.
 - `HUGEGRAPH_MCP_ALLOW_AI=true` allows calls to HugeGraph-AI, including natural-language Gremlin generation and graph data extraction.
+- `HUGEGRAPH_MCP_READONLY=false` enables write-capable paths that are otherwise blocked by readonly mode.
+- `HUGEGRAPH_MCP_ADMIN_MODE=true` enables admin/debug tools such as direct Gremlin writes and embedding refresh.
 - `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true` enables the experimental GraphRAG text-query path for debugging. It is disabled by default and is not the primary user query path.
 - You can set both to `true` to allow AI-assisted read/query/extraction workflows while still blocking all writes.
+
+Safe V1 defaults are `readonly=true`, `allow_ai=false`, and `sql_enabled=false`.
 
 If first-run dependency installation is slow, pre-install the MCP server locally:
 
@@ -89,6 +95,21 @@ All high-level tools return the unified envelope:
   }
 }
 ```
+
+### V1 Stable Tool List
+
+These are the stable public V1 tools:
+
+| Tool | Description |
+| --- | --- |
+| `inspect_graph_tool` | Inspect HugeGraph Server status, schema summary, counts, readonly state, and AI availability. |
+| `generate_gremlin_tool` | Convert natural language to Gremlin through HugeGraph-AI. Defaults to generation only; set `execute=true` to run safe read-only Gremlin. |
+| `execute_gremlin_read_tool` | Execute a Gremlin traversal after read-only policy validation. |
+| `extract_graph_data_tool` | Extract candidate `{vertices, edges}` graph data from text. It does not write to HugeGraph. |
+| `design_schema_tool` | Get schema design guidance from proposed operations. |
+| `apply_schema_tool` | Validate or dry-run schema operations. `mode="apply"` is disabled in V1. |
+
+Compatibility tools such as `query_graph_tool`, `manage_schema_tool`, `manage_graph_data_tool`, and `import_graph_data_tool` remain available, but new integrations should prefer the V1 stable tools above.
 
 ### 1. Inspect Graph Status And Schema
 
@@ -428,7 +449,7 @@ Delete a graph element with a dry run:
 
 ## Advanced Debug Tools
 
-These tools are available for maintenance and debugging. Prefer the four main tools for normal workflows.
+These tools are available for maintenance and debugging. Prefer the V1 stable tools for normal workflows.
 
 ### `execute_gremlin_write_tool`
 
@@ -482,16 +503,27 @@ Tool behavior under this model:
 | --- | --- |
 | `inspect_graph_tool` | Always allowed. Returns graph status, schema summary, counts when available, and AI status. |
 | `query_graph_tool` | Read-only Gremlin execution is allowed. AI-backed Gremlin generation requires `HUGEGRAPH_MCP_ALLOW_AI=true`. GraphRAG text mode is disabled unless `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true` is also set. |
-| `manage_schema_tool` | Design, validation, and dry runs are allowed. Apply requires `readonly=false`, a previous dry run, matching `plan_hash`, and `confirm=true`. |
-| `manage_graph_data_tool` | Natural-language extraction, table mapping, and dry runs are allowed subject to AI availability where applicable. Import, update, and delete apply paths require `readonly=false`, a previous dry run, matching `plan_hash`, and `confirm=true`. |
+| `manage_schema_tool` | Compatibility wrapper. Design, validation, and dry runs are allowed; apply is disabled in V1. |
+| `manage_graph_data_tool` | Compatibility wrapper. Natural-language extraction and import dry runs are allowed where applicable; table, SQL, update, and delete modes are disabled in V1. |
 | `import_graph_data_tool` | Compatibility wrapper for graph data import. Prefer `manage_graph_data_tool` for new workflows. |
 | `refresh_vid_embeddings_tool` | Requires `readonly=false` and `confirm=true`. |
 | `execute_gremlin_write_tool` | Requires `readonly=false`. Intended for debugging and admin maintenance, not routine data loading. |
+
+V1 disabled capabilities return `FEATURE_DISABLED` instead of executing:
+
+- SQL modes and SQL-backed import (`sql_preview`, `sql_mapping_suggest`, `sql_import`)
+- Table import
+- Graph data update/delete modes
+- Direct debug writes unless `HUGEGRAPH_MCP_ADMIN_MODE=true`
+- Refreshing VID embeddings unless `HUGEGRAPH_MCP_ADMIN_MODE=true`
+- Full schema apply through `apply_schema_tool` and the compatibility schema apply path
 
 ## Safety Notes
 
 - Set `HUGEGRAPH_MCP_READONLY=true` for exploration, demos, and production read-only assistant access.
 - Set `HUGEGRAPH_MCP_ALLOW_AI=true` only when the deployment should call HugeGraph-AI.
+- Set `HUGEGRAPH_MCP_READONLY=false` only when writes are intended.
+- Set `HUGEGRAPH_MCP_ADMIN_MODE=true` only for maintenance/debug sessions that need admin tools.
 - Keep `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=false` for normal user-facing deployments; enable it only while debugging GraphRAG.
 - Readonly mode is enforced at runtime for write paths, including schema changes, graph data import/update/delete apply paths, direct write queries, and embedding refresh.
 - Schema apply and graph data import/update/delete apply paths require a previous dry run, a matching `plan_hash`, and `confirm=true`.

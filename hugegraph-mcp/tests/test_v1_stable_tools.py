@@ -16,7 +16,16 @@
 from unittest.mock import Mock
 
 from hugegraph_mcp import server
-from hugegraph_mcp.envelope import envelope_ok
+from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
+
+
+def _assert_v1_envelope_shape(result):
+    assert set(result) == {"ok", "data", "error", "warnings", "next_actions", "meta"}
+    assert result["meta"]["request_id"].startswith("req-")
+    assert "graph" in result["meta"]
+    assert "graphspace" in result["meta"]
+    assert "readonly" in result["meta"]
+    assert "duration_ms" in result["meta"]
 
 
 def test_generate_gremlin_tool_routes_to_generate_gremlin(monkeypatch):
@@ -26,7 +35,9 @@ def test_generate_gremlin_tool_routes_to_generate_gremlin(monkeypatch):
 
     result = server.generate_gremlin_tool(query="count vertices", execute=True)
 
-    assert result == expected
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
     mock.assert_called_once_with(query="count vertices", execute=True)
 
 
@@ -37,7 +48,9 @@ def test_execute_gremlin_read_tool_routes_to_execute_gremlin_read(monkeypatch):
 
     result = server.execute_gremlin_read_tool(gremlin_query="g.V().limit(3)")
 
-    assert result == expected
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
     mock.assert_called_once_with("g.V().limit(3)")
 
 
@@ -52,7 +65,9 @@ def test_extract_graph_data_tool_routes_to_extract_graph_data(monkeypatch):
         example_prompt="extract people",
     )
 
-    assert result == expected
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
     mock.assert_called_once_with(
         text="Alice knows Bob.",
         schema={"vertexlabels": ["person"]},
@@ -67,10 +82,10 @@ def test_design_schema_tool_routes_to_manage_schema_design(monkeypatch):
 
     result = server.design_schema_tool(operations=[{"op": "add_vertex_label"}])
 
-    assert result == expected
-    mock.assert_called_once_with(
-        mode="design", operations=[{"op": "add_vertex_label"}]
-    )
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
+    mock.assert_called_once_with(mode="design", operations=[{"op": "add_vertex_label"}])
 
 
 def test_apply_schema_tool_validate_routes_to_manage_schema(monkeypatch):
@@ -82,7 +97,9 @@ def test_apply_schema_tool_validate_routes_to_manage_schema(monkeypatch):
         mode="validate", operations=[{"op": "add_vertex_label"}]
     )
 
-    assert result == expected
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
     mock.assert_called_once_with(
         mode="validate",
         operations=[{"op": "add_vertex_label"}],
@@ -100,7 +117,9 @@ def test_apply_schema_tool_dry_run_routes_to_manage_schema(monkeypatch):
         mode="dry_run", operations=[{"op": "add_vertex_label"}]
     )
 
-    assert result == expected
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
     mock.assert_called_once_with(
         mode="dry_run",
         operations=[{"op": "add_vertex_label"}],
@@ -112,9 +131,62 @@ def test_apply_schema_tool_dry_run_routes_to_manage_schema(monkeypatch):
 def test_apply_schema_tool_apply_returns_feature_disabled():
     result = server.apply_schema_tool(mode="apply", operations=[{"op": "test"}])
 
+    _assert_v1_envelope_shape(result)
     assert result["ok"] is False
     assert result["error"]["type"] == "FEATURE_DISABLED"
+    assert result["error"]["source"] == "apply_schema_tool"
     assert "apply" in result["error"]["message"].lower()
+
+
+def test_generate_gremlin_tool_aligns_error_source(monkeypatch):
+    expected = {
+        **envelope_ok(),
+        "ok": False,
+        "data": None,
+        "error": {
+            "type": "HUGEGRAPH_AI_UNAVAILABLE",
+            "message": "AI disabled",
+            "suggestion": None,
+            "retryable": False,
+            "source": "hugegraph-ai",
+            "details": {},
+        },
+    }
+    mock = Mock(return_value=expected)
+    monkeypatch.setattr(server, "generate_gremlin", mock)
+
+    result = server.generate_gremlin_tool(query="count vertices")
+
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is False
+    assert result["error"]["source"] == "generate_gremlin_tool"
+
+
+def test_execute_gremlin_read_tool_aligns_error_source(monkeypatch):
+    expected = envelope_err(
+        ErrorType.UNSAFE_GREMLIN,
+        "Unsafe query",
+        source="gremlin_tools",
+    )
+    mock = Mock(return_value=expected)
+    monkeypatch.setattr(server, "execute_gremlin_read", mock)
+
+    result = server.execute_gremlin_read_tool(gremlin_query="g.addV('person')")
+
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is False
+    assert result["error"]["source"] == "execute_gremlin_read_tool"
+
+
+def test_manage_schema_tool_apply_returns_feature_disabled():
+    result = server.manage_schema_tool(mode="apply", operations=[{"op": "test"}])
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FEATURE_DISABLED"
+    assert result["error"]["details"] == {
+        "mode": "apply",
+        "tool": "manage_schema_tool",
+    }
 
 
 def test_admin_gate_blocks_write_tool_by_default(monkeypatch):
