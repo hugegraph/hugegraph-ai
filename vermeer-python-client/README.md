@@ -1,6 +1,6 @@
 # vermeer-python-client
 
-The `vermeer-python-client` is a Python client(SDK) for [Vermeer](https://github.com/apache/incubator-hugegraph-computer/tree/master/vermeer#readme) (A high-performance distributed graph computing platform based on memory, supporting more than 15 graph algorithms, custom algorithm extensions, and custom data source access & easy to deploy and use)
+The `vermeer-python-client` is a Python client(SDK) for [Vermeer](https://github.com/apache/hugegraph-computer/tree/master/vermeer#readme) (A high-performance distributed graph computing platform based on memory, supporting more than 15 graph algorithms, custom algorithm extensions, and custom data source access & easy to deploy and use)
 
 ## Installation
 
@@ -19,8 +19,8 @@ To install the `vermeer-python-client`, you can use uv/pip:
 To install from the source, clone the repository and install the required dependencies:
 
 ```bash
-git clone https://github.com/apache/incubator-hugegraph-ai.git
-cd incubator-hugegraph-ai/vermeer-python-client
+git clone https://github.com/apache/hugegraph-ai.git
+cd hugegraph-ai/vermeer-python-client
 
 # Use uv sync to install dependencies (standalone module, not in workspace)
 uv sync  # Automatically creates .venv and installs dependencies
@@ -83,6 +83,6 @@ Thank you to all the people who already contributed to `vermeer-python-client`!
 
 ## Contact Us
 
-* [GitHub Issues](https://github.com/apache/incubator-hugegraph-ai/issues): Feedback on usage issues and functional requirements (quick response)
+* [GitHub Issues](https://github.com/apache/hugegraph-ai/issues): Feedback on usage issues and functional requirements (quick response)
 * Feedback Email: [dev@hugegraph.apache.org](mailto:dev@hugegraph.apache.org) (subscriber only)
 ```

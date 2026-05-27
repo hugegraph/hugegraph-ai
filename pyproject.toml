@@ -53,10 +53,10 @@ all = ["hugegraph-python-client", "hugegraph-llm", "hugegraph-ml", "vermeer-pyth
 
 [project.urls]
 homepage = "https://hugegraph.apache.org/"
-repository = "https://github.com/apache/incubator-hugegraph-ai"
+repository = "https://github.com/apache/hugegraph-ai"
 documentation = "https://hugegraph.apache.org/docs/quickstart/hugegraph-ai/"
-bug_tracker = "https://github.com/apache/incubator-hugegraph-ai/issues"
-changelog = "https://github.com/apache/incubator-hugegraph-ai/releases"
+bug_tracker = "https://github.com/apache/hugegraph-ai/issues"
+changelog = "https://github.com/apache/hugegraph-ai/releases"
 
 [build-system]
 requires = ["hatchling"]

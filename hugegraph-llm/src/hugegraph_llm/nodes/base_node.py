@@ -13,6 +13,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import traceback
 from typing import Dict, Optional
 
 from pycgraph import CStatus, GNode
@@ -20,6 +21,11 @@ from pycgraph import CStatus, GNode
 from hugegraph_llm.nodes.util import init_context
 from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 from hugegraph_llm.utils.log import log
+
+
+def _format_node_err(node, exc: Exception, prefix: str = "Node failed") -> str:
+    node_info = f"Node type: {type(node).__name__}, Node object: {node}"
+    return f"{prefix}: {exc}\n{node_info}\n{traceback.format_exc()}"
 
 
 class BaseNode(GNode):
@@ -70,10 +76,8 @@ class BaseNode(GNode):
         try:
             res = self.operator_schedule(data_json)
         except (ValueError, TypeError, KeyError, NotImplementedError) as exc:
-            import traceback
-
-            node_info = f"Node type: {type(self).__name__}, Node object: {self}"
-            err_msg = f"Node failed: {exc}\n{node_info}\n{traceback.format_exc()}"
+            err_msg = _format_node_err(self, exc)
+            log.error(err_msg)
             return CStatus(-1, err_msg)
         # For unexpected exceptions, re-raise to let them propagate or be caught elsewhere
 

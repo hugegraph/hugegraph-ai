@@ -81,8 +81,7 @@ class SchemaBuildNode(BaseNode):
     def operator_schedule(self, data_json):
         try:
             schema_result = self.schema_builder.run(data_json)
-
             return {"schema": schema_result}
         except (ValueError, RuntimeError) as e:
             log.error("Failed to generate schema: %s", e)
-            return {"schema": f"Schema generation failed: {e}"}
+            raise ValueError(f"Failed to generate schema: {e}") from e
