@@ -53,7 +53,12 @@ def test_generate_gremlin_default_no_execute(monkeypatch):
 
 def test_generate_gremlin_safe_execute(monkeypatch):
     post = Mock(return_value=_ai_ok("g.V().limit(2)"))
-    execution_result = {"data": [{"id": 1}], "total": 1, "duration_ms": 1, "is_read": True}
+    execution_result = {
+        "data": [{"id": 1}],
+        "total": 1,
+        "duration_ms": 1,
+        "is_read": True,
+    }
     execute_read = Mock(return_value=execution_result)
     monkeypatch.setattr(generate_gremlin_module, "post", post)
     monkeypatch.setattr(generate_gremlin_module, "execute_gremlin_read", execute_read)

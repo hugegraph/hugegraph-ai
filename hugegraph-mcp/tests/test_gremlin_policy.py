@@ -13,7 +13,11 @@
 
 """Tests for GremlinPolicy (Milestone 3)."""
 
-from hugegraph_mcp.gremlin_policy import GremlinDecision, GremlinPolicy, check_gremlin_read
+from hugegraph_mcp.gremlin_policy import (
+    GremlinDecision,
+    GremlinPolicy,
+    check_gremlin_read,
+)
 
 
 def test_safe_query_returns_allowed():
@@ -40,7 +44,9 @@ def test_uncertain_query_returns_blocked():
     assert decision.allowed is False
     assert decision.classification == "uncertain"
     assert decision.error_type == "UNSAFE_GREMLIN"
-    assert "ambiguous" in decision.reason.lower() or "unknown" in decision.reason.lower()
+    assert (
+        "ambiguous" in decision.reason.lower() or "unknown" in decision.reason.lower()
+    )
 
 
 def test_decision_is_frozen_dataclass():

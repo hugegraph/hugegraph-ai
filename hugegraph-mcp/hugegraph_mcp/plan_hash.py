@@ -47,7 +47,7 @@ class PlanContext:
     payload_digest: str
     schema_hash: str | None
     nonce: str
-    expires_at: float
+    expires_at: int
     extra_context: dict[str, Any] = field(default_factory=dict)
 
 
@@ -55,12 +55,10 @@ def compute_plan_hash(context: PlanContext) -> str:
     """计算目标绑定的计划哈希。
 
     使用 canonical JSON 序列化（sorted keys, stable normalization），
-    对 PlanContext（排除 expires_at）做 SHA256 哈希。
-    expires_at 由 verify_plan_hash 单独检查。
+    对完整 PlanContext 做 SHA256 哈希。expires_at 参与哈希，防止
+    调用方在 confirm 时延长计划有效期。
     """
-    # expires_at 不参与哈希：confirm 时时间已变，哈希必须稳定
     payload = asdict(context)
-    payload.pop("expires_at", None)
     payload = _canonicalize(payload)
     encoded = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
@@ -81,7 +79,7 @@ def build_plan_context(
         (PlanContext, plan_hash) 元组。
     """
     cfg = MCPConfig.from_env()
-    now = time.time()
+    now = int(time.time())
 
     if nonce is None:
         nonce = _generate_nonce()
@@ -112,7 +110,7 @@ def verify_plan_hash(
     payload_digest: str,
     schema_hash: str | None = None,
     nonce: str | None = None,
-    expires_at: float | None = None,
+    expires_at: float | int | None = None,
     extra_context: dict[str, Any] | None = None,
 ) -> tuple[bool, str | None, dict[str, Any] | None]:
     """验证提交的 plan_hash。
@@ -128,14 +126,20 @@ def verify_plan_hash(
     if nonce is None:
         return False, "PLAN_HASH_MISMATCH", {"reason": "Missing nonce in plan context."}
 
+    expires_at_seconds = _coerce_expires_at(expires_at)
+
     # 检查过期。expires_at 是 dry_run 返回的计划上下文字段，confirm 时必须传回；
-    # 缺失时按过期处理，避免调用方用 None 绕过有效期校验。
-    if expires_at is None or time.time() > expires_at:
-        return False, "PLAN_EXPIRED", {
-            "expires_at": expires_at,
-            "current_time": time.time(),
-            "reason": "Plan has expired. Run dry_run again.",
-        }
+    # 缺失或格式错误时按过期处理，避免调用方用 None 绕过有效期校验。
+    if expires_at_seconds is None or int(time.time()) > expires_at_seconds:
+        return (
+            False,
+            "PLAN_EXPIRED",
+            {
+                "expires_at": expires_at,
+                "current_time": int(time.time()),
+                "reason": "Plan has expired. Run dry_run again.",
+            },
+        )
 
     # 重建上下文（使用当前 config，不是提交时的 config）
     context = PlanContext(
@@ -149,18 +153,22 @@ def verify_plan_hash(
         payload_digest=payload_digest,
         schema_hash=schema_hash,
         nonce=nonce,
-        expires_at=0,  # 不参与哈希
+        expires_at=expires_at_seconds,
         extra_context=extra_context or {},
     )
 
     expected_hash = compute_plan_hash(context)
 
     if submitted_hash != expected_hash:
-        return False, "PLAN_HASH_MISMATCH", {
-            "expected_hash": expected_hash,
-            "provided_hash": submitted_hash,
-            "reason": "Plan context has changed since dry_run.",
-        }
+        return (
+            False,
+            "PLAN_HASH_MISMATCH",
+            {
+                "expected_hash": expected_hash,
+                "provided_hash": submitted_hash,
+                "reason": "Plan context has changed since dry_run.",
+            },
+        )
 
     return True, None, None
 
@@ -186,3 +194,12 @@ def _generate_nonce() -> str:
     from uuid import uuid4
 
     return uuid4().hex[:12]
+
+
+def _coerce_expires_at(value: float | int | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

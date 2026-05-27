@@ -11,18 +11,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
-import re
-import sqlite3
-from typing import Any
-
 """SQLite 适配层 — SQL 数据源的安全访问。
 
 所有 SQL 操作通过只读连接执行：uri mode=ro, PRAGMA query_only=ON, authorizer 拦截写入。
 只允许 SELECT/WITH...SELECT/EXPLAIN/只读 PRAGMA，拒绝 DML/DDL。
 BLOB 和不可序列化值替换为人类可读摘要。
 """
+
+import json
+import os
+import re
+import sqlite3
+from typing import Any
 
 from hugegraph_mcp.config import config
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
@@ -32,13 +32,29 @@ _UNSAFE_SQL_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
-_READONLY_PRAGMAS = frozenset({
-    "table_info", "table_xinfo", "index_list", "index_info", "index_xinfo",
-    "foreign_key_list", "foreign_key_check", "collation_list", "compile_options",
-    "data_version", "database_list", "function_list", "module_list",
-    "page_count", "page_size", "quick_check", "schema_version", "user_version",
-    "wal_checkpoint",
-})
+_READONLY_PRAGMAS = frozenset(
+    {
+        "table_info",
+        "table_xinfo",
+        "index_list",
+        "index_info",
+        "index_xinfo",
+        "foreign_key_list",
+        "foreign_key_check",
+        "collation_list",
+        "compile_options",
+        "data_version",
+        "database_list",
+        "function_list",
+        "module_list",
+        "page_count",
+        "page_size",
+        "quick_check",
+        "schema_version",
+        "user_version",
+        "wal_checkpoint",
+    }
+)
 
 
 def validate_sqlite_source(sql_source: dict[str, Any]) -> dict[str, Any] | None:
@@ -137,9 +153,7 @@ def validate_readonly_sql(sql_query: str) -> dict[str, Any] | None:
         )
 
     if re.search(r"\bPRAGMA\b", query, re.IGNORECASE):
-        pragma_match = re.search(
-            r"\bPRAGMA\s+(\w+)", query, re.IGNORECASE
-        )
+        pragma_match = re.search(r"\bPRAGMA\s+(\w+)", query, re.IGNORECASE)
         if pragma_match:
             pragma_name = pragma_match.group(1).lower()
             if pragma_name not in _READONLY_PRAGMAS:
@@ -147,8 +161,7 @@ def validate_readonly_sql(sql_query: str) -> dict[str, Any] | None:
                     ErrorType.UNSAFE_SQL,
                     f"PRAGMA '{pragma_name}' is not permitted.",
                     suggestion=(
-                        "Only informational PRAGMAs are allowed "
-                        "in read-only mode."
+                        "Only informational PRAGMAs are allowed in read-only mode."
                     ),
                     details={"pragma": pragma_name},
                 )
@@ -215,11 +228,7 @@ def execute_select_to_table_data(
         return sql_err
 
     source_path = sql_source["path"]
-    limit = (
-        max_rows
-        if max_rows is not None
-        else config.sql_max_import_rows
-    )
+    limit = max_rows if max_rows is not None else config.sql_max_import_rows
 
     try:
         conn = _open_readonly_connection(source_path)
@@ -259,9 +268,7 @@ def execute_select_to_table_data(
 
         row_count = len(rows)
         if row_count == 0:
-            warnings.append(
-                "SQL query returned zero rows; import will be skipped."
-            )
+            warnings.append("SQL query returned zero rows; import will be skipped.")
 
         return envelope_ok(
             {
@@ -320,15 +327,11 @@ def _preview_table(source_path: str, table_name: str) -> dict[str, Any]:
         for row in conn.execute(f"PRAGMA table_info('{table_name}')"):
             columns.append({"name": row[1], "type": row[2]})
 
-        count_row = conn.execute(
-            f"SELECT COUNT(*) FROM \"{table_name}\""
-        ).fetchone()
+        count_row = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()
         estimated_rows = count_row[0] if count_row else 0
 
         limit = config.sql_max_preview_rows
-        cursor = conn.execute(
-            f"SELECT * FROM \"{table_name}\" LIMIT {limit}"
-        )
+        cursor = conn.execute(f'SELECT * FROM "{table_name}" LIMIT {limit}')
         rows, truncated, blob_warnings = _fetch_rows(cursor, limit)
 
         return envelope_ok(
@@ -436,10 +439,7 @@ def _readonly_authorizer(action: int, *args: Any) -> int:
 
 
 def _column_info(cursor: sqlite3.Cursor) -> list[dict[str, str]]:
-    return [
-        {"name": desc[0], "type": ""}
-        for desc in cursor.description or []
-    ]
+    return [{"name": desc[0], "type": ""} for desc in cursor.description or []]
 
 
 def _fetch_rows(
@@ -535,14 +535,11 @@ def _derive_table_name(sql_query: str) -> str:
     return "sql_preview"
 
 
-def _validate_column_names(
-    columns: list[dict[str, str]], warnings: list[str]
-) -> None:
+def _validate_column_names(columns: list[dict[str, str]], warnings: list[str]) -> None:
     names = [col["name"] for col in columns]
     if any(not name for name in names):
         raise ValueError(
-            "SQL result contains empty column names. "
-            "Use AS to alias computed columns."
+            "SQL result contains empty column names. Use AS to alias computed columns."
         )
     if len(names) != len(set(names)):
         seen: set[str] = set()

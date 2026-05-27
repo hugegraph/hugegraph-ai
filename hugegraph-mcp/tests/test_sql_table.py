@@ -48,9 +48,7 @@ def temp_sqlite_db():
     conn.execute(
         "INSERT INTO chunks VALUES (2,'doc2.md','Methods','Some content',x'DEADBEEF')"
     )
-    conn.execute(
-        "INSERT INTO chunks VALUES (3,'doc3.md','Results','Result text',NULL)"
-    )
+    conn.execute("INSERT INTO chunks VALUES (3,'doc3.md','Results','Result text',NULL)")
     conn.commit()
     conn.close()
     yield path
@@ -85,29 +83,35 @@ class TestValidateSqliteSource:
 
     def test_rejects_when_sql_disabled(self, sql_config):
         sql_config.sql_enabled = False
-        result = validate_sqlite_source({
-            "type": "sqlite",
-            "path": sql_config.sqlite_allowlist[0],
-        })
+        result = validate_sqlite_source(
+            {
+                "type": "sqlite",
+                "path": sql_config.sqlite_allowlist[0],
+            }
+        )
         assert result is not None
         assert result["error"]["type"] == ErrorType.AUTHORIZATION_FAILED.value
         assert "not enabled" in result["error"]["message"].lower()
 
     def test_rejects_path_not_in_allowlist(self, sql_config):
-        result = validate_sqlite_source({
-            "type": "sqlite",
-            "path": "/not/allowed/path.sqlite3",
-        })
+        result = validate_sqlite_source(
+            {
+                "type": "sqlite",
+                "path": "/not/allowed/path.sqlite3",
+            }
+        )
         assert result is not None
         assert result["error"]["type"] == ErrorType.AUTHORIZATION_FAILED.value
 
     def test_rejects_missing_file(self, sql_config):
         nonexistent = sql_config.sqlite_allowlist[0] + ".nonexistent"
         sql_config.sqlite_allowlist = (nonexistent,)
-        result = validate_sqlite_source({
-            "type": "sqlite",
-            "path": nonexistent,
-        })
+        result = validate_sqlite_source(
+            {
+                "type": "sqlite",
+                "path": nonexistent,
+            }
+        )
         assert result is not None
         assert result["error"]["type"] == ErrorType.SQL_SOURCE_NOT_FOUND.value
 
@@ -187,9 +191,7 @@ class TestValidateReadonlySql:
         assert result["error"]["type"] == ErrorType.UNSAFE_SQL.value
 
     def test_multiple_statements_rejected(self):
-        result = validate_readonly_sql(
-            "SELECT * FROM chunks; SELECT * FROM chunks;"
-        )
+        result = validate_readonly_sql("SELECT * FROM chunks; SELECT * FROM chunks;")
         assert result is not None
         assert result["error"]["type"] == ErrorType.UNSAFE_SQL.value
 
@@ -397,13 +399,9 @@ class TestExecuteSelectToTableData:
 
 class TestNestedQuotedSemicolon:
     def test_semicolon_inside_quotes_not_split(self):
-        result = validate_readonly_sql(
-            "SELECT 'hello;world' AS greeting"
-        )
+        result = validate_readonly_sql("SELECT 'hello;world' AS greeting")
         assert result is None
 
     def test_semicolon_inside_double_quotes_not_split(self):
-        result = validate_readonly_sql(
-            'SELECT "col;name" FROM chunks'
-        )
+        result = validate_readonly_sql('SELECT "col;name" FROM chunks')
         assert result is None

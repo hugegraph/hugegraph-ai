@@ -21,7 +21,7 @@ import hashlib
 import json
 from typing import Any
 
-from hugegraph_mcp import gremlin_tools, schema_tools
+from hugegraph_mcp import gremlin_tools
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.tools.graph_data_gremlin import (

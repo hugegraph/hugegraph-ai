@@ -21,7 +21,9 @@ from hugegraph_mcp import schema_tools
 def current_live_schema(live_schema: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return the provided schema or fetch the current HugeGraph schema."""
 
-    return live_schema or schema_tools.get_live_schema()
+    if live_schema is not None:
+        return live_schema
+    return schema_tools.get_live_schema()
 
 
 def fetch_live_schema_or_none() -> dict[str, Any] | None:

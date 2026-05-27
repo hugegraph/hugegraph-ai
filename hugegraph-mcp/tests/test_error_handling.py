@@ -33,10 +33,7 @@ def test_connection_error_handling():
         assert result["ok"] is False
         assert result["error"]["type"] == "CONNECTION_FAILED"
         assert "Cannot connect to HugeGraph server" in result["error"]["message"]
-        assert (
-            "Check if HugeGraph server is running"
-            in result["error"]["suggestion"]
-        )
+        assert "Check if HugeGraph server is running" in result["error"]["suggestion"]
         assert result["error"]["details"]["error_type"] == "connection_error"
 
 

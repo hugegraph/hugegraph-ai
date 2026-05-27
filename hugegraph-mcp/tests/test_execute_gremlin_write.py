@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 class FakeGremlinClient:
     def __init__(self, results):
         self.results = results

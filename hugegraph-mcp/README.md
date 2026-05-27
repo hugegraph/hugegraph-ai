@@ -77,7 +77,7 @@ Then restart your IDE or assistant.
 
 ## Main Tools
 
-All high-level tools return the unified envelope:
+V1 stable tools return the unified envelope:
 
 ```json
 {
@@ -187,7 +187,7 @@ Run a direct read-only Gremlin traversal:
 
 ### 3. Design And Manage Schema
 
-Use `manage_schema_tool` to design, validate, dry-run, and apply schema operations. Mutating schema changes require the safety chain `dry_run -> plan_hash -> confirm`.
+Use `manage_schema_tool` to design, validate, and dry-run schema operations. Full schema apply is disabled in V1 and returns `FEATURE_DISABLED`.
 
 Ask for schema design guidance:
 
@@ -250,36 +250,11 @@ Create a dry-run plan and capture the returned `plan_hash`:
 }
 ```
 
-Apply the exact dry-run plan:
-
-```json
-{
-  "tool": "manage_schema_tool",
-  "arguments": {
-    "mode": "apply",
-    "confirm": true,
-    "plan_hash": "PLAN_HASH_FROM_DRY_RUN",
-    "operations": [
-      {
-        "type": "create_property_key",
-        "name": "name",
-        "data_type": "TEXT",
-        "cardinality": "SINGLE"
-      },
-      {
-        "type": "create_vertex_label",
-        "name": "person",
-        "properties": ["name"],
-        "primary_keys": ["name"]
-      }
-    ]
-  }
-}
-```
+`mode="apply"` is reserved for a later release. In V1, use `mode="dry_run"` to preview the schema diff and risk warnings.
 
 ### 4. Manage Graph Data
 
-Use `manage_graph_data_tool` to extract graph-shaped data from text, import structured graph data, map table rows into graph data, update graph elements, or delete graph elements. Mutating graph data changes require the safety chain `dry_run -> plan_hash -> confirm`.
+Use `manage_graph_data_tool` to extract graph-shaped data from text or import structured graph data. V1 disables table import, SQL import, update, and delete modes; those paths return `FEATURE_DISABLED`.
 
 Extract candidate graph data from text without writing to HugeGraph:
 
@@ -353,97 +328,7 @@ Apply the exact dry-run import plan:
 }
 ```
 
-Map table rows into graph data and run the same import safety flow:
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "table",
-    "dry_run": true,
-    "table_data": {
-      "table_name": "employment",
-      "columns": ["person_name", "company_name"],
-      "rows": [
-        ["Alice", "Acme"],
-        ["Bob", "Acme"]
-      ]
-    },
-    "mapping": {
-      "vertex_mappings": [
-        {
-          "target_label": "person",
-          "column_mapping": {"name": "person_name"},
-          "primary_key_columns": ["person_name"]
-        },
-        {
-          "target_label": "company",
-          "column_mapping": {"name": "company_name"},
-          "primary_key_columns": ["company_name"]
-        }
-      ],
-      "edge_mappings": [
-        {
-          "target_label": "works_at",
-          "source_vertex": {
-            "label": "person",
-            "primary_key_columns": ["person_name"]
-          },
-          "target_vertex": {
-            "label": "company",
-            "primary_key_columns": ["company_name"]
-          },
-          "column_mapping": {}
-        }
-      ]
-    }
-  }
-}
-```
-
-Update a graph element with a dry run:
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "update",
-    "dry_run": true,
-    "change_plan": {
-      "operations": [
-        {
-          "op": "update_vertex",
-          "label": "person",
-          "match": {"name": "Alice"},
-          "set": {"age": 31}
-        }
-      ]
-    }
-  }
-}
-```
-
-Delete a graph element with a dry run:
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "delete",
-    "dry_run": true,
-    "change_plan": {
-      "operations": [
-        {
-          "op": "delete_vertex",
-          "label": "person",
-          "match": {"name": "Alice"},
-          "cascade": false
-        }
-      ]
-    }
-  }
-}
-```
+Table, SQL, update, and delete workflows are planned for a later release. In V1, use `mode="extract"` and `mode="import"` only.
 
 `import_graph_data_tool` remains available for compatibility. Prefer `manage_graph_data_tool` for new workflows.
 
@@ -525,8 +410,8 @@ V1 disabled capabilities return `FEATURE_DISABLED` instead of executing:
 - Set `HUGEGRAPH_MCP_READONLY=false` only when writes are intended.
 - Set `HUGEGRAPH_MCP_ADMIN_MODE=true` only for maintenance/debug sessions that need admin tools.
 - Keep `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=false` for normal user-facing deployments; enable it only while debugging GraphRAG.
-- Readonly mode is enforced at runtime for write paths, including schema changes, graph data import/update/delete apply paths, direct write queries, and embedding refresh.
-- Schema apply and graph data import/update/delete apply paths require a previous dry run, a matching `plan_hash`, and `confirm=true`.
+- Readonly mode is enforced at runtime for write paths, including graph data import confirmation, direct write queries, and embedding refresh.
+- Graph data import confirmation requires a previous dry run, a matching `plan_hash`, and `confirm=true`.
 - `query_graph_tool` with `mode="generate"` does not execute generated Gremlin unless `execute=true`.
 - Direct Gremlin reads are allowed only when the traversal can be treated as read-only. Unsafe or uncertain traversals are rejected.
 - Do not use direct write debugging tools for routine data loading.

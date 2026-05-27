@@ -172,7 +172,10 @@ def _extract_answer(ai_data: dict[str, Any], mode: str) -> Any:
 def _combined_answer(ai_data: dict[str, Any]) -> str | None:
     sections = [
         ("graph_only", ai_data.get("graph_only_answer") or ai_data.get("graph_only")),
-        ("vector_only", ai_data.get("vector_only_answer") or ai_data.get("vector_only")),
+        (
+            "vector_only",
+            ai_data.get("vector_only_answer") or ai_data.get("vector_only"),
+        ),
         (
             "graph_vector",
             ai_data.get("graph_vector_answer") or ai_data.get("graph_vector"),

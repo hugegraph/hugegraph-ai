@@ -54,6 +54,7 @@ def _target_vertex_match_query(operation: dict[str, Any]) -> str:
     target_label = operation.get("target_label") or operation.get("inVLabel")
     return f"g.V().hasLabel({_g(target_label)}){_has_steps(operation['target_match'])}"
 
+
 # ---- Gremlin 写入语句生成 — label 和 values 均为 schema 约束值 + JSON 转义 ----
 
 
@@ -114,4 +115,3 @@ def _write_query(operation: dict[str, Any]) -> str:
     if op == "delete_edge":
         return _delete_edge_query(operation)
     raise ValueError(f"Unsupported op: {op}")
-

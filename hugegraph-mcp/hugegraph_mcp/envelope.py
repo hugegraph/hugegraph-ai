@@ -25,6 +25,7 @@ from hugegraph_mcp.config import MCPConfig
 
 class ErrorType(str, Enum):
     """标准化错误类型枚举 — 按能力域划分，便于 Agent 分类处理。"""
+
     CONNECTION_FAILED = "CONNECTION_FAILED"
     AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
     AUTHORIZATION_FAILED = "AUTHORIZATION_FAILED"

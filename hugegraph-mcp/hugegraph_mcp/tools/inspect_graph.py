@@ -137,7 +137,9 @@ def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:
         "graphspace": cfg.graphspace,
         "hugegraph_server_status": server_status,
         "hugegraph_ai_status": ai_status,
-        "vid_embedding_status": "available" if graph_index_info is not None else "unknown",
+        "vid_embedding_status": "available"
+        if graph_index_info is not None
+        else "unknown",
         "schema_summary": schema_summary,
         "vertex_count": vertex_count,
         "edge_count": edge_count,
@@ -176,9 +178,13 @@ def _next_actions(data: dict[str, Any]) -> list[str]:
         "Use inspect_graph_tool with include_raw_schema=true for full schema details"
     ]
     if data.get("hugegraph_server_status") == "available":
-        actions.append("Use query_graph_tool with mode='gremlin' for read-only graph exploration")
+        actions.append(
+            "Use query_graph_tool with mode='gremlin' for read-only graph exploration"
+        )
     else:
         actions.append("Check HugeGraph Server URL, graph name, and credentials")
     if data.get("hugegraph_ai_status") != "available":
-        actions.append("Check HugeGraph-AI URL if embedding or graph index features are needed")
+        actions.append(
+            "Check HugeGraph-AI URL if embedding or graph index features are needed"
+        )
     return actions

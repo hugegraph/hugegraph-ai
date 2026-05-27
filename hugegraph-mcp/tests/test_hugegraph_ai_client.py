@@ -48,7 +48,9 @@ def _cfg(**overrides):
 
 def test_request_success(monkeypatch):
     http_request = Mock(return_value=FakeResponse({"status": "ok"}))
-    monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", http_request)
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request", http_request
+    )
 
     result = request("GET", "/health", cfg=_cfg())
 
@@ -102,7 +104,9 @@ def test_request_http_500(monkeypatch):
 
 def test_request_allow_ai_disabled(monkeypatch):
     http_request = Mock()
-    monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", http_request)
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request", http_request
+    )
 
     result = request("GET", "/health", cfg=_cfg(allow_ai=False))
 
@@ -114,7 +118,9 @@ def test_request_allow_ai_disabled(monkeypatch):
 
 def test_post_convenience(monkeypatch):
     http_request = Mock(return_value=FakeResponse({"gremlin": "g.V().count()"}))
-    monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", http_request)
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request", http_request
+    )
 
     result = post("/generate-gremlin", cfg=_cfg(), json={"question": "count vertices"})
 
@@ -131,7 +137,9 @@ def test_post_convenience(monkeypatch):
 
 def test_get_convenience(monkeypatch):
     http_request = Mock(return_value=FakeResponse({"ready": True}))
-    monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", http_request)
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request", http_request
+    )
 
     result = get("/graph-index-info", cfg=_cfg())
 
@@ -147,7 +155,9 @@ def test_get_convenience(monkeypatch):
 
 def test_health_check(monkeypatch):
     http_request = Mock(return_value=FakeResponse({"ok": True, "data": "ready"}))
-    monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", http_request)
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request", http_request
+    )
 
     result = health_check(cfg=_cfg())
 
@@ -170,7 +180,9 @@ def test_health_check_falls_back_to_openapi(monkeypatch):
             FakeResponse({"openapi": "3.1.0"}),
         ]
     )
-    monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", http_request)
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request", http_request
+    )
 
     result = health_check(cfg=_cfg())
 

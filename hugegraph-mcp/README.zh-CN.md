@@ -91,7 +91,7 @@ design_schema_tool / apply_schema_tool
 extract_graph_data_tool               ← 从文本抽取候选图数据（不写入）
 ```
 
-**写入安全链**：所有会修改图数据的操作（schema apply、数据 import/update/delete）都必须走同一套流程：
+**写入安全链**：V1 中图数据 import 的确认写入必须走同一套流程：
 
 ```
 dry_run=true → 审查 preview + 记录 plan_hash → dry_run=false + confirm=true + plan_hash
@@ -99,7 +99,7 @@ dry_run=true → 审查 preview + 记录 plan_hash → dry_run=false + confirm=t
 
 ## 统一响应格式
 
-所有工具返回统一 envelope，成功和失败都是同一结构：
+V1 稳定工具返回统一 envelope，成功和失败都是同一结构：
 
 成功响应 (`ok: true`)：
 
@@ -219,7 +219,7 @@ dry_run=true → 审查 preview + 记录 plan_hash → dry_run=false + confirm=t
 
 ### 3. 设计和管理 Schema — `manage_schema_tool`
 
-四种模式：`design` → `validate` → `dry_run` → `apply`。apply 必须走安全链。
+V1 支持 `design`、`validate`、`dry_run`。`apply` 保留为后续版本能力，当前返回 `FEATURE_DISABLED`。
 
 获取分步 schema 设计引导：
 
@@ -260,37 +260,18 @@ dry-run 生成 plan_hash（记下返回值中的 `plan_hash`）：
 }
 ```
 
-确认执行（`plan_hash` 必须来自同一次 dry-run）：
-
-```json
-{
-  "tool": "manage_schema_tool",
-  "arguments": {
-    "mode": "apply",
-    "confirm": true,
-    "plan_hash": "abc123fromDryRun",
-    "operations": [
-      { "type": "create_property_key", "name": "name", "data_type": "TEXT" },
-      { "type": "create_vertex_label", "name": "person", "properties": ["name"], "primary_keys": ["name"] }
-    ]
-  }
-}
-```
+V1 中如传入 `mode="apply"`，工具会返回 `FEATURE_DISABLED`。需要变更 schema 时，先使用 `dry_run` 审查 schema diff 和风险提示。
 
 ### 4. 管理图数据 — `manage_graph_data_tool`
 
-8 种 mode，覆盖完整的图数据生命周期：
+V1 只开放两种 mode：
 
 | mode | 功能 | 写入？ |
 |------|------|--------|
 | `extract` | 自然语言 → 候选图数据 | 否 |
-| `import` | 结构化图数据导入 | 是 |
-| `table` | 表格行 → 图数据映射导入 | 是 |
-| `sql_preview` | 预览 SQLite 表或 SELECT 结果 | 否 |
-| `sql_mapping_suggest` | 生成 SQL 列到图 schema 的映射建议 | 否 |
-| `sql_import` | SQL 查询结果 → 图数据导入 | 是 |
-| `update` | 更新图元素 | 是 |
-| `delete` | 删除图元素 | 是 |
+| `import` | 结构化图数据导入 | 确认阶段写入 |
+
+`table`、`sql_preview`、`sql_mapping_suggest`、`sql_import`、`update`、`delete` 在 V1 中禁用，调用时返回 `FEATURE_DISABLED`。
 
 #### 从自然语言抽取图数据（不写入）
 
@@ -347,199 +328,11 @@ dry-run 生成 plan_hash（记下返回值中的 `plan_hash`）：
 }
 ```
 
-#### 表格数据映射导入
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "table",
-    "dry_run": true,
-    "table_data": {
-      "table_name": "employment",
-      "columns": ["person_name", "company_name"],
-      "rows": [["Alice", "Acme"], ["Bob", "Acme"]]
-    },
-    "mapping": {
-      "vertex_mappings": [
-        { "target_label": "person", "column_mapping": { "name": "person_name" }, "primary_key_columns": ["person_name"] },
-        { "target_label": "company", "column_mapping": { "name": "company_name" }, "primary_key_columns": ["company_name"] }
-      ],
-      "edge_mappings": [
-        {
-          "target_label": "works_at",
-          "source_vertex": { "label": "person", "primary_key_columns": ["person_name"] },
-          "target_vertex": { "label": "company", "primary_key_columns": ["company_name"] },
-          "column_mapping": {}
-        }
-      ]
-    }
-  }
-}
-```
-
-#### 更新图元素
-
-dry-run：
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "update",
-    "dry_run": true,
-    "change_plan": {
-      "operations": [
-        { "op": "update_vertex", "label": "person", "match": { "name": "Alice" }, "set": { "age": 31 } }
-      ]
-    }
-  }
-}
-```
-
-确认执行：
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "update",
-    "dry_run": false,
-    "confirm": true,
-    "plan_hash": "def456fromDryRun",
-    "change_plan": {
-      "operations": [
-        { "op": "update_vertex", "label": "person", "match": { "name": "Alice" }, "set": { "age": 31 } }
-      ]
-    }
-  }
-}
-```
-
-#### 删除图元素
-
-dry-run（`cascade: false` 时，有关联边的顶点会被拒绝）：
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "delete",
-    "dry_run": true,
-    "change_plan": {
-      "operations": [
-        { "op": "delete_vertex", "label": "person", "match": { "name": "Alice" }, "cascade": false }
-      ]
-    }
-  }
-}
-```
-
-确认执行：
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "delete",
-    "dry_run": false,
-    "confirm": true,
-    "plan_hash": "ghi789fromDryRun",
-    "change_plan": {
-      "operations": [
-        { "op": "delete_vertex", "label": "person", "match": { "name": "Alice" }, "cascade": false }
-      ]
-    }
-  }
-}
-```
-
-## 从 SQL 导入图数据
-
-SQL 导入是表格导入的上游能力：SQLite SELECT → `table_data` → mapping → `graph_data` → 安全链写入。当前只支持本地 SQLite。
-
-启用 SQL 能力需配置环境变量：
-
-```json
-{
-  "env": {
-    "HUGEGRAPH_MCP_SQL_ENABLED": "true",
-    "HUGEGRAPH_MCP_SQLITE_ALLOWLIST": "D:/data/hugegraph-import.sqlite3;D:/data/other.sqlite3"
-  }
-}
-```
-
-`sql_source` 格式：
-
-```json
-{ "type": "sqlite", "path": "D:/data/hugegraph-import.sqlite3" }
-```
-
-SQL 只允许只读语句（`SELECT`、`WITH ... SELECT`、`EXPLAIN`、信息类 `PRAGMA`）；`INSERT`、`UPDATE`、`DELETE`、`DROP`、`ALTER`、`CREATE` 等会被拒绝。
-
-推荐三步流程：
-
-**Step 1 — 预览数据** (`sql_preview`)：确认 SQL 结果列和行内容正确。
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "sql_preview",
-    "sql_source": { "type": "sqlite", "path": "D:/data/hugegraph-import.sqlite3" },
-    "sql_query": "SELECT source_name, target_name, work_date FROM employee_relations"
-  }
-}
-```
-
-**Step 2 — 生成映射建议** (`sql_mapping_suggest`)：基于列名和 live schema 自动生成可编辑的 mapping 草稿。
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "sql_mapping_suggest",
-    "sql_source": { "type": "sqlite", "path": "D:/data/hugegraph-import.sqlite3" },
-    "sql_query": "SELECT source_name, target_name, work_date FROM employee_relations"
-  }
-}
-```
-
-检查返回的 `mapping_suggestion`，确认 `target_label`、`column_mapping`、`primary_key_columns` 是否与 live schema 一致，必要时手动修改。
-
-**Step 3 — 导入** (`sql_import`)：先 dry-run，审查 `plan_hash` 后确认执行。
-
-```json
-{
-  "tool": "manage_graph_data_tool",
-  "arguments": {
-    "mode": "sql_import",
-    "dry_run": true,
-    "sql_source": { "type": "sqlite", "path": "D:/data/hugegraph-import.sqlite3" },
-    "sql_query": "SELECT source_name, target_name, work_date FROM employee_relations",
-    "mapping": {
-      "vertex_mappings": [
-        { "target_label": "person", "column_mapping": { "name": "source_name" }, "primary_key_columns": ["source_name"] },
-        { "target_label": "person", "column_mapping": { "name": "target_name" }, "primary_key_columns": ["target_name"] }
-      ],
-      "edge_mappings": [
-        {
-          "target_label": "colleague",
-          "source_vertex": { "label": "person", "primary_key_columns": ["source_name"] },
-          "target_vertex": { "label": "person", "primary_key_columns": ["target_name"] },
-          "column_mapping": { "date": "work_date" }
-        }
-      ]
-    }
-  }
-}
-```
-
-SQL 导入的 `plan_hash` 绑定 SQL source、SQL query、mapping 和图变更计划；确认执行时必须传 dry-run 返回的同一个 `plan_hash`。
+表格、SQL、update、delete 工作流后移到后续版本。V1 文档不提供这些禁用 mode 的调用示例。
 
 ## 兼容入口
 
-`import_graph_data_tool` 保留用于兼容旧流程，支持 `extract` / `ingest` / `table` 三种 mode。新流程推荐使用 `manage_graph_data_tool`。
+`import_graph_data_tool` 保留用于兼容旧流程，V1 支持 `extract` / `ingest`；`table` 返回 `FEATURE_DISABLED`。新流程推荐使用 `manage_graph_data_tool`。
 
 ## 安全模型
 
@@ -624,8 +417,8 @@ Skills 是 agent 侧的工作流说明，帮助 AI 助手选择正确的 MCP 能
 | --- | --- | --- |
 | `hugegraph-operator` | 查看图状态、schema、服务健康、权限、AI 可用性、计数和索引 | `inspect_graph_tool` |
 | `hugegraph-query-analyst` | 查询图数据；NL 生成 Gremlin 并只读执行；GraphRAG 仅作为实验调试路径 | `query_graph_tool` |
-| `hugegraph-schema-designer` | 设计、校验、dry-run 和安全 apply schema 变更 | `manage_schema_tool` |
-| `hugegraph-data-importer` | 从自然语言、结构化图数据、表格行或 SQL 结果导入图数据；更新和删除图数据 | `manage_graph_data_tool` |
+| `hugegraph-schema-designer` | 设计、校验和 dry-run schema 变更；完整 apply 属于后续版本能力 | `manage_schema_tool` |
+| `hugegraph-data-importer` | 从自然语言抽取候选图数据，并通过结构化 graph_data 导入图数据；表格、SQL、update/delete 属于后续版本能力 | `manage_graph_data_tool` |
 | `hugegraph-regression-tester` | 对用户能力做真实回归测试，包括写入、验证、清理和权限行为检查 | 上述工具组合 |
 
 Skills 的定位是"怎么调用 MCP"的操作指南，不是绕过 MCP 的实现入口。例如导入数据时，Skill 会要求先 dry-run、记录 `plan_hash`、再 confirm 写入、最后查询验证和清理；真正的写入仍通过 `manage_graph_data_tool` 完成。

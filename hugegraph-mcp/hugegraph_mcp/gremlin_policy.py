@@ -36,22 +36,73 @@ _READ_START_RE = re.compile(r"^\s*g\s*\.\s*(?:V|E)\s*\(", re.IGNORECASE)
 _DYNAMIC_MARKERS = ("${", "#{", "->")
 _ALLOWED_ARG_TOKENS = {"true", "false", "null"}
 _WRITE_METHODS = {
-    "addv", "adde", "drop", "dropv", "drope", "remove", "clear",
-    "sideeffect", "io", "call", "program",
+    "addv",
+    "adde",
+    "drop",
+    "dropv",
+    "drope",
+    "remove",
+    "clear",
+    "sideeffect",
+    "io",
+    "call",
+    "program",
 }
 _READ_METHODS = {
-    "v", "e", "count", "limit", "range", "has", "haslabel", "hasid",
-    "values", "valuemap", "id", "label", "keys", "elementmap", "properties",
-    "out", "in", "both", "oute", "ine", "bothe",
-    "path", "order", "group", "groupcount", "by", "dedup", "sample",
-    "where", "not", "and", "or", "as", "select", "unfold",
-    "coalesce", "optional", "repeat", "times", "until", "emit",
-    "simplepath", "cyclicpath", "skip", "tail",
-    "tolist", "toset", "explain", "profile",
+    "v",
+    "e",
+    "count",
+    "limit",
+    "range",
+    "has",
+    "haslabel",
+    "hasid",
+    "values",
+    "valuemap",
+    "id",
+    "label",
+    "keys",
+    "elementmap",
+    "properties",
+    "out",
+    "in",
+    "both",
+    "oute",
+    "ine",
+    "bothe",
+    "path",
+    "order",
+    "group",
+    "groupcount",
+    "by",
+    "dedup",
+    "sample",
+    "where",
+    "not",
+    "and",
+    "or",
+    "as",
+    "select",
+    "unfold",
+    "coalesce",
+    "optional",
+    "repeat",
+    "times",
+    "until",
+    "emit",
+    "simplepath",
+    "cyclicpath",
+    "skip",
+    "tail",
+    "tolist",
+    "toset",
+    "explain",
+    "profile",
 }
 
 
 # ========== 分类器实现 ==========
+
 
 def classify_gremlin_read_safety(gremlin_query: str) -> GremlinSafety:
     """Classify a Gremlin query for use by the read-only execution tool.
@@ -177,6 +228,7 @@ def _strip_string_literals(query: str) -> str:
 
 
 # ========== 结构化决策 ==========
+
 
 @dataclass(frozen=True)
 class GremlinDecision:

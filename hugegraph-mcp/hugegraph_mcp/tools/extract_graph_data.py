@@ -79,22 +79,24 @@ def extract_graph_data(
         )
 
     cfg = MCPConfig.from_env()
-    return envelope_ok({
-        "graph_data": {
-            "schema_ref": {
-                "schema_source": "graph",
-                "graph": cfg.graph,
-                "graphspace": cfg.graphspace,
-                "version": None,
+    return envelope_ok(
+        {
+            "graph_data": {
+                "schema_ref": {
+                    "schema_source": "graph",
+                    "graph": cfg.graph,
+                    "graphspace": cfg.graphspace,
+                    "version": None,
+                },
+                "vertices": graph_data.get("vertices", []),
+                "edges": graph_data.get("edges", []),
+                "warnings": graph_data.get("warnings", []),
+                "raw": graph_data.get("raw"),
             },
-            "vertices": graph_data.get("vertices", []),
-            "edges": graph_data.get("edges", []),
-            "warnings": graph_data.get("warnings", []),
-            "raw": graph_data.get("raw"),
-        },
-        "raw_summary": graph_data.get("raw_summary"),
-        "schema_warnings": graph_data.get("schema_warnings", []),
-    })
+            "raw_summary": graph_data.get("raw_summary"),
+            "schema_warnings": graph_data.get("schema_warnings", []),
+        }
+    )
 
 
 def _schema_message(schema: Any) -> str:

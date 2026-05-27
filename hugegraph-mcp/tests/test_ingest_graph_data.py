@@ -106,10 +106,15 @@ def test_ingest_graph_data_dry_run(monkeypatch):
 
 def test_ingest_graph_data_dry_run_same_input_same_hash(monkeypatch):
     _mock_schema(monkeypatch)
+    monkeypatch.setattr("hugegraph_mcp.plan_hash.time.time", lambda: 1000)
 
-    # With nonce-based hashing, same nonce + same input = same hash
-    first = ingest_graph_data_module.ingest_graph_data(_graph_data(), nonce="fixed_nonce")
-    second = ingest_graph_data_module.ingest_graph_data(_graph_data(), nonce="fixed_nonce")
+    # Same nonce + same payload + same expiry window = same hash.
+    first = ingest_graph_data_module.ingest_graph_data(
+        _graph_data(), nonce="fixed_nonce"
+    )
+    second = ingest_graph_data_module.ingest_graph_data(
+        _graph_data(), nonce="fixed_nonce"
+    )
 
     assert first["data"]["plan_hash"] == second["data"]["plan_hash"]
 
@@ -121,7 +126,9 @@ def test_ingest_graph_data_plan_hash_includes_schema(monkeypatch):
     schema_with_age_text["schema"]["propertykeys"][1]["data_type"] = "TEXT"
 
     first = ingest_graph_data_module.calculate_plan_hash(graph_data, schema)
-    second = ingest_graph_data_module.calculate_plan_hash(graph_data, schema_with_age_text)
+    second = ingest_graph_data_module.calculate_plan_hash(
+        graph_data, schema_with_age_text
+    )
 
     assert first != second
 
@@ -166,7 +173,9 @@ def test_ingest_plan_hash_schema_metadata_ignored_same_hash():
     schema_with_metadata["server_time"] = "2026-05-26T00:00:00Z"
 
     first = ingest_graph_data_module.calculate_plan_hash(graph_data, schema)
-    second = ingest_graph_data_module.calculate_plan_hash(graph_data, schema_with_metadata)
+    second = ingest_graph_data_module.calculate_plan_hash(
+        graph_data, schema_with_metadata
+    )
 
     assert first == second
 
@@ -211,7 +220,9 @@ def test_ingest_graph_data_validate_invalid(monkeypatch):
 def test_ingest_graph_data_rejects_when_live_schema_unavailable(monkeypatch):
     monkeypatch.setattr(ingest_graph_data_module, "_fetch_live_schema", lambda: None)
 
-    result = ingest_graph_data_module.ingest_graph_data({"vertices": [{"label":"x"}], "edges": []})
+    result = ingest_graph_data_module.ingest_graph_data(
+        {"vertices": [{"label": "x"}], "edges": []}
+    )
 
     assert result["ok"] is False
     assert result["error"]["type"] == "CONNECTION_FAILED"
@@ -237,7 +248,9 @@ def test_ingest_graph_data_schema_mismatch(monkeypatch):
 
     assert result["ok"] is False
     assert result["error"]["type"] == "SCHEMA_MISMATCH"
-    assert any("source_label 'ghost'" in e for e in result["error"]["details"]["errors"])
+    assert any(
+        "source_label 'ghost'" in e for e in result["error"]["details"]["errors"]
+    )
 
 
 def test_ingest_graph_data_rejects_property_type_mismatch(monkeypatch):
@@ -252,7 +265,9 @@ def test_ingest_graph_data_rejects_property_type_mismatch(monkeypatch):
 
     assert result["ok"] is False
     assert result["error"]["type"] == "SCHEMA_MISMATCH"
-    assert any("property 'age' expects INT" in e for e in result["error"]["details"]["errors"])
+    assert any(
+        "property 'age' expects INT" in e for e in result["error"]["details"]["errors"]
+    )
 
 
 def test_ingest_graph_data_rejects_missing_schema_primary_key(monkeypatch):
@@ -408,7 +423,9 @@ def test_ingest_graph_data_rejects_edge_label_mismatch(monkeypatch):
     errors = result["error"]["details"]["errors"]
     assert any("edge 0 label 'likes' does not exist in schema" in e for e in errors)
     assert any("edge 1 target_label 'ghost'" in e for e in errors)
-    assert any("does not match edge label 'knows' target_label 'person'" in e for e in errors)
+    assert any(
+        "does not match edge label 'knows' target_label 'person'" in e for e in errors
+    )
 
 
 def test_ingest_graph_data_warns_for_labels_without_schema_index(monkeypatch):
@@ -421,7 +438,9 @@ def test_ingest_graph_data_warns_for_labels_without_schema_index(monkeypatch):
     result = ingest_graph_data_module.ingest_graph_data(_graph_data())
 
     assert result["ok"] is True
-    assert "no edge index found in schema for label: knows" in result["data"]["warnings"]
+    assert (
+        "no edge index found in schema for label: knows" in result["data"]["warnings"]
+    )
 
 
 def test_ingest_graph_data_missing_confirm(monkeypatch):

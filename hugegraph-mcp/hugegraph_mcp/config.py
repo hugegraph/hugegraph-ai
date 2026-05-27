@@ -11,12 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import logging
 """统一配置层 — 所有 MCP 工具通过 MCPConfig.from_env() 获取配置。
 
 环境变量优先级高于默认值，避免硬编码连接信息。"""
 
+import logging
+import os
 from dataclasses import dataclass, field
 from typing import Mapping
 
@@ -85,15 +85,11 @@ class MCPConfig:
             enable_graphrag_experimental=_parse_bool(
                 env.get("HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL", "")
             ),
-            timeout_seconds=_parse_int(
-                env.get("HUGEGRAPH_MCP_TIMEOUT_SECONDS"), 30
-            ),
+            timeout_seconds=_parse_int(env.get("HUGEGRAPH_MCP_TIMEOUT_SECONDS"), 30),
             max_context_items=_parse_int(
                 env.get("HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS"), 100
             ),
-            sql_enabled=_parse_bool(
-                env.get("HUGEGRAPH_MCP_SQL_ENABLED", "")
-            ),
+            sql_enabled=_parse_bool(env.get("HUGEGRAPH_MCP_SQL_ENABLED", "")),
             sqlite_allowlist=_parse_semicolon_tuple(
                 env.get("HUGEGRAPH_MCP_SQLITE_ALLOWLIST", "")
             ),
@@ -149,11 +145,7 @@ def _optional_non_empty(value: str | None) -> str | None:
 def _parse_semicolon_tuple(value: str) -> tuple[str, ...]:
     if not value or not value.strip():
         return ()
-    return tuple(
-        part.strip()
-        for part in value.split(";")
-        if part.strip()
-    )
+    return tuple(part.strip() for part in value.split(";") if part.strip())
 
 
 config = MCPConfig.from_env()  # 模块级单例，一次解析避免重复读环境变量

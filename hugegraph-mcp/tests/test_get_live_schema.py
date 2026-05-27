@@ -12,7 +12,6 @@
 # limitations under the License.
 
 
-
 class FakeSchemaManager:
     def __init__(self, schema):
         self._schema = schema
@@ -112,3 +111,18 @@ def test_get_live_schema_respects_readonly_flag(monkeypatch):
     result = schema_tools.get_live_schema()
 
     assert result.get("readonly") is True
+
+
+def test_current_live_schema_respects_explicit_empty_schema(monkeypatch):
+    from hugegraph_mcp import schema_tools
+    from hugegraph_mcp.tools.live_schema import current_live_schema
+
+    def fail_fetch():
+        raise AssertionError(
+            "current_live_schema should not fetch when schema is provided"
+        )
+
+    empty_schema = {}
+    monkeypatch.setattr(schema_tools, "get_live_schema", fail_fetch)
+
+    assert current_live_schema(empty_schema) is empty_schema

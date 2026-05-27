@@ -222,9 +222,7 @@ def test_inspect_graph_ai_available_when_openapi_fallback_works(monkeypatch):
 
     def fake_get(url, timeout):
         if url.endswith("/graph-index-info"):
-            return FakeResponse(
-                status_error=requests.exceptions.HTTPError("HTTP 404")
-            )
+            return FakeResponse(status_error=requests.exceptions.HTTPError("HTTP 404"))
         if url.endswith("/openapi.json"):
             return FakeResponse({"openapi": "3.1.0"})
         raise AssertionError(f"Unexpected URL: {url}")

@@ -952,6 +952,57 @@ def test_manage_graph_data_execute_update_vertex(monkeypatch):
     assert writes == ['g.V().hasLabel("person").has("name","Alice").property("age",31)']
 
 
+def test_manage_graph_data_partial_write_reports_written_count(monkeypatch):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+
+    graph_data = {
+        "vertices": [
+            {"label": "person", "properties": {"name": "Alice"}},
+            {"label": "person", "properties": {"name": "Bob"}},
+        ],
+        "edges": [],
+    }
+    writes = []
+
+    def fake_write(query):
+        writes.append(query)
+        if len(writes) == 1:
+            return {"success": True, "affected": 1, "duration_ms": 1, "is_write": True}
+        return {
+            "success": False,
+            "error_type": "connection_error",
+            "message": "write failed",
+        }
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools, "execute_gremlin_write", fake_write
+    )
+
+    dry_run = manage_graph_data_module.manage_graph_data(
+        mode="import",
+        graph_data=graph_data,
+    )
+    result = manage_graph_data_module.manage_graph_data(
+        mode="import",
+        graph_data=graph_data,
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=dry_run["data"]["plan_context"]["nonce"],
+        expires_at=dry_run["data"]["plan_context"]["expires_at"],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["status"] == "partial"
+    assert result["data"]["success"] is False
+    assert result["data"]["planned"] == {"create_vertex": 2}
+    assert result["data"]["written"] == {"create_vertex": 1}
+    assert result["data"]["failed_items"][0]["operation_index"] == 1
+    assert result["data"]["failed_items"][0]["op"] == "create_vertex"
+    assert len(writes) == 2
+
+
 def test_manage_graph_data_import_validates_graph_payload(monkeypatch):
     _mock_schema(monkeypatch)
 

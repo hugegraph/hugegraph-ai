@@ -354,9 +354,9 @@ def manage_schema_tool(
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict:
-    """统一 schema 管理入口 — design / validate / dry_run / apply 四种模式。
+    """统一 schema 管理入口 — design / validate / dry_run 兼容入口。
 
-    apply 模式需 dry_run 返回的 plan_hash + confirm=True。
+    apply 模式在 V1 中禁用并返回 FEATURE_DISABLED。
     """
 
     if mode == "apply":
