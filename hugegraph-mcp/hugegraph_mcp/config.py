@@ -33,7 +33,7 @@ class MCPConfig:
     graphspace: str | None = "DEFAULT"
     user: str = "admin"
     password: str = ""
-    readonly: bool = False
+    readonly: bool = True
     ai_url: str = "http://127.0.0.1:8001"
     ai_graph_url: str | None = None
     allow_ai: bool = False
@@ -78,7 +78,7 @@ class MCPConfig:
             graphspace=graphspace,
             user=env.get("HUGEGRAPH_USER", "admin"),
             password=env.get("HUGEGRAPH_PASSWORD", ""),
-            readonly=_parse_bool(env.get("HUGEGRAPH_MCP_READONLY", "")),
+            readonly=_parse_bool(env.get("HUGEGRAPH_MCP_READONLY", "true")),
             ai_url=env.get("HUGEGRAPH_AI_URL", "http://127.0.0.1:8001"),
             ai_graph_url=_optional_non_empty(env.get("HUGEGRAPH_AI_GRAPH_URL")),
             allow_ai=_parse_bool(env.get("HUGEGRAPH_MCP_ALLOW_AI", "")),

@@ -155,7 +155,7 @@ def test_default_values(monkeypatch):
     assert cfg.graph == "hugegraph"
     assert cfg.user == "admin"
     assert cfg.password == ""
-    assert cfg.is_readonly() is False
+    assert cfg.is_readonly() is True
     assert cfg.ai_url == "http://127.0.0.1:8001"
     assert cfg.ai_graph_url is None
     assert cfg.allow_ai is False

@@ -107,8 +107,9 @@ def test_ingest_graph_data_dry_run(monkeypatch):
 def test_ingest_graph_data_dry_run_same_input_same_hash(monkeypatch):
     _mock_schema(monkeypatch)
 
-    first = ingest_graph_data_module.ingest_graph_data(_graph_data())
-    second = ingest_graph_data_module.ingest_graph_data(_graph_data())
+    # With nonce-based hashing, same nonce + same input = same hash
+    first = ingest_graph_data_module.ingest_graph_data(_graph_data(), nonce="fixed_nonce")
+    second = ingest_graph_data_module.ingest_graph_data(_graph_data(), nonce="fixed_nonce")
 
     assert first["data"]["plan_hash"] == second["data"]["plan_hash"]
 
@@ -475,17 +476,21 @@ def test_ingest_graph_data_success(monkeypatch):
     graph_data = _graph_data()
     dry_run = ingest_graph_data_module.ingest_graph_data(graph_data)
 
+    # M5: pass nonce and expires_at from dry_run plan_context
+    plan_ctx = dry_run["data"]["plan_context"]
     result = ingest_graph_data_module.ingest_graph_data(
         graph_data,
         dry_run=False,
         confirm=True,
         plan_hash=dry_run["data"]["plan_hash"],
+        nonce=plan_ctx["nonce"],
+        expires_at=plan_ctx["expires_at"],
     )
 
     assert result["ok"] is True
     assert result["data"]["batch_id"].startswith("batch-")
-    assert result["data"]["mutation_summary"] == {"vertices": 2, "edges": 1}
-    assert result["data"]["import_result"] == {"inserted": 2}
+    assert result["data"]["status"] in ("success", "partial", "degraded")
+    assert result["data"]["planned"] == {"vertices": 2, "edges": 1}
     post.assert_called_once()
     assert post.call_args.args == ("/graph-import",)
     assert post.call_args.kwargs["json"]["schema"] == "hugegraph"

@@ -32,7 +32,7 @@ _METHOD_RE = re.compile(r"\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 _READ_START_RE = re.compile(r"^\s*g\s*\.\s*(?:V|E)\s*\(", re.IGNORECASE)
 _DYNAMIC_MARKERS = ("${", "#{", "->")
 _ALLOWED_ARG_TOKENS = {"true", "false", "null"}
-_WRITE_METHODS = {"addv", "adde", "drop", "dropv", "drope", "remove", "clear"}
+_WRITE_METHODS = {"addv", "adde", "drop", "dropv", "drope", "remove", "clear", "sideeffect", "io", "call", "program"}
 _READ_METHODS = {
     "v",
     "e",

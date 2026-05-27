@@ -77,3 +77,29 @@ def test_existing_keyword_tests_still_pass():
 
     for query in queries:
         assert classify_gremlin_read_safety(query) == "unsafe"
+
+
+def test_newly_denied_high_risk_steps():
+    """M1: sideEffect, io, call, program must be classified as unsafe."""
+    queries = [
+        "g.V().sideEffect('x')",
+        "g.V().io('file')",
+        "g.V().call('func')",
+        "g.V().program('script')",
+    ]
+
+    for query in queries:
+        assert classify_gremlin_read_safety(query) == "unsafe", f"Expected unsafe: {query}"
+
+
+def test_side_effect_accumulators_are_uncertain():
+    """sack, store, aggregate, cap are not in read whitelist → classified as uncertain."""
+    queries = [
+        "g.V().sack(sum).by('age')",
+        "g.V().store('x')",
+        "g.V().aggregate('x')",
+        "g.V().cap('x')",
+    ]
+
+    for query in queries:
+        assert classify_gremlin_read_safety(query) == "uncertain", f"Expected uncertain: {query}"

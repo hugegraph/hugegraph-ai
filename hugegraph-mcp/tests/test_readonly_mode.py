@@ -58,59 +58,61 @@ def test_readonly_env_parsing():
 
 
 def test_write_tools_available_when_not_readonly(monkeypatch):
-    """Test that public write tools are registered when not in readonly mode."""
+    """Test that all V1 tools are registered when not in readonly mode."""
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
     import hugegraph_mcp.server
 
     importlib.reload(hugegraph_mcp.server)
     tools = get_registered_tools()
-    assert "execute_schema_operations_tool" not in tools
-    assert "design_schema_tool" not in tools
-    assert "execute_gremlin_write_tool" in tools
+    # V1 stable tools
+    assert "inspect_graph_tool" in tools
+    assert "generate_gremlin_tool" in tools
+    assert "execute_gremlin_read_tool" in tools
+    assert "extract_graph_data_tool" in tools
+    assert "design_schema_tool" in tools
+    assert "apply_schema_tool" in tools
+    # Compatibility tools
+    assert "query_graph_tool" in tools
     assert "manage_schema_tool" in tools
     assert "manage_graph_data_tool" in tools
     assert "import_graph_data_tool" in tools
-    assert "extract_graph_data_tool" not in tools
-    assert "ingest_graph_data_tool" not in tools
-    assert len(tools) == 7
+    # Admin-gated debug tools
+    assert "execute_gremlin_write_tool" in tools
+    assert "refresh_vid_embeddings_tool" in tools
+    assert len(tools) == 12
 
 
 def test_write_tools_disabled_when_readonly(monkeypatch):
-    """Test that only public tools remain registered in readonly mode."""
+    """Test that all V1 tools remain registered in readonly mode."""
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
 
     import hugegraph_mcp.server
 
     importlib.reload(hugegraph_mcp.server)
     tools = get_registered_tools()
-    assert "execute_schema_operations_tool" not in tools
-    assert "design_schema_tool" not in tools
-    assert "execute_gremlin_write_tool" in tools
-    assert "manage_schema_tool" in tools
-    # Read tools should still be available
+    # All tools are registered; readonly blocks execution, not registration
     assert "inspect_graph_tool" in tools
+    assert "generate_gremlin_tool" in tools
+    assert "execute_gremlin_read_tool" in tools
+    assert "extract_graph_data_tool" in tools
+    assert "design_schema_tool" in tools
+    assert "apply_schema_tool" in tools
     assert "query_graph_tool" in tools
+    assert "manage_schema_tool" in tools
     assert "manage_graph_data_tool" in tools
     assert "import_graph_data_tool" in tools
-    assert "extract_graph_data_tool" not in tools
-    assert "ingest_graph_data_tool" not in tools
-    assert len(tools) == 7
+    assert "execute_gremlin_write_tool" in tools
+    assert "refresh_vid_embeddings_tool" in tools
+    assert len(tools) == 12
 
 
 def test_readonly_mode_default(monkeypatch):
-    """Test that default mode is not readonly when env is not set."""
+    """Test that default mode is readonly when env is not set (V1 safe default)."""
     monkeypatch.delenv("HUGEGRAPH_MCP_READONLY", raising=False)
 
     import hugegraph_mcp.server
 
     importlib.reload(hugegraph_mcp.server)
     tools = get_registered_tools()
-    assert "execute_schema_operations_tool" not in tools
-    assert "design_schema_tool" not in tools
-    assert "execute_gremlin_write_tool" in tools
-    assert "manage_graph_data_tool" in tools
-    assert "import_graph_data_tool" in tools
-    assert "extract_graph_data_tool" not in tools
-    assert "ingest_graph_data_tool" not in tools
-    assert len(tools) == 7
+    assert len(tools) == 12

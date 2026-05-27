@@ -86,3 +86,10 @@ def test_import_graph_data_tool_rejects_unknown_mode():
     assert result["ok"] is False
     assert result["error"]["type"] == "VALIDATION_ERROR"
     assert result["error"]["details"] == {"mode": "unknown"}
+
+
+def test_import_graph_data_tool_table_returns_feature_disabled():
+    result = server.import_graph_data_tool(mode="table", table_data={"rows": []})
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FEATURE_DISABLED"

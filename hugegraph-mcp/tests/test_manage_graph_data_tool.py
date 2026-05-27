@@ -66,120 +66,44 @@ def test_manage_graph_data_tool_import_routes_to_manage_graph_data(monkeypatch):
     assert calls == [("import", graph_data, None, False, True, "0123456789abcdef")]
 
 
-def test_manage_graph_data_tool_update_routes_to_manage_graph_data(monkeypatch):
-    calls = []
+def test_manage_graph_data_tool_update_returns_feature_disabled(monkeypatch):
     change_plan = {"operations": [{"op": "update_vertex"}]}
-
-    def fake_manage_graph_data(
-        mode,
-        graph_data=None,
-        change_plan=None,
-        dry_run=True,
-        confirm=False,
-        plan_hash=None,
-    ):
-        calls.append((mode, graph_data, change_plan, dry_run, confirm, plan_hash))
-        return envelope_ok({"plan_hash": "0123456789abcdef"})
-
-    monkeypatch.setattr(server, "manage_graph_data", fake_manage_graph_data)
 
     result = server.manage_graph_data_tool(
         mode="update",
         change_plan=change_plan,
     )
 
-    assert result["ok"] is True
-    assert calls == [("update", None, change_plan, True, False, None)]
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FEATURE_DISABLED"
 
 
-def test_manage_graph_data_tool_delete_routes_to_manage_graph_data(monkeypatch):
-    calls = []
+def test_manage_graph_data_tool_delete_returns_feature_disabled(monkeypatch):
     change_plan = {"operations": [{"op": "delete_vertex"}]}
-
-    def fake_manage_graph_data(
-        mode,
-        graph_data=None,
-        change_plan=None,
-        dry_run=True,
-        confirm=False,
-        plan_hash=None,
-    ):
-        calls.append((mode, graph_data, change_plan, dry_run, confirm, plan_hash))
-        return envelope_ok({"plan_hash": "0123456789abcdef"})
-
-    monkeypatch.setattr(server, "manage_graph_data", fake_manage_graph_data)
 
     result = server.manage_graph_data_tool(
         mode="delete",
         change_plan=change_plan,
-        dry_run=False,
-        confirm=True,
-        plan_hash="0123456789abcdef",
     )
 
-    assert result["ok"] is True
-    assert calls == [("delete", None, change_plan, False, True, "0123456789abcdef")]
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FEATURE_DISABLED"
 
 
-def test_manage_graph_data_tool_table_routes_to_manage_graph_data(monkeypatch):
-    calls = []
-
+def test_manage_graph_data_tool_table_returns_feature_disabled(monkeypatch):
     table_data = {
         "table_name": "people",
         "columns": ["name"],
         "rows": [["Alice"]],
     }
-    mapping = {
-        "vertex_mappings": [
-            {
-                "target_label": "person",
-                "column_mapping": {"name": "name"},
-                "primary_key_columns": ["name"],
-            }
-        ],
-        "edge_mappings": [],
-    }
-
-    def fake_manage_graph_data(
-        mode,
-        graph_data=None,
-        change_plan=None,
-        dry_run=True,
-        confirm=False,
-        plan_hash=None,
-    ):
-        calls.append((mode, graph_data, change_plan, dry_run, confirm, plan_hash))
-        return envelope_ok({"plan_hash": "0123456789abcdef"})
-
-    monkeypatch.setattr(server, "manage_graph_data", fake_manage_graph_data)
 
     result = server.manage_graph_data_tool(
         mode="table",
         table_data=table_data,
-        mapping=mapping,
-        dry_run=False,
-        confirm=True,
-        plan_hash="0123456789abcdef",
     )
 
-    assert result["ok"] is True
-    assert len(calls) == 1
-    mode, graph_data, change_plan, dry_run, confirm, plan_hash = calls[0]
-    assert mode == "import"
-    assert graph_data["vertices"][0] == {
-        "label": "person",
-        "properties": {"name": "Alice"},
-    }
-    assert change_plan["operations"][0] == {
-        "op": "create_vertex",
-        "label": "person",
-        "properties": {"name": "Alice"},
-    }
-    assert (dry_run, confirm, plan_hash) == (
-        False,
-        True,
-        "0123456789abcdef",
-    )
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FEATURE_DISABLED"
 
 
 def test_manage_graph_data_tool_validates_extract_text():
@@ -190,12 +114,11 @@ def test_manage_graph_data_tool_validates_extract_text():
     assert "text is required" in result["error"]["message"]
 
 
-def test_manage_graph_data_tool_validates_table_data():
+def test_manage_graph_data_tool_table_returns_feature_disabled_even_without_data():
     result = server.manage_graph_data_tool(mode="table")
 
     assert result["ok"] is False
-    assert result["error"]["type"] == "VALIDATION_ERROR"
-    assert "table_data is required" in result["error"]["message"]
+    assert result["error"]["type"] == "FEATURE_DISABLED"
 
 
 def test_manage_graph_data_tool_rejects_unknown_mode():

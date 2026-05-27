@@ -298,7 +298,7 @@ def _vertex_identity_map(
     vertices: list[Any],
     raw_schema: dict[str, Any],
 ) -> tuple[dict[tuple[str, str, Any], Any], dict[str, list[str]]]:
-    # 建立“用户可表达的身份”到 HugeGraph 后端 id 的映射。
+    # 建立"用户可表达的身份"到 HugeGraph 后端 id 的映射。
     # 同一顶点可能同时拥有显式 id、PRIMARY_KEY 后端 id 和主键 tuple，
     # 边端点解析时任意一种命中都应该指向同一个后端顶点。
     vertex_info = _schema_vertex_info(raw_schema)
@@ -343,7 +343,7 @@ def _endpoint_backend_id(
     schema_primary_keys: dict[str, list[str]],
     vertex_info: dict[str, dict[str, Any]],
 ) -> Any:
-    # 边端点优先解析为本批 payload 中的顶点，保证“先创建顶点再创建边”
+    # 边端点优先解析为本批 payload 中的顶点，保证"先创建顶点再创建边"
     # 的批量导入场景不需要用户提前知道 HugeGraph 后端 id。
     endpoint_identities, _missing_pk = _endpoint_identities(
         label,
@@ -675,6 +675,9 @@ def calculate_plan_hash(
     graph_data: dict[str, Any],
     live_schema: dict[str, Any] | None = None,
 ) -> str:
+    """计算图数据导入的计划哈希（兼容旧接口）。"""
+    from hugegraph_mcp.plan_hash import compute_payload_digest
+
     cfg = MCPConfig.from_env()
     schema_summary = normalized_schema_summary(live_schema)
     payload = {
@@ -683,11 +686,8 @@ def calculate_plan_hash(
         "graphspace": cfg.graphspace,
     }
     if schema_summary is not None:
-        # schema 摘要参与 hash：同一 payload 在不同主键/属性类型/schema 下
-        # 可能具有不同语义，不能复用旧 dry-run 的确认结果。
         payload["schema_summary"] = schema_summary
-    encoded = json.dumps(payload, sort_keys=True, default=str)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+    return compute_payload_digest(payload)
 
 
 def _fetch_live_schema() -> dict[str, Any] | None:
@@ -704,11 +704,14 @@ def ingest_graph_data(
     dry_run: bool = True,
     confirm: bool = False,
     plan_hash: str | None = None,
+    nonce: str | None = None,
+    expires_at: float | None = None,
 ) -> dict[str, Any]:
     """导入图数据 — 安全链入口。
 
     dry_run=True: schema 校验 + plan_hash 生成，不写入
     dry_run=False + confirm=True + plan_hash 匹配: 执行写入
+    nonce/expires_at: dry_run 返回的 plan_context 中的字段，confirm 时必须传回
     """
     live_schema = _fetch_live_schema()
     if live_schema is None:
@@ -726,16 +729,46 @@ def ingest_graph_data(
             details={"errors": validation["errors"]},
         )
 
+    from hugegraph_mcp.plan_hash import build_plan_context, compute_plan_hash, compute_payload_digest
+
     expected_plan_hash = calculate_plan_hash(graph_data, live_schema=live_schema)
     mutation_summary = _mutation_summary(graph_data)
     warnings = validation["warnings"]
 
+    # 构建目标绑定的计划上下文（包含 url、user、readonly、nonce、expires_at）
+    cfg = MCPConfig.from_env()
+    schema_summary = normalized_schema_summary(live_schema)
+    payload_for_digest = {
+        "graph_data": _normalize_graph_data(graph_data, schema_summary),
+        "graph": cfg.graph,
+        "graphspace": cfg.graphspace,
+    }
+    if schema_summary is not None:
+        payload_for_digest["schema_summary"] = schema_summary
+
+    payload_digest = compute_payload_digest(payload_for_digest)
+    schema_hash = compute_payload_digest(schema_summary) if schema_summary else None
+    plan_context, _ = build_plan_context(
+        tool_name="ingest_graph_data",
+        mode="import",
+        payload_digest=payload_digest,
+        schema_hash=schema_hash,
+        nonce=nonce,
+    )
+
     if dry_run:
-        # dry_run 是唯一生成 plan_hash 的入口；真实写入必须带回这个 hash，
-        # 形成“用户审核过的计划”和“即将执行的计划”之间的绑定。
         return envelope_ok(
             {
-                "plan_hash": expected_plan_hash,
+                "plan_hash": compute_plan_hash(plan_context),
+                "plan_context": {
+                    "nonce": plan_context.nonce,
+                    "expires_at": plan_context.expires_at,
+                    "graph_url": plan_context.graph_url,
+                    "graph_name": plan_context.graph_name,
+                    "graphspace": plan_context.graphspace,
+                    "principal": plan_context.principal,
+                    "readonly": plan_context.readonly,
+                },
                 "mutation_summary": mutation_summary,
                 "warnings": warnings,
             },
@@ -753,26 +786,49 @@ def ingest_graph_data(
             suggestion="Run dry_run=True, review mutation_summary and warnings, then pass confirm=True with the returned plan_hash.",
         )
 
-    if plan_hash != expected_plan_hash:
+    # 使用目标绑定验证：重新读取 config 和 schema，重新计算哈希
+    # nonce 必须从 dry_run 返回的 plan_context 中传回
+    from hugegraph_mcp.plan_hash import verify_plan_hash
+
+    valid, error_type, details = verify_plan_hash(
+        submitted_hash=plan_hash,
+        tool_name="ingest_graph_data",
+        mode="import",
+        payload_digest=payload_digest,
+        schema_hash=schema_hash,
+        nonce=nonce or plan_context.nonce,
+        expires_at=expires_at,
+    )
+    if not valid:
         return envelope_err(
             ErrorType.PLAN_HASH_MISMATCH,
-            "Provided plan_hash does not match the current graph data plan.",
+            "Plan hash mismatch: config, schema, or payload has changed since dry_run.",
             suggestion="Run dry_run=True again and use the returned plan_hash.",
-            details={
-                "expected_plan_hash": expected_plan_hash,
-                "provided_plan_hash": plan_hash,
-            },
+            details=details,
         )
 
     batch_id = f"batch-{uuid4().hex[:12]}"
+    request_id = f"req-{uuid4().hex[:12]}"
     cfg = MCPConfig.from_env()
+    planned = mutation_summary
+
     import_data = _prepare_graph_import_data(graph_data, live_schema)
     # 真实写入仍走 HugeGraph-AI 的 graph-import HTTP 接口；MCP 只负责
     # schema 校验、安全确认和 payload 规范化，不直接导入 hugegraph-llm 流程。
-    ai_result = post(
-        "/graph-import",
-        json={"data": json.dumps(import_data, sort_keys=True), "schema": cfg.graph},
-    )
+    try:
+        ai_result = post(
+            "/graph-import",
+            json={"data": json.dumps(import_data, sort_keys=True), "schema": cfg.graph},
+        )
+    except Exception as exc:
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            f"Import execution failed: {exc}",
+            details=_import_error_result(
+                planned=planned, batch_id=batch_id, request_id=request_id, cfg=cfg
+            ),
+        )
+
     if not ai_result.get("ok"):
         return ai_result
 
@@ -780,13 +836,16 @@ def ingest_graph_data(
     if isinstance(import_result, dict) and import_result.get("ok") is False:
         return import_result
 
-    return envelope_ok(
-        {
-            "batch_id": batch_id,
-            "mutation_summary": mutation_summary,
-            "import_result": import_result,
-        }
+    # M5: 规范化导入结果
+    normalized = _normalize_import_result(
+        ai_result=import_result,
+        planned=planned,
+        batch_id=batch_id,
+        request_id=request_id,
+        cfg=cfg,
     )
+
+    return envelope_ok(normalized)
 
 
 def _mutation_summary(graph_data: dict[str, Any]) -> dict[str, int]:
@@ -802,3 +861,124 @@ def _unwrap_ai_payload(data: Any) -> Any:
             return data
         return data.get("data")
     return data
+
+
+def _normalize_import_result(
+    ai_result: Any,
+    planned: dict[str, int],
+    batch_id: str,
+    request_id: str,
+    cfg: MCPConfig,
+) -> dict[str, Any]:
+    """将 AI 导入结果规范化为 V1 标准格式。
+
+    M5: success / partial / degraded / error
+    """
+    target = {
+        "graph_url": cfg.url,
+        "graph_name": cfg.graph,
+        "graphspace": cfg.graphspace or "DEFAULT",
+    }
+
+    if ai_result is None or (isinstance(ai_result, dict) and ai_result.get("ok") is False):
+        return {
+            "status": "error",
+            "planned": planned,
+            "written": {"vertices": 0, "edges": 0},
+            "failed_items": [],
+            "warnings": [],
+            "retryable": True,
+            "compensation_suggestions": ["Retry the import with dry_run first."],
+            "target": target,
+            "batch_id": batch_id,
+            "request_id": request_id,
+        }
+
+    # 尝试从 AI 结果中提取写入计数
+    written = _extract_written_counts(ai_result, planned)
+    failed_items = _extract_failed_items(ai_result)
+
+    if written == planned and not failed_items:
+        status = "success"
+    elif written["vertices"] > 0 or written["edges"] > 0:
+        status = "partial"
+    else:
+        # AI 返回了结果但没有可识别的写入计数
+        status = "degraded"
+
+    return {
+        "status": status,
+        "planned": planned,
+        "written": written,
+        "failed_items": failed_items,
+        "warnings": [],
+        "retryable": status in ("partial", "degraded"),
+        "compensation_suggestions": (
+            ["Review failed_items and retry partial import."]
+            if status == "partial"
+            else []
+        ),
+        "target": target,
+        "batch_id": batch_id,
+        "request_id": request_id,
+    }
+
+
+def _extract_written_counts(ai_result: Any, planned: dict[str, int]) -> dict[str, int]:
+    """从 AI 结果中提取写入计数，无法识别时返回 0。"""
+    if not isinstance(ai_result, dict):
+        return {"vertices": 0, "edges": 0}
+
+    # 常见的 AI 返回格式
+    for key in ("written", "imported", "created", "result"):
+        data = ai_result.get(key)
+        if isinstance(data, dict):
+            verts = data.get("vertices") or data.get("vertex_count") or 0
+            edges = data.get("edges") or data.get("edge_count") or 0
+            return {"vertices": int(verts), "edges": int(edges)}
+
+    # 顶层直接有计数
+    verts = ai_result.get("vertices_written") or ai_result.get("vertex_count") or 0
+    edges = ai_result.get("edges_written") or ai_result.get("edge_count") or 0
+    if verts or edges:
+        return {"vertices": int(verts), "edges": int(edges)}
+
+    return {"vertices": 0, "edges": 0}
+
+
+def _extract_failed_items(ai_result: Any) -> list[dict[str, Any]]:
+    """从 AI 结果中提取失败项。"""
+    if not isinstance(ai_result, dict):
+        return []
+
+    for key in ("failed_items", "errors", "failures"):
+        items = ai_result.get(key)
+        if isinstance(items, list):
+            return items[:100]  # 限制数量
+
+    return []
+
+
+def _import_error_result(
+    planned: dict[str, int],
+    batch_id: str,
+    request_id: str,
+    cfg: MCPConfig,
+) -> dict[str, Any]:
+    """构建导入执行错误的规范化结果。"""
+    return {
+        "status": "error",
+        "planned": planned,
+        "written": {"vertices": 0, "edges": 0},
+        "failed_items": [],
+        "warnings": ["Import execution failed before any writes."],
+        "retryable": True,
+        "compensation_suggestions": ["Check HugeGraph-AI service availability."],
+        "target": {
+            "graph_url": cfg.url,
+            "graph_name": cfg.graph,
+            "graphspace": cfg.graphspace or "DEFAULT",
+        },
+        "batch_id": batch_id,
+        "request_id": request_id,
+    }

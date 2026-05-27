@@ -25,7 +25,7 @@ from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
-from hugegraph_mcp.gremlin_safety import classify_gremlin_read_safety
+from hugegraph_mcp.gremlin_policy import check_gremlin_read
 from hugegraph_mcp.guard import Capability, guard_write
 
 _cfg = MCPConfig.from_env()
@@ -245,25 +245,18 @@ def _execute_gremlin_with_error_handling(
 def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
     """执行只读 Gremlin 查询。
 
-    先通过安全分类器检查查询是否为已知只读遍历，
+    通过 GremlinPolicy.check_read() 做安全检查，
     拒绝写入类和无法确定的查询，只放行明确安全的遍历。
     返回 {data, total, duration_ms, is_read}。
     """
 
-    safety = classify_gremlin_read_safety(gremlin_query)
-    if safety == "unsafe":
+    decision = check_gremlin_read(gremlin_query)
+    if not decision.allowed:
         return envelope_err(
             ErrorType.UNSAFE_GREMLIN,
-            "execute_gremlin_read does not allow write operations",
-            suggestion="Use execute_gremlin_write for write operations when write access is enabled.",
-            details={"classification": safety},
-        )
-    if safety == "uncertain":
-        return envelope_err(
-            ErrorType.UNSAFE_GREMLIN,
-            "execute_gremlin_read only allows known read-only queries",
-            suggestion="Use a clearly read-only Gremlin traversal.",
-            details={"classification": safety},
+            decision.reason,
+            suggestion=decision.suggestion,
+            details={"classification": decision.classification},
         )
 
     client = _get_read_client()
