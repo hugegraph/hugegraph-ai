@@ -115,5 +115,6 @@ Questions:
 ### Environment
 
 - Python `>=3.10` for `hugegraph-mcp`.
-- `hugegraph-mcp` is NOT a uv workspace member; dependencies are managed via its own `pyproject.toml`.
+- `hugegraph-mcp` is a root `uv` workspace member for monorepo CI and local development.
+- `hugegraph-mcp` still keeps its own `pyproject.toml` so users can install it from the git subdirectory with `uvx`.
 - Run MCP tests: `cd hugegraph-mcp && uv run pytest`.

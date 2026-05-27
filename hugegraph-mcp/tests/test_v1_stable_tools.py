@@ -13,6 +13,7 @@
 
 """Tests for V1 stable tools and admin gate (Milestone 2)."""
 
+import asyncio
 from unittest.mock import Mock
 
 from hugegraph_mcp import server
@@ -26,6 +27,26 @@ def _assert_v1_envelope_shape(result):
     assert "graphspace" in result["meta"]
     assert "readonly" in result["meta"]
     assert "duration_ms" in result["meta"]
+
+
+def test_public_tool_contract_lists_only_v1_tools():
+    async def _tool_names():
+        list_tools = getattr(server.mcp, "_list_tools", server.mcp._mcp_list_tools)
+        tools = await list_tools()
+        return {tool.name for tool in tools}
+
+    assert asyncio.run(_tool_names()) == {
+        "inspect_graph_tool",
+        "generate_gremlin_tool",
+        "execute_gremlin_read_tool",
+        "extract_graph_data_tool",
+        "design_schema_tool",
+        "apply_schema_tool",
+        "import_graph_data_tool",
+        "delete_graph_data_tool",
+        "refresh_vid_embeddings_tool",
+        "execute_gremlin_write_tool",
+    }
 
 
 def test_generate_gremlin_tool_routes_to_generate_gremlin(monkeypatch):

@@ -24,7 +24,12 @@ def get_registered_tools():
     import hugegraph_mcp.server
 
     async def _get_tools():
-        tools = await hugegraph_mcp.server.mcp._list_tools()
+        list_tools = getattr(
+            hugegraph_mcp.server.mcp,
+            "_list_tools",
+            hugegraph_mcp.server.mcp._mcp_list_tools,
+        )
+        tools = await list_tools()
         return [t.name for t in tools]
 
     return asyncio.run(_get_tools())

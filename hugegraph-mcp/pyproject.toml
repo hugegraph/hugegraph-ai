@@ -24,7 +24,7 @@ authors = [
 
 dependencies = [
     "fastmcp>=2.2.0",
-    "hugegraph-python-client @ git+https://github.com/apache/incubator-hugegraph-ai.git#subdirectory=hugegraph-python-client",
+    "hugegraph-python-client",
 ]
 [project.scripts]
 hugegraph-mcp = "hugegraph_mcp.server:main"
@@ -45,5 +45,5 @@ allow-direct-references = true
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "pytest~=8.0.0",
 ]

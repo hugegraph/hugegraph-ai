@@ -1,0 +1,88 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: HugeGraph-MCP CI
+
+on:
+  push:
+    branches:
+      - "main"
+      - "release-*"
+    paths:
+      - "hugegraph-mcp/**"
+      - "hugegraph-python-client/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/hugegraph-mcp.yml"
+  pull_request:
+    paths:
+      - "hugegraph-mcp/**"
+      - "hugegraph-python-client/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/hugegraph-mcp.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+          key: ${{ runner.os }}-mcp-uv-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mcp-uv-${{ matrix.python-version }}-
+
+      - name: Install MCP dependencies
+        run: |
+          uv sync --extra mcp --extra dev
+
+      - name: Check MCP formatting
+        working-directory: hugegraph-mcp
+        run: |
+          uv run ruff format --check hugegraph_mcp tests
+
+      - name: Lint MCP
+        working-directory: hugegraph-mcp
+        run: |
+          uv run ruff check hugegraph_mcp tests
+
+      - name: Run MCP tests
+        working-directory: hugegraph-mcp
+        run: |
+          uv run pytest
