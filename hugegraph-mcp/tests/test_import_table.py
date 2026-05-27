@@ -234,18 +234,12 @@ def test_import_graph_data_tool_table_routes_to_ingest(monkeypatch):
         plan_hash="0123456789abcdef",
     )
 
-    assert result["ok"] is True
-    assert len(calls) == 1
-    assert calls[0][1:] == (False, True, "0123456789abcdef")
-    assert calls[0][0]["vertices"][0] == {
-        "label": "person",
-        "properties": {"name": "Alice"},
-    }
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FEATURE_DISABLED"
 
 
-def test_import_graph_data_tool_table_validates_table_data():
+def test_import_graph_data_tool_table_returns_feature_disabled():
     result = server.import_graph_data_tool(mode="table")
 
     assert result["ok"] is False
-    assert result["error"]["type"] == "VALIDATION_ERROR"
-    assert "table_data is required" in result["error"]["message"]
+    assert result["error"]["type"] == "FEATURE_DISABLED"

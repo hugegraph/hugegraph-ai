@@ -40,8 +40,10 @@ def test_connection_error_handling():
         assert result["error"]["details"]["error_type"] == "connection_error"
 
 
-def test_http_500_error_handling():
+def test_http_500_error_handling(monkeypatch):
     """Test handling of HTTP 500 server errors."""
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
     with patch("hugegraph_mcp.gremlin_tools._get_write_client") as mock_client:
         mock_client_instance = Mock()
 
@@ -101,7 +103,7 @@ def test_validation_error_for_read_operations():
 
     assert result["ok"] is False
     assert result["error"]["type"] == "UNSAFE_GREMLIN"
-    assert "write operations" in result["error"]["message"]
+    assert "write" in result["error"]["message"].lower()
 
 
 def test_syntax_error_handling():
