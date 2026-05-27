@@ -2,82 +2,43 @@
 
 [中文文档](README.zh-CN.md)
 
-FastMCP-based Model Context Protocol server for HugeGraph. It lets AI assistants inspect graph status, generate and run read-only Gremlin, extract candidate graph data, and design or preview schema changes through a small set of V1 stable tools.
+HugeGraph MCP is a Model Context Protocol server for HugeGraph. V1 is designed as a safe, controlled, thin adapter layer: it exposes a small set of stable tools and centralizes configuration, permission checks, read-only Gremlin validation, the dry-run/confirm write safety chain, and the unified response envelope.
 
-## Quick Start
+## Developer Notes
 
-### Prerequisites
+### Design Boundary
 
-- HugeGraph Server, for example `http://127.0.0.1:8080`, version 1.7.0 or later
-- Python 3.10+
-- Git in `PATH`
+V1 does not turn MCP into a second business kernel. The MCP layer is responsible for:
 
-### MCP Configuration
+- Exposing stable MCP tool interfaces
+- Reading runtime configuration
+- Enforcing permission and readonly guards
+- Validating whether Gremlin is read-only
+- Generating and validating `plan_hash`
+- Returning a unified response envelope
+- Forwarding AI capabilities to HugeGraph-AI, or graph reads/writes to HugeGraph Server
 
-Add an MCP server entry to your IDE or assistant MCP configuration file:
+### Public Tool Surface
 
-```json
-{
-  "mcpServers": {
-    "hugegraph-mcp": {
-      "command": "uvx",
-      "args": [
-        "--from",
-        "git+https://github.com/hugegraph/hugegraph-ai.git@graph-mcp#subdirectory=hugegraph-mcp",
-        "hugegraph-mcp"
-      ],
-      "env": {
-        "HUGEGRAPH_MCP_READONLY": "true"
-      }
-    }
-  }
-}
-```
+V1 exposes these stable tools to users:
 
-Restart your IDE or assistant after adding the configuration.
+- `inspect_graph_tool`
+- `generate_gremlin_tool`
+- `execute_gremlin_read_tool`
+- `extract_graph_data_tool`
+- `import_graph_data_tool`
+- `delete_graph_data_tool`
+- `design_schema_tool`
+- `apply_schema_tool`
 
-### Optional Environment Variables
+These tools are still registered in MCP, but they are admin/debug capabilities and are blocked by default when `HUGEGRAPH_MCP_ADMIN_MODE=false`:
 
-All environment variables are optional:
+- `execute_gremlin_write_tool`
+- `refresh_vid_embeddings_tool`
 
-- `HUGEGRAPH_URL` (default: `http://127.0.0.1:8080`)
-- `HUGEGRAPH_GRAPH_PATH` (default: `DEFAULT/hugegraph`)
-- `HUGEGRAPH_USER` (default: `admin`)
-- `HUGEGRAPH_PASSWORD` (default: empty string)
-- `HUGEGRAPH_MCP_READONLY` (default: `true`)
-- `HUGEGRAPH_MCP_ALLOW_AI` (default: `false`)
-- `HUGEGRAPH_MCP_ADMIN_MODE` (default: `false`)
-- `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL` (default: `false`)
-- `HUGEGRAPH_MCP_SQL_ENABLED` (default: `false`)
-- `HUGEGRAPH_AI_URL` (default: `http://127.0.0.1:8001`)
-- `HUGEGRAPH_AI_GRAPH_URL` (default: unset)
-- `HUGEGRAPH_MCP_TIMEOUT_SECONDS` (default: `30`)
-- `HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS` (default: `100`)
+### Unified Response Envelope
 
-`HUGEGRAPH_GRAPH_PATH` uses the format `GRAPH_SPACE/GRAPH_NAME`, for example `DEFAULT/hugegraph`.
-
-`HUGEGRAPH_MCP_READONLY` and `HUGEGRAPH_MCP_ALLOW_AI` are controlled independently:
-
-- `HUGEGRAPH_MCP_READONLY=true` blocks mutating schema, graph data, index, and direct write operations.
-- `HUGEGRAPH_MCP_ALLOW_AI=true` allows calls to HugeGraph-AI, including natural-language Gremlin generation and graph data extraction.
-- `HUGEGRAPH_MCP_READONLY=false` enables write-capable paths that are otherwise blocked by readonly mode.
-- `HUGEGRAPH_MCP_ADMIN_MODE=true` enables admin/debug tools such as direct Gremlin writes and embedding refresh.
-- `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true` enables the experimental GraphRAG text-query path for debugging. It is disabled by default and is not the primary user query path.
-- You can set both to `true` to allow AI-assisted read/query/extraction workflows while still blocking all writes.
-
-Safe V1 defaults are `readonly=true`, `allow_ai=false`, and `sql_enabled=false`.
-
-If first-run dependency installation is slow, pre-install the MCP server locally:
-
-```bash
-uvx --from git+https://github.com/hugegraph/hugegraph-ai.git@graph-mcp#subdirectory=hugegraph-mcp hugegraph-mcp
-```
-
-Then restart your IDE or assistant.
-
-## Main Tools
-
-V1 stable tools return the unified envelope:
+V1 high-level tools return a unified envelope:
 
 ```json
 {
@@ -87,423 +48,137 @@ V1 stable tools return the unified envelope:
   "warnings": [],
   "next_actions": [],
   "meta": {
-    "request_id": "...",
+    "request_id": "req-...",
     "graph": "hugegraph",
     "graphspace": "DEFAULT",
     "readonly": true,
-    "duration_ms": 0
+    "duration_ms": 12.3
   }
 }
 ```
 
-### V1 Stable Tool List
+When a call fails, `ok=false` and `error` uses this structure:
 
-These are the stable public V1 tools:
+```json
+{
+  "type": "READONLY_VIOLATION",
+  "message": "DATA_WRITE capability is disabled in read-only mode",
+  "suggestion": "Disable HUGEGRAPH_MCP_READONLY to allow this operation.",
+  "retryable": false,
+  "source": "hugegraph-mcp",
+  "details": {}
+}
+```
+
+## Tool Reference
+
+### User-Facing Tool Overview
 
 | Tool | Description |
-| --- | --- |
-| `inspect_graph_tool` | Inspect HugeGraph Server status, schema summary, counts, readonly state, and AI availability. |
-| `generate_gremlin_tool` | Convert natural language to Gremlin through HugeGraph-AI. Defaults to generation only; set `execute=true` to run safe read-only Gremlin. |
-| `execute_gremlin_read_tool` | Execute a Gremlin traversal after read-only policy validation. |
-| `extract_graph_data_tool` | Extract candidate `{vertices, edges}` graph data from text. It does not write to HugeGraph. |
-| `import_graph_data_tool` | Import structured graph data through MCP local validation, dry-run/confirm, and Gremlin execution. |
-| `delete_graph_data_tool` | Delete exactly matched vertices or edges through MCP local validation, dry-run/confirm, and post-delete verification. |
-| `design_schema_tool` | Get schema design guidance from proposed operations. |
-| `apply_schema_tool` | Validate or dry-run schema operations. `mode="apply"` is disabled in V1. |
+|------|-------------|
+| `inspect_graph_tool` | Inspect HugeGraph Server status, schema summary, vertex/edge counts, readonly state, and AI availability |
+| `generate_gremlin_tool` | Generate Gremlin from natural language; defaults to generation only; `execute=true` still requires read-only validation |
+| `execute_gremlin_read_tool` | Execute read-only Gremlin queries; rejects queries whose safety cannot be confirmed |
+| `extract_graph_data_tool` | Extract candidate graph data from natural language text and return vertex/edge structures without writing to HugeGraph |
+| `import_graph_data_tool` | Structured graph data import entrypoint; real writes must pass `dry_run -> plan_hash -> confirm` |
+| `delete_graph_data_tool` | Controlled delete entrypoint; supports only exact vertex or edge deletion, not conditional bulk delete or cascade delete |
+| `design_schema_tool` | Provide schema design guidance from proposed schema operations without modifying the database |
+| `apply_schema_tool` | V1 supports only schema `validate` and `dry_run`; real `apply` is currently disabled |
+| `execute_gremlin_write_tool` | Execute direct Gremlin writes; disabled by default and available only when `HUGEGRAPH_MCP_ADMIN_MODE=true` |
+| `refresh_vid_embeddings_tool` | Refresh VID embeddings and mutate index state; disabled by default and available only in admin mode |
 
-The old multi-mode compatibility tools are not exposed in V1. Use the stable tools above directly.
+The old `query_graph_tool`, `manage_schema_tool`, and `manage_graph_data_tool` are no longer exposed as user interfaces. New integrations should use the stable tools listed above.
 
-### 1. Inspect Graph Status And Schema
+## Write Safety Chain
 
-Use `inspect_graph_tool` first after connecting. It checks HugeGraph Server status, HugeGraph-AI availability, schema summary, graph counts, index counts, readonly state, warnings, and suggested next actions. It is best-effort: if part of the backend is unavailable, it returns a degraded envelope instead of failing the whole inspection.
+All user-reachable write operations must follow this chain:
 
-Basic inspection:
-
-```json
-{
-  "tool": "inspect_graph_tool",
-  "arguments": {
-    "include_raw_schema": false
-  }
-}
+```text
+dry_run=true
+  -> user/agent reviews preview, warnings, matched_count, mutation_summary
+  -> records plan_hash, nonce, expires_at
+  -> dry_run=false + confirm=true + original payload + plan_hash + nonce + expires_at
+  -> MCP revalidates target, permission, schema, payload digest, and expiry
+  -> executes the write
+  -> returns write/delete results and failure details
 ```
 
-Include the full raw schema when planning schema changes or debugging mismatches:
+`plan_hash` is not just a payload hash. It binds at least:
 
-```json
-{
-  "tool": "inspect_graph_tool",
-  "arguments": {
-    "include_raw_schema": true
-  }
-}
-```
+- Tool name
+- Operation mode
+- Graph URL
+- Graph name
+- Graph space
+- Permission state such as readonly/admin flags
+- Current schema hash
+- Normalized payload digest
+- Nonce
+- Expiry
 
-### 2. Query The Graph
+The confirm phase must fully revalidate the plan. If the dry-run result expires, the target graph changes, the schema changes, the payload changes, or permissions change, confirm must fail and require a new dry run.
 
-Use `generate_gremlin_tool` for natural-language Gremlin generation and
-`execute_gremlin_read_tool` for known-safe read-only traversals. GraphRAG text
-query mode is not exposed in V1.
+### Import Semantics
 
-Generate Gremlin without executing it:
+When `import_graph_data_tool(mode="ingest")` executes a create operation, it returns one of three states:
 
-```json
-{
-  "tool": "generate_gremlin_tool",
-  "arguments": {
-    "query": "Find the top 10 people with the most outgoing knows edges"
-  }
-}
-```
+- `success`: all writes succeeded
+- `partial` / `degraded`: some writes succeeded, some failed, or the final state cannot be fully confirmed
+- `error`: the write failed
 
-Generate Gremlin and execute it only if the generated traversal is read-only:
+The response should include written counts, failure details, and compensation suggestions to avoid an untraceable partial write.
 
-```json
-{
-  "tool": "generate_gremlin_tool",
-  "arguments": {
-    "query": "Count person vertices by city",
-    "execute": true
-  }
-}
-```
+### Delete Semantics
 
-Run a direct read-only Gremlin traversal:
+`delete_graph_data_tool` is a controlled delete tool:
 
-```json
-{
-  "tool": "execute_gremlin_read_tool",
-  "arguments": {
-    "gremlin_query": "g.V().hasLabel('person').limit(10).valueMap(true)"
-  }
-}
-```
+- The dry-run phase must resolve the concrete objects that would be deleted
+- The confirm phase must re-match and verify that the target is unchanged
+- The tool must verify after deletion that the target no longer exists
+- Vertex deletion is rejected by default when the vertex has associated edges
 
-### 3. Design And Manage Schema
+Therefore, when deleting a vertex with associated edges, explicitly dry-run and delete the related edges first, then dry-run and delete the vertex.
 
-Use `design_schema_tool` for design guidance and `apply_schema_tool` for schema
-validation and dry-run previews. Full schema apply is disabled in V1 and
-returns `FEATURE_DISABLED`.
+## Configuration
 
-Ask for schema design guidance:
+All configuration is read from environment variables.
 
-```json
-{
-  "tool": "design_schema_tool",
-  "arguments": {
-    "operations": []
-  }
-}
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HUGEGRAPH_URL` | `http://127.0.0.1:8080` | HugeGraph Server URL |
+| `HUGEGRAPH_GRAPH_PATH` | `DEFAULT/hugegraph` | Graph path in `GRAPH_SPACE/GRAPH_NAME` format |
+| `HUGEGRAPH_GRAPHSPACE` | unset | Override graph space separately |
+| `HUGEGRAPH_GRAPH` | unset | Override graph name separately |
+| `HUGEGRAPH_USER` | `admin` | HugeGraph username |
+| `HUGEGRAPH_PASSWORD` | `""` | HugeGraph password |
+| `HUGEGRAPH_MCP_READONLY` | `true` | Whether readonly mode is enabled |
+| `HUGEGRAPH_MCP_ALLOW_AI` | `false` | Whether HugeGraph-AI calls are allowed |
+| `HUGEGRAPH_MCP_ADMIN_MODE` | `false` | Whether admin/debug tools are enabled |
+| `HUGEGRAPH_AI_URL` | `http://127.0.0.1:8001` | HugeGraph-AI URL |
+| `HUGEGRAPH_AI_GRAPH_URL` | unset | Graph URL used by HugeGraph-AI; defaults to `HUGEGRAPH_URL` when unset |
+| `HUGEGRAPH_MCP_TIMEOUT_SECONDS` | `30` | AI call timeout in seconds |
+| `HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS` | `100` | GraphRAG context item limit |
+| `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL` | `false` | Reserved experimental GraphRAG configuration |
+| `HUGEGRAPH_MCP_SQL_ENABLED` | `false` | SQL capability switch; V1 user-facing SQL paths are still disabled |
+| `HUGEGRAPH_MCP_SQLITE_ALLOWLIST` | empty | SQLite file allowlist, separated by semicolons |
+| `HUGEGRAPH_MCP_SQL_MAX_PREVIEW_ROWS` | `20` | SQL preview row limit |
+| `HUGEGRAPH_MCP_SQL_MAX_IMPORT_ROWS` | `1000` | SQL import row limit |
+| `HUGEGRAPH_MCP_SQL_TIMEOUT_SECONDS` | `10` | SQLite timeout in seconds |
 
-Validate operations before planning an apply:
+Recommended safe defaults:
 
-```json
-{
-  "tool": "apply_schema_tool",
-  "arguments": {
-    "mode": "validate",
-    "operations": [
-      {
-        "type": "create_property_key",
-        "name": "name",
-        "data_type": "TEXT",
-        "cardinality": "SINGLE"
-      },
-      {
-        "type": "create_vertex_label",
-        "name": "person",
-        "properties": ["name"],
-        "primary_keys": ["name"]
-      }
-    ]
-  }
-}
-```
+- `HUGEGRAPH_MCP_READONLY=true`
+- `HUGEGRAPH_MCP_ALLOW_AI=false`
+- `HUGEGRAPH_MCP_ADMIN_MODE=false`
 
-Create a dry-run plan and capture the returned `plan_hash`:
+Common combinations:
 
-```json
-{
-  "tool": "apply_schema_tool",
-  "arguments": {
-    "mode": "dry_run",
-    "operations": [
-      {
-        "type": "create_property_key",
-        "name": "name",
-        "data_type": "TEXT",
-        "cardinality": "SINGLE"
-      },
-      {
-        "type": "create_vertex_label",
-        "name": "person",
-        "properties": ["name"],
-        "primary_keys": ["name"]
-      }
-    ]
-  }
-}
-```
-
-`mode="apply"` is reserved for a later release. In V1, use `mode="dry_run"` to preview the schema diff and risk warnings.
-
-### 4. Graph Data Extraction And Import
-
-Use `extract_graph_data_tool` for graph-shaped extraction from text. Use
-`import_graph_data_tool(mode="ingest")` as the public structured create
-entrypoint and `delete_graph_data_tool` as the public controlled delete
-entrypoint. V1 disables table import, SQL import, and update.
-
-Structured writes are executed by MCP through its local
-`graph_data -> change_plan -> Gremlin` path after schema validation,
-`dry_run`, target-bound `plan_hash`, and `confirm=true`. The HugeGraph-AI
-`/graph-import` API is not used as a public write path.
-
-Extract candidate graph data from text without writing to HugeGraph:
-
-```json
-{
-  "tool": "extract_graph_data_tool",
-  "arguments": {
-    "text": "Alice works at Acme. Bob knows Alice."
-  }
-}
-```
-
-The `schema` argument is optional. In normal usage, omit it so HugeGraph-AI can use the current graph schema. If you pass `schema`, provide a backend-compatible live schema shape instead of a simplified label list.
-
-Dry-run a structured graph data import:
-
-```json
-{
-  "tool": "import_graph_data_tool",
-  "arguments": {
-    "mode": "ingest",
-    "dry_run": true,
-    "graph_data": {
-      "vertices": [
-        {"label": "person", "id": "alice", "properties": {"name": "Alice"}},
-        {"label": "person", "id": "bob", "properties": {"name": "Bob"}}
-      ],
-      "edges": [
-        {
-          "label": "knows",
-          "source_label": "person",
-          "target_label": "person",
-          "source": {"name": "Bob"},
-          "target": {"name": "Alice"},
-          "properties": {}
-        }
-      ]
-    }
-  }
-}
-```
-
-Apply the exact dry-run import plan:
-
-```json
-{
-  "tool": "import_graph_data_tool",
-  "arguments": {
-    "mode": "ingest",
-    "dry_run": false,
-    "confirm": true,
-    "plan_hash": "PLAN_HASH_FROM_DRY_RUN",
-    "graph_data": {
-      "vertices": [
-        {"label": "person", "id": "alice", "properties": {"name": "Alice"}},
-        {"label": "person", "id": "bob", "properties": {"name": "Bob"}}
-      ],
-      "edges": [
-        {
-          "label": "knows",
-          "source_label": "person",
-          "target_label": "person",
-          "source": {"name": "Bob"},
-          "target": {"name": "Alice"},
-          "properties": {}
-        }
-      ]
-    }
-  }
-}
-```
-
-### 5. Controlled Delete
-
-Use `delete_graph_data_tool` for controlled deletion. It does not accept raw
-Gremlin. It only accepts a structured `change_plan` with `delete_vertex` or
-`delete_edge` operations. Each operation must match exactly one graph element.
-
-V1 controlled delete does not support conditional bulk delete or cascade delete.
-If a vertex has associated edges, delete those edges explicitly first, then
-delete the vertex with `cascade=false`.
-
-Dry-run a vertex delete:
-
-```json
-{
-  "tool": "delete_graph_data_tool",
-  "arguments": {
-    "dry_run": true,
-    "change_plan": {
-      "operations": [
-        {
-          "op": "delete_vertex",
-          "label": "person",
-          "match": {"name": "Alice"},
-          "cascade": false
-        }
-      ]
-    }
-  }
-}
-```
-
-Dry-run an edge delete:
-
-```json
-{
-  "tool": "delete_graph_data_tool",
-  "arguments": {
-    "dry_run": true,
-    "change_plan": {
-      "operations": [
-        {
-          "op": "delete_edge",
-          "label": "knows",
-          "source_label": "person",
-          "source_match": {"name": "Alice"},
-          "target_label": "person",
-          "target_match": {"name": "Bob"}
-        }
-      ]
-    }
-  }
-}
-```
-
-Apply the exact dry-run delete plan:
-
-```json
-{
-  "tool": "delete_graph_data_tool",
-  "arguments": {
-    "dry_run": false,
-    "confirm": true,
-    "plan_hash": "PLAN_HASH_FROM_DRY_RUN",
-    "nonce": "NONCE_FROM_DRY_RUN",
-    "expires_at": 1790000000,
-    "change_plan": {
-      "operations": [
-        {
-          "op": "delete_edge",
-          "label": "knows",
-          "source_label": "person",
-          "source_match": {"name": "Alice"},
-          "target_label": "person",
-          "target_match": {"name": "Bob"}
-        }
-      ]
-    }
-  }
-}
-```
-
-Table, SQL, and update workflows are planned for a later release. In V1, use
-`extract_graph_data_tool` for extraction, `import_graph_data_tool(mode="ingest")`
-for structured creates, and `delete_graph_data_tool` for controlled deletes.
-
-## Advanced Debug Tools
-
-These tools are available for maintenance and debugging. Prefer the V1 stable tools for normal workflows.
-
-### `execute_gremlin_write_tool`
-
-Runs a direct Gremlin write query. Prefer `import_graph_data_tool` with
-`mode="ingest"` for normal graph data writes because it validates data and uses
-the dry-run safety chain.
-
-```json
-{
-  "tool": "execute_gremlin_write_tool",
-  "arguments": {
-    "gremlin_query": "g.addV('person').property('name', 'Alice')"
-  }
-}
-```
-
-### `refresh_vid_embeddings_tool`
-
-Refreshes VID embeddings through HugeGraph-AI. This is a mutating index operation and requires explicit confirmation.
-
-```json
-{
-  "tool": "refresh_vid_embeddings_tool",
-  "arguments": {
-    "confirm": true
-  }
-}
-```
-
-## Permission Model
-
-The MCP server uses environment switches plus runtime capability guards. It does not provide per-user RBAC.
-
-`HUGEGRAPH_MCP_READONLY` and `HUGEGRAPH_MCP_ALLOW_AI` are intentionally independent:
-
-- `HUGEGRAPH_MCP_READONLY=true` blocks graph-side mutations.
-- `HUGEGRAPH_MCP_ALLOW_AI=true` allows HugeGraph-AI calls for natural-language query generation and graph data extraction.
-- `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true` additionally exposes the experimental GraphRAG text-query path for debugging.
-- Setting both to `true` allows AI-assisted read/query/extraction workflows while still rejecting graph writes.
-
-| Capability | Used By | `readonly=true` Behavior |
-| --- | --- | --- |
-| `READ` | Graph status, schema inspection, direct read-only graph queries | Allowed |
-| `GENERATE` | Generation-only planning paths | Allowed |
-| `DATA_WRITE` | Graph data import, update, and delete apply paths | Rejected |
-| `SCHEMA_WRITE` | Schema apply paths | Rejected |
-| `INDEX_WRITE` | VID embedding refresh | Rejected |
-| `DEBUG_WRITE` | Direct Gremlin write debugging tool | Rejected |
-
-Tool behavior under this model:
-
-| Tool | Behavior |
-| --- | --- |
-| `inspect_graph_tool` | Always allowed. Returns graph status, schema summary, counts when available, and AI status. |
-| `generate_gremlin_tool` | AI-backed Gremlin generation requires `HUGEGRAPH_MCP_ALLOW_AI=true`; execution is still read-only. |
-| `execute_gremlin_read_tool` | Read-only Gremlin execution is allowed after policy validation. |
-| `extract_graph_data_tool` | AI-backed graph-data extraction requires `HUGEGRAPH_MCP_ALLOW_AI=true`; it does not write. |
-| `design_schema_tool` | Schema design guidance is allowed. |
-| `apply_schema_tool` | Schema validation and dry runs are allowed; apply is disabled in V1. |
-| `import_graph_data_tool` | Single public structured graph-data write entrypoint. Uses MCP local validation, dry-run/confirm, and Gremlin execution. |
-| `delete_graph_data_tool` | Controlled delete entrypoint. Dry runs are allowed; confirm execution is rejected when readonly is true. |
-| `refresh_vid_embeddings_tool` | Requires `readonly=false` and `confirm=true`. |
-| `execute_gremlin_write_tool` | Requires `readonly=false`. Intended for debugging and admin maintenance, not routine data loading. |
-
-V1 disabled capabilities return `FEATURE_DISABLED` instead of executing:
-
-- SQL modes and SQL-backed import (`sql_preview`, `sql_mapping_suggest`, `sql_import`)
-- Table import
-- Graph data update modes and uncontrolled delete modes
-- Direct debug writes unless `HUGEGRAPH_MCP_ADMIN_MODE=true`
-- Refreshing VID embeddings unless `HUGEGRAPH_MCP_ADMIN_MODE=true`
-- Full schema apply through `apply_schema_tool`
-
-## Safety Notes
-
-- Set `HUGEGRAPH_MCP_READONLY=true` for exploration, demos, and production read-only assistant access.
-- Set `HUGEGRAPH_MCP_ALLOW_AI=true` only when the deployment should call HugeGraph-AI.
-- Set `HUGEGRAPH_MCP_READONLY=false` only when writes are intended.
-- Set `HUGEGRAPH_MCP_ADMIN_MODE=true` only for maintenance/debug sessions that need admin tools.
-- Keep `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=false` for normal user-facing deployments; enable it only while debugging GraphRAG.
-- Readonly mode is enforced at runtime for write paths, including graph data import confirmation, direct write queries, and embedding refresh.
-- Graph data import confirmation requires a previous dry run, a matching `plan_hash`, and `confirm=true`.
-- `generate_gremlin_tool` does not execute generated Gremlin unless `execute=true`.
-- Direct Gremlin reads are allowed only when the traversal can be treated as read-only. Unsafe or uncertain traversals are rejected.
-- Do not use direct write debugging tools for routine data loading.
+| Scenario | Configuration |
+|----------|---------------|
+| Read-only graph query | `READONLY=true`, `ALLOW_AI=false` |
+| AI Gremlin generation / text extraction | `READONLY=true`, `ALLOW_AI=true` |
+| Controlled import and delete | `READONLY=false`, set `ALLOW_AI=true` as needed |
+| Administration/debugging | `READONLY=false`, `ADMIN_MODE=true` |
 
 ## License
 
