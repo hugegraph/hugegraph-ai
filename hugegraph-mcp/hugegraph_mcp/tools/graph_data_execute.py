@@ -427,20 +427,26 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                 idx,
                 results,
             )
-        if op == "delete_vertex":
-            # 删除顶点后立即反查，确保 HugeGraph 已经实际移除目标。
+        if op in {"delete_vertex", "delete_edge"}:
+            # 删除后立即反查，确保 HugeGraph 已经实际移除目标。
             # 这能捕获后端静默失败或异步状态异常，而不是只信任写接口返回。
-            verify_result = _read_count(_vertex_match_query(operation))
+            verify_query = (
+                _edge_match_query(operation)
+                if op == "delete_edge"
+                else _vertex_match_query(operation)
+            )
+            verify_result = _read_count(verify_query)
             if not verify_result.get("ok"):
                 return _execution_failure(verify_result, operation, idx, results)
             if verify_result["data"]["matched_count"] != 0:
                 return _execution_failure(
                     envelope_err(
-                        ErrorType.INVALID_GRAPH_DATA,
-                        "delete_vertex execution did not remove the matched vertex.",
-                        suggestion="Inspect the graph state and retry after confirming the vertex match criteria.",
+                        "DELETE_VERIFY_FAILED",
+                        f"{op} execution did not remove the matched element.",
+                        suggestion="Inspect the graph state and retry after confirming the match criteria.",
                         details={
                             "operation_index": idx,
+                            "op": op,
                             "matched_count": verify_result["data"]["matched_count"],
                         },
                     ),

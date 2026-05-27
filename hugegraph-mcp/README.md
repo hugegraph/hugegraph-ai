@@ -107,6 +107,7 @@ These are the stable public V1 tools:
 | `execute_gremlin_read_tool` | Execute a Gremlin traversal after read-only policy validation. |
 | `extract_graph_data_tool` | Extract candidate `{vertices, edges}` graph data from text. It does not write to HugeGraph. |
 | `import_graph_data_tool` | Import structured graph data through MCP local validation, dry-run/confirm, and Gremlin execution. |
+| `delete_graph_data_tool` | Delete exactly matched vertices or edges through MCP local validation, dry-run/confirm, and post-delete verification. |
 | `design_schema_tool` | Get schema design guidance from proposed operations. |
 | `apply_schema_tool` | Validate or dry-run schema operations. `mode="apply"` is disabled in V1. |
 
@@ -250,8 +251,9 @@ Create a dry-run plan and capture the returned `plan_hash`:
 ### 4. Graph Data Extraction And Import
 
 Use `extract_graph_data_tool` for graph-shaped extraction from text. Use
-`import_graph_data_tool(mode="ingest")` as the single public structured write
-entrypoint. V1 disables table import, SQL import, update, and delete.
+`import_graph_data_tool(mode="ingest")` as the public structured create
+entrypoint and `delete_graph_data_tool` as the public controlled delete
+entrypoint. V1 disables table import, SQL import, and update.
 
 Structured writes are executed by MCP through its local
 `graph_data -> change_plan -> Gremlin` path after schema validation,
@@ -329,9 +331,90 @@ Apply the exact dry-run import plan:
 }
 ```
 
-Table, SQL, update, and delete workflows are planned for a later release. In V1,
-use `extract_graph_data_tool` for extraction and
-`import_graph_data_tool(mode="ingest")` for structured writes.
+### 5. Controlled Delete
+
+Use `delete_graph_data_tool` for controlled deletion. It does not accept raw
+Gremlin. It only accepts a structured `change_plan` with `delete_vertex` or
+`delete_edge` operations. Each operation must match exactly one graph element.
+
+V1 controlled delete does not support conditional bulk delete or cascade delete.
+If a vertex has associated edges, delete those edges explicitly first, then
+delete the vertex with `cascade=false`.
+
+Dry-run a vertex delete:
+
+```json
+{
+  "tool": "delete_graph_data_tool",
+  "arguments": {
+    "dry_run": true,
+    "change_plan": {
+      "operations": [
+        {
+          "op": "delete_vertex",
+          "label": "person",
+          "match": {"name": "Alice"},
+          "cascade": false
+        }
+      ]
+    }
+  }
+}
+```
+
+Dry-run an edge delete:
+
+```json
+{
+  "tool": "delete_graph_data_tool",
+  "arguments": {
+    "dry_run": true,
+    "change_plan": {
+      "operations": [
+        {
+          "op": "delete_edge",
+          "label": "knows",
+          "source_label": "person",
+          "source_match": {"name": "Alice"},
+          "target_label": "person",
+          "target_match": {"name": "Bob"}
+        }
+      ]
+    }
+  }
+}
+```
+
+Apply the exact dry-run delete plan:
+
+```json
+{
+  "tool": "delete_graph_data_tool",
+  "arguments": {
+    "dry_run": false,
+    "confirm": true,
+    "plan_hash": "PLAN_HASH_FROM_DRY_RUN",
+    "nonce": "NONCE_FROM_DRY_RUN",
+    "expires_at": 1790000000,
+    "change_plan": {
+      "operations": [
+        {
+          "op": "delete_edge",
+          "label": "knows",
+          "source_label": "person",
+          "source_match": {"name": "Alice"},
+          "target_label": "person",
+          "target_match": {"name": "Bob"}
+        }
+      ]
+    }
+  }
+}
+```
+
+Table, SQL, and update workflows are planned for a later release. In V1, use
+`extract_graph_data_tool` for extraction, `import_graph_data_tool(mode="ingest")`
+for structured creates, and `delete_graph_data_tool` for controlled deletes.
 
 ## Advanced Debug Tools
 
@@ -396,6 +479,7 @@ Tool behavior under this model:
 | `design_schema_tool` | Schema design guidance is allowed. |
 | `apply_schema_tool` | Schema validation and dry runs are allowed; apply is disabled in V1. |
 | `import_graph_data_tool` | Single public structured graph-data write entrypoint. Uses MCP local validation, dry-run/confirm, and Gremlin execution. |
+| `delete_graph_data_tool` | Controlled delete entrypoint. Dry runs are allowed; confirm execution is rejected when readonly is true. |
 | `refresh_vid_embeddings_tool` | Requires `readonly=false` and `confirm=true`. |
 | `execute_gremlin_write_tool` | Requires `readonly=false`. Intended for debugging and admin maintenance, not routine data loading. |
 
@@ -403,7 +487,7 @@ V1 disabled capabilities return `FEATURE_DISABLED` instead of executing:
 
 - SQL modes and SQL-backed import (`sql_preview`, `sql_mapping_suggest`, `sql_import`)
 - Table import
-- Graph data update/delete modes
+- Graph data update modes and uncontrolled delete modes
 - Direct debug writes unless `HUGEGRAPH_MCP_ADMIN_MODE=true`
 - Refreshing VID embeddings unless `HUGEGRAPH_MCP_ADMIN_MODE=true`
 - Full schema apply through `apply_schema_tool`

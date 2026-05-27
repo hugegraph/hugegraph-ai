@@ -333,6 +333,37 @@ def import_graph_data_tool(
     )
 
 
+# ========== 受控图数据删除入口 ==========
+
+
+@mcp.tool()
+def delete_graph_data_tool(
+    change_plan: dict,
+    dry_run: bool = True,
+    confirm: bool = False,
+    plan_hash: str | None = None,
+    nonce: str | None = None,
+    expires_at: float | None = None,
+) -> dict:
+    """V1 稳定工具：受控删除图数据。
+
+    只支持精确 delete_vertex/delete_edge change_plan。
+    必须经过 dry_run -> plan_hash -> confirm；不支持批量条件删除或级联删除。
+    """
+    return _call_public_tool(
+        "delete_graph_data_tool",
+        manage_graph_data,
+        mode="delete",
+        change_plan=change_plan,
+        dry_run=dry_run,
+        confirm=confirm,
+        plan_hash=plan_hash,
+        nonce=nonce,
+        expires_at=expires_at,
+        plan_tool_name="delete_graph_data_tool",
+    )
+
+
 # ========== 高级调试工具 ==========
 
 

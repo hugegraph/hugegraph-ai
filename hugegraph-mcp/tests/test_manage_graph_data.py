@@ -543,6 +543,103 @@ def test_manage_graph_data_execute_delete_vertex_verifies_removed(monkeypatch):
     assert reads[-1] == 'g.V().hasLabel("person").has("name","Alice").count()'
 
 
+def test_manage_graph_data_execute_delete_edge_verifies_removed(monkeypatch):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    reads = []
+    writes = []
+    counts = iter([1, 1, 1, 1, 1, 1, 1, 1, 1, 0])
+
+    def fake_read(query):
+        reads.append(query)
+        return {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        }
+
+    def fake_write(query):
+        writes.append(query)
+        return {"success": True, "affected": 1, "duration_ms": 1, "is_write": True}
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools, "execute_gremlin_read", fake_read
+    )
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools, "execute_gremlin_write", fake_write
+    )
+    dry_run = manage_graph_data_module.manage_graph_data(
+        mode="delete",
+        change_plan=_delete_edge_plan(),
+    )
+
+    result = manage_graph_data_module.manage_graph_data(
+        mode="delete",
+        change_plan=_delete_edge_plan(),
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=dry_run["data"]["plan_context"]["nonce"],
+        expires_at=dry_run["data"]["plan_context"]["expires_at"],
+    )
+
+    edge_match_query = (
+        'g.V().hasLabel("person").has("name","Alice").outE("knows")'
+        '.where(inV().hasLabel("person").has("name","Bob"))'
+    )
+    assert result["ok"] is True
+    assert writes == [f"{edge_match_query}.drop()"]
+    assert reads[-1] == f"{edge_match_query}.count()"
+
+
+def test_manage_graph_data_execute_delete_edge_verify_failure(monkeypatch):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    counts = iter([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
+    )
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_write",
+        lambda _query: {
+            "success": True,
+            "affected": 1,
+            "duration_ms": 1,
+            "is_write": True,
+        },
+    )
+    dry_run = manage_graph_data_module.manage_graph_data(
+        mode="delete",
+        change_plan=_delete_edge_plan(),
+    )
+
+    result = manage_graph_data_module.manage_graph_data(
+        mode="delete",
+        change_plan=_delete_edge_plan(),
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=dry_run["data"]["plan_context"]["nonce"],
+        expires_at=dry_run["data"]["plan_context"]["expires_at"],
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "DELETE_VERIFY_FAILED"
+    assert result["error"]["details"]["failed_items"][0]["type"] == (
+        "DELETE_VERIFY_FAILED"
+    )
+
+
 def test_dry_run_update_edge_returns_preview_and_hash(monkeypatch):
     queries = []
     counts = iter([1, 1, 1])

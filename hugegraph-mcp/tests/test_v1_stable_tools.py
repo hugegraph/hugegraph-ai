@@ -138,6 +138,37 @@ def test_apply_schema_tool_apply_returns_feature_disabled():
     assert "apply" in result["error"]["message"].lower()
 
 
+def test_delete_graph_data_tool_routes_to_manage_graph_data_delete(monkeypatch):
+    expected = envelope_ok({"valid": True, "preview": [], "plan_hash": "abc123"})
+    mock = Mock(return_value=expected)
+    monkeypatch.setattr(server, "manage_graph_data", mock)
+    change_plan = {
+        "operations": [
+            {
+                "op": "delete_vertex",
+                "label": "person",
+                "match": {"name": "Alice"},
+            }
+        ]
+    }
+
+    result = server.delete_graph_data_tool(change_plan=change_plan)
+
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
+    mock.assert_called_once_with(
+        mode="delete",
+        change_plan=change_plan,
+        dry_run=True,
+        confirm=False,
+        plan_hash=None,
+        nonce=None,
+        expires_at=None,
+        plan_tool_name="delete_graph_data_tool",
+    )
+
+
 def test_generate_gremlin_tool_aligns_error_source(monkeypatch):
     expected = {
         **envelope_ok(),

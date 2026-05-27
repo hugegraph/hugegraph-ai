@@ -151,6 +151,7 @@ V1 稳定工具返回统一 envelope，成功和失败都是同一结构：
 | `execute_gremlin_read_tool` | 执行通过只读策略校验的 Gremlin traversal |
 | `extract_graph_data_tool` | 从文本抽取候选 `{vertices, edges}`，不写入 HugeGraph |
 | `import_graph_data_tool` | 通过 MCP 本地校验、dry-run/confirm 和 Gremlin 执行导入结构化图数据 |
+| `delete_graph_data_tool` | 通过 MCP 本地校验、dry-run/confirm 和删除后反查，受控删除精确匹配的点或边 |
 | `design_schema_tool` | 基于操作草案给出 schema 设计指导 |
 | `apply_schema_tool` | 支持 `validate` 和 `dry_run`；V1 中 `apply` 返回 `FEATURE_DISABLED` |
 
@@ -254,14 +255,15 @@ dry-run 生成 plan_hash（记下返回值中的 `plan_hash`）：
 
 V1 中如传入 `mode="apply"`，工具会返回 `FEATURE_DISABLED`。需要变更 schema 时，先使用 `dry_run` 审查 schema diff 和风险提示。
 
-### 4. 图数据抽取与导入
+### 4. 图数据抽取、导入与受控删除
 
-V1 只保留一个公开结构化写入口：`import_graph_data_tool(mode="ingest")`。
+V1 保留两个公开结构化写入口：`import_graph_data_tool(mode="ingest")`
+用于创建数据，`delete_graph_data_tool` 用于受控删除数据。
 自然语言抽取候选图数据使用 `extract_graph_data_tool`。
 
 结构化写入由 MCP 本地执行：`graph_data -> change_plan -> Gremlin`。写入前必须经过 schema 校验、`dry_run`、目标绑定 `plan_hash` 和 `confirm=true`。HugeGraph-AI 的 `/graph-import` 不作为公开写入路径使用。
 
-`table`、`sql_preview`、`sql_mapping_suggest`、`sql_import`、`update`、`delete` 在 V1 中禁用。
+`table`、`sql_preview`、`sql_mapping_suggest`、`sql_import`、`update` 和不受控删除模式在 V1 中禁用。
 
 #### 从自然语言抽取图数据（不写入）
 
@@ -317,7 +319,76 @@ V1 只保留一个公开结构化写入口：`import_graph_data_tool(mode="inges
 }
 ```
 
-表格、SQL、update、delete 工作流后移到后续版本。V1 中使用 `extract_graph_data_tool` 抽取候选数据，使用 `import_graph_data_tool(mode="ingest")` 执行结构化写入。
+#### 受控删除图数据
+
+`delete_graph_data_tool` 不接受用户传入 Gremlin，只接受结构化 `change_plan`。
+第一版只支持精确删除 `delete_vertex` 和 `delete_edge`，每个操作必须唯一匹配一个对象。
+不支持条件批量删除，也不支持级联删除；如果顶点有关联边，需要先显式删除边，再删除点。
+
+删除点 dry-run：
+
+```json
+{
+  "tool": "delete_graph_data_tool",
+  "arguments": {
+    "dry_run": true,
+    "change_plan": {
+      "operations": [
+        {
+          "op": "delete_vertex",
+          "label": "person",
+          "match": { "name": "Alice" },
+          "cascade": false
+        }
+      ]
+    }
+  }
+}
+```
+
+删除边 dry-run：
+
+```json
+{
+  "tool": "delete_graph_data_tool",
+  "arguments": {
+    "dry_run": true,
+    "change_plan": {
+      "operations": [
+        {
+          "op": "delete_edge",
+          "label": "knows",
+          "source_label": "person",
+          "source_match": { "name": "Alice" },
+          "target_label": "person",
+          "target_match": { "name": "Bob" }
+        }
+      ]
+    }
+  }
+}
+```
+
+审查 dry-run 结果中的 `preview`、`matched_count`、`associated_edge_count`
+和 `warnings`。确认无误后，传回 `plan_hash`、`nonce`、`expires_at` 执行：
+
+```json
+{
+  "tool": "delete_graph_data_tool",
+  "arguments": {
+    "dry_run": false,
+    "confirm": true,
+    "plan_hash": "abc123fromDryRun",
+    "nonce": "nonceFromDryRun",
+    "expires_at": 1790000000,
+    "change_plan": { "operations": [ ... ] }
+  }
+}
+```
+
+表格、SQL 和 update 工作流后移到后续版本。V1 中使用 `extract_graph_data_tool`
+抽取候选数据，使用 `import_graph_data_tool(mode="ingest")` 创建结构化数据，
+使用 `delete_graph_data_tool` 做受控删除。
 
 ## 安全模型
 
@@ -352,6 +423,8 @@ V1 只保留一个公开结构化写入口：`import_graph_data_tool(mode="inges
 | `apply_schema_tool`（apply） | V1 禁用 |
 | `import_graph_data_tool`（ingest dry_run） | 允许 |
 | `import_graph_data_tool`（ingest confirm） | readonly=true 时拒绝 |
+| `delete_graph_data_tool`（dry_run） | 允许 |
+| `delete_graph_data_tool`（confirm） | readonly=true 时拒绝 |
 | `refresh_vid_embeddings_tool` | 拒绝（需 confirm=true） |
 | `execute_gremlin_write_tool` | 拒绝 |
 
@@ -361,7 +434,7 @@ V1 只保留一个公开结构化写入口：`import_graph_data_tool(mode="inges
 
 - SQL 和 SQL 导入路径：`sql_preview`、`sql_mapping_suggest`、`sql_import`
 - 表格导入
-- 图数据 update/delete
+- 图数据 update 和不受控 delete
 - 直接 debug write（除非 `HUGEGRAPH_MCP_ADMIN_MODE=true`）
 - 刷新 VID embeddings（除非 `HUGEGRAPH_MCP_ADMIN_MODE=true`）
 - `apply_schema_tool` 的完整 schema apply
@@ -403,10 +476,10 @@ Skills 是 agent 侧的工作流说明，帮助 AI 助手选择正确的 MCP 能
 | `hugegraph-operator` | 查看图状态、schema、服务健康、权限、AI 可用性、计数和索引 | `inspect_graph_tool` |
 | `hugegraph-query-analyst` | 查询图数据；NL 生成 Gremlin 并只读执行 | `generate_gremlin_tool`、`execute_gremlin_read_tool` |
 | `hugegraph-schema-designer` | 设计、校验和 dry-run schema 变更；完整 apply 属于后续版本能力 | `design_schema_tool`、`apply_schema_tool` |
-| `hugegraph-data-importer` | 从自然语言抽取候选图数据，并通过结构化 graph_data 导入图数据；表格、SQL、update/delete 属于后续版本能力 | `extract_graph_data_tool`、`import_graph_data_tool` |
+| `hugegraph-data-importer` | 从自然语言抽取候选图数据，并通过结构化 graph_data 导入图数据或受控删除图数据；表格、SQL、update 属于后续版本能力 | `extract_graph_data_tool`、`import_graph_data_tool`、`delete_graph_data_tool` |
 | `hugegraph-regression-tester` | 对用户能力做真实回归测试，包括写入、验证、清理和权限行为检查 | 上述工具组合 |
 
-Skills 的定位是"怎么调用 MCP"的操作指南，不是绕过 MCP 的实现入口。例如导入数据时，Skill 会要求先 dry-run、记录 `plan_hash`、再 confirm 写入、最后查询验证和清理；真正的写入仍通过 `import_graph_data_tool(mode="ingest")` 完成。
+Skills 的定位是"怎么调用 MCP"的操作指南，不是绕过 MCP 的实现入口。例如导入或删除数据时，Skill 会要求先 dry-run、记录 `plan_hash`、再 confirm 写入、最后查询验证和清理；真正的创建仍通过 `import_graph_data_tool(mode="ingest")` 完成，真正的删除仍通过 `delete_graph_data_tool` 完成。
 
 支持 Skills 的客户端通常从本地目录加载：
 
