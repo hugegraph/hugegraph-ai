@@ -830,11 +830,32 @@ def ingest_graph_data(
         )
 
     if not ai_result.get("ok"):
-        return ai_result
+        # M5: 归一化 AI 错误响应，而非透传原始结果
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            "HugeGraph-AI import returned an error.",
+            details=_normalize_import_result(
+                ai_result=None,
+                planned=planned,
+                batch_id=batch_id,
+                request_id=request_id,
+                cfg=cfg,
+            ),
+        )
 
     import_result = _unwrap_ai_payload(ai_result.get("data"))
     if isinstance(import_result, dict) and import_result.get("ok") is False:
-        return import_result
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            "HugeGraph-AI import returned an error in payload.",
+            details=_normalize_import_result(
+                ai_result=None,
+                planned=planned,
+                batch_id=batch_id,
+                request_id=request_id,
+                cfg=cfg,
+            ),
+        )
 
     # M5: 规范化导入结果
     normalized = _normalize_import_result(
@@ -947,14 +968,22 @@ def _extract_written_counts(ai_result: Any, planned: dict[str, int]) -> dict[str
 
 
 def _extract_failed_items(ai_result: Any) -> list[dict[str, Any]]:
-    """从 AI 结果中提取失败项。"""
+    """从 AI 结果中提取失败项，统一为对象数组。"""
     if not isinstance(ai_result, dict):
         return []
 
     for key in ("failed_items", "errors", "failures"):
         items = ai_result.get(key)
         if isinstance(items, list):
-            return items[:100]  # 限制数量
+            normalized = []
+            for item in items[:100]:
+                if isinstance(item, dict):
+                    normalized.append(item)
+                elif isinstance(item, str):
+                    normalized.append({"message": item})
+                else:
+                    normalized.append({"item": str(item)})
+            return normalized
 
     return []
 

@@ -46,6 +46,8 @@ def test_import_graph_data_tool_ingest_routes_to_ingest(monkeypatch):
         dry_run=True,
         confirm=False,
         plan_hash=None,
+        nonce=None,
+        expires_at=None,
     ):
         calls.append((graph_data, dry_run, confirm, plan_hash))
         return envelope_ok({"plan_hash": "0123456789abcdef"})
