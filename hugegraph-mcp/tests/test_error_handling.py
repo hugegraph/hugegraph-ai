@@ -133,6 +133,24 @@ def test_unknown_error_handling():
         assert result["error"]["details"]["error_type"] == "unknown_error"
 
 
+def test_no_index_exception_is_classified_as_no_index():
+    """HugeGraph NoIndexException should not be reported as a connection failure."""
+    with patch("hugegraph_mcp.gremlin_tools._get_read_client") as mock_client:
+        mock_client_instance = Mock()
+        mock_client_instance.exec.side_effect = RuntimeError(
+            "Gremlin can't get results: Server Exception: "
+            "org.apache.hugegraph.exception.NoIndexException"
+        )
+        mock_client.return_value = mock_client_instance
+
+        result = execute_gremlin_read("g.V().has('occupation','engineer')")
+
+        assert result["ok"] is False
+        assert result["error"]["type"] == "NO_INDEX"
+        assert result["error"]["details"]["error_type"] == "no_index_error"
+        assert "Create an index" in result["error"]["suggestion"]
+
+
 def test_successful_execution_preserves_format():
     """Test that successful execution maintains the expected format."""
     with patch("hugegraph_mcp.gremlin_tools._get_read_client") as mock_client:

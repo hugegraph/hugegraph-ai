@@ -12,7 +12,6 @@
 # limitations under the License.
 
 from hugegraph_mcp import server
-from hugegraph_mcp.envelope import envelope_ok
 from hugegraph_mcp.tools.import_table import import_table_data, suggest_table_mapping
 
 
@@ -211,20 +210,7 @@ def test_suggest_table_mapping_infers_edge_shape():
     ]
 
 
-def test_import_graph_data_tool_table_routes_to_ingest(monkeypatch):
-    calls = []
-
-    def fake_ingest_graph_data(
-        graph_data,
-        dry_run=True,
-        confirm=False,
-        plan_hash=None,
-    ):
-        calls.append((graph_data, dry_run, confirm, plan_hash))
-        return envelope_ok({"plan_hash": "0123456789abcdef"})
-
-    monkeypatch.setattr(server, "ingest_graph_data", fake_ingest_graph_data)
-
+def test_import_graph_data_tool_table_returns_feature_disabled_with_payload():
     result = server.import_graph_data_tool(
         mode="table",
         table_data=_table_data(),

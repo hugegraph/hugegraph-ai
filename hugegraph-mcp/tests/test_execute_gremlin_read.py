@@ -22,6 +22,16 @@ class FakeGremlinClient:
         return ["alice", "bob"]
 
 
+class FakeHugeGraphShapeClient:
+    def __init__(self, data):
+        self.data = data
+        self.last_query = None
+
+    def exec(self, query: str):
+        self.last_query = query
+        return self.data
+
+
 def test_execute_gremlin_read_basic(monkeypatch):
     """Basic happy path: query is executed with read client and returns data/total/duration/is_read."""
 
@@ -41,6 +51,35 @@ def test_execute_gremlin_read_basic(monkeypatch):
     assert result["data"]["total"] == 2
     assert isinstance(result["data"]["duration_ms"], (int, float))
     assert result["meta"]["duration_ms"] == result["data"]["duration_ms"]
+
+
+def test_execute_gremlin_read_counts_hugegraph_data_shape(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeHugeGraphShapeClient({"data": [{"id": "1:Alice"}], "meta": {}})
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().limit(1).elementMap()")
+
+    assert result["ok"] is True
+    assert result["data"]["total"] == 1
+    assert result["data"]["data"] == {"data": [{"id": "1:Alice"}], "meta": {}}
+
+
+def test_execute_gremlin_read_counts_empty_hugegraph_data_shape(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeHugeGraphShapeClient({"data": [], "meta": {}})
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().has('name','missing')")
+
+    assert result["ok"] is True
+    assert result["data"]["total"] == 0
 
 
 def test_execute_gremlin_read_rejects_obvious_writes(monkeypatch):

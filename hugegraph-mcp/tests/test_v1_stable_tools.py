@@ -178,17 +178,6 @@ def test_execute_gremlin_read_tool_aligns_error_source(monkeypatch):
     assert result["error"]["source"] == "execute_gremlin_read_tool"
 
 
-def test_manage_schema_tool_apply_returns_feature_disabled():
-    result = server.manage_schema_tool(mode="apply", operations=[{"op": "test"}])
-
-    assert result["ok"] is False
-    assert result["error"]["type"] == "FEATURE_DISABLED"
-    assert result["error"]["details"] == {
-        "mode": "apply",
-        "tool": "manage_schema_tool",
-    }
-
-
 def test_admin_gate_blocks_write_tool_by_default(monkeypatch):
     monkeypatch.setattr(server, "ADMIN_MODE", False)
 

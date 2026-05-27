@@ -149,6 +149,7 @@ def manage_graph_data(
     nonce: str | None = None,
     expires_at: float | None = None,
     extra_hash_context: dict[str, Any] | None = None,
+    plan_tool_name: str = "manage_graph_data",
 ) -> dict[str, Any]:
     """统一图数据管理入口。
 
@@ -238,6 +239,7 @@ def manage_graph_data(
         )
 
     plan_context, _ = _build_manage_graph_data_plan_context(
+        tool_name=plan_tool_name,
         mode=mode,
         plan=plan,
         live_schema=live_schema,
@@ -267,7 +269,7 @@ def manage_graph_data(
     schema_summary = _schema_summary(live_schema)
     valid, error_type, details = verify_plan_hash(
         submitted_hash=plan_hash,
-        tool_name="manage_graph_data",
+        tool_name=plan_tool_name,
         mode=mode,
         payload_digest=_manage_graph_data_payload_digest(
             plan,
@@ -301,6 +303,7 @@ def manage_graph_data(
 
 def _build_manage_graph_data_plan_context(
     *,
+    tool_name: str,
     mode: str,
     plan: Any,
     live_schema: dict[str, Any],
@@ -309,7 +312,7 @@ def _build_manage_graph_data_plan_context(
 ):
     schema_summary = _schema_summary(live_schema)
     return build_plan_context(
-        tool_name="manage_graph_data",
+        tool_name=tool_name,
         mode=mode,
         payload_digest=_manage_graph_data_payload_digest(
             plan,

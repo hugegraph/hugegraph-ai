@@ -37,22 +37,35 @@ def test_import_graph_data_tool_extract_routes_to_extract(monkeypatch):
     ]
 
 
-def test_import_graph_data_tool_ingest_routes_to_ingest(monkeypatch):
+def test_import_graph_data_tool_ingest_routes_to_mcp_import(monkeypatch):
     calls = []
     graph_data = {"vertices": [], "edges": []}
 
-    def fake_ingest_graph_data(
+    def fake_manage_graph_data(
+        mode,
         graph_data,
         dry_run=True,
         confirm=False,
         plan_hash=None,
         nonce=None,
         expires_at=None,
+        plan_tool_name="manage_graph_data",
     ):
-        calls.append((graph_data, dry_run, confirm, plan_hash, nonce, expires_at))
+        calls.append(
+            (
+                mode,
+                graph_data,
+                dry_run,
+                confirm,
+                plan_hash,
+                nonce,
+                expires_at,
+                plan_tool_name,
+            )
+        )
         return envelope_ok({"plan_hash": "0123456789abcdef"})
 
-    monkeypatch.setattr(server, "ingest_graph_data", fake_ingest_graph_data)
+    monkeypatch.setattr(server, "manage_graph_data", fake_manage_graph_data)
 
     result = server.import_graph_data_tool(
         mode="ingest",
@@ -66,7 +79,16 @@ def test_import_graph_data_tool_ingest_routes_to_ingest(monkeypatch):
 
     assert result["ok"] is True
     assert calls == [
-        (graph_data, False, True, "0123456789abcdef", "test_nonce", 9999999999.0)
+        (
+            "import",
+            graph_data,
+            False,
+            True,
+            "0123456789abcdef",
+            "test_nonce",
+            9999999999.0,
+            "import_graph_data_tool",
+        )
     ]
 
 

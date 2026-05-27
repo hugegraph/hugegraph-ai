@@ -106,10 +106,11 @@ These are the stable public V1 tools:
 | `generate_gremlin_tool` | Convert natural language to Gremlin through HugeGraph-AI. Defaults to generation only; set `execute=true` to run safe read-only Gremlin. |
 | `execute_gremlin_read_tool` | Execute a Gremlin traversal after read-only policy validation. |
 | `extract_graph_data_tool` | Extract candidate `{vertices, edges}` graph data from text. It does not write to HugeGraph. |
+| `import_graph_data_tool` | Import structured graph data through MCP local validation, dry-run/confirm, and Gremlin execution. |
 | `design_schema_tool` | Get schema design guidance from proposed operations. |
 | `apply_schema_tool` | Validate or dry-run schema operations. `mode="apply"` is disabled in V1. |
 
-Compatibility tools such as `query_graph_tool`, `manage_schema_tool`, `manage_graph_data_tool`, and `import_graph_data_tool` remain available, but new integrations should prefer the V1 stable tools above.
+The old multi-mode compatibility tools are not exposed in V1. Use the stable tools above directly.
 
 ### 1. Inspect Graph Status And Schema
 
@@ -139,22 +140,16 @@ Include the full raw schema when planning schema changes or debugging mismatches
 
 ### 2. Query The Graph
 
-Use `query_graph_tool` for graph reads. It exposes two stable user modes:
-
-- `generate`: convert a natural-language question to Gremlin. By default this only generates the traversal and does not execute it.
-- `gremlin`: execute a known-safe read-only Gremlin traversal directly.
-
-The old `text` GraphRAG mode is kept as an experimental/debug path behind
-`HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true`. By default, callers should use
-`mode="generate"` with `execute=true` for natural-language graph questions.
+Use `generate_gremlin_tool` for natural-language Gremlin generation and
+`execute_gremlin_read_tool` for known-safe read-only traversals. GraphRAG text
+query mode is not exposed in V1.
 
 Generate Gremlin without executing it:
 
 ```json
 {
-  "tool": "query_graph_tool",
+  "tool": "generate_gremlin_tool",
   "arguments": {
-    "mode": "generate",
     "query": "Find the top 10 people with the most outgoing knows edges"
   }
 }
@@ -164,9 +159,8 @@ Generate Gremlin and execute it only if the generated traversal is read-only:
 
 ```json
 {
-  "tool": "query_graph_tool",
+  "tool": "generate_gremlin_tool",
   "arguments": {
-    "mode": "generate",
     "query": "Count person vertices by city",
     "execute": true
   }
@@ -177,9 +171,8 @@ Run a direct read-only Gremlin traversal:
 
 ```json
 {
-  "tool": "query_graph_tool",
+  "tool": "execute_gremlin_read_tool",
   "arguments": {
-    "mode": "gremlin",
     "gremlin_query": "g.V().hasLabel('person').limit(10).valueMap(true)"
   }
 }
@@ -187,15 +180,17 @@ Run a direct read-only Gremlin traversal:
 
 ### 3. Design And Manage Schema
 
-Use `manage_schema_tool` to design, validate, and dry-run schema operations. Full schema apply is disabled in V1 and returns `FEATURE_DISABLED`.
+Use `design_schema_tool` for design guidance and `apply_schema_tool` for schema
+validation and dry-run previews. Full schema apply is disabled in V1 and
+returns `FEATURE_DISABLED`.
 
 Ask for schema design guidance:
 
 ```json
 {
-  "tool": "manage_schema_tool",
+  "tool": "design_schema_tool",
   "arguments": {
-    "mode": "design"
+    "operations": []
   }
 }
 ```
@@ -204,7 +199,7 @@ Validate operations before planning an apply:
 
 ```json
 {
-  "tool": "manage_schema_tool",
+  "tool": "apply_schema_tool",
   "arguments": {
     "mode": "validate",
     "operations": [
@@ -229,7 +224,7 @@ Create a dry-run plan and capture the returned `plan_hash`:
 
 ```json
 {
-  "tool": "manage_schema_tool",
+  "tool": "apply_schema_tool",
   "arguments": {
     "mode": "dry_run",
     "operations": [
@@ -252,17 +247,23 @@ Create a dry-run plan and capture the returned `plan_hash`:
 
 `mode="apply"` is reserved for a later release. In V1, use `mode="dry_run"` to preview the schema diff and risk warnings.
 
-### 4. Manage Graph Data
+### 4. Graph Data Extraction And Import
 
-Use `manage_graph_data_tool` to extract graph-shaped data from text or import structured graph data. V1 disables table import, SQL import, update, and delete modes; those paths return `FEATURE_DISABLED`.
+Use `extract_graph_data_tool` for graph-shaped extraction from text. Use
+`import_graph_data_tool(mode="ingest")` as the single public structured write
+entrypoint. V1 disables table import, SQL import, update, and delete.
+
+Structured writes are executed by MCP through its local
+`graph_data -> change_plan -> Gremlin` path after schema validation,
+`dry_run`, target-bound `plan_hash`, and `confirm=true`. The HugeGraph-AI
+`/graph-import` API is not used as a public write path.
 
 Extract candidate graph data from text without writing to HugeGraph:
 
 ```json
 {
-  "tool": "manage_graph_data_tool",
+  "tool": "extract_graph_data_tool",
   "arguments": {
-    "mode": "extract",
     "text": "Alice works at Acme. Bob knows Alice."
   }
 }
@@ -274,9 +275,9 @@ Dry-run a structured graph data import:
 
 ```json
 {
-  "tool": "manage_graph_data_tool",
+  "tool": "import_graph_data_tool",
   "arguments": {
-    "mode": "import",
+    "mode": "ingest",
     "dry_run": true,
     "graph_data": {
       "vertices": [
@@ -302,9 +303,9 @@ Apply the exact dry-run import plan:
 
 ```json
 {
-  "tool": "manage_graph_data_tool",
+  "tool": "import_graph_data_tool",
   "arguments": {
-    "mode": "import",
+    "mode": "ingest",
     "dry_run": false,
     "confirm": true,
     "plan_hash": "PLAN_HASH_FROM_DRY_RUN",
@@ -328,9 +329,9 @@ Apply the exact dry-run import plan:
 }
 ```
 
-Table, SQL, update, and delete workflows are planned for a later release. In V1, use `mode="extract"` and `mode="import"` only.
-
-`import_graph_data_tool` remains available for compatibility. Prefer `manage_graph_data_tool` for new workflows.
+Table, SQL, update, and delete workflows are planned for a later release. In V1,
+use `extract_graph_data_tool` for extraction and
+`import_graph_data_tool(mode="ingest")` for structured writes.
 
 ## Advanced Debug Tools
 
@@ -338,7 +339,9 @@ These tools are available for maintenance and debugging. Prefer the V1 stable to
 
 ### `execute_gremlin_write_tool`
 
-Runs a direct Gremlin write query. Prefer `manage_graph_data_tool` with `mode="import"` for normal graph data writes because it validates data and uses the dry-run safety chain.
+Runs a direct Gremlin write query. Prefer `import_graph_data_tool` with
+`mode="ingest"` for normal graph data writes because it validates data and uses
+the dry-run safety chain.
 
 ```json
 {
@@ -387,10 +390,12 @@ Tool behavior under this model:
 | Tool | Behavior |
 | --- | --- |
 | `inspect_graph_tool` | Always allowed. Returns graph status, schema summary, counts when available, and AI status. |
-| `query_graph_tool` | Read-only Gremlin execution is allowed. AI-backed Gremlin generation requires `HUGEGRAPH_MCP_ALLOW_AI=true`. GraphRAG text mode is disabled unless `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true` is also set. |
-| `manage_schema_tool` | Compatibility wrapper. Design, validation, and dry runs are allowed; apply is disabled in V1. |
-| `manage_graph_data_tool` | Compatibility wrapper. Natural-language extraction and import dry runs are allowed where applicable; table, SQL, update, and delete modes are disabled in V1. |
-| `import_graph_data_tool` | Compatibility wrapper for graph data import. Prefer `manage_graph_data_tool` for new workflows. |
+| `generate_gremlin_tool` | AI-backed Gremlin generation requires `HUGEGRAPH_MCP_ALLOW_AI=true`; execution is still read-only. |
+| `execute_gremlin_read_tool` | Read-only Gremlin execution is allowed after policy validation. |
+| `extract_graph_data_tool` | AI-backed graph-data extraction requires `HUGEGRAPH_MCP_ALLOW_AI=true`; it does not write. |
+| `design_schema_tool` | Schema design guidance is allowed. |
+| `apply_schema_tool` | Schema validation and dry runs are allowed; apply is disabled in V1. |
+| `import_graph_data_tool` | Single public structured graph-data write entrypoint. Uses MCP local validation, dry-run/confirm, and Gremlin execution. |
 | `refresh_vid_embeddings_tool` | Requires `readonly=false` and `confirm=true`. |
 | `execute_gremlin_write_tool` | Requires `readonly=false`. Intended for debugging and admin maintenance, not routine data loading. |
 
@@ -401,7 +406,7 @@ V1 disabled capabilities return `FEATURE_DISABLED` instead of executing:
 - Graph data update/delete modes
 - Direct debug writes unless `HUGEGRAPH_MCP_ADMIN_MODE=true`
 - Refreshing VID embeddings unless `HUGEGRAPH_MCP_ADMIN_MODE=true`
-- Full schema apply through `apply_schema_tool` and the compatibility schema apply path
+- Full schema apply through `apply_schema_tool`
 
 ## Safety Notes
 
@@ -412,7 +417,7 @@ V1 disabled capabilities return `FEATURE_DISABLED` instead of executing:
 - Keep `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=false` for normal user-facing deployments; enable it only while debugging GraphRAG.
 - Readonly mode is enforced at runtime for write paths, including graph data import confirmation, direct write queries, and embedding refresh.
 - Graph data import confirmation requires a previous dry run, a matching `plan_hash`, and `confirm=true`.
-- `query_graph_tool` with `mode="generate"` does not execute generated Gremlin unless `execute=true`.
+- `generate_gremlin_tool` does not execute generated Gremlin unless `execute=true`.
 - Direct Gremlin reads are allowed only when the traversal can be treated as read-only. Unsafe or uncertain traversals are rejected.
 - Do not use direct write debugging tools for routine data loading.
 

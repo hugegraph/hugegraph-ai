@@ -102,6 +102,7 @@ def test_ingest_graph_data_dry_run(monkeypatch):
     assert re.fullmatch(r"[0-9a-f]{16}", result["data"]["plan_hash"])
     assert result["data"]["mutation_summary"] == {"vertices": 2, "edges": 1}
     assert any("index" in w for w in result["data"]["warnings"])
+    assert "duplicate vertex labels detected" not in result["data"]["warnings"]
 
 
 def test_ingest_graph_data_dry_run_same_input_same_hash(monkeypatch):
@@ -521,3 +522,53 @@ def test_ingest_graph_data_success(monkeypatch):
     assert import_payload["edges"][0]["inV"] == "1:Bob"
     assert import_payload["edges"][0]["inVLabel"] == "person"
     assert import_payload["edges"][0]["properties"] == {}
+
+
+def test_ingest_graph_data_assumes_planned_counts_when_ai_omits_counts(monkeypatch):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    post = Mock(return_value=envelope_ok({"message": "import finished"}))
+    monkeypatch.setattr(ingest_graph_data_module, "post", post)
+    graph_data = _graph_data()
+    dry_run = ingest_graph_data_module.ingest_graph_data(graph_data)
+    plan_ctx = dry_run["data"]["plan_context"]
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        graph_data,
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=plan_ctx["nonce"],
+        expires_at=plan_ctx["expires_at"],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["status"] == "success"
+    assert result["data"]["written"] == {"vertices": 2, "edges": 1}
+    assert any(
+        "did not return explicit written counts" in w for w in result["warnings"]
+    )
+
+
+def test_ingest_graph_data_splits_total_written_count(monkeypatch):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    post = Mock(return_value=envelope_ok({"inserted": 2}))
+    monkeypatch.setattr(ingest_graph_data_module, "post", post)
+    graph_data = _graph_data()
+    dry_run = ingest_graph_data_module.ingest_graph_data(graph_data)
+    plan_ctx = dry_run["data"]["plan_context"]
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        graph_data,
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=plan_ctx["nonce"],
+        expires_at=plan_ctx["expires_at"],
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["status"] == "partial"
+    assert result["data"]["written"] == {"vertices": 2, "edges": 0}
+    assert any("total written count" in w for w in result["warnings"])

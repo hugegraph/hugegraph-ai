@@ -58,6 +58,7 @@ _GREMLIN_ERROR_TYPE_MAP = {
     "connection_error": ErrorType.CONNECTION_FAILED,
     "authentication_error": ErrorType.AUTHENTICATION_FAILED,
     "authorization_error": ErrorType.AUTHORIZATION_FAILED,
+    "no_index_error": ErrorType.NO_INDEX,
     "query_syntax_error": ErrorType.UNSAFE_GREMLIN,
 }
 
@@ -86,6 +87,47 @@ def _gremlin_error_envelope(result: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _gremlin_result_count(data: Any) -> int:
+    """Return the number of result items from HugeGraph/PyHugeGraph shapes."""
+    if data is None:
+        return 0
+    if isinstance(data, dict) and "data" in data:
+        inner_data = data.get("data")
+        if inner_data is None:
+            return 0
+        if isinstance(inner_data, (list, tuple, set, dict, str, bytes)):
+            return len(inner_data)
+        return 1
+    try:
+        return len(data)  # type: ignore[arg-type]
+    except TypeError:
+        return 1
+
+
+def _is_no_index_error(message: Any) -> bool:
+    lowered = str(message).lower()
+    return "noindexexception" in lowered or "no index" in lowered
+
+
+def _no_index_error_result(
+    message: str,
+    duration_ms: float,
+    operation_type: str,
+) -> dict[str, Any]:
+    return {
+        "success": False,
+        "error_type": "no_index_error",
+        "message": message,
+        "suggestions": [
+            "Create an index for the queried property before using has() filters",
+            "Use primary-key based lookups when possible",
+            "Check HugeGraph schema index labels with inspect_graph_tool",
+        ],
+        "duration_ms": duration_ms,
+        "operation_type": operation_type,
+    }
+
+
 def _execute_gremlin_with_error_handling(
     client, gremlin_query: str, operation_type: str = "read"
 ) -> dict[str, Any]:
@@ -100,15 +142,10 @@ def _execute_gremlin_with_error_handling(
         data = client.exec(gremlin_query)
         duration_ms = (time.time() - start) * 1000.0
 
-        try:
-            count = len(data)  # type: ignore[arg-type]
-        except TypeError:
-            count = 1 if data is not None else 0
-
         return {
             "success": True,
             "data": data,
-            "count": count,
+            "count": _gremlin_result_count(data),
             "duration_ms": duration_ms,
             "operation_type": operation_type,
         }
@@ -175,6 +212,12 @@ def _execute_gremlin_with_error_handling(
                 pass
 
             if detail_message:
+                if _is_no_index_error(detail_message):
+                    return _no_index_error_result(
+                        f"Query requires an index: {detail_message}",
+                        (time.time() - start) * 1000.0,
+                        operation_type,
+                    )
                 message = f"HugeGraph server internal error: {detail_message}"
             else:
                 message = "HugeGraph server internal error"
@@ -214,16 +257,20 @@ def _execute_gremlin_with_error_handling(
         }
 
     except Exception as e:
+        duration_ms = (time.time() - start) * 1000.0
+        message = f"Unexpected error: {e!s}"
+        if _is_no_index_error(message):
+            return _no_index_error_result(message, duration_ms, operation_type)
         return {
             "success": False,
             "error_type": "unknown_error",
-            "message": f"Unexpected error: {e!s}",
+            "message": message,
             "suggestions": [
                 "Check HugeGraph server logs",
                 "Verify the query format and parameters",
                 "Try a simpler query to test connectivity",
             ],
-            "duration_ms": (time.time() - start) * 1000.0,
+            "duration_ms": duration_ms,
             "operation_type": operation_type,
         }
 

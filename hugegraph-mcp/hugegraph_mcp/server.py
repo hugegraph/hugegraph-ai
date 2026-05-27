@@ -83,10 +83,8 @@ from hugegraph_mcp.envelope import ErrorType, envelope_err
 from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
 from hugegraph_mcp.tools.inspect_graph import inspect_graph
 from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
-from hugegraph_mcp.tools.ingest_graph_data import ingest_graph_data
 from hugegraph_mcp.tools.manage_graph_data import manage_graph_data
 from hugegraph_mcp.tools.manage_schema import manage_schema
-from hugegraph_mcp.tools.query_graph import query_graph_by_text
 from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
 
 os.makedirs = _original_makedirs
@@ -268,198 +266,7 @@ def apply_schema_tool(
     )
 
 
-# ========== 兼容工具：查询图 ==========
-
-
-@mcp.tool()
-def query_graph_tool(
-    mode: str,
-    query: str | None = None,
-    gremlin_query: str | None = None,
-    rag_mode: str = "graph_only",
-    execute: bool = False,
-    include_evidence: bool = False,
-    max_context_items: int = 20,
-) -> dict:
-    """兼容图查询入口 — 推荐使用 generate_gremlin_tool 或 execute_gremlin_read_tool。
-
-    - mode="generate": NL → Gremlin 生成（兼容路由到 generate_gremlin_tool）
-    - mode="gremlin": 执行只读 Gremlin 遍历（兼容路由到 execute_gremlin_read_tool）
-    - mode="text": GraphRAG 实验路径，默认禁用
-    """
-    if mode == "text":
-        cfg = MCPConfig.from_env()
-        if not cfg.enable_graphrag_experimental:
-            return envelope_err(
-                ErrorType.FEATURE_DISABLED,
-                "GraphRAG text query mode is experimental and disabled by default",
-                suggestion=(
-                    "Use mode='generate' with execute=true for the stable "
-                    "natural-language graph query path, or enable "
-                    "HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true for "
-                    "GraphRAG debugging."
-                ),
-                details={
-                    "mode": mode,
-                    "feature": "GraphRAG",
-                    "enable_env": "HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL",
-                },
-                next_actions=[
-                    "Use query_graph_tool with mode='generate' and execute=true",
-                    "Enable HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL=true only for experimental GraphRAG debugging",
-                ],
-            )
-        if not query:
-            return envelope_err("VALIDATION_ERROR", "query is required for mode='text'")
-        return query_graph_by_text(
-            query=query,
-            mode=rag_mode,
-            include_evidence=include_evidence,
-            max_context_items=max_context_items,
-        )
-
-    if mode == "generate":
-        if not query:
-            return envelope_err(
-                "VALIDATION_ERROR", "query is required for mode='generate'"
-            )
-        return generate_gremlin(query=query, execute=execute)
-
-    if mode == "gremlin":
-        if not gremlin_query:
-            return envelope_err(
-                "VALIDATION_ERROR", "gremlin_query is required for mode='gremlin'"
-            )
-        result = execute_gremlin_read(gremlin_query)
-        return result
-
-    return envelope_err(
-        "VALIDATION_ERROR",
-        f"Unknown mode: {mode!r}. Use 'generate' or 'gremlin'.",
-        details={
-            "mode": mode,
-            "stable_modes": ["generate", "gremlin"],
-            "experimental_modes": ["text"],
-        },
-    )
-
-
-# ========== 工具 3：设计和管理 schema ==========
-
-
-@mcp.tool()
-def manage_schema_tool(
-    mode: str,
-    operations: list[dict] | None = None,
-    confirm: bool = False,
-    plan_hash: str | None = None,
-) -> dict:
-    """统一 schema 管理入口 — design / validate / dry_run 兼容入口。
-
-    apply 模式在 V1 中禁用并返回 FEATURE_DISABLED。
-    """
-
-    if mode == "apply":
-        return envelope_err(
-            ErrorType.FEATURE_DISABLED,
-            "Schema apply is disabled in V1. Use validate or dry_run mode.",
-            suggestion="Use mode='validate' or mode='dry_run' to preview schema changes.",
-            details={"mode": mode, "tool": "manage_schema_tool"},
-        )
-
-    return manage_schema(
-        mode=mode,
-        operations=operations,
-        confirm=confirm,
-        plan_hash=plan_hash,
-    )
-
-
-# ========== 工具 4：导入和管理图数据 ==========
-
-
-@mcp.tool()
-def manage_graph_data_tool(
-    mode: str,
-    text: str | None = None,
-    schema: dict | None = None,
-    example_prompt: str | None = None,
-    graph_data: dict | None = None,
-    change_plan: dict | list[dict] | None = None,
-    table_data: dict | None = None,
-    mapping: dict | None = None,
-    sql_source: dict | None = None,
-    sql_query: str | None = None,
-    table_name: str | None = None,
-    dry_run: bool = True,
-    confirm: bool = False,
-    plan_hash: str | None = None,
-    nonce: str | None = None,
-    expires_at: float | None = None,
-) -> dict:
-    """统一图数据管理入口 — 兼容工具。
-
-    V1 支持的模式：
-    - extract: 自然语言 → 候选 graph_data（不写入）
-    - import: 结构化 graph_data → 校验+导入
-
-    V1 禁用的模式（返回 FEATURE_DISABLED）：
-    - table, sql_preview, sql_mapping_suggest, sql_import, update, delete
-    """
-
-    if mode == "extract":
-        if not text:
-            return envelope_err(
-                "VALIDATION_ERROR", "text is required for mode='extract'"
-            )
-        return extract_graph_data(
-            text=text,
-            schema=schema,
-            example_prompt=example_prompt,
-        )
-
-    if mode == "table":
-        return envelope_err(
-            ErrorType.FEATURE_DISABLED,
-            "Table import is not available in V1.",
-            suggestion="Use mode='extract' with extract_graph_data_tool instead.",
-            details={"mode": mode, "tool": "manage_graph_data_tool"},
-        )
-
-    if mode in {"sql_preview", "sql_mapping_suggest", "sql_import"}:
-        return envelope_err(
-            ErrorType.FEATURE_DISABLED,
-            f"SQL mode '{mode}' is not available in V1.",
-            details={"mode": mode, "tool": "manage_graph_data_tool"},
-        )
-
-    if mode == "import":
-        return manage_graph_data(
-            mode=mode,
-            graph_data=graph_data,
-            change_plan=change_plan,
-            dry_run=dry_run,
-            confirm=confirm,
-            plan_hash=plan_hash,
-            nonce=nonce,
-            expires_at=expires_at,
-        )
-
-    if mode in {"update", "delete"}:
-        return envelope_err(
-            ErrorType.FEATURE_DISABLED,
-            f"Mode '{mode}' is not available in V1.",
-            details={"mode": mode, "tool": "manage_graph_data_tool"},
-        )
-
-    return envelope_err(
-        "VALIDATION_ERROR",
-        f"Unknown mode: {mode!r}. Use 'extract' or 'import'.",
-        details={"mode": mode},
-    )
-
-
-# ========== 兼容入口：import_graph_data_tool ==========
+# ========== 图数据导入入口 ==========
 
 
 @mcp.tool()
@@ -477,10 +284,10 @@ def import_graph_data_tool(
     nonce: str | None = None,
     expires_at: float | None = None,
 ) -> dict:
-    """兼容图数据导入入口 — 推荐使用 extract_graph_data_tool。
+    """V1 图数据导入入口。
 
     mode="extract": 自然语言文本 → 候选 graph_data
-    mode="ingest": 校验+导入 graph_data
+    mode="ingest": MCP 本地校验+dry_run/confirm+Gremlin 导入 graph_data
     mode="table": V1 禁用（返回 FEATURE_DISABLED）
     """
 
@@ -500,13 +307,15 @@ def import_graph_data_tool(
             return envelope_err(
                 "VALIDATION_ERROR", "graph_data is required for mode='ingest'"
             )
-        return ingest_graph_data(
+        return manage_graph_data(
+            mode="import",
             graph_data=graph_data,
             dry_run=dry_run,
             confirm=confirm,
             plan_hash=plan_hash,
             nonce=nonce,
             expires_at=expires_at,
+            plan_tool_name="import_graph_data_tool",
         )
 
     if mode == "table":

@@ -638,8 +638,6 @@ def validate_graph_payload(
                         f"edge {idx} {endpoint_name} endpoint not found for label '{endpoint_label}': {_format_endpoint_value(endpoint_value)}"
                     )
 
-    if isinstance(vertices, list) and len(vertex_labels) < len(vertices):
-        warnings.append("duplicate vertex labels detected")
     if isinstance(edges, list):
         edge_pairs = []
         for e in edges:
@@ -864,7 +862,7 @@ def ingest_graph_data(
         cfg=cfg,
     )
 
-    return envelope_ok(normalized)
+    return envelope_ok(normalized, warnings=normalized.get("warnings", []))
 
 
 def _mutation_summary(graph_data: dict[str, Any]) -> dict[str, int]:
@@ -916,27 +914,47 @@ def _normalize_import_result(
         }
 
     # 尝试从 AI 结果中提取写入计数
-    written = _extract_written_counts(ai_result, planned)
+    written, count_source = _extract_written_counts(ai_result, planned)
     failed_items = _extract_failed_items(ai_result)
+    warnings = _extract_import_warnings(ai_result)
 
-    if written == planned and not failed_items:
+    if written is None:
+        if failed_items:
+            written = {"vertices": 0, "edges": 0}
+            status = "degraded"
+            warnings.append(
+                "HugeGraph-AI import returned failures without explicit written counts."
+            )
+        else:
+            written = dict(planned)
+            status = "success"
+            warnings.append(
+                "HugeGraph-AI import did not return explicit written counts; assuming planned writes succeeded because the endpoint returned ok."
+            )
+    elif written == planned and not failed_items:
         status = "success"
     elif written["vertices"] > 0 or written["edges"] > 0:
         status = "partial"
+    elif failed_items:
+        status = "error"
     else:
-        # AI 返回了结果但没有可识别的写入计数
         status = "degraded"
+
+    if count_source == "total":
+        warnings.append(
+            "HugeGraph-AI import returned only a total written count; vertices/edges were estimated from the planned import order."
+        )
 
     return {
         "status": status,
         "planned": planned,
         "written": written,
         "failed_items": failed_items,
-        "warnings": [],
-        "retryable": status in ("partial", "degraded"),
+        "warnings": warnings,
+        "retryable": status in ("partial", "degraded", "error"),
         "compensation_suggestions": (
             ["Review failed_items and retry partial import."]
-            if status == "partial"
+            if status in {"partial", "degraded", "error"}
             else []
         ),
         "target": target,
@@ -945,26 +963,69 @@ def _normalize_import_result(
     }
 
 
-def _extract_written_counts(ai_result: Any, planned: dict[str, int]) -> dict[str, int]:
-    """从 AI 结果中提取写入计数，无法识别时返回 0。"""
+def _extract_written_counts(
+    ai_result: Any, planned: dict[str, int]
+) -> tuple[dict[str, int] | None, str | None]:
+    """从 AI 结果中提取写入计数。
+
+    返回 (counts, source)，无法识别时 counts 为 None。source="total" 表示
+    只有总数，vertices/edges 是按导入顺序估算出来的。
+    """
     if not isinstance(ai_result, dict):
-        return {"vertices": 0, "edges": 0}
+        return None, None
 
     # 常见的 AI 返回格式
     for key in ("written", "imported", "created", "result"):
         data = ai_result.get(key)
         if isinstance(data, dict):
-            verts = data.get("vertices") or data.get("vertex_count") or 0
-            edges = data.get("edges") or data.get("edge_count") or 0
-            return {"vertices": int(verts), "edges": int(edges)}
+            verts = data.get("vertices")
+            if verts is None:
+                verts = data.get("vertex_count")
+            edges = data.get("edges")
+            if edges is None:
+                edges = data.get("edge_count")
+            if verts is not None or edges is not None:
+                return {
+                    "vertices": _safe_int(verts),
+                    "edges": _safe_int(edges),
+                }, "explicit"
 
     # 顶层直接有计数
-    verts = ai_result.get("vertices_written") or ai_result.get("vertex_count") or 0
-    edges = ai_result.get("edges_written") or ai_result.get("edge_count") or 0
-    if verts or edges:
-        return {"vertices": int(verts), "edges": int(edges)}
+    verts = ai_result.get("vertices_written")
+    if verts is None:
+        verts = ai_result.get("vertex_count")
+    edges = ai_result.get("edges_written")
+    if edges is None:
+        edges = ai_result.get("edge_count")
+    if verts is not None or edges is not None:
+        return {
+            "vertices": _safe_int(verts),
+            "edges": _safe_int(edges),
+        }, "explicit"
 
-    return {"vertices": 0, "edges": 0}
+    for key in ("inserted", "total_inserted", "created_count", "imported_count"):
+        if key in ai_result:
+            return _split_total_written(_safe_int(ai_result.get(key)), planned), "total"
+
+    return None, None
+
+
+def _safe_int(value: Any) -> int:
+    if value in (None, ""):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _split_total_written(total: int, planned: dict[str, int]) -> dict[str, int]:
+    total = max(0, total)
+    planned_vertices = max(0, int(planned.get("vertices", 0)))
+    planned_edges = max(0, int(planned.get("edges", 0)))
+    vertices = min(planned_vertices, total)
+    edges = min(planned_edges, max(0, total - vertices))
+    return {"vertices": vertices, "edges": edges}
 
 
 def _extract_failed_items(ai_result: Any) -> list[dict[str, Any]]:
@@ -986,6 +1047,15 @@ def _extract_failed_items(ai_result: Any) -> list[dict[str, Any]]:
             return normalized
 
     return []
+
+
+def _extract_import_warnings(ai_result: Any) -> list[str]:
+    if not isinstance(ai_result, dict):
+        return []
+    raw_warnings = ai_result.get("warnings")
+    if not isinstance(raw_warnings, list):
+        return []
+    return [str(warning) for warning in raw_warnings[:100]]
 
 
 def _import_error_result(
