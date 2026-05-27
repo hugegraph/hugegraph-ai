@@ -23,6 +23,12 @@ from typing import Any
 from hugegraph_mcp import gremlin_tools, schema_tools
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
+from hugegraph_mcp.plan_hash import (
+    build_plan_context,
+    compute_payload_digest,
+    compute_plan_hash,
+    verify_plan_hash,
+)
 from hugegraph_mcp.tools import ingest_graph_data
 from hugegraph_mcp.tools.graph_data_execute import (
     _extract_count_value,
@@ -140,6 +146,8 @@ def manage_graph_data(
     dry_run: bool = True,
     confirm: bool = False,
     plan_hash: str | None = None,
+    nonce: str | None = None,
+    expires_at: float | None = None,
     extra_hash_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """统一图数据管理入口。
@@ -229,6 +237,17 @@ def manage_graph_data(
             warnings=dry_run_result.get("warnings", []),
         )
 
+    plan_context, _ = _build_manage_graph_data_plan_context(
+        mode=mode,
+        plan=plan,
+        live_schema=live_schema,
+        nonce=nonce,
+        extra_hash_context=extra_hash_context,
+    )
+    target_bound_hash = compute_plan_hash(plan_context)
+    dry_run_result["plan_hash"] = target_bound_hash
+    dry_run_result["plan_context"] = _plan_context_payload(plan_context)
+
     if dry_run:
         return envelope_ok(dry_run_result, warnings=dry_run_result.get("warnings", []))
 
@@ -245,18 +264,153 @@ def manage_graph_data(
             suggestion="Run dry_run=True, review preview and warnings, then pass confirm=True with the returned plan_hash.",
         )
 
-    expected_plan_hash = dry_run_result["plan_hash"]
-    # plan_hash 绑定 change_plan、graph/graphspace、schema 摘要和额外上下文，
-    # 防止用户 dry-run 后修改 payload，或 schema/SQL 来源发生变化后继续执行旧确认。
-    if plan_hash != expected_plan_hash:
+    schema_summary = _schema_summary(live_schema)
+    valid, error_type, details = verify_plan_hash(
+        submitted_hash=plan_hash,
+        tool_name="manage_graph_data",
+        mode=mode,
+        payload_digest=_manage_graph_data_payload_digest(
+            plan,
+            extra_hash_context=extra_hash_context,
+        ),
+        schema_hash=compute_payload_digest(schema_summary) if schema_summary else None,
+        nonce=nonce,
+        expires_at=expires_at,
+        extra_context={"extra_hash_context": extra_hash_context or {}},
+    )
+    if not valid:
         return envelope_err(
-            ErrorType.PLAN_HASH_MISMATCH,
+            error_type or ErrorType.PLAN_HASH_MISMATCH,
             "Provided plan_hash does not match the current graph data change plan.",
             suggestion="Run dry_run=True again and use the returned plan_hash.",
-            details={
-                "expected_plan_hash": expected_plan_hash,
-                "provided_plan_hash": plan_hash,
-            },
+            details=details,
         )
 
-    return envelope_ok(execute_graph_change_plan(plan))
+    execute_result = execute_graph_change_plan(plan)
+    if isinstance(execute_result, dict) and execute_result.get("ok") is False:
+        return envelope_err(
+            execute_result["error"]["type"],
+            execute_result["error"]["message"],
+            suggestion=execute_result["error"].get("suggestion"),
+            retryable=execute_result["error"].get("retryable", False),
+            details=_normalize_execute_result(execute_result, plan),
+        )
+
+    return envelope_ok(_normalize_execute_result(execute_result, plan))
+
+
+def _build_manage_graph_data_plan_context(
+    *,
+    mode: str,
+    plan: Any,
+    live_schema: dict[str, Any],
+    nonce: str | None,
+    extra_hash_context: dict[str, Any] | None,
+):
+    schema_summary = _schema_summary(live_schema)
+    return build_plan_context(
+        tool_name="manage_graph_data",
+        mode=mode,
+        payload_digest=_manage_graph_data_payload_digest(
+            plan,
+            extra_hash_context=extra_hash_context,
+        ),
+        schema_hash=compute_payload_digest(schema_summary) if schema_summary else None,
+        nonce=nonce,
+        extra_context={"extra_hash_context": extra_hash_context or {}},
+    )
+
+
+def _manage_graph_data_payload_digest(
+    plan: Any,
+    *,
+    extra_hash_context: dict[str, Any] | None,
+) -> str:
+    payload: dict[str, Any] = {"change_plan": plan}
+    if extra_hash_context is not None:
+        payload["extra_hash_context"] = extra_hash_context
+    return compute_payload_digest(payload)
+
+
+def _plan_context_payload(plan_context) -> dict[str, Any]:
+    return {
+        "nonce": plan_context.nonce,
+        "expires_at": plan_context.expires_at,
+        "graph_url": plan_context.graph_url,
+        "graph_name": plan_context.graph_name,
+        "graphspace": plan_context.graphspace,
+        "principal": plan_context.principal,
+        "readonly": plan_context.readonly,
+    }
+
+
+def _normalize_execute_result(execute_result: Any, plan: Any) -> dict[str, Any]:
+    operations = _operations(plan)
+    planned = _mutation_summary(operations)
+
+    if isinstance(execute_result, dict) and execute_result.get("ok") is False:
+        return {
+            "status": "error",
+            "success": False,
+            "planned": planned,
+            "written": {},
+            "failed_items": [execute_result["error"]],
+            "warnings": execute_result.get("warnings", []),
+            "retryable": execute_result["error"].get("retryable", False),
+            "compensation_suggestions": [],
+            "results": [],
+            "mutation_summary": planned,
+        }
+
+    if not isinstance(execute_result, dict):
+        return {
+            "status": "degraded",
+            "success": False,
+            "planned": planned,
+            "written": {},
+            "failed_items": [{"result": execute_result}],
+            "warnings": ["Graph change execution returned an unrecognized result."],
+            "retryable": True,
+            "compensation_suggestions": ["Inspect graph state before retrying."],
+            "results": [],
+            "mutation_summary": planned,
+        }
+
+    raw_results = execute_result.get("results")
+    results = raw_results if isinstance(raw_results, list) else []
+    failed_items = execute_result.get("failed_items")
+    if not isinstance(failed_items, list):
+        failed_items = []
+
+    if (
+        execute_result.get("success") is True
+        and len(results) == len(operations)
+        and not failed_items
+    ):
+        status = "success"
+    elif results:
+        status = "partial"
+    elif execute_result.get("success") is False or failed_items:
+        status = "error"
+    else:
+        status = "degraded"
+
+    written = _mutation_summary(
+        [operation for operation, _result in zip(operations, results, strict=False)]
+    )
+    return {
+        "status": status,
+        "success": status == "success",
+        "planned": planned,
+        "written": written,
+        "failed_items": failed_items,
+        "warnings": execute_result.get("warnings", []),
+        "retryable": status in ("partial", "degraded", "error"),
+        "compensation_suggestions": (
+            ["Inspect graph state before retrying remaining operations."]
+            if status in ("partial", "degraded")
+            else []
+        ),
+        "results": results,
+        "mutation_summary": execute_result.get("mutation_summary", planned),
+    }

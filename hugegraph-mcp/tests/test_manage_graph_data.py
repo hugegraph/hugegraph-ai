@@ -534,6 +534,8 @@ def test_manage_graph_data_execute_delete_vertex_verifies_removed(monkeypatch):
         dry_run=False,
         confirm=True,
         plan_hash=dry_run["data"]["plan_hash"],
+        nonce=dry_run["data"]["plan_context"]["nonce"],
+        expires_at=dry_run["data"]["plan_context"]["expires_at"],
     )
 
     assert result["ok"] is True
@@ -779,6 +781,8 @@ def test_manage_graph_data_plan_hash_mismatch(monkeypatch):
         dry_run=False,
         confirm=True,
         plan_hash="0000000000000000",
+        nonce="test_nonce",
+        expires_at=9999999999.0,
     )
 
     assert result["ok"] is False
@@ -894,6 +898,8 @@ def test_manage_graph_data_readonly_rejects_execution(monkeypatch):
         dry_run=False,
         confirm=True,
         plan_hash=dry_run["data"]["plan_hash"],
+        nonce=dry_run["data"]["plan_context"]["nonce"],
+        expires_at=dry_run["data"]["plan_context"]["expires_at"],
     )
 
     assert result["ok"] is False
@@ -932,6 +938,8 @@ def test_manage_graph_data_execute_update_vertex(monkeypatch):
         dry_run=False,
         confirm=True,
         plan_hash=dry_run["data"]["plan_hash"],
+        nonce=dry_run["data"]["plan_context"]["nonce"],
+        expires_at=dry_run["data"]["plan_context"]["expires_at"],
     )
 
     assert result["ok"] is True

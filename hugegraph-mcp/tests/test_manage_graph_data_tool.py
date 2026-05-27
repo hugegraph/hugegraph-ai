@@ -48,8 +48,21 @@ def test_manage_graph_data_tool_import_routes_to_manage_graph_data(monkeypatch):
         dry_run=True,
         confirm=False,
         plan_hash=None,
+        nonce=None,
+        expires_at=None,
     ):
-        calls.append((mode, graph_data, change_plan, dry_run, confirm, plan_hash))
+        calls.append(
+            (
+                mode,
+                graph_data,
+                change_plan,
+                dry_run,
+                confirm,
+                plan_hash,
+                nonce,
+                expires_at,
+            )
+        )
         return envelope_ok({"plan_hash": "0123456789abcdef"})
 
     monkeypatch.setattr(server, "manage_graph_data", fake_manage_graph_data)
@@ -60,10 +73,23 @@ def test_manage_graph_data_tool_import_routes_to_manage_graph_data(monkeypatch):
         dry_run=False,
         confirm=True,
         plan_hash="0123456789abcdef",
+        nonce="test_nonce",
+        expires_at=9999999999.0,
     )
 
     assert result["ok"] is True
-    assert calls == [("import", graph_data, None, False, True, "0123456789abcdef")]
+    assert calls == [
+        (
+            "import",
+            graph_data,
+            None,
+            False,
+            True,
+            "0123456789abcdef",
+            "test_nonce",
+            9999999999.0,
+        )
+    ]
 
 
 def test_manage_graph_data_tool_update_returns_feature_disabled(monkeypatch):

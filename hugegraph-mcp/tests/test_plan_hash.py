@@ -132,6 +132,7 @@ def test_verify_plan_hash_accepts_matching_hash(monkeypatch):
         mode="import",
         payload_digest="abc123",
         nonce="mynonce",
+        expires_at=context.expires_at,
     )
 
     assert valid is True
@@ -140,6 +141,9 @@ def test_verify_plan_hash_accepts_matching_hash(monkeypatch):
 
 def test_verify_plan_hash_rejects_mismatched_hash(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_URL", "http://test:8080")
+    context, _ = build_plan_context(
+        tool_name="test", mode="import", payload_digest="abc123", nonce="mynonce"
+    )
 
     valid, error_type, details = verify_plan_hash(
         submitted_hash="wrong_hash",
@@ -147,6 +151,7 @@ def test_verify_plan_hash_rejects_mismatched_hash(monkeypatch):
         mode="import",
         payload_digest="abc123",
         nonce="mynonce",
+        expires_at=context.expires_at,
     )
 
     assert valid is False

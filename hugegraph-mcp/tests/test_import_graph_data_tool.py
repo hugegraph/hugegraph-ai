@@ -49,7 +49,7 @@ def test_import_graph_data_tool_ingest_routes_to_ingest(monkeypatch):
         nonce=None,
         expires_at=None,
     ):
-        calls.append((graph_data, dry_run, confirm, plan_hash))
+        calls.append((graph_data, dry_run, confirm, plan_hash, nonce, expires_at))
         return envelope_ok({"plan_hash": "0123456789abcdef"})
 
     monkeypatch.setattr(server, "ingest_graph_data", fake_ingest_graph_data)
@@ -60,10 +60,14 @@ def test_import_graph_data_tool_ingest_routes_to_ingest(monkeypatch):
         dry_run=False,
         confirm=True,
         plan_hash="0123456789abcdef",
+        nonce="test_nonce",
+        expires_at=9999999999.0,
     )
 
     assert result["ok"] is True
-    assert calls == [(graph_data, False, True, "0123456789abcdef")]
+    assert calls == [
+        (graph_data, False, True, "0123456789abcdef", "test_nonce", 9999999999.0)
+    ]
 
 
 def test_import_graph_data_tool_validates_extract_text():

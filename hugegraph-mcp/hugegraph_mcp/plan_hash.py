@@ -128,8 +128,9 @@ def verify_plan_hash(
     if nonce is None:
         return False, "PLAN_HASH_MISMATCH", {"reason": "Missing nonce in plan context."}
 
-    # 检查过期
-    if expires_at is not None and time.time() > expires_at:
+    # 检查过期。expires_at 是 dry_run 返回的计划上下文字段，confirm 时必须传回；
+    # 缺失时按过期处理，避免调用方用 None 绕过有效期校验。
+    if expires_at is None or time.time() > expires_at:
         return False, "PLAN_EXPIRED", {
             "expires_at": expires_at,
             "current_time": time.time(),

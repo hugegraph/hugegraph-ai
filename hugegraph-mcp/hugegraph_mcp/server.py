@@ -304,6 +304,8 @@ def manage_graph_data_tool(
     dry_run: bool = True,
     confirm: bool = False,
     plan_hash: str | None = None,
+    nonce: str | None = None,
+    expires_at: float | None = None,
 ) -> dict:
     """统一图数据管理入口 — 兼容工具。
 
@@ -347,6 +349,8 @@ def manage_graph_data_tool(
             dry_run=dry_run,
             confirm=confirm,
             plan_hash=plan_hash,
+            nonce=nonce,
+            expires_at=expires_at,
         )
 
     if mode in {"update", "delete"}:
