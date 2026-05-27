@@ -27,6 +27,7 @@ from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.gremlin_policy import check_gremlin_read
 from hugegraph_mcp.guard import Capability, guard_write
+from hugegraph_mcp.hugegraph_client import build_hugegraph_client
 
 _cfg = MCPConfig.from_env()
 
@@ -41,22 +42,7 @@ class GremlinExecutor:
         self._cfg = cfg
 
     def _build_client(self) -> PyHugeClient:
-        # graphspace 为空时跳过，保持与旧版 HugeGraph 的兼容性
-        if self._cfg.graphspace and self._cfg.graphspace.strip():
-            return PyHugeClient(
-                url=self._cfg.url,
-                graph=self._cfg.graph,
-                user=self._cfg.user,
-                pwd=self._cfg.password,
-                graphspace=self._cfg.graphspace.strip(),
-            )
-        else:
-            return PyHugeClient(
-                url=self._cfg.url,
-                graph=self._cfg.graph,
-                user=self._cfg.user,
-                pwd=self._cfg.password,
-            )
+        return build_hugegraph_client(self._cfg, client_cls=PyHugeClient)
 
     def get_read_client(self):
         return self._build_client().gremlin()

@@ -26,6 +26,7 @@ from hugegraph_mcp import schema_tools
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
+from hugegraph_mcp.tools.live_schema import current_live_schema
 from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
 
 
@@ -208,7 +209,7 @@ def validate_schema_operations(
             "warnings": [],
         }
 
-    live_schema = live_schema or schema_tools.get_live_schema()
+    live_schema = current_live_schema(live_schema)
     live_property_keys = _schema_items(live_schema, "propertykeys")
     live_vertex_labels = _schema_items(live_schema, "vertexlabels")
     live_edge_labels = _schema_items(live_schema, "edgelabels")
@@ -389,7 +390,7 @@ def _current_plan_context(
     operations: list[dict[str, Any]], live_schema: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     cfg = MCPConfig.from_env()
-    live_schema = live_schema or schema_tools.get_live_schema()
+    live_schema = current_live_schema(live_schema)
     # plan_hash 只绑定写入语义相关的 schema 摘要，不绑定 id/status/create_time
     # 等元数据，减少 dry-run 到 apply 之间的无关字段抖动。
     return {
@@ -412,7 +413,7 @@ def _risk_warnings(
     operations: list[dict[str, Any]], live_schema: dict[str, Any] | None = None
 ) -> list[str]:
     warnings: list[str] = []
-    live_schema = live_schema or schema_tools.get_live_schema()
+    live_schema = current_live_schema(live_schema)
     property_keys = _schema_items(live_schema, "propertykeys")
     vertex_labels = _schema_items(live_schema, "vertexlabels")
     edge_labels = _schema_items(live_schema, "edgelabels")
@@ -460,7 +461,7 @@ def _mutation_summary(operations: list[dict[str, Any]]) -> str:
 
 
 def dry_run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
-    live_schema = schema_tools.get_live_schema()
+    live_schema = current_live_schema()
     validation = validate_schema_operations(operations, live_schema)
     if not validation["valid"]:
         return validation

@@ -22,7 +22,6 @@ validate_graph_payload() 对 vertices/edges 做全面 schema 校验：
 - 类型匹配
 """
 
-import hashlib
 import json
 from copy import deepcopy
 from typing import Any
@@ -39,6 +38,7 @@ from hugegraph_mcp.tools.schema_utils import (
     property_names as _property_names,
     schema_payload as _schema_payload,
 )
+from hugegraph_mcp.tools.live_schema import fetch_live_schema_or_none
 
 
 def _property_types(raw_schema: dict[str, Any]) -> dict[str, str]:
@@ -691,12 +691,7 @@ def calculate_plan_hash(
 
 
 def _fetch_live_schema() -> dict[str, Any] | None:
-    try:
-        from hugegraph_mcp.schema_tools import get_live_schema
-
-        return get_live_schema()
-    except Exception:
-        return None
+    return fetch_live_schema_or_none()
 
 
 def ingest_graph_data(
@@ -729,9 +724,12 @@ def ingest_graph_data(
             details={"errors": validation["errors"]},
         )
 
-    from hugegraph_mcp.plan_hash import build_plan_context, compute_plan_hash, compute_payload_digest
+    from hugegraph_mcp.plan_hash import (
+        build_plan_context,
+        compute_plan_hash,
+        compute_payload_digest,
+    )
 
-    expected_plan_hash = calculate_plan_hash(graph_data, live_schema=live_schema)
     mutation_summary = _mutation_summary(graph_data)
     warnings = validation["warnings"]
 
@@ -901,7 +899,9 @@ def _normalize_import_result(
         "graphspace": cfg.graphspace or "DEFAULT",
     }
 
-    if ai_result is None or (isinstance(ai_result, dict) and ai_result.get("ok") is False):
+    if ai_result is None or (
+        isinstance(ai_result, dict) and ai_result.get("ok") is False
+    ):
         return {
             "status": "error",
             "planned": planned,

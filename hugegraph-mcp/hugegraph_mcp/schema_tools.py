@@ -25,6 +25,7 @@ from pyhugegraph.client import PyHugeClient
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err
 from hugegraph_mcp.guard import Capability, guard
+from hugegraph_mcp.hugegraph_client import build_hugegraph_client
 
 _config = MCPConfig.from_env()
 
@@ -44,23 +45,7 @@ def _is_delete_schema_operation(op_type: Any) -> bool:
 
 
 def _build_client() -> PyHugeClient:
-    # graphspace 可选 — 为空时使用默认连接，保持向后兼容
-    graphspace = _config.graphspace
-    if graphspace and graphspace.strip():
-        return PyHugeClient(
-            url=_config.url,
-            graph=_config.graph,
-            user=_config.user,
-            pwd=_config.password,
-            graphspace=graphspace.strip(),
-        )
-    else:
-        return PyHugeClient(
-            url=_config.url,
-            graph=_config.graph,
-            user=_config.user,
-            pwd=_config.password,
-        )
+    return build_hugegraph_client(_config, client_cls=PyHugeClient)
 
 
 def _simple_schema(schema: dict[str, Any]) -> dict[str, Any]:

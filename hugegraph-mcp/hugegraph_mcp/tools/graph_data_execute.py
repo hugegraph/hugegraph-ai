@@ -38,6 +38,7 @@ from hugegraph_mcp.tools.graph_data_validate import (
     _validation_error,
     validate_graph_change_plan,
 )
+from hugegraph_mcp.tools.live_schema import fetch_live_schema_or_none
 from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
 
 
@@ -336,16 +337,23 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                 ):
                     endpoint_count_result = _read_count(endpoint_query)
                     if not endpoint_count_result.get("ok"):
-                        return endpoint_count_result
+                        return _execution_failure(
+                            endpoint_count_result, operation, idx, results
+                        )
                     endpoint_count = endpoint_count_result["data"]["matched_count"]
                     if endpoint_count != 1:
-                        return envelope_err(
-                            ErrorType.INVALID_GRAPH_DATA,
-                            f"{op} {endpoint} endpoint matched_count must be 1 before execution.",
-                            details={
-                                "operation_index": idx,
-                                "matched_count": endpoint_count,
-                            },
+                        return _execution_failure(
+                            envelope_err(
+                                ErrorType.INVALID_GRAPH_DATA,
+                                f"{op} {endpoint} endpoint matched_count must be 1 before execution.",
+                                details={
+                                    "operation_index": idx,
+                                    "matched_count": endpoint_count,
+                                },
+                            ),
+                            operation,
+                            idx,
+                            results,
                         )
             match_query = (
                 _edge_match_query(operation)
@@ -354,64 +362,91 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
             )
             count_result = _read_count(match_query)
             if not count_result.get("ok"):
-                return count_result
+                return _execution_failure(count_result, operation, idx, results)
             matched_count = count_result["data"]["matched_count"]
             if matched_count != 1:
-                return envelope_err(
-                    ErrorType.INVALID_GRAPH_DATA,
-                    f"{op} matched_count must be 1 before execution.",
-                    details={
-                        "operation_index": idx,
-                        "matched_count": matched_count,
-                    },
+                return _execution_failure(
+                    envelope_err(
+                        ErrorType.INVALID_GRAPH_DATA,
+                        f"{op} matched_count must be 1 before execution.",
+                        details={
+                            "operation_index": idx,
+                            "matched_count": matched_count,
+                        },
+                    ),
+                    operation,
+                    idx,
+                    results,
                 )
             if op == "delete_vertex" and operation.get("cascade", False) is False:
                 edge_count_result = _read_count(f"{match_query}.bothE()")
                 if not edge_count_result.get("ok"):
-                    return edge_count_result
+                    return _execution_failure(
+                        edge_count_result, operation, idx, results
+                    )
                 edge_count = edge_count_result["data"]["matched_count"]
                 if edge_count > 0:
-                    return envelope_err(
-                        "BLOCKED_BY_RELATIONSHIPS",
-                        "delete_vertex cascade=false but vertex has associated edges.",
-                        suggestion="Delete associated edges first, then retry the vertex delete.",
-                        details={
-                            "operation_index": idx,
-                            "associated_edge_count": edge_count,
-                        },
+                    return _execution_failure(
+                        envelope_err(
+                            "BLOCKED_BY_RELATIONSHIPS",
+                            "delete_vertex cascade=false but vertex has associated edges.",
+                            suggestion="Delete associated edges first, then retry the vertex delete.",
+                            details={
+                                "operation_index": idx,
+                                "associated_edge_count": edge_count,
+                            },
+                        ),
+                        operation,
+                        idx,
+                        results,
                     )
             if op == "delete_vertex" and operation.get("cascade", False) is True:
-                return envelope_err(
-                    "CASCADE_NOT_ENABLED",
-                    "delete_vertex cascade=true is not enabled in this phase.",
-                    suggestion="Delete associated edges explicitly, then delete the vertex with cascade=false.",
-                    details={"operation_index": idx},
+                return _execution_failure(
+                    envelope_err(
+                        "CASCADE_NOT_ENABLED",
+                        "delete_vertex cascade=true is not enabled in this phase.",
+                        suggestion="Delete associated edges explicitly, then delete the vertex with cascade=false.",
+                        details={"operation_index": idx},
+                    ),
+                    operation,
+                    idx,
+                    results,
                 )
         write_result = gremlin_tools.execute_gremlin_write(_write_query(operation))
         if isinstance(write_result, dict) and write_result.get("ok") is False:
-            return write_result
+            return _execution_failure(write_result, operation, idx, results)
         if isinstance(write_result, dict) and write_result.get("success") is False:
-            return envelope_err(
-                ErrorType.CONNECTION_FAILED,
-                "HugeGraph write query failed during graph change execution.",
-                details=write_result,
-                retryable=True,
+            return _execution_failure(
+                envelope_err(
+                    ErrorType.CONNECTION_FAILED,
+                    "HugeGraph write query failed during graph change execution.",
+                    details=write_result,
+                    retryable=True,
+                ),
+                operation,
+                idx,
+                results,
             )
         if op == "delete_vertex":
             # 删除顶点后立即反查，确保 HugeGraph 已经实际移除目标。
             # 这能捕获后端静默失败或异步状态异常，而不是只信任写接口返回。
             verify_result = _read_count(_vertex_match_query(operation))
             if not verify_result.get("ok"):
-                return verify_result
+                return _execution_failure(verify_result, operation, idx, results)
             if verify_result["data"]["matched_count"] != 0:
-                return envelope_err(
-                    ErrorType.INVALID_GRAPH_DATA,
-                    "delete_vertex execution did not remove the matched vertex.",
-                    suggestion="Inspect the graph state and retry after confirming the vertex match criteria.",
-                    details={
-                        "operation_index": idx,
-                        "matched_count": verify_result["data"]["matched_count"],
-                    },
+                return _execution_failure(
+                    envelope_err(
+                        ErrorType.INVALID_GRAPH_DATA,
+                        "delete_vertex execution did not remove the matched vertex.",
+                        suggestion="Inspect the graph state and retry after confirming the vertex match criteria.",
+                        details={
+                            "operation_index": idx,
+                            "matched_count": verify_result["data"]["matched_count"],
+                        },
+                    ),
+                    operation,
+                    idx,
+                    results,
                 )
         results.append(
             {
@@ -428,11 +463,45 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
     }
 
 
+def _execution_failure(
+    error_result: dict[str, Any],
+    operation: dict[str, Any],
+    operation_index: int,
+    results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not results:
+        return error_result
+
+    error = _extract_execution_error(error_result)
+    return {
+        "success": False,
+        "status": "partial",
+        "results": results,
+        "failed_items": [
+            {
+                "operation_index": operation_index,
+                "op": operation.get("op") or operation.get("type"),
+                "label": operation.get("label"),
+                "error": error,
+            }
+        ],
+        "warnings": ["Graph change execution stopped after a partial write."],
+        "mutation_summary": _mutation_summary(_operations({"operations": results})),
+    }
+
+
+def _extract_execution_error(error_result: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(error_result, dict) and isinstance(error_result.get("error"), dict):
+        return error_result["error"]
+    return {
+        "type": ErrorType.CONNECTION_FAILED.value,
+        "message": "Graph change execution failed.",
+        "details": error_result if isinstance(error_result, dict) else {},
+    }
+
+
 # ---- Live Schema 获取 ----
 
 
 def _fetch_live_schema() -> dict[str, Any] | None:
-    try:
-        return schema_tools.get_live_schema()
-    except Exception:
-        return None
+    return fetch_live_schema_or_none()
