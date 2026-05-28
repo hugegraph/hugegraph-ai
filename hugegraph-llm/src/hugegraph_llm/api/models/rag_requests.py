@@ -164,3 +164,23 @@ class GremlinGenerateRequest(BaseModel):
             if missing:
                 raise ValueError(f"Prompt template is missing required placeholders: {', '.join(missing)}")
         return v
+
+
+class GraphExtractRequest(BaseModel):
+    text: str
+    schema: Optional[str] = None
+    example_prompt: Optional[str] = None
+    language: str = "zh"
+
+
+class GraphImportRequest(BaseModel):
+    data: str
+    schema: Optional[str] = None
+
+
+class VidEmbeddingsRefreshRequest(BaseModel):
+    pass
+
+
+class GraphIndexInfoRequest(BaseModel):
+    pass

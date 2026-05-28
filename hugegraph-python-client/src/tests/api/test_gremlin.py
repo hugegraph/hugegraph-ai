@@ -15,7 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import os
 import unittest
+from unittest import mock
 
 import pytest
 from pyhugegraph.utils.exceptions import NotFoundError
@@ -29,9 +31,20 @@ class TestGremlin(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # To run these tests locally, start HugeGraph via Docker:
+        #   docker run -d -p 8080:8080 hugegraph/hugegraph:latest
+        #
+        # To explicitly skip Gremlin tests in CI or locally, set:
+        #   SKIP_GREMLIN_TESTS=true
+        #
+        # Do NOT add automatic skip logic based on connectivity probes.
+        # Endpoint failures must surface as FAILED tests, not SKIPPED.
+        if os.environ.get("SKIP_GREMLIN_TESTS", "").lower() == "true":
+            raise unittest.SkipTest("Skipping Gremlin tests: SKIP_GREMLIN_TESTS=true")
+
         cls.client = ClientUtils()
-        cls.client.clear_graph_all_data()
         cls.gremlin = cls.client.gremlin
+        cls.client.clear_graph_all_data()
         cls.client.init_property_key()
         cls.client.init_vertex_label()
         cls.client.init_edge_label()
@@ -88,3 +101,36 @@ class TestGremlin(unittest.TestCase):
     def test_security_operation(self):
         with pytest.raises(NotFoundError):
             self.assertTrue(self.gremlin.exec("System.exit(-1)"))
+
+
+class TestGremlinSetupBehavior(unittest.TestCase):
+    def tearDown(self):
+        TestGremlin.client = None
+        TestGremlin.gremlin = None
+
+    def test_set_up_class_reraises_non_probe_failures(self):
+        with mock.patch(f"{TestGremlin.__module__}.ClientUtils") as client_utils_cls:
+            client = client_utils_cls.return_value
+            client.gremlin = mock.Mock()
+            client.clear_graph_all_data.side_effect = RuntimeError("Connection refused during graph cleanup")
+
+            with self.assertRaisesRegex(RuntimeError, "Connection refused during graph cleanup"):
+                TestGremlin.setUpClass()
+
+    def test_set_up_class_no_longer_probes_gremlin(self):
+        # After removing the probe, setUpClass should NOT call gremlin.exec at all.
+        with mock.patch(f"{TestGremlin.__module__}.ClientUtils") as client_utils_cls:
+            client = client_utils_cls.return_value
+            client.gremlin = mock.Mock()
+
+            TestGremlin.setUpClass()
+
+            client.gremlin.exec.assert_not_called()
+
+    def test_set_up_class_skips_when_env_var_set(self):
+        # Explicit opt-in skip via environment variable is supported.
+        with mock.patch(f"{TestGremlin.__module__}.ClientUtils") as client_utils_cls:
+            client = client_utils_cls.return_value
+            client.gremlin = mock.Mock()
+            with mock.patch.dict(os.environ, {"SKIP_GREMLIN_TESTS": "true"}), self.assertRaises(unittest.SkipTest):
+                TestGremlin.setUpClass()

@@ -40,7 +40,7 @@ dependencies = [
 
 [project.urls]
 homepage = "https://hugegraph.apache.org/"
-repository = "https://github.com/apache/incubator-hugegraph-ai"
+repository = "https://github.com/apache/hugegraph-ai"
 
 [build-system]
 requires = ["hatchling"] # Using hatchling like other submodules for consistency

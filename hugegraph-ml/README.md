@@ -47,8 +47,8 @@ The implemented algorithm models can be found in the [models](./src/hugegraph_ml
 2. Clone and setup the project:
 
    ```bash
-   git clone https://github.com/apache/incubator-hugegraph-ai.git
-   cd incubator-hugegraph-ai/hugegraph-ml
+   git clone https://github.com/apache/hugegraph-ai.git
+   cd hugegraph-ai/hugegraph-ml
    ```
 
 3. Install dependencies using uv:

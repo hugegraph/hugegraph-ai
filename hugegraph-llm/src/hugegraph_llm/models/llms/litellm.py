@@ -51,7 +51,8 @@ class LiteLLMClient(BaseLLM):
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=5),
-        retry=retry_if_exception_type((RateLimitError, BudgetExceededError, APIError)),
+        retry=retry_if_exception_type((RateLimitError, APIError)),
+        reraise=True,
     )
     def generate(
         self,
@@ -75,12 +76,13 @@ class LiteLLMClient(BaseLLM):
             return response.choices[0].message.content
         except (RateLimitError, BudgetExceededError, APIError) as e:
             log.error("Error in LiteLLM call: %s", e)
-            return f"Error: {str(e)}"
+            raise
 
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=5),
-        retry=retry_if_exception_type((RateLimitError, BudgetExceededError, APIError)),
+        retry=retry_if_exception_type((RateLimitError, APIError)),
+        reraise=True,
     )
     async def agenerate(
         self,
@@ -104,7 +106,7 @@ class LiteLLMClient(BaseLLM):
             return response.choices[0].message.content
         except (RateLimitError, BudgetExceededError, APIError) as e:
             log.error("Error in async LiteLLM call: %s", e)
-            return f"Error: {str(e)}"
+            raise
 
     def generate_streaming(
         self,
@@ -138,7 +140,7 @@ class LiteLLMClient(BaseLLM):
             return result
         except (RateLimitError, BudgetExceededError, APIError) as e:
             log.error("Error in streaming LiteLLM call: %s", e)
-            return f"Error: {str(e)}"
+            raise
 
     async def agenerate_streaming(
         self,
@@ -170,7 +172,7 @@ class LiteLLMClient(BaseLLM):
                     yield chunk.choices[0].delta.content
         except (RateLimitError, BudgetExceededError, APIError) as e:
             log.error("Error in async streaming LiteLLM call: %s", e)
-            yield f"Error: {str(e)}"
+            raise
 
     def num_tokens_from_string(self, string: str) -> int:
         """Get token count from string."""

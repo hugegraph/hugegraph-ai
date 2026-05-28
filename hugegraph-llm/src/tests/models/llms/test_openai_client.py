@@ -92,6 +92,23 @@ class TestOpenAIClient(unittest.TestCase):
             messages=messages,
         )
 
+    @patch("hugegraph_llm.models.llms.openai.OpenAI")
+    def test_generate_raises_runtime_error_with_empty_choices(self, mock_openai_class):
+        """Test generate method with an empty choices response."""
+        # Setup mock client
+        mock_client = MagicMock()
+        empty_response = MagicMock()
+        empty_response.choices = []
+        empty_response.usage = None
+        mock_client.chat.completions.create.return_value = empty_response
+        mock_openai_class.return_value = mock_client
+
+        # Test the method
+        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+
+        with self.assertRaisesRegex(RuntimeError, "Empty choices in LLM response"):
+            openai_client.generate(prompt="What is the capital of France?")
+
     @patch("hugegraph_llm.models.llms.openai.AsyncOpenAI")
     def test_agenerate(self, mock_async_openai_class):
         """Test agenerate method with mocked async OpenAI client."""
@@ -115,6 +132,26 @@ class TestOpenAIClient(unittest.TestCase):
                 max_tokens=8092,
                 messages=[{"role": "user", "content": "What is the capital of France?"}],
             )
+
+        asyncio.run(run_async_test())
+
+    @patch("hugegraph_llm.models.llms.openai.AsyncOpenAI")
+    def test_agenerate_raises_runtime_error_with_empty_choices(self, mock_async_openai_class):
+        """Test agenerate method with an empty choices response."""
+        # Setup mock async client
+        mock_async_client = MagicMock()
+        empty_response = MagicMock()
+        empty_response.choices = []
+        empty_response.usage = None
+        mock_async_client.chat.completions.create = AsyncMock(return_value=empty_response)
+        mock_async_openai_class.return_value = mock_async_client
+
+        # Test the method
+        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+
+        async def run_async_test():
+            with self.assertRaisesRegex(RuntimeError, "Empty choices in LLM response"):
+                await openai_client.agenerate(prompt="What is the capital of France?")
 
         asyncio.run(run_async_test())
 

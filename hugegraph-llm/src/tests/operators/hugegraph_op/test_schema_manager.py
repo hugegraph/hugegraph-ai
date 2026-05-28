@@ -158,7 +158,16 @@ class TestSchemaManager(unittest.TestCase):
             self.schema_manager.run({})
 
         # Verify the exception message
-        self.assertIn(f"Can not get {self.graph_name}'s schema from HugeGraph!", str(cm.exception))
+        self.assertIn(f"Cannot get {self.graph_name}'s schema from HugeGraph!", str(cm.exception))
+
+    def test_run_with_none_schema(self):
+        """Test run method when HugeGraph returns an invalid schema payload."""
+        self.mock_schema.getSchema.return_value = None
+
+        with self.assertRaises(ValueError) as cm:
+            self.schema_manager.run({})
+
+        self.assertIn(f"Cannot get {self.graph_name}'s schema from HugeGraph!", str(cm.exception))
 
     def test_run_with_existing_context(self):
         """Test run method with an existing context."""

@@ -1,7 +1,7 @@
 # hugegraph-ai
 
 [![License](https://img.shields.io/badge/license-Apache%202-0E78BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/apache/incubator-hugegraph-ai)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/apache/hugegraph-ai)
 
 `hugegraph-ai` integrates [HugeGraph](https://github.com/apache/hugegraph) with artificial intelligence capabilities, providing comprehensive support for developers to build AI-powered graph applications.
 
@@ -11,7 +11,7 @@
 - **[Knowledge Graph Construction](./hugegraph-llm/README.md#knowledge-graph-construction)**: Automated graph building from text using LLMs
 - **[Graph ML](./hugegraph-ml/README.md)**: Integration with 20+ graph learning algorithms (GCN, GAT, GraphSAGE, etc.)
 - **[HG-Python Client](./hugegraph-python-client/README.md)**: Easy-to-use Python interface for HugeGraph operations
-- **[Vermeer Python Client](./vermeer-python-client/README.md)**: SDK/Interface for Graph Computing with [Vermeer](https://github.com/apache/incubator-hugegraph-computer/tree/master/vermeer#readme)
+- **[Vermeer Python Client](./vermeer-python-client/README.md)**: SDK/Interface for Graph Computing with [Vermeer](https://github.com/apache/hugegraph-computer/tree/master/vermeer#readme)
 
 ## 🚀 Quick Start
 
@@ -29,8 +29,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/apache/incubator-hugegraph-ai.git
-cd incubator-hugegraph-ai
+git clone https://github.com/apache/hugegraph-ai.git
+cd hugegraph-ai
 
 # Set up environment and start services
 cp docker/env.template docker/.env
@@ -51,8 +51,8 @@ docker compose -f docker-compose-network.yml up -d
 docker run -itd --name=server -p 8080:8080 hugegraph/hugegraph
 
 # 2. Clone and set up the project
-git clone https://github.com/apache/incubator-hugegraph-ai.git
-cd incubator-hugegraph-ai
+git clone https://github.com/apache/hugegraph-ai.git
+cd hugegraph-ai
 
 # 3. Install dependencies with workspace management
 # uv sync automatically creates venv (.venv) and installs base dependencies
@@ -89,7 +89,7 @@ python examples/your_ml_example.py
 
 ## 📦 Modules
 
-### [hugegraph-llm](./hugegraph-llm) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/apache/incubator-hugegraph-ai)
+### [hugegraph-llm](./hugegraph-llm) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/apache/hugegraph-ai)
 
 Large language model integration for graph applications:
 
@@ -123,14 +123,14 @@ Python client for HugeGraph operations:
 
 - [Project Homepage](https://hugegraph.apache.org/docs/quickstart/hugegraph-ai/)
 - [LLM Quick Start Guide](./hugegraph-llm/quick_start.md)
-- [DeepWiki AI Documentation](https://deepwiki.com/apache/incubator-hugegraph-ai)
+- [DeepWiki AI Documentation](https://deepwiki.com/apache/hugegraph-ai)
 
 ## 🔗 Related HugeGraph Projects
 
 And here are links of other repositories:
 
 1. [hugegraph](https://github.com/apache/hugegraph) (graph's core component - Graph server + PD + Store)
-2. [hugegraph-toolchain](https://github.com/apache/hugegraph-toolchain) (graph tools **[loader](https://github.com/apache/incubator-hugegraph-toolchain/tree/master/hugegraph-loader)/[dashboard](https://github.com/apache/incubator-hugegraph-toolchain/tree/master/hugegraph-hubble)/[tool](https://github.com/apache/incubator-hugegraph-toolchain/tree/master/hugegraph-tools)/[client](https://github.com/apache/incubator-hugegraph-toolchain/tree/master/hugegraph-client)**)
+2. [hugegraph-toolchain](https://github.com/apache/hugegraph-toolchain) (graph tools **[loader](https://github.com/apache/hugegraph-toolchain/tree/master/hugegraph-loader)/[dashboard](https://github.com/apache/hugegraph-toolchain/tree/master/hugegraph-hubble)/[tool](https://github.com/apache/hugegraph-toolchain/tree/master/hugegraph-tools)/[client](https://github.com/apache/hugegraph-toolchain/tree/master/hugegraph-client)**)
 3. [hugegraph-computer](https://github.com/apache/hugegraph-computer) (integrated **graph computing** system)
 4. [hugegraph-website](https://github.com/apache/hugegraph-doc) (**doc & website** code)
 
@@ -155,8 +155,8 @@ We welcome contributions! Please see our [contribution guidelines](https://hugeg
 
 ```bash
 # 1. Clone and navigate to project
-git clone https://github.com/apache/incubator-hugegraph-ai.git
-cd incubator-hugegraph-ai
+git clone https://github.com/apache/hugegraph-ai.git
+cd hugegraph-ai
 
 # 2. Install all development dependencies
 # uv sync creates venv automatically and installs base dependencies
@@ -194,7 +194,7 @@ uv add --group dev pytest-mock  # Add to dev group
 - Use [GitHub Desktop](https://desktop.github.com/) for easier PR management
 - Check existing issues before reporting bugs
 
-[![contributors graph](https://contrib.rocks/image?repo=apache/incubator-hugegraph-ai)](https://github.com/apache/incubator-hugegraph-ai/graphs/contributors)
+[![contributors graph](https://contrib.rocks/image?repo=apache/hugegraph-ai)](https://github.com/apache/hugegraph-ai/graphs/contributors)
 
 ## 📄 License
 
@@ -202,7 +202,7 @@ hugegraph-ai is licensed under [Apache 2.0 License](./LICENSE).
 
 ## 📞 Contact Us
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/apache/incubator-hugegraph-ai/issues) (fastest response)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/apache/hugegraph-ai/issues) (fastest response)
 - **Email**: [dev@hugegraph.apache.org](mailto:dev@hugegraph.apache.org) ([subscription required](https://hugegraph.apache.org/docs/contribution-guidelines/subscribe/))
 - **Slack**: [Join the ASF HugeGraph channel](https://the-asf.slack.com/archives/C059UU2FJ23)
 - **WeChat**: Follow "Apache HugeGraph" official account
