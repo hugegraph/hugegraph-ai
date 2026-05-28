@@ -148,4 +148,14 @@ def _parse_semicolon_tuple(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split(";") if part.strip())
 
 
-config = MCPConfig.from_env()  # 模块级单例，一次解析避免重复读环境变量
+class RuntimeConfigProxy:
+    """Compatibility proxy for code that imports config directly."""
+
+    def __getattr__(self, name: str):
+        return getattr(MCPConfig.from_env(), name)
+
+    def is_readonly(self) -> bool:
+        return MCPConfig.from_env().is_readonly()
+
+
+config = RuntimeConfigProxy()

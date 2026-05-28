@@ -13,7 +13,7 @@
 
 import logging
 
-from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.config import MCPConfig, config
 
 
 CONFIG_ENV_VARS = (
@@ -163,3 +163,12 @@ def test_default_values(monkeypatch):
     assert cfg.timeout_seconds == 30
     assert cfg.max_context_items == 100
     assert cfg.warnings == ()
+
+
+def test_config_proxy_reads_current_env(monkeypatch):
+    clear_config_env(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "first_graph")
+    assert config.graph == "first_graph"
+
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "second_graph")
+    assert config.graph == "second_graph"

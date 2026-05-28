@@ -29,8 +29,6 @@ from hugegraph_mcp.gremlin_policy import check_gremlin_read
 from hugegraph_mcp.guard import Capability, guard_write
 from hugegraph_mcp.hugegraph_client import build_hugegraph_client
 
-_cfg = MCPConfig.from_env()
-
 
 class GremlinExecutor:
     """封装 HugeGraph Gremlin 读写客户端，自动处理 graphspace 兼容性。
@@ -51,9 +49,6 @@ class GremlinExecutor:
         return self._build_client().gremlin()
 
 
-# 模块级单例，避免重复构建客户端
-_executor = GremlinExecutor(_cfg)
-
 _GREMLIN_ERROR_TYPE_MAP = {
     "connection_error": ErrorType.CONNECTION_FAILED,
     "authentication_error": ErrorType.AUTHENTICATION_FAILED,
@@ -64,11 +59,11 @@ _GREMLIN_ERROR_TYPE_MAP = {
 
 
 def _get_read_client():
-    return _executor.get_read_client()
+    return GremlinExecutor(MCPConfig.from_env()).get_read_client()
 
 
 def _get_write_client():
-    return _executor.get_write_client()
+    return GremlinExecutor(MCPConfig.from_env()).get_write_client()
 
 
 def _gremlin_error_envelope(result: dict[str, Any]) -> dict[str, Any]:

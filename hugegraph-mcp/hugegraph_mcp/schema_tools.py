@@ -27,8 +27,6 @@ from hugegraph_mcp.envelope import ErrorType, envelope_err
 from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.hugegraph_client import build_hugegraph_client
 
-_config = MCPConfig.from_env()
-
 ALLOWED_SCHEMA_OPERATION_TYPES = frozenset(
     {
         "create_property_key",
@@ -45,7 +43,7 @@ def _is_delete_schema_operation(op_type: Any) -> bool:
 
 
 def _build_client() -> PyHugeClient:
-    return build_hugegraph_client(_config, client_cls=PyHugeClient)
+    return build_hugegraph_client(MCPConfig.from_env(), client_cls=PyHugeClient)
 
 
 def _simple_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -96,7 +94,7 @@ def get_live_schema() -> dict[str, Any]:
         "simple_schema": _simple_schema(raw_schema),
     }
 
-    graphspace = _config.graphspace
+    graphspace = MCPConfig.from_env().graphspace
     if graphspace:
         result["graphspace"] = graphspace
 

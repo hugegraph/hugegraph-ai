@@ -257,6 +257,10 @@ def test_inspect_graph_includes_next_actions(monkeypatch):
         "inspect_graph_tool with include_raw_schema=true" in action
         for action in result["next_actions"]
     )
+    assert any(
+        "execute_gremlin_read_tool" in action for action in result["next_actions"]
+    )
+    assert not any("query_graph_tool" in action for action in result["next_actions"])
 
 
 def test_inspect_graph_readonly_flag(monkeypatch):

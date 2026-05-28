@@ -32,6 +32,24 @@ class FakeHugeGraphShapeClient:
         return self.data
 
 
+class FakePyHugeClient:
+    init_kwargs: list[dict] = []
+
+    def __init__(self, url: str, graph: str, user: str, pwd: str, graphspace=None):
+        self.init_kwargs.append(
+            {
+                "url": url,
+                "graph": graph,
+                "user": user,
+                "pwd": pwd,
+                "graphspace": graphspace,
+            }
+        )
+
+    def gremlin(self):
+        return FakeGremlinClient()
+
+
 def test_execute_gremlin_read_basic(monkeypatch):
     """Basic happy path: query is executed with read client and returns data/total/duration/is_read."""
 
@@ -116,3 +134,23 @@ def test_execute_gremlin_read_respects_readonly_env(monkeypatch):
     assert result["ok"] is True
     assert result["data"]["is_read"] is True
     assert "total" in result["data"]
+
+
+def test_get_read_client_uses_current_env(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    FakePyHugeClient.init_kwargs = []
+    monkeypatch.setattr(gremlin_tools, "PyHugeClient", FakePyHugeClient)
+
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "first_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "first_space")
+    gremlin_tools._get_read_client()
+
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "second_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "second_space")
+    gremlin_tools._get_read_client()
+
+    assert FakePyHugeClient.init_kwargs[0]["graph"] == "first_graph"
+    assert FakePyHugeClient.init_kwargs[0]["graphspace"] == "first_space"
+    assert FakePyHugeClient.init_kwargs[1]["graph"] == "second_graph"
+    assert FakePyHugeClient.init_kwargs[1]["graphspace"] == "second_space"

@@ -83,11 +83,7 @@ def test_get_live_schema_basic(monkeypatch):
 def test_get_live_schema_with_graphspace(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_GRAPH_PATH", "mcp_space/hugegraph")
 
-    # Reload the module to pick up the new environment variable
-    import importlib
     import hugegraph_mcp.schema_tools
-
-    importlib.reload(hugegraph_mcp.schema_tools)
 
     FakePyHugeClient.schema_data = _make_full_schema()
     monkeypatch.setattr(hugegraph_mcp.schema_tools, "PyHugeClient", FakePyHugeClient)
@@ -98,6 +94,28 @@ def test_get_live_schema_with_graphspace(monkeypatch):
     assert FakePyHugeClient.last_init_kwargs is not None
     assert FakePyHugeClient.last_init_kwargs["graphspace"] == "mcp_space"
     assert result.get("graphspace") == "mcp_space"
+
+
+def test_get_live_schema_uses_current_env_without_reload(monkeypatch):
+    from hugegraph_mcp import schema_tools
+
+    FakePyHugeClient.schema_data = _make_full_schema()
+    monkeypatch.setattr(schema_tools, "PyHugeClient", FakePyHugeClient)
+
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "first_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "first_space")
+    schema_tools.get_live_schema()
+    first_kwargs = dict(FakePyHugeClient.last_init_kwargs)
+
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "second_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "second_space")
+    schema_tools.get_live_schema()
+    second_kwargs = dict(FakePyHugeClient.last_init_kwargs)
+
+    assert first_kwargs["graph"] == "first_graph"
+    assert first_kwargs["graphspace"] == "first_space"
+    assert second_kwargs["graph"] == "second_graph"
+    assert second_kwargs["graphspace"] == "second_space"
 
 
 def test_get_live_schema_respects_readonly_flag(monkeypatch):
