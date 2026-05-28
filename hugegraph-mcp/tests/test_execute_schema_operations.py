@@ -11,13 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 
 def _sample_ops():
     return [
@@ -28,6 +21,8 @@ def _sample_ops():
 
 def test_execute_schema_operations_all_success(monkeypatch):
     """All operations succeed → success True, no errors, per-op results preserved."""
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
     from hugegraph_mcp import schema_tools
 
@@ -62,6 +57,8 @@ def test_execute_schema_operations_all_success(monkeypatch):
 def test_execute_schema_operations_collects_errors(monkeypatch):
     """Mixed success/failure → When operations fail, errors are collected and success is False."""
 
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+
     from hugegraph_mcp import schema_tools
 
     def fake_runner(ops):
@@ -85,3 +82,40 @@ def test_execute_schema_operations_collects_errors(monkeypatch):
     assert result["success"] is False
     assert result["errors"]
     assert result["errors"][0]["message"] == "Constraint violation"
+
+
+def test_execute_schema_operations_blocked_in_readonly(monkeypatch):
+    """When HUGEGRAPH_MCP_READONLY is true, schema operations must be blocked."""
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
+
+    from hugegraph_mcp import schema_tools
+
+    result = schema_tools.execute_schema_operations(_sample_ops())
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "READONLY_VIOLATION"
+    assert result["meta"]["readonly"] is True
+    assert result["meta"]["capability"] == "SCHEMA_WRITE"
+
+
+def test_execute_schema_operations_rejects_delete(monkeypatch):
+    """V1 schema management must reject destructive schema operations."""
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+
+    from hugegraph_mcp import schema_tools
+
+    def fake_runner(_ops):
+        raise AssertionError("delete operations must be rejected before execution")
+
+    monkeypatch.setattr(
+        schema_tools, "_run_schema_operations", fake_runner, raising=False
+    )
+
+    result = schema_tools.execute_schema_operations(
+        [{"type": "delete_vertex_label", "name": "person"}]
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
