@@ -70,7 +70,6 @@ class HGraphConfig:
                         "Please upgrade to HugeGraph >= 1.5.0 or use an older version of this client (v1.3.x)."
                     )
 
-                # Enable graphspace support for versions >= 1.7.0
                 # HugeGraph 1.7.0+ moved auth APIs to graphspaces/{graphspace}/auth/...
                 if (major, minor, patch) >= (1, 7, 0):
                     self.graphspace = "DEFAULT"
