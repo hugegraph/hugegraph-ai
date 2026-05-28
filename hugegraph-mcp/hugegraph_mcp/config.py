@@ -37,14 +37,7 @@ class MCPConfig:
     ai_url: str = "http://127.0.0.1:8001"
     ai_graph_url: str | None = None
     allow_ai: bool = False
-    enable_graphrag_experimental: bool = False
     timeout_seconds: int = 30
-    max_context_items: int = 100
-    sql_enabled: bool = False
-    sqlite_allowlist: tuple[str, ...] = field(default_factory=tuple)
-    sql_max_preview_rows: int = 20
-    sql_max_import_rows: int = 1000
-    sql_timeout_seconds: int = 10
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
     @classmethod
@@ -82,26 +75,7 @@ class MCPConfig:
             ai_url=env.get("HUGEGRAPH_AI_URL", "http://127.0.0.1:8001"),
             ai_graph_url=_optional_non_empty(env.get("HUGEGRAPH_AI_GRAPH_URL")),
             allow_ai=_parse_bool(env.get("HUGEGRAPH_MCP_ALLOW_AI", "")),
-            enable_graphrag_experimental=_parse_bool(
-                env.get("HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL", "")
-            ),
             timeout_seconds=_parse_int(env.get("HUGEGRAPH_MCP_TIMEOUT_SECONDS"), 30),
-            max_context_items=_parse_int(
-                env.get("HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS"), 100
-            ),
-            sql_enabled=_parse_bool(env.get("HUGEGRAPH_MCP_SQL_ENABLED", "")),
-            sqlite_allowlist=_parse_semicolon_tuple(
-                env.get("HUGEGRAPH_MCP_SQLITE_ALLOWLIST", "")
-            ),
-            sql_max_preview_rows=_parse_int(
-                env.get("HUGEGRAPH_MCP_SQL_MAX_PREVIEW_ROWS"), 20
-            ),
-            sql_max_import_rows=_parse_int(
-                env.get("HUGEGRAPH_MCP_SQL_MAX_IMPORT_ROWS"), 1000
-            ),
-            sql_timeout_seconds=_parse_int(
-                env.get("HUGEGRAPH_MCP_SQL_TIMEOUT_SECONDS"), 10
-            ),
             warnings=tuple(warnings),
         )
         for warning in config.warnings:
@@ -140,12 +114,6 @@ def _optional_non_empty(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
-
-
-def _parse_semicolon_tuple(value: str) -> tuple[str, ...]:
-    if not value or not value.strip():
-        return ()
-    return tuple(part.strip() for part in value.split(";") if part.strip())
 
 
 class RuntimeConfigProxy:

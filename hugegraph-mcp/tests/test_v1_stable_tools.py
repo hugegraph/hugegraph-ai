@@ -15,6 +15,7 @@
 
 import asyncio
 from unittest.mock import Mock
+import warnings
 
 from hugegraph_mcp import server
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
@@ -47,6 +48,19 @@ def test_public_tool_contract_lists_only_v1_tools():
         "refresh_vid_embeddings_tool",
         "execute_gremlin_write_tool",
     }
+
+
+def test_public_tool_argument_models_do_not_emit_schema_shadow_warning():
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+
+        async def _list_tools():
+            list_tools = getattr(server.mcp, "_list_tools", server.mcp._mcp_list_tools)
+            return await list_tools()
+
+        asyncio.run(_list_tools())
+
+    assert not any("shadows an attribute" in str(item.message) for item in captured)
 
 
 def test_generate_gremlin_tool_routes_to_generate_gremlin(monkeypatch):
@@ -82,7 +96,7 @@ def test_extract_graph_data_tool_routes_to_extract_graph_data(monkeypatch):
 
     result = server.extract_graph_data_tool(
         text="Alice knows Bob.",
-        schema={"vertexlabels": ["person"]},
+        graph_schema={"vertexlabels": ["person"]},
         example_prompt="extract people",
     )
 

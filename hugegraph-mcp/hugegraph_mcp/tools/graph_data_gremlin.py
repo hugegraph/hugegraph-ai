@@ -81,20 +81,6 @@ def _create_edge_query(operation: dict[str, Any]) -> str:
     return query
 
 
-def _update_vertex_query(operation: dict[str, Any]) -> str:
-    query = _vertex_match_query(operation)
-    for prop, value in operation["set"].items():
-        query += f".property({_g(prop)},{_g(value)})"
-    return query
-
-
-def _update_edge_query(operation: dict[str, Any]) -> str:
-    query = _edge_match_query(operation)
-    for prop, value in operation["set"].items():
-        query += f".property({_g(prop)},{_g(value)})"
-    return query
-
-
 def _delete_vertex_query(operation: dict[str, Any]) -> str:
     return f"{_vertex_match_query(operation)}.drop()"
 
@@ -109,10 +95,6 @@ def _write_query(operation: dict[str, Any]) -> str:
         return _create_vertex_query(operation)
     if op == "create_edge":
         return _create_edge_query(operation)
-    if op == "update_vertex":
-        return _update_vertex_query(operation)
-    if op == "update_edge":
-        return _update_edge_query(operation)
     if op == "delete_vertex":
         return _delete_vertex_query(operation)
     if op == "delete_edge":

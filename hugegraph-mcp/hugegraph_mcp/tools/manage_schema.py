@@ -11,10 +11,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Schema 管理统一入口 — design / validate / dry_run / apply 四种模式。
+"""Schema 管理统一入口 — design / validate / dry_run 三种模式。
 
-安全链：validate → dry_run(生成 plan_hash) → confirm check → plan_hash match → execute
-apply 前必须 dry_run 获取 plan_hash，防止 schema 在审核期间被变更。
+V1 仅提供 schema 设计、校验和 dry-run 预览。公共 apply 工具保留
+FEATURE_DISABLED 响应，实际 schema 写入留到后续版本。
 """
 
 import hashlib
@@ -25,7 +25,6 @@ from typing import Any
 from hugegraph_mcp import schema_tools
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
-from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.tools.live_schema import current_live_schema
 from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
 
@@ -493,12 +492,11 @@ def manage_schema(
     confirm: bool = False,
     plan_hash: str | None = None,
 ) -> dict[str, Any]:
-    """统一 schema 管理入口 — 四种模式。
+    """统一 schema 管理入口 — 三种模式。
 
     - design: 获取分步 schema 设计引导
     - validate: 基于 live schema 校验操作合法性
     - dry_run: 校验 + 生成 plan_hash + 风险警告
-    - apply: dry_run 通过后，confirm=True + plan_hash 匹配 → 执行
     """
     operations = operations or []
 
@@ -511,36 +509,8 @@ def manage_schema(
     if mode == "dry_run":
         return envelope_ok(dry_run_schema_operations(operations))
 
-    if mode == "apply":
-        violation = guard(Capability.SCHEMA_WRITE)
-        if violation is not None:
-            return violation
-
-        # schema apply 比数据写入影响更大，必须走 confirm + plan_hash。
-        # 这里再次计算 hash，确保用户确认的是当前 schema 快照下的同一批操作。
-        if not confirm:
-            return envelope_err(
-                ErrorType.CONFIRM_REQUIRED,
-                "Schema apply requires confirm=True after a dry_run.",
-                suggestion="Run mode='dry_run', review warnings, then pass confirm=True with the returned plan_hash.",
-            )
-
-        expected_plan_hash = calculate_plan_hash(operations)
-        if plan_hash != expected_plan_hash:
-            return envelope_err(
-                ErrorType.PLAN_HASH_MISMATCH,
-                "Provided plan_hash does not match the current schema plan.",
-                suggestion="Run mode='dry_run' again and use the returned plan_hash.",
-                details={
-                    "expected_plan_hash": expected_plan_hash,
-                    "provided_plan_hash": plan_hash,
-                },
-            )
-
-        return envelope_ok(schema_tools.execute_schema_operations(operations))
-
     return envelope_err(
         ErrorType.SCHEMA_MISMATCH,
         f"Unsupported manage_schema mode: {mode}",
-        suggestion="Use one of: design, validate, dry_run, apply.",
+        suggestion="Use one of: design, validate, dry_run.",
     )

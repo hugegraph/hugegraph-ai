@@ -14,8 +14,8 @@
 
 """Graph data management orchestration layer.
 
-manage_graph_data() keeps the CRUD safety-chain entry point while validation,
-Gremlin generation, and execution helpers live in focused modules.
+manage_graph_data() keeps the V1 import/delete safety-chain entry point while
+validation, Gremlin generation, and execution helpers live in focused modules.
 """
 
 from typing import Any
@@ -50,8 +50,6 @@ from hugegraph_mcp.tools.graph_data_gremlin import (
     _has_steps,
     _source_vertex_match_query,
     _target_vertex_match_query,
-    _update_edge_query,
-    _update_vertex_query,
     _vertex_match_query,
     _write_query,
 )
@@ -116,8 +114,6 @@ __all__ = [
     "_schema_summary",
     "_source_vertex_match_query",
     "_target_vertex_match_query",
-    "_update_edge_query",
-    "_update_vertex_query",
     "_validate_field_map",
     "_validate_mode_operations",
     "_validate_primary_key_match",
@@ -163,9 +159,9 @@ def manage_graph_data(
                 "graph_data is required for mode='import'",
             )
         # import 模式以用户友好的 graph_data 为输入，但后续安全链统一处理
-        # change_plan；这样 import/update/delete 能共享 dry-run、hash 和执行逻辑。
+        # change_plan；这样 import/delete 能共享 dry-run、hash 和执行逻辑。
         plan = graph_data_to_change_plan(graph_data)
-    elif mode in {"update", "delete"}:
+    elif mode == "delete":
         if change_plan is None:
             return envelope_err(
                 "VALIDATION_ERROR",
@@ -179,11 +175,11 @@ def manage_graph_data(
     else:
         return envelope_err(
             "VALIDATION_ERROR",
-            f"Unknown mode: {mode!r}. Use 'import', 'update', or 'delete'.",
+            f"Unknown mode: {mode!r}. Use 'import' or 'delete'.",
             details={"mode": mode},
         )
 
-    # mode 和 op 的关系是第一道边界：import 只能 create，update/delete
+    # mode 和 op 的关系是第一道边界：import 只能 create，delete
     # 只能执行对应操作，避免用户把高风险操作塞进低风险入口。
     mode_validation = _validate_mode_operations(mode, plan)
     if not mode_validation["valid"]:

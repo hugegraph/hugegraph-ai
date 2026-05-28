@@ -205,18 +205,19 @@ def execute_gremlin_read_tool(gremlin_query: str) -> dict:
 @mcp.tool()
 def extract_graph_data_tool(
     text: str,
-    schema: dict | None = None,
+    graph_schema: dict | None = None,
     example_prompt: str | None = None,
 ) -> dict:
     """V1 稳定工具：自然语言文本 → 候选 graph_data（不写入）。
 
     返回提取的顶点和边数据，供后续导入使用。
+    graph_schema 可传入 HugeGraph schema；为空时使用当前图名作为 schema 引用。
     """
     return _call_public_tool(
         "extract_graph_data_tool",
         extract_graph_data,
         text=text,
-        schema=schema,
+        schema=graph_schema,
         example_prompt=example_prompt,
     )
 
@@ -273,7 +274,7 @@ def apply_schema_tool(
 def import_graph_data_tool(
     mode: str,
     text: str | None = None,
-    schema: dict | None = None,
+    graph_schema: dict | None = None,
     example_prompt: str | None = None,
     graph_data: dict | None = None,
     table_data: dict | None = None,
@@ -298,7 +299,7 @@ def import_graph_data_tool(
             )
         return extract_graph_data(
             text=text,
-            schema=schema,
+            schema=graph_schema,
             example_prompt=example_prompt,
         )
 

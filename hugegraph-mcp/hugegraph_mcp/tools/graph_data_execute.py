@@ -127,8 +127,8 @@ def calculate_graph_change_plan_hash(
     if schema_summary is not None:
         payload["schema_summary"] = schema_summary
     if extra_hash_context is not None:
-        # SQL 导入等上游链路会把来源 SQL、映射配置放进额外上下文。
-        # 同一个 change_plan 如果来自不同 SQL 或 mapping，不能复用确认 hash。
+        # 上游链路可把来源摘要和映射配置放进额外上下文，避免不同来源
+        # 复用同一个确认 hash。
         payload["extra_hash_context"] = extra_hash_context
     encoded = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
@@ -144,7 +144,7 @@ def dry_run_graph_change_plan(
 ) -> dict[str, Any]:
     """干跑 — 校验 + 预览每个操作的影响（matched_count），不执行写入。
 
-    update/delete 操作通过只读 Gremlin 查询验证 matched_count==1，
+    delete 操作通过只读 Gremlin 查询验证 matched_count==1，
     delete_vertex cascade=false 时检查关联边。
     """
     validation = validate_graph_change_plan(change_plan, live_schema)
@@ -170,8 +170,8 @@ def dry_run_graph_change_plan(
             preview.append(item)
             continue
 
-        if op in {"update_edge", "delete_edge"}:
-            # 边的 update/delete 先分别确认两个端点唯一，再确认边本身唯一。
+        if op == "delete_edge":
+            # 边删除先分别确认两个端点唯一，再确认边本身唯一。
             # 这样错误能定位到 source/target，而不是只得到一条模糊的边匹配失败。
             endpoint_failed = False
             for endpoint, endpoint_query in (
@@ -208,7 +208,7 @@ def dry_run_graph_change_plan(
 
         match_query = (
             _edge_match_query(operation)
-            if op in {"update_edge", "delete_edge"}
+            if op == "delete_edge"
             else _vertex_match_query(operation)
         )
         count_result = _read_count(match_query)
@@ -225,10 +225,7 @@ def dry_run_graph_change_plan(
         matched_count = count_result["data"]["matched_count"]
         item["matched_count"] = matched_count
 
-        if (
-            op in {"update_vertex", "update_edge", "delete_vertex", "delete_edge"}
-            and matched_count != 1
-        ):
+        if op in {"delete_vertex", "delete_edge"} and matched_count != 1:
             errors.append(
                 _validation_error(
                     idx,
@@ -330,7 +327,7 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
         if op in WRITE_OPS:
             # 执行前再次读取 matched_count，处理 dry-run 和 confirm 之间图状态变化
             # 的 TOCTOU 风险；只要匹配不再唯一，就拒绝写入。
-            if op in {"update_edge", "delete_edge"}:
+            if op == "delete_edge":
                 for endpoint, endpoint_query in (
                     ("source", _source_vertex_match_query(operation)),
                     ("target", _target_vertex_match_query(operation)),
@@ -357,7 +354,7 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                         )
             match_query = (
                 _edge_match_query(operation)
-                if op in {"update_edge", "delete_edge"}
+                if op == "delete_edge"
                 else _vertex_match_query(operation)
             )
             count_result = _read_count(match_query)

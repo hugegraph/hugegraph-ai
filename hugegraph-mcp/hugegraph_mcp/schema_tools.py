@@ -11,10 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""HugeGraph Schema 操作层 — 底层 schema CRUD 和设计指导。
+"""HugeGraph Schema 操作层 — schema 读取和设计指导。
 
 get_live_schema() 从 HugeGraph 拉取全量 schema 并生成 LLM 精简版，
-execute_schema_operations() 执行幂等 schema 创建，
 design_schema() 提供链式思维引导的 schema 设计框架。
 """
 
@@ -23,23 +22,7 @@ from typing import Any
 from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp.config import MCPConfig
-from hugegraph_mcp.envelope import ErrorType, envelope_err
-from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.hugegraph_client import build_hugegraph_client
-
-ALLOWED_SCHEMA_OPERATION_TYPES = frozenset(
-    {
-        "create_property_key",
-        "create_vertex_label",
-        "create_edge_label",
-        "create_index_label",
-    }
-)
-
-
-def _is_delete_schema_operation(op_type: Any) -> bool:
-    lowered = str(op_type).lower()
-    return "delete" in lowered or "drop" in lowered
 
 
 def _build_client() -> PyHugeClient:
@@ -99,145 +82,6 @@ def get_live_schema() -> dict[str, Any]:
         result["graphspace"] = graphspace
 
     result["readonly"] = MCPConfig.from_env().is_readonly()
-
-    return result
-
-
-def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
-    """底层 schema 执行器 — 对 HugeGraph REST schema API 的最小封装。
-
-    支持 create_property_key / create_vertex_label / create_edge_label / create_index_label，
-    使用 ifNotExist() 保证幂等，拒绝 delete/drop 操作。
-    """
-
-    client = _build_client()
-    schema = client.schema()
-
-    results: list[dict[str, Any]] = []
-    errors: list[dict[str, Any]] = []
-
-    for idx, op in enumerate(operations):
-        op_type = op.get("type")
-        try:
-            if _is_delete_schema_operation(op_type):
-                raise ValueError(
-                    f"Delete/drop schema operation is not supported: {op_type}"
-                )
-            if op_type not in ALLOWED_SCHEMA_OPERATION_TYPES:
-                raise ValueError(f"Unsupported schema operation type: {op_type}")
-
-            if op_type == "create_property_key":
-                name = op["name"]
-                # 未指定 data_type 时默认 TEXT
-                data_type = op.get("data_type", "TEXT").upper()
-                pk_builder = schema.propertyKey(name)
-                if data_type == "INT":
-                    pk_builder = pk_builder.asInt()
-                elif data_type == "DOUBLE":
-                    pk_builder = pk_builder.asDouble()
-                else:
-                    pk_builder = pk_builder.asText()
-                pk_builder.ifNotExist().create()
-
-            elif op_type == "create_vertex_label":
-                name = op["name"]
-                properties = op.get("properties", [])
-                vl_builder = schema.vertexLabel(name)
-                if properties:
-                    vl_builder = vl_builder.properties(*properties)
-                if op.get("primary_keys"):
-                    vl_builder = vl_builder.primaryKeys(*op["primary_keys"])
-                vl_builder.ifNotExist().create()
-
-            elif op_type == "create_edge_label":
-                name = op["name"]
-                source_label = op["source_label"]
-                target_label = op["target_label"]
-                properties = op.get("properties", [])
-                sort_keys = op.get("sort_keys", [])
-                nullable_keys = op.get("nullable_keys", [])
-                frequency = op.get("frequency", "MULTI").upper()
-
-                el_builder = (
-                    schema.edgeLabel(name)
-                    .sourceLabel(source_label)
-                    .targetLabel(target_label)
-                )
-                if properties:
-                    el_builder = el_builder.properties(*properties)
-                if sort_keys:
-                    el_builder = el_builder.sortKeys(*sort_keys)
-                if nullable_keys:
-                    el_builder = el_builder.nullableKeys(*nullable_keys)
-                if frequency == "MULTI":
-                    el_builder = el_builder.multiTimes()
-                el_builder.ifNotExist().create()
-
-            elif op_type == "create_index_label":
-                name = op["name"]
-                base_type = op.get("base_type", "VERTEX").upper()
-                base_label = op["base_label"]
-                fields = op.get("fields", [])
-                index_type = op.get("index_type", "SECONDARY").upper()
-
-                il_builder = schema.indexLabel(name)
-                if base_type == "VERTEX":
-                    il_builder = il_builder.onV(base_label)
-                elif base_type == "EDGE":
-                    il_builder = il_builder.onE(base_label)
-                else:
-                    raise ValueError(
-                        f"Unsupported base_type for index label: {base_type}"
-                    )
-
-                if fields:
-                    il_builder = il_builder.by(*fields)
-
-                if index_type == "SECONDARY":
-                    il_builder = il_builder.secondary()
-                elif index_type == "RANGE":
-                    il_builder = il_builder.range()
-                else:
-                    raise ValueError(
-                        f"Unsupported index_type for index label: {index_type}"
-                    )
-
-                il_builder.ifNotExist().create()
-
-            results.append({"op": op, "status": "ok"})
-        except Exception as exc:  # pragma: no cover - errors are aggregated above
-            msg = str(exc)
-            results.append({"op": op, "status": "failed", "error": msg})
-            errors.append({"op_index": idx, "message": msg})
-
-    return {"success": not bool(errors), "results": results, "errors": errors}
-
-
-def execute_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
-    """执行一组幂等 schema 操作 — 带 readonly 守卫和 delete 预检。
-
-    readonly 模式下拒绝执行，delete 操作在预检阶段直接拒绝。
-    """
-
-    violation = guard(Capability.SCHEMA_WRITE)
-    if violation is not None:
-        return violation
-
-    for idx, operation in enumerate(operations):
-        op_type = operation.get("type") if isinstance(operation, dict) else None
-        if _is_delete_schema_operation(op_type):
-            return envelope_err(
-                ErrorType.SCHEMA_MISMATCH,
-                f"Delete/drop schema operation is not supported: {op_type}",
-                details={"op_index": idx, "operation": operation},
-            )
-
-    result = _run_schema_operations(operations)
-
-    if "errors" not in result:
-        result["errors"] = []
-    if "success" not in result:
-        result["success"] = not bool(result["errors"])
 
     return result
 

@@ -27,9 +27,7 @@ CONFIG_ENV_VARS = (
     "HUGEGRAPH_AI_URL",
     "HUGEGRAPH_AI_GRAPH_URL",
     "HUGEGRAPH_MCP_ALLOW_AI",
-    "HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL",
     "HUGEGRAPH_MCP_TIMEOUT_SECONDS",
-    "HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS",
 )
 
 
@@ -49,9 +47,7 @@ def test_basic_config_parsing(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_AI_URL", "http://ai.example:18001")
     monkeypatch.setenv("HUGEGRAPH_AI_GRAPH_URL", "http://graph-internal:8080")
     monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "yes")
-    monkeypatch.setenv("HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL", "true")
     monkeypatch.setenv("HUGEGRAPH_MCP_TIMEOUT_SECONDS", "45")
-    monkeypatch.setenv("HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS", "250")
 
     cfg = MCPConfig.from_env()
 
@@ -64,9 +60,7 @@ def test_basic_config_parsing(monkeypatch):
     assert cfg.ai_url == "http://ai.example:18001"
     assert cfg.ai_graph_url == "http://graph-internal:8080"
     assert cfg.allow_ai is True
-    assert cfg.enable_graphrag_experimental is True
     assert cfg.timeout_seconds == 45
-    assert cfg.max_context_items == 250
 
 
 def test_graph_path_parsing(monkeypatch):
@@ -159,9 +153,7 @@ def test_default_values(monkeypatch):
     assert cfg.ai_url == "http://127.0.0.1:8001"
     assert cfg.ai_graph_url is None
     assert cfg.allow_ai is False
-    assert cfg.enable_graphrag_experimental is False
     assert cfg.timeout_seconds == 30
-    assert cfg.max_context_items == 100
     assert cfg.warnings == ()
 
 

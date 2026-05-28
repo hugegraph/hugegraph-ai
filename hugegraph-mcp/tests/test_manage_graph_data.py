@@ -46,19 +46,6 @@ def _live_schema():
     }
 
 
-def _update_vertex_plan():
-    return {
-        "operations": [
-            {
-                "op": "update_vertex",
-                "label": "person",
-                "match": {"name": "Alice"},
-                "set": {"age": 31},
-            }
-        ]
-    }
-
-
 def _delete_edge_plan():
     return {
         "operations": [
@@ -69,22 +56,6 @@ def _delete_edge_plan():
                 "source_match": {"name": "Alice"},
                 "target_label": "person",
                 "target_match": {"name": "Bob"},
-            }
-        ]
-    }
-
-
-def _update_edge_plan():
-    return {
-        "operations": [
-            {
-                "op": "update_edge",
-                "label": "knows",
-                "source_label": "person",
-                "source_match": {"name": "Alice"},
-                "target_label": "person",
-                "target_match": {"name": "Bob"},
-                "set": {"since": 2025},
             }
         ]
     }
@@ -134,25 +105,6 @@ def test_gremlin_literal_uses_single_quotes_to_avoid_gstring_interpolation():
     assert _g("Alice's path\\name") == "'Alice\\'s path\\\\name'"
 
 
-def test_validate_update_vertex_rejects_primary_key_set():
-    result = manage_graph_data_module.validate_graph_change_plan(
-        {
-            "operations": [
-                {
-                    "op": "update_vertex",
-                    "label": "person",
-                    "match": {"name": "Alice"},
-                    "set": {"name": "Alicia"},
-                }
-            ]
-        },
-        _live_schema(),
-    )
-
-    assert result["valid"] is False
-    assert "must not include primary key" in result["errors"][0]["reason"]
-
-
 def test_validate_delete_vertex_requires_primary_key_match():
     result = manage_graph_data_module.validate_graph_change_plan(
         {
@@ -192,44 +144,6 @@ def test_validate_edge_rejects_unknown_endpoint_label():
     assert any(
         "source_label references undefined" in e["reason"] for e in result["errors"]
     )
-
-
-def test_dry_run_update_vertex_returns_preview_and_hash(monkeypatch):
-    queries = []
-
-    def fake_read(query):
-        queries.append(query)
-        return {"data": [1], "total": 1, "duration_ms": 1, "is_read": True}
-
-    monkeypatch.setattr(
-        manage_graph_data_module.gremlin_tools, "execute_gremlin_read", fake_read
-    )
-
-    result = manage_graph_data_module.dry_run_graph_change_plan(
-        _update_vertex_plan(),
-        _live_schema(),
-    )
-
-    assert result["valid"] is True
-    assert re.fullmatch(r"[0-9a-f]{16}", result["plan_hash"])
-    assert result["preview"][0]["matched_count"] == 1
-    assert queries == ["g.V().hasLabel('person').has('name','Alice').count()"]
-
-
-def test_dry_run_update_vertex_accepts_nested_count_result(monkeypatch):
-    monkeypatch.setattr(
-        manage_graph_data_module.gremlin_tools,
-        "execute_gremlin_read",
-        lambda _query: _nested_count_result(1),
-    )
-
-    result = manage_graph_data_module.dry_run_graph_change_plan(
-        _update_vertex_plan(),
-        _live_schema(),
-    )
-
-    assert result["valid"] is True
-    assert result["preview"][0]["matched_count"] == 1
 
 
 def test_dry_run_delete_edge_rejects_non_single_match(monkeypatch):
@@ -646,123 +560,6 @@ def test_manage_graph_data_execute_delete_edge_verify_failure(monkeypatch):
     )
 
 
-def test_dry_run_update_edge_returns_preview_and_hash(monkeypatch):
-    queries = []
-    counts = iter([1, 1, 1])
-
-    def fake_read(query):
-        queries.append(query)
-        return {
-            "data": [next(counts)],
-            "total": 1,
-            "duration_ms": 1,
-            "is_read": True,
-        }
-
-    monkeypatch.setattr(
-        manage_graph_data_module.gremlin_tools, "execute_gremlin_read", fake_read
-    )
-
-    result = manage_graph_data_module.dry_run_graph_change_plan(
-        _update_edge_plan(),
-        _live_schema(),
-    )
-
-    assert result["valid"] is True
-    assert result["preview"][0]["source_matched_count"] == 1
-    assert result["preview"][0]["target_matched_count"] == 1
-    assert result["preview"][0]["matched_count"] == 1
-    assert queries == [
-        "g.V().hasLabel('person').has('name','Alice').count()",
-        "g.V().hasLabel('person').has('name','Bob').count()",
-        "g.V().hasLabel('person').has('name','Alice').outE('knows').where(inV().hasLabel('person').has('name','Bob')).count()",
-    ]
-
-
-def test_validate_update_edge_rejects_unknown_set_field():
-    plan = _update_edge_plan()
-    plan["operations"][0]["set"] = {"weight": 1}
-
-    result = manage_graph_data_module.validate_graph_change_plan(plan, _live_schema())
-
-    assert result["valid"] is False
-    assert (
-        "set references property not on label: weight" in result["errors"][0]["reason"]
-    )
-
-
-def test_validate_update_vertex_rejects_unknown_set_field():
-    plan = _update_vertex_plan()
-    plan["operations"][0]["set"] = {"nickname": "Al"}
-
-    result = manage_graph_data_module.validate_graph_change_plan(plan, _live_schema())
-
-    assert result["valid"] is False
-    assert (
-        "set references property not on label: nickname"
-        in result["errors"][0]["reason"]
-    )
-
-
-def test_validate_update_edge_rejects_endpoint_set_field():
-    plan = _update_edge_plan()
-    plan["operations"][0]["set"] = {"source_label": "person"}
-
-    result = manage_graph_data_module.validate_graph_change_plan(plan, _live_schema())
-
-    assert result["valid"] is False
-    assert any(
-        "must not include source/target" in e["reason"] for e in result["errors"]
-    )
-
-
-def test_dry_run_update_edge_rejects_non_single_edge_match(monkeypatch):
-    counts = iter([1, 1, 2])
-
-    monkeypatch.setattr(
-        manage_graph_data_module.gremlin_tools,
-        "execute_gremlin_read",
-        lambda _query: {
-            "data": [next(counts)],
-            "total": 1,
-            "duration_ms": 1,
-            "is_read": True,
-        },
-    )
-
-    result = manage_graph_data_module.dry_run_graph_change_plan(
-        _update_edge_plan(),
-        _live_schema(),
-    )
-
-    assert result["valid"] is False
-    assert "update_edge matched_count must be 1, got 2" in result["errors"][0]["reason"]
-
-
-def test_dry_run_update_edge_rejects_endpoint_match_failure(monkeypatch):
-    counts = iter([0, 1])
-
-    monkeypatch.setattr(
-        manage_graph_data_module.gremlin_tools,
-        "execute_gremlin_read",
-        lambda _query: {
-            "data": [next(counts)],
-            "total": 1,
-            "duration_ms": 1,
-            "is_read": True,
-        },
-    )
-
-    result = manage_graph_data_module.dry_run_graph_change_plan(
-        _update_edge_plan(),
-        _live_schema(),
-    )
-
-    assert result["valid"] is False
-    assert "source endpoint matched_count must be 1" in result["errors"][0]["reason"]
-    assert "matched_count" not in result["preview"][0]
-
-
 def test_graph_data_to_change_plan_maps_create_operations():
     result = manage_graph_data_module.graph_data_to_change_plan(
         {
@@ -836,15 +633,22 @@ def test_graph_data_to_change_plan_normalizes_vertex_id_lookup():
 def test_manage_graph_data_requires_confirm(monkeypatch):
     _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    counts = iter([1, 0])
+
     monkeypatch.setattr(
         manage_graph_data_module.gremlin_tools,
         "execute_gremlin_read",
-        lambda _query: {"data": [1], "total": 1, "duration_ms": 1, "is_read": True},
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
     )
 
     result = manage_graph_data_module.manage_graph_data(
-        mode="update",
-        change_plan=_update_vertex_plan(),
+        mode="delete",
+        change_plan=_delete_vertex_plan(),
         dry_run=False,
         confirm=False,
     )
@@ -853,34 +657,38 @@ def test_manage_graph_data_requires_confirm(monkeypatch):
     assert result["error"]["type"] == "CONFIRM_REQUIRED"
 
 
-def test_manage_graph_data_rejects_wrong_mode_operations(monkeypatch):
+def test_manage_graph_data_rejects_update_mode(monkeypatch):
     _mock_schema(monkeypatch)
 
     result = manage_graph_data_module.manage_graph_data(
         mode="update",
-        change_plan=_delete_edge_plan(),
+        change_plan=_delete_vertex_plan(),
     )
 
     assert result["ok"] is False
-    assert result["error"]["type"] == "INVALID_GRAPH_DATA"
-    assert (
-        "not allowed in mode='update'"
-        in result["error"]["details"]["errors"][0]["reason"]
-    )
+    assert result["error"]["type"] == "VALIDATION_ERROR"
+    assert "Use 'import' or 'delete'" in result["error"]["message"]
 
 
 def test_manage_graph_data_plan_hash_mismatch(monkeypatch):
     _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    counts = iter([1, 0])
+
     monkeypatch.setattr(
         manage_graph_data_module.gremlin_tools,
         "execute_gremlin_read",
-        lambda _query: {"data": [1], "total": 1, "duration_ms": 1, "is_read": True},
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
     )
 
     result = manage_graph_data_module.manage_graph_data(
-        mode="update",
-        change_plan=_update_vertex_plan(),
+        mode="delete",
+        change_plan=_delete_vertex_plan(),
         dry_run=False,
         confirm=True,
         plan_hash="0000000000000000",
@@ -894,15 +702,22 @@ def test_manage_graph_data_plan_hash_mismatch(monkeypatch):
 
 def test_manage_graph_data_dry_run_returns_plan_hash(monkeypatch):
     _mock_schema(monkeypatch)
+    counts = iter([1, 0])
+
     monkeypatch.setattr(
         manage_graph_data_module.gremlin_tools,
         "execute_gremlin_read",
-        lambda _query: {"data": [1], "total": 1, "duration_ms": 1, "is_read": True},
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
     )
 
     result = manage_graph_data_module.manage_graph_data(
-        mode="update",
-        change_plan=_update_vertex_plan(),
+        mode="delete",
+        change_plan=_delete_vertex_plan(),
     )
 
     assert result["ok"] is True
@@ -910,7 +725,7 @@ def test_manage_graph_data_dry_run_returns_plan_hash(monkeypatch):
 
 
 def test_manage_graph_data_plan_hash_schema_field_order_same_hash():
-    plan = _update_vertex_plan()
+    plan = _delete_vertex_plan()
     schema = _live_schema()
     reordered_schema = _live_schema()
     reordered_schema["schema"]["propertykeys"] = list(
@@ -937,7 +752,7 @@ def test_manage_graph_data_plan_hash_schema_field_order_same_hash():
 
 
 def test_manage_graph_data_plan_hash_schema_primary_key_change_different_hash():
-    plan = _update_vertex_plan()
+    plan = _delete_vertex_plan()
     schema = _live_schema()
     changed_schema = deepcopy(schema)
     changed_schema["schema"]["vertexlabels"][0]["primary_keys"] = ["age"]
@@ -955,7 +770,7 @@ def test_manage_graph_data_plan_hash_schema_primary_key_change_different_hash():
 
 
 def test_manage_graph_data_plan_hash_schema_metadata_ignored_same_hash():
-    plan = _update_vertex_plan()
+    plan = _delete_vertex_plan()
     schema = _live_schema()
     schema_with_metadata = deepcopy(schema)
     schema_with_metadata["server_time"] = "2026-05-26T00:00:00Z"
@@ -979,11 +794,17 @@ def test_manage_graph_data_readonly_rejects_execution(monkeypatch):
     _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
     writes = []
+    counts = iter([1, 0, 1, 0])
 
     monkeypatch.setattr(
         manage_graph_data_module.gremlin_tools,
         "execute_gremlin_read",
-        lambda _query: {"data": [1], "total": 1, "duration_ms": 1, "is_read": True},
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
     )
     monkeypatch.setattr(
         manage_graph_data_module.gremlin_tools,
@@ -991,13 +812,13 @@ def test_manage_graph_data_readonly_rejects_execution(monkeypatch):
         lambda query: writes.append(query),
     )
     dry_run = manage_graph_data_module.manage_graph_data(
-        mode="update",
-        change_plan=_update_vertex_plan(),
+        mode="delete",
+        change_plan=_delete_vertex_plan(),
     )
 
     result = manage_graph_data_module.manage_graph_data(
-        mode="update",
-        change_plan=_update_vertex_plan(),
+        mode="delete",
+        change_plan=_delete_vertex_plan(),
         dry_run=False,
         confirm=True,
         plan_hash=dry_run["data"]["plan_hash"],
@@ -1008,51 +829,6 @@ def test_manage_graph_data_readonly_rejects_execution(monkeypatch):
     assert result["ok"] is False
     assert result["error"]["type"] == "READONLY_VIOLATION"
     assert writes == []
-
-
-def test_manage_graph_data_execute_update_vertex(monkeypatch):
-    _mock_schema(monkeypatch)
-    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
-    reads = []
-    writes = []
-
-    def fake_read(query):
-        reads.append(query)
-        return {"data": [1], "total": 1, "duration_ms": 1, "is_read": True}
-
-    def fake_write(query):
-        writes.append(query)
-        return {"success": True, "affected": 1, "duration_ms": 1, "is_write": True}
-
-    monkeypatch.setattr(
-        manage_graph_data_module.gremlin_tools, "execute_gremlin_read", fake_read
-    )
-    monkeypatch.setattr(
-        manage_graph_data_module.gremlin_tools, "execute_gremlin_write", fake_write
-    )
-    dry_run = manage_graph_data_module.manage_graph_data(
-        mode="update",
-        change_plan=_update_vertex_plan(),
-    )
-
-    result = manage_graph_data_module.manage_graph_data(
-        mode="update",
-        change_plan=_update_vertex_plan(),
-        dry_run=False,
-        confirm=True,
-        plan_hash=dry_run["data"]["plan_hash"],
-        nonce=dry_run["data"]["plan_context"]["nonce"],
-        expires_at=dry_run["data"]["plan_context"]["expires_at"],
-    )
-
-    assert result["ok"] is True
-    assert result["data"]["success"] is True
-    assert reads == [
-        "g.V().hasLabel('person').has('name','Alice').count()",
-        "g.V().hasLabel('person').has('name','Alice').count()",
-        "g.V().hasLabel('person').has('name','Alice').count()",
-    ]
-    assert writes == ["g.V().hasLabel('person').has('name','Alice').property('age',31)"]
 
 
 def test_manage_graph_data_partial_write_reports_written_count(monkeypatch):

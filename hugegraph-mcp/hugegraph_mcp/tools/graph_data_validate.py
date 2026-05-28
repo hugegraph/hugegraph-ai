@@ -33,20 +33,17 @@ ALLOWED_OPS = frozenset(
     {
         "create_vertex",
         "create_edge",
-        "update_vertex",
-        "update_edge",
         "delete_vertex",
         "delete_edge",
     }
 )
 
-VERTEX_OPS = frozenset({"create_vertex", "update_vertex", "delete_vertex"})
-EDGE_OPS = frozenset({"create_edge", "update_edge", "delete_edge"})
-WRITE_OPS = frozenset({"update_vertex", "update_edge", "delete_vertex", "delete_edge"})
+VERTEX_OPS = frozenset({"create_vertex", "delete_vertex"})
+EDGE_OPS = frozenset({"create_edge", "delete_edge"})
+WRITE_OPS = frozenset({"delete_vertex", "delete_edge"})
 # 每种 mode 只允许特定操作类型，防止错误使用
 MODE_OPS = {
     "import": frozenset({"create_vertex", "create_edge"}),
-    "update": frozenset({"update_vertex", "update_edge"}),
     "delete": frozenset({"delete_vertex", "delete_edge"}),
 }
 
@@ -197,7 +194,7 @@ def validate_graph_change_plan(
 ) -> dict[str, Any]:
     """校验 change_plan 中的操作是否与 live schema 兼容。
 
-    检查项：op 类型白名单、label 存在性、properties/set/match 字段合法性、
+    检查项：op 类型白名单、label 存在性、properties/match 字段合法性、
     主键匹配、边端点合法性。
     """
     errors: list[ValidationError] = []
@@ -270,7 +267,7 @@ def validate_graph_change_plan(
                     idx,
                     operation,
                     f"unsupported op: {op}",
-                    "Use one of: create_vertex, create_edge, update_vertex, update_edge, delete_vertex, delete_edge.",
+                    "Use one of: create_vertex, create_edge, delete_vertex, delete_edge.",
                 )
             )
             continue
@@ -286,6 +283,16 @@ def validate_graph_change_plan(
                 )
             )
             continue
+
+        if "set" in operation:
+            errors.append(
+                _validation_error(
+                    idx,
+                    operation,
+                    "set is not supported by V1 graph data operations",
+                    "Use properties for create operations, or submit update support in a later V2 change.",
+                )
+            )
 
         if op in VERTEX_OPS:
             if label not in vertex_labels:
@@ -304,7 +311,7 @@ def validate_graph_change_plan(
                 warnings.append(
                     f"operation {idx} references vertex label '{label}' with no primary_keys"
                 )
-            # properties/match/set 都只能引用该 label 已定义的属性。
+            # properties/match 都只能引用该 label 已定义的属性。
             # 这里先做字段白名单检查，再按 op 做更严格的业务约束。
             _validate_field_map(
                 idx=idx,
@@ -320,43 +327,7 @@ def validate_graph_change_plan(
                 allowed_properties=allowed,
                 errors=errors,
             )
-            _validate_field_map(
-                idx=idx,
-                operation=operation,
-                field="set",
-                allowed_properties=allowed,
-                errors=errors,
-            )
-            if op == "update_vertex":
-                set_values = operation.get("set")
-                if not isinstance(set_values, dict) or not set_values:
-                    errors.append(
-                        _validation_error(
-                            idx,
-                            operation,
-                            "update_vertex set must be a non-empty object",
-                            "Provide at least one non-primary-key property to update.",
-                        )
-                    )
-                elif any(pk in set_values for pk in pks):
-                    # 主键是顶点身份的一部分，更新主键等价于换一个顶点；
-                    # 这种操作必须拆成显式 delete + create。
-                    errors.append(
-                        _validation_error(
-                            idx,
-                            operation,
-                            "update_vertex set must not include primary key properties",
-                            "Primary key values identify the vertex and cannot be updated.",
-                        )
-                    )
-                _validate_primary_key_match(
-                    idx=idx,
-                    operation=operation,
-                    field="match",
-                    primary_keys=pks,
-                    errors=errors,
-                )
-            elif op == "delete_vertex":
+            if op == "delete_vertex":
                 _validate_primary_key_match(
                     idx=idx,
                     operation=operation,
@@ -425,49 +396,6 @@ def validate_graph_change_plan(
                 allowed_properties=allowed,
                 errors=errors,
             )
-            _validate_field_map(
-                idx=idx,
-                operation=operation,
-                field="set",
-                allowed_properties=allowed,
-                errors=errors,
-            )
-            if op == "update_edge":
-                set_values = operation.get("set")
-                if not isinstance(set_values, dict) or not set_values:
-                    errors.append(
-                        _validation_error(
-                            idx,
-                            operation,
-                            "update_edge set must be a non-empty object",
-                            "Provide at least one edge property to update.",
-                        )
-                    )
-                elif any(
-                    endpoint in set_values
-                    for endpoint in (
-                        "source",
-                        "target",
-                        "source_label",
-                        "target_label",
-                        "source_match",
-                        "target_match",
-                        "outV",
-                        "inV",
-                        "outVLabel",
-                        "inVLabel",
-                    )
-                ):
-                    # 边端点决定边身份，不能作为 update 的 set 字段修改。
-                    # 如果要迁移边，应显式删除旧边并创建新边。
-                    errors.append(
-                        _validation_error(
-                            idx,
-                            operation,
-                            "update_edge set must not include source/target endpoint fields",
-                            "Endpoints identify the edge and cannot be updated.",
-                        )
-                    )
             if isinstance(source_label, str) and source_label in vertex_labels:
                 _validate_primary_key_match(
                     idx=idx,
@@ -508,7 +436,7 @@ def validate_graph_change_plan(
 def _validate_mode_operations(
     mode: str, change_plan: GraphChangePlan
 ) -> dict[str, Any]:
-    """确保 mode 下的所有操作类型匹配，例如 import 模式不允许 update/delete。"""
+    """确保 mode 下的所有操作类型匹配，例如 import 模式不允许删除。"""
     allowed = MODE_OPS[mode]
     errors = []
     for idx, operation in enumerate(_operations(change_plan)):

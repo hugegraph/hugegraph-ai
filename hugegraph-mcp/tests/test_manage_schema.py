@@ -579,25 +579,7 @@ def test_manage_schema_plan_hash_operation_order_different_hash():
     assert first != second
 
 
-def test_manage_schema_apply_missing_confirm(monkeypatch):
-    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
-
-    result = manage_schema(
-        mode="apply",
-        operations=[_property_key()],
-        confirm=False,
-    )
-
-    assert result["ok"] is False
-    assert result["error"]["type"] == "CONFIRM_REQUIRED"
-
-
-def test_manage_schema_apply_plan_hash_mismatch(monkeypatch):
-    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
-    monkeypatch.setattr(
-        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
-    )
-
+def test_manage_schema_apply_is_not_an_internal_v1_mode():
     result = manage_schema(
         mode="apply",
         operations=[_property_key()],
@@ -606,52 +588,5 @@ def test_manage_schema_apply_plan_hash_mismatch(monkeypatch):
     )
 
     assert result["ok"] is False
-    assert result["error"]["type"] == "PLAN_HASH_MISMATCH"
-
-
-def test_manage_schema_apply_readonly(monkeypatch):
-    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
-
-    result = manage_schema(
-        mode="apply",
-        operations=[_property_key()],
-        confirm=True,
-        plan_hash="0000000000000000",
-    )
-
-    assert result["ok"] is False
-    assert result["error"]["type"] == "READONLY_VIOLATION"
-
-
-def test_manage_schema_apply_success(monkeypatch):
-    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
-    monkeypatch.setattr(
-        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
-    )
-
-    operations = [_property_key()]
-    dry_run = manage_schema(mode="dry_run", operations=operations)
-
-    def fake_execute(ops):
-        return {
-            "success": True,
-            "results": [{"op": ops[0], "status": "ok"}],
-            "errors": [],
-        }
-
-    monkeypatch.setattr(
-        manage_schema_module.schema_tools,
-        "execute_schema_operations",
-        fake_execute,
-    )
-
-    result = manage_schema(
-        mode="apply",
-        operations=operations,
-        confirm=True,
-        plan_hash=dry_run["data"]["plan_hash"],
-    )
-
-    assert result["ok"] is True
-    assert result["data"]["success"] is True
-    assert result["data"]["errors"] == []
+    assert result["error"]["type"] == "SCHEMA_MISMATCH"
+    assert "Unsupported manage_schema mode: apply" in result["error"]["message"]

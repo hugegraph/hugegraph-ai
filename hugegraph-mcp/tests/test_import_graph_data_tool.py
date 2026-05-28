@@ -27,7 +27,7 @@ def test_import_graph_data_tool_extract_routes_to_extract(monkeypatch):
     result = server.import_graph_data_tool(
         mode="extract",
         text="Alice knows Bob.",
-        schema={"vertexlabels": ["person"]},
+        graph_schema={"vertexlabels": ["person"]},
         example_prompt="extract people",
     )
 

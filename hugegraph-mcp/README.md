@@ -157,13 +157,6 @@ All configuration is read from environment variables.
 | `HUGEGRAPH_AI_URL` | `http://127.0.0.1:8001` | HugeGraph-AI URL |
 | `HUGEGRAPH_AI_GRAPH_URL` | unset | Graph URL used by HugeGraph-AI; defaults to `HUGEGRAPH_URL` when unset |
 | `HUGEGRAPH_MCP_TIMEOUT_SECONDS` | `30` | AI call timeout in seconds |
-| `HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS` | `100` | GraphRAG context item limit |
-| `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL` | `false` | Reserved experimental GraphRAG configuration |
-| `HUGEGRAPH_MCP_SQL_ENABLED` | `false` | SQL capability switch; V1 user-facing SQL paths are still disabled |
-| `HUGEGRAPH_MCP_SQLITE_ALLOWLIST` | empty | SQLite file allowlist, separated by semicolons |
-| `HUGEGRAPH_MCP_SQL_MAX_PREVIEW_ROWS` | `20` | SQL preview row limit |
-| `HUGEGRAPH_MCP_SQL_MAX_IMPORT_ROWS` | `1000` | SQL import row limit |
-| `HUGEGRAPH_MCP_SQL_TIMEOUT_SECONDS` | `10` | SQLite timeout in seconds |
 
 Recommended safe defaults:
 

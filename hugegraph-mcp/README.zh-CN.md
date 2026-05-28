@@ -162,13 +162,6 @@ confirm 阶段必须全量重验。dry-run 结果过期、目标图变化、sche
 | `HUGEGRAPH_AI_URL` | `http://127.0.0.1:8001` | HugeGraph-AI 地址 |
 | `HUGEGRAPH_AI_GRAPH_URL` | 未设置 | AI 侧使用的图地址，未设置时使用 `HUGEGRAPH_URL` |
 | `HUGEGRAPH_MCP_TIMEOUT_SECONDS` | `30` | AI 调用超时时间 |
-| `HUGEGRAPH_MCP_MAX_CONTEXT_ITEMS` | `100` | GraphRAG 上下文数量上限 |
-| `HUGEGRAPH_MCP_ENABLE_GRAPHRAG_EXPERIMENTAL` | `false` | 预留实验性 GraphRAG 配置 |
-| `HUGEGRAPH_MCP_SQL_ENABLED` | `false` | SQL 能力开关；V1 用户接口仍禁用 SQL 路径 |
-| `HUGEGRAPH_MCP_SQLITE_ALLOWLIST` | 空 | SQLite 文件 allowlist，分号分隔 |
-| `HUGEGRAPH_MCP_SQL_MAX_PREVIEW_ROWS` | `20` | SQL preview 行数上限 |
-| `HUGEGRAPH_MCP_SQL_MAX_IMPORT_ROWS` | `1000` | SQL import 行数上限 |
-| `HUGEGRAPH_MCP_SQL_TIMEOUT_SECONDS` | `10` | SQLite 超时时间 |
 
 推荐默认安全姿态：
 
