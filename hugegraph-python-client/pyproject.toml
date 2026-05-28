@@ -36,9 +36,9 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/apache/incubator-hugegraph-ai"
-repository = "https://github.com/apache/incubator-hugegraph-ai"
-bug_tracker = "https://github.com/apache/incubator-hugegraph-ai/issues"
+homepage = "https://github.com/apache/hugegraph-ai"
+repository = "https://github.com/apache/hugegraph-ai"
+bug_tracker = "https://github.com/apache/hugegraph-ai/issues"
 
 [build-system]
 requires = ["hatchling"]

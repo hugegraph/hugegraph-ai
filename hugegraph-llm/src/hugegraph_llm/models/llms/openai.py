@@ -70,7 +70,10 @@ class OpenAIClient(BaseLLM):
                 max_tokens=self.max_tokens,
                 messages=messages,
             )
-            log.info("Token usage: %s", completions.usage.model_dump_json())
+            if not completions.choices:
+                raise RuntimeError(f"Empty choices in LLM response: {str(completions)[:200]}")
+            if completions.usage:
+                log.info("Token usage: %s", completions.usage.model_dump_json())
             return completions.choices[0].message.content
         # catch context length / do not retry
         except openai.BadRequestError as e:
@@ -105,7 +108,10 @@ class OpenAIClient(BaseLLM):
                 max_tokens=self.max_tokens,
                 messages=messages,
             )
-            log.info("Token usage: %s", completions.usage.model_dump_json())
+            if not completions.choices:
+                raise RuntimeError(f"Empty choices in LLM response: {str(completions)[:200]}")
+            if completions.usage:
+                log.info("Token usage: %s", completions.usage.model_dump_json())
             return completions.choices[0].message.content
         # catch context length / do not retry
         except openai.BadRequestError as e:

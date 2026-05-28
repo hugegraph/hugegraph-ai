@@ -16,6 +16,7 @@
 # under the License.
 
 import argparse
+import os
 
 import gradio as gr
 import uvicorn
@@ -202,5 +203,5 @@ if __name__ == "__main__":
         host=args.host,
         port=args.port,
         factory=True,
-        reload=True,
+        reload=os.getenv("HG_DEV_RELOAD") == "1",
     )
