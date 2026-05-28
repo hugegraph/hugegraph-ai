@@ -1,0 +1,4 @@
+interface:
+  display_name: "HugeGraph Query Analyst"
+  short_description: "Query graphs with read-only MCP"
+  default_prompt: "Use $hugegraph-query-analyst to answer this graph question through MCP read-only query tools."

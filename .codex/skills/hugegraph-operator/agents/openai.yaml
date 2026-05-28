@@ -1,0 +1,4 @@
+interface:
+  display_name: "HugeGraph Operator"
+  short_description: "Inspect graph status and schema"
+  default_prompt: "Use $hugegraph-operator to check the current HugeGraph MCP status, schema, permissions, and next actions."

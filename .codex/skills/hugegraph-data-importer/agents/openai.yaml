@@ -1,0 +1,4 @@
+interface:
+  display_name: "HugeGraph Data Importer"
+  short_description: "Extract and import graph data safely"
+  default_prompt: "Use $hugegraph-data-importer to extract or import HugeGraph data through the current MCP V1 safe path."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "HugeGraph Schema Designer"
+  short_description: "Design and preview graph schema"
+  default_prompt: "Use $hugegraph-schema-designer to design and dry-run preview a HugeGraph schema plan."

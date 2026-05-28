@@ -1,0 +1,4 @@
+interface:
+  display_name: "HugeGraph Regression Tester"
+  short_description: "Test current MCP V1 capabilities"
+  default_prompt: "Use $hugegraph-regression-tester to run a real HugeGraph MCP V1 regression test and report pass/fail results."
