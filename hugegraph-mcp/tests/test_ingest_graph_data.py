@@ -254,6 +254,39 @@ def test_ingest_graph_data_schema_mismatch(monkeypatch):
     )
 
 
+def test_validate_graph_payload_rejects_labels_when_live_schema_is_empty():
+    empty_schema = {
+        "schema": {
+            "propertykeys": [],
+            "vertexlabels": [],
+            "edgelabels": [],
+            "indexlabels": [],
+        }
+    }
+
+    result = ingest_graph_data_module.validate_graph_payload(
+        {
+            "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "target_label": "person",
+                    "source": {"name": "Alice"},
+                    "target": {"name": "Bob"},
+                }
+            ],
+        },
+        live_schema=empty_schema,
+    )
+
+    assert result["valid"] is False
+    assert "vertex 0 label 'person' does not exist in schema" in result["errors"]
+    assert "edge 0 label 'knows' does not exist in schema" in result["errors"]
+    assert "edge 0 source_label 'person' does not exist in schema" in result["errors"]
+    assert "edge 0 target_label 'person' does not exist in schema" in result["errors"]
+
+
 def test_ingest_graph_data_rejects_property_type_mismatch(monkeypatch):
     _mock_schema(monkeypatch)
 

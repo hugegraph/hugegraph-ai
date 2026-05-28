@@ -93,6 +93,8 @@ def _read_values(gremlin_query: str) -> dict[str, Any]:
             retryable=True,
         )
     data = result.get("data") if isinstance(result, dict) else result
+    if isinstance(data, dict) and "data" in data:
+        data = data["data"]
     return envelope_ok({"values": data if isinstance(data, list) else [data]})
 
 

@@ -13,9 +13,12 @@
 
 """Live schema fetch helpers shared by V1 tools."""
 
+import logging
 from typing import Any
 
 from hugegraph_mcp import schema_tools
+
+LOGGER = logging.getLogger("hugegraph_mcp.live_schema")
 
 
 def current_live_schema(live_schema: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -31,5 +34,6 @@ def fetch_live_schema_or_none() -> dict[str, Any] | None:
 
     try:
         return current_live_schema()
-    except Exception:
+    except Exception as exc:
+        LOGGER.warning("Failed to fetch live schema: %s", exc, exc_info=True)
         return None

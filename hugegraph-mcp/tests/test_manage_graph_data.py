@@ -333,6 +333,43 @@ def test_dry_run_delete_vertex_rejects_edges_when_not_cascade(monkeypatch):
     assert result["preview"][0]["associated_edge_count"] == 3
 
 
+def test_dry_run_delete_vertex_cascade_preview_unwraps_nested_values(monkeypatch):
+    def fake_read(query):
+        if query.endswith(".count()"):
+            return {"data": {"data": [1], "meta": {}}, "duration_ms": 1}
+        return {
+            "data": {
+                "data": [{"id": "edge-1", "label": "knows"}],
+                "meta": {"ignored": True},
+            },
+            "duration_ms": 1,
+        }
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools, "execute_gremlin_read", fake_read
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(
+        {
+            "operations": [
+                {
+                    "op": "delete_vertex",
+                    "label": "person",
+                    "match": {"name": "Alice"},
+                    "cascade": True,
+                }
+            ]
+        },
+        _live_schema(),
+    )
+
+    assert result["valid"] is False
+    assert result["preview"][0]["associated_edges"] == [
+        {"id": "edge-1", "label": "knows"}
+    ]
+    assert result["errors"][0]["error_type"] == "CASCADE_NOT_ENABLED"
+
+
 def test_manage_delete_vertex_returns_blocked_by_relationships(monkeypatch):
     _mock_schema(monkeypatch)
     counts = iter([1, 2])

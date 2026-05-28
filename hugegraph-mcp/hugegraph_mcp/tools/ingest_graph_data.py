@@ -454,8 +454,9 @@ def validate_graph_payload(
     schema_elabels: dict[str, dict[str, Any]] = {}
     schema_eprops: dict[str, set[str]] = {}
     indexed_labels = {"VERTEX": set(), "EDGE": set()}
-    if live_schema:
-        raw = _schema_payload(live_schema) or {}
+    raw = _schema_payload(live_schema) if live_schema is not None else None
+    schema_available = raw is not None
+    if schema_available:
         # 把 live schema 摘成 label -> 属性/主键/类型表，后续校验只依赖这份快照。
         # 这避免遍历过程中 schema 被重复读取导致前后判断不一致。
         schema_property_types = _property_types(raw)
@@ -488,7 +489,7 @@ def validate_graph_payload(
                 errors.append(f"vertex {idx} missing required field: label")
                 continue
             vertex_labels.add(label)
-            if schema_vlabels and label not in schema_vlabels:
+            if schema_available and label not in schema_vlabels:
                 errors.append(f"vertex {idx} label '{label}' does not exist in schema")
 
             props = vertex.get("properties")
@@ -499,7 +500,11 @@ def validate_graph_payload(
                         warnings.append(
                             f"vertex {idx} property '{prop_name}' has empty value"
                         )
-                    if schema_prop_names and prop_name not in schema_prop_names:
+                    if (
+                        schema_available
+                        and label in schema_props
+                        and prop_name not in schema_prop_names
+                    ):
                         errors.append(
                             f"vertex {idx} property '{prop_name}' does not exist on label '{label}'"
                         )
@@ -565,11 +570,11 @@ def validate_graph_payload(
                 errors.append(f"edge {idx} missing required field: target_label")
             if label:
                 edge_labels.add(label)
-                if schema_elabels and label not in schema_elabels:
+                if schema_available and label not in schema_elabels:
                     errors.append(
                         f"edge {idx} label '{label}' does not exist in schema"
                     )
-            if schema_vlabels:
+            if schema_available:
                 if src_label and src_label not in schema_vlabels:
                     errors.append(
                         f"edge {idx} source_label '{src_label}' does not exist in schema"
@@ -598,7 +603,11 @@ def validate_graph_payload(
                         warnings.append(
                             f"edge {idx} property '{prop_name}' has empty value"
                         )
-                    if schema_prop_names and prop_name not in schema_prop_names:
+                    if (
+                        schema_available
+                        and label in schema_eprops
+                        and prop_name not in schema_prop_names
+                    ):
                         errors.append(
                             f"edge {idx} property '{prop_name}' does not exist on label '{label}'"
                         )

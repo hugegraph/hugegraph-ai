@@ -144,3 +144,19 @@ def test_current_live_schema_respects_explicit_empty_schema(monkeypatch):
     monkeypatch.setattr(schema_tools, "get_live_schema", fail_fetch)
 
     assert current_live_schema(empty_schema) is empty_schema
+
+
+def test_fetch_live_schema_or_none_logs_fetch_failures(monkeypatch, caplog):
+    from hugegraph_mcp import schema_tools
+    from hugegraph_mcp.tools.live_schema import fetch_live_schema_or_none
+
+    def fail_fetch():
+        raise RuntimeError("schema fetch failed")
+
+    monkeypatch.setattr(schema_tools, "get_live_schema", fail_fetch)
+
+    with caplog.at_level("WARNING", logger="hugegraph_mcp.live_schema"):
+        result = fetch_live_schema_or_none()
+
+    assert result is None
+    assert "Failed to fetch live schema: schema fetch failed" in caplog.text
