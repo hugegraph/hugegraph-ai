@@ -135,9 +135,11 @@ def _execute_gremlin_with_error_handling(
     便于上层统一处理。区分 401/403/404/500 等状态码给出针对性建议。
     """
     start = time.perf_counter()
+    actual_client = None
 
     try:
-        data = client.exec(gremlin_query)
+        actual_client = client() if callable(client) else client
+        data = actual_client.exec(gremlin_query)
         duration_ms = (time.perf_counter() - start) * 1000.0
 
         return {
@@ -149,11 +151,15 @@ def _execute_gremlin_with_error_handling(
         }
 
     except requests.exceptions.ConnectionError:
+        address = (
+            actual_client._url
+            if actual_client is not None and hasattr(actual_client, "_url")
+            else "unknown address"
+        )
         return {
             "success": False,
             "error_type": "connection_error",
-            "message": f"Cannot connect to HugeGraph server at "
-            f"{client._url if hasattr(client, '_url') else 'unknown address'}",
+            "message": f"Cannot connect to HugeGraph server at {address}",
             "suggestions": [
                 "Check if HugeGraph server is running",
                 "Verify the HUGEGRAPH_URL environment variable",
@@ -290,8 +296,9 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
             details={"classification": decision.classification},
         )
 
-    client = _get_read_client()
-    result = _execute_gremlin_with_error_handling(client, gremlin_query, "read")
+    result = _execute_gremlin_with_error_handling(
+        _get_read_client, gremlin_query, "read"
+    )
 
     if result.get("success"):
         duration_ms = result["duration_ms"]
@@ -319,8 +326,9 @@ def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
     if violation is not None:
         return violation
 
-    client = _get_write_client()
-    result = _execute_gremlin_with_error_handling(client, gremlin_query, "write")
+    result = _execute_gremlin_with_error_handling(
+        _get_write_client, gremlin_query, "write"
+    )
 
     if result.get("success"):
         duration_ms = result["duration_ms"]

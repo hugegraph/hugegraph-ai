@@ -295,7 +295,7 @@ def import_graph_data_tool(
     if mode == "extract":
         if not text:
             return envelope_err(
-                "VALIDATION_ERROR", "text is required for mode='extract'"
+                ErrorType.VALIDATION_ERROR, "text is required for mode='extract'"
             )
         return extract_graph_data(
             text=text,
@@ -306,7 +306,8 @@ def import_graph_data_tool(
     if mode == "ingest":
         if graph_data is None:
             return envelope_err(
-                "VALIDATION_ERROR", "graph_data is required for mode='ingest'"
+                ErrorType.VALIDATION_ERROR,
+                "graph_data is required for mode='ingest'",
             )
         return manage_graph_data(
             mode="import",
@@ -328,7 +329,7 @@ def import_graph_data_tool(
         )
 
     return envelope_err(
-        "VALIDATION_ERROR",
+        ErrorType.VALIDATION_ERROR,
         f"Unknown mode: {mode!r}. Use 'extract' or 'ingest'.",
         details={"mode": mode},
     )

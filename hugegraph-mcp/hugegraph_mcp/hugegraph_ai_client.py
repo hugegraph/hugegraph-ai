@@ -41,7 +41,7 @@ def request(
     HUGEGRAPH_AI_UNAVAILABLE 信封，不抛异常。
     """
 
-    start = time.time()
+    start = time.perf_counter()
     cfg = cfg or MCPConfig.from_env()
     method = method.upper()
     url = _build_url(cfg.ai_url, path)
@@ -77,19 +77,27 @@ def request(
         )
     except requests.exceptions.HTTPError as exc:
         status_code = _status_code(exc)
-        if isinstance(status_code, int) and 400 <= status_code < 500:
+        details = {"method": method, "url": url, "status_code": status_code}
+        if status_code in {401, 403}:
             return envelope_err(
                 ErrorType.AUTHORIZATION_FAILED,
                 _exception_message("HugeGraph-AI authorization failed", exc),
                 retryable=False,
-                details={"method": method, "url": url, "status_code": status_code},
+                details=details,
                 duration_ms=_duration_ms(start),
+            )
+        if isinstance(status_code, int) and 400 <= status_code < 500:
+            return _ai_error(
+                _exception_message("HugeGraph-AI request failed", exc),
+                duration_ms=_duration_ms(start),
+                retryable=status_code == 429,
+                details=details,
             )
         return _ai_error(
             _exception_message("HugeGraph-AI is unavailable", exc),
             duration_ms=_duration_ms(start),
             retryable=True,
-            details={"method": method, "url": url, "status_code": status_code},
+            details=details,
         )
     except ValueError as exc:
         return _ai_error(
@@ -176,7 +184,7 @@ def _build_url(base_url: str, path: str) -> str:
 
 
 def _duration_ms(start: float) -> float:
-    return (time.time() - start) * 1000.0
+    return (time.perf_counter() - start) * 1000.0
 
 
 def _status_code(exc: requests.exceptions.HTTPError) -> int | None:

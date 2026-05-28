@@ -85,3 +85,27 @@ def test_accumulator_steps_as_uncertain():
         decision = check_gremlin_read(f"g.V().{step}('x')")
         assert decision.allowed is False, f"Expected blocked: {step}"
         assert decision.classification == "uncertain"
+
+
+def test_bare_identifier_wrapped_in_parentheses_is_uncertain():
+    decision = check_gremlin_read("g.V().has('age', (secret_token))")
+
+    assert decision.allowed is False
+    assert decision.classification == "uncertain"
+
+
+def test_bare_identifier_nested_in_function_call_is_uncertain():
+    decision = check_gremlin_read("g.V().has('age', coalesce(secret_token))")
+
+    assert decision.allowed is False
+    assert decision.classification == "uncertain"
+
+
+def test_allowed_literal_tokens_remain_safe():
+    for query in [
+        "g.V().has('active', true)",
+        "g.V().has('active', false)",
+        "g.V().has('deleted_at', null)",
+    ]:
+        decision = check_gremlin_read(query)
+        assert decision.allowed is True, f"Expected allowed: {query}"

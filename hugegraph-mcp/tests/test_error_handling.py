@@ -37,6 +37,38 @@ def test_connection_error_handling():
         assert result["error"]["details"]["error_type"] == "connection_error"
 
 
+def test_read_client_initialization_connection_error_is_enveloped():
+    """Connection failures while constructing the client should not escape."""
+    with patch("hugegraph_mcp.gremlin_tools._get_read_client") as mock_client:
+        mock_client.side_effect = requests.exceptions.ConnectionError(
+            "Connection refused during init"
+        )
+
+        result = execute_gremlin_read("g.V().count()")
+
+        assert result["ok"] is False
+        assert result["error"]["type"] == "CONNECTION_FAILED"
+        assert "Cannot connect to HugeGraph server" in result["error"]["message"]
+        assert result["error"]["details"]["error_type"] == "connection_error"
+
+
+def test_write_client_initialization_connection_error_is_enveloped(monkeypatch):
+    """Write client construction failures should use the same envelope path."""
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
+    with patch("hugegraph_mcp.gremlin_tools._get_write_client") as mock_client:
+        mock_client.side_effect = requests.exceptions.ConnectionError(
+            "Connection refused during init"
+        )
+
+        result = execute_gremlin_write("g.addV('test')")
+
+        assert result["ok"] is False
+        assert result["error"]["type"] == "CONNECTION_FAILED"
+        assert "Cannot connect to HugeGraph server" in result["error"]["message"]
+        assert result["error"]["details"]["error_type"] == "connection_error"
+
+
 def test_http_500_error_handling(monkeypatch):
     """Test handling of HTTP 500 server errors."""
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")

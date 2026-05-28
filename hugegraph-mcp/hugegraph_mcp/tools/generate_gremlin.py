@@ -35,14 +35,32 @@ def generate_gremlin(
     execute=True 时通过 GremlinPolicy 检查安全性：只有 safe 的查询才会执行。
     """
 
-    ai_result = post("/text2gremlin", json={"query": query})
+    payload: dict[str, Any] = {"query": query}
+    if output_types is not None:
+        payload["output_types"] = output_types
+
+    ai_result = post("/text2gremlin", json=payload)
     if not ai_result.get("ok"):
         return ai_result
 
     ai_data = ai_result.get("data") or {}
+    if not isinstance(ai_data, dict):
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            "HugeGraph-AI returned an invalid text2gremlin response.",
+            details={"response": ai_data},
+        )
+
     template_gremlin = ai_data.get("template_gremlin")
     raw_gremlin = ai_data.get("raw_gremlin")
     gremlin = template_gremlin or raw_gremlin or ai_data.get("gremlin")
+    if not gremlin:
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            "HugeGraph-AI did not return Gremlin.",
+            details={"response": ai_data},
+        )
+
     requires_index = ai_data.get("requires_index", False)
     assumptions = ai_data.get("assumptions")
 

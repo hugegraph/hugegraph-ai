@@ -121,6 +121,48 @@ def test_request_http_500(monkeypatch):
     assert result["error"]["details"]["status_code"] == 500
 
 
+def test_request_http_401_is_authorization_failed(monkeypatch):
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request",
+        Mock(return_value=FakeResponse({"error": "denied"}, status_code=401)),
+    )
+
+    result = request("GET", "/health", cfg=_cfg())
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "AUTHORIZATION_FAILED"
+    assert result["error"]["retryable"] is False
+    assert result["error"]["details"]["status_code"] == 401
+
+
+def test_request_http_404_is_not_authorization_failed(monkeypatch):
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request",
+        Mock(return_value=FakeResponse({"error": "missing"}, status_code=404)),
+    )
+
+    result = request("GET", "/missing", cfg=_cfg())
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "HUGEGRAPH_AI_UNAVAILABLE"
+    assert result["error"]["retryable"] is False
+    assert result["error"]["details"]["status_code"] == 404
+
+
+def test_request_http_429_is_retryable_ai_error(monkeypatch):
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request",
+        Mock(return_value=FakeResponse({"error": "rate limited"}, status_code=429)),
+    )
+
+    result = request("GET", "/health", cfg=_cfg())
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "HUGEGRAPH_AI_UNAVAILABLE"
+    assert result["error"]["retryable"] is True
+    assert result["error"]["details"]["status_code"] == 429
+
+
 def test_request_allow_ai_disabled(monkeypatch):
     http_request = Mock()
     monkeypatch.setattr(

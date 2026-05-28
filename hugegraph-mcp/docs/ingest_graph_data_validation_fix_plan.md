@@ -18,13 +18,13 @@
 Run targeted ingest validation tests:
 
 ```powershell
-cd D:\Code\agent_learning\hugegraph-ai\hugegraph-mcp
+cd hugegraph-mcp
 uv run pytest tests/test_ingest_graph_data.py -v
 ```
 
 Run the full `hugegraph-mcp` regression suite:
 
 ```powershell
-cd D:\Code\agent_learning\hugegraph-ai\hugegraph-mcp
+cd hugegraph-mcp
 uv run pytest
 ```

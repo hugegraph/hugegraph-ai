@@ -125,4 +125,5 @@ def _edge_endpoint_match(
         match = vertex_matches.get((endpoint_label, str(vertex_id)))
         if match is not None:
             return match
-    return {"id": explicit or vertex_id}
+    fallback_id = explicit if explicit not in (None, "") else vertex_id
+    return {"id": fallback_id}

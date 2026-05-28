@@ -139,6 +139,22 @@ def test_invalid_integer_config_falls_back_to_default(monkeypatch, caplog):
     )
 
 
+def test_non_positive_integer_config_falls_back_to_default(monkeypatch, caplog):
+    for value in ("0", "-1"):
+        clear_config_env(monkeypatch)
+        monkeypatch.setenv("HUGEGRAPH_MCP_TIMEOUT_SECONDS", value)
+        caplog.clear()
+
+        with caplog.at_level(logging.WARNING, logger="hugegraph_mcp.config"):
+            cfg = MCPConfig.from_env()
+
+        assert cfg.timeout_seconds == 30
+        assert (
+            f"Invalid integer config value '{value}'; using default 30"
+            in caplog.messages
+        )
+
+
 def test_readonly_and_allow_ai_are_controlled_independently(monkeypatch):
     clear_config_env(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")

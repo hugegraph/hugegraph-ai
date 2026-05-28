@@ -51,6 +51,40 @@ def test_generate_gremlin_default_no_execute(monkeypatch):
     execute_read.assert_not_called()
 
 
+def test_generate_gremlin_passes_output_types(monkeypatch):
+    post = Mock(return_value=_ai_ok("g.V().count()"))
+    monkeypatch.setattr(generate_gremlin_module, "post", post)
+
+    result = generate_gremlin_module.generate_gremlin(
+        "count vertices",
+        output_types=["vertex"],
+    )
+
+    assert result["ok"] is True
+    post.assert_called_once_with(
+        "/text2gremlin",
+        json={"query": "count vertices", "output_types": ["vertex"]},
+    )
+
+
+def test_generate_gremlin_rejects_missing_gremlin(monkeypatch):
+    post = Mock(
+        return_value=envelope_ok(
+            {"requires_index": False, "assumptions": ["no query generated"]}
+        )
+    )
+    execute_read = Mock()
+    monkeypatch.setattr(generate_gremlin_module, "post", post)
+    monkeypatch.setattr(generate_gremlin_module, "execute_gremlin_read", execute_read)
+
+    result = generate_gremlin_module.generate_gremlin("count vertices", execute=True)
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FLOW_EXECUTION_FAILED"
+    assert result["error"]["message"] == "HugeGraph-AI did not return Gremlin."
+    execute_read.assert_not_called()
+
+
 def test_generate_gremlin_safe_execute(monkeypatch):
     post = Mock(return_value=_ai_ok("g.V().limit(2)"))
     execution_result = {

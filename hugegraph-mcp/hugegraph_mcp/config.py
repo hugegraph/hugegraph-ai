@@ -132,12 +132,18 @@ def _parse_int(value: str | None, default: int) -> int:
     if value is None or value.strip() == "":
         return default
     try:
-        return int(value)
+        parsed = int(value)
     except ValueError:
         LOGGER.warning(
             "Invalid integer config value %r; using default %s", value, default
         )
         return default
+    if parsed <= 0:
+        LOGGER.warning(
+            "Invalid integer config value %r; using default %s", value, default
+        )
+        return default
+    return parsed
 
 
 def _non_empty(value: str, default: str) -> str:

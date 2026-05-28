@@ -183,12 +183,16 @@ def _has_dynamic_construction_markers(
 
 
 def _has_bare_identifier_arguments(query_without_strings: str) -> bool:
-    for match in re.finditer(r"\.\s*\w+\s*\(([^()]*)\)", query_without_strings):
-        args = match.group(1)
-        for token_match in re.finditer(r"\b[A-Za-z_][A-Za-z0-9_]*\b", args):
-            token = token_match.group(0).lower()
-            if token not in _ALLOWED_ARG_TOKENS:
-                return True
+    cleaned = re.sub(
+        r"\.\s*[A-Za-z_][A-Za-z0-9_]*",
+        " ",
+        query_without_strings,
+    )
+    cleaned = re.sub(r"^\s*[gG]\b", " ", cleaned)
+    for token_match in re.finditer(r"\b[A-Za-z_][A-Za-z0-9_]*\b", cleaned):
+        token = token_match.group(0).lower()
+        if token not in _ALLOWED_ARG_TOKENS:
+            return True
 
     return False
 

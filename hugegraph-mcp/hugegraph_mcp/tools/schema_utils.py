@@ -53,9 +53,14 @@ def primary_key_names(vertex_label: dict[str, Any]) -> list[str]:
 def schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any] | None:
     # inspect_graph/get_live_schema 可能返回 {"schema": {...}}，也可能直接返回
     # schema 本体；共享入口统一解包，避免各工具各自判断格式。
-    if not live_schema:
+    if live_schema is None or not isinstance(live_schema, dict):
         return None
-    raw = live_schema.get("schema") or live_schema
+    if "schema" in live_schema:
+        raw = live_schema.get("schema")
+    else:
+        if not live_schema:
+            return None
+        raw = live_schema
     return raw if isinstance(raw, dict) else None
 
 

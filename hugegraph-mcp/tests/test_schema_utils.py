@@ -14,7 +14,7 @@
 import inspect
 
 from hugegraph_mcp.tools import graph_data_validate
-from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
+from hugegraph_mcp.tools.schema_utils import normalized_schema_summary, schema_payload
 
 
 def test_normalized_schema_summary_uses_shared_canonical_shape():
@@ -87,6 +87,10 @@ def test_normalized_schema_summary_uses_shared_canonical_shape():
             }
         ],
     }
+
+
+def test_schema_payload_preserves_explicit_empty_schema():
+    assert schema_payload({"schema": {}}) == {}
 
 
 def test_graph_data_validate_does_not_reverse_import_ingest_module():

@@ -21,6 +21,13 @@ from hugegraph_mcp import server
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 
 
+async def _list_mcp_tools():
+    list_tools = getattr(server.mcp, "_mcp_list_tools", None)
+    if list_tools is None:
+        list_tools = getattr(server.mcp, "_list_tools")
+    return await list_tools()
+
+
 def _assert_v1_envelope_shape(result):
     assert set(result) == {"ok", "data", "error", "warnings", "next_actions", "meta"}
     assert result["meta"]["request_id"].startswith("req-")
@@ -32,8 +39,7 @@ def _assert_v1_envelope_shape(result):
 
 def test_public_tool_contract_lists_only_v1_tools():
     async def _tool_names():
-        list_tools = getattr(server.mcp, "_list_tools", server.mcp._mcp_list_tools)
-        tools = await list_tools()
+        tools = await _list_mcp_tools()
         return {tool.name for tool in tools}
 
     assert asyncio.run(_tool_names()) == {
@@ -55,8 +61,7 @@ def test_public_tool_argument_models_do_not_emit_schema_shadow_warning():
         warnings.simplefilter("always")
 
         async def _list_tools():
-            list_tools = getattr(server.mcp, "_list_tools", server.mcp._mcp_list_tools)
-            return await list_tools()
+            return await _list_mcp_tools()
 
         asyncio.run(_list_tools())
 

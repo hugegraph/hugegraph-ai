@@ -89,7 +89,7 @@ def _schema_summary(live_schema: dict[str, Any] | None) -> dict[str, Any] | None
     return normalized_schema_summary(live_schema)
 
 
-def _operations(change_plan: Any) -> list[dict[str, Any]]:
+def _operations(change_plan: Any) -> list[Any]:
     if isinstance(change_plan, list):
         return change_plan
     if not isinstance(change_plan, dict):
@@ -437,10 +437,34 @@ def _validate_mode_operations(
     mode: str, change_plan: GraphChangePlan
 ) -> dict[str, Any]:
     """确保 mode 下的所有操作类型匹配，例如 import 模式不允许删除。"""
-    allowed = MODE_OPS[mode]
+    allowed = MODE_OPS.get(mode)
+    if allowed is None:
+        return {
+            "valid": False,
+            "errors": [
+                _validation_error(
+                    -1,
+                    change_plan,
+                    f"unknown mode: {mode}",
+                    "Use mode='import' or mode='delete'.",
+                )
+            ],
+            "warnings": [],
+        }
+
     errors = []
     for idx, operation in enumerate(_operations(change_plan)):
-        op = str(operation.get("op") or operation.get("type"))
+        if not isinstance(operation, dict):
+            errors.append(
+                _validation_error(
+                    idx,
+                    operation,
+                    "operation must be an object",
+                    "Replace this item with a graph change operation object.",
+                )
+            )
+            continue
+        op = str(operation.get("op") or operation.get("type") or "")
         if op not in allowed:
             errors.append(
                 _validation_error(

@@ -100,6 +100,26 @@ def test_validate_graph_change_plan_rejects_unknown_op():
     assert "unsupported op" in result["errors"][0]["reason"]
 
 
+def test_validate_mode_operations_handles_unknown_mode():
+    result = manage_graph_data_module._validate_mode_operations(
+        "upsert",
+        {"operations": []},
+    )
+
+    assert result["valid"] is False
+    assert result["errors"][0]["reason"] == "unknown mode: upsert"
+
+
+def test_validate_mode_operations_rejects_non_object_operation():
+    result = manage_graph_data_module._validate_mode_operations(
+        "import",
+        {"operations": ["not-an-operation"]},
+    )
+
+    assert result["valid"] is False
+    assert result["errors"][0]["reason"] == "operation must be an object"
+
+
 def test_gremlin_literal_uses_single_quotes_to_avoid_gstring_interpolation():
     assert _g("${System.exit(0)}") == "'${System.exit(0)}'"
     assert _g("Alice's path\\name") == "'Alice\\'s path\\\\name'"
@@ -667,6 +687,27 @@ def test_graph_data_to_change_plan_normalizes_vertex_id_lookup():
     edge_op = result["operations"][2]
     assert edge_op["source_match"] == {"name": "Alice"}
     assert edge_op["target_match"] == {"name": "Bob"}
+
+
+def test_graph_data_to_change_plan_preserves_explicit_zero_endpoint_id():
+    result = manage_graph_data_module.graph_data_to_change_plan(
+        {
+            "vertices": [],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "source": 0,
+                    "target_label": "person",
+                    "target": 1,
+                }
+            ],
+        }
+    )
+
+    edge_op = result["operations"][0]
+    assert edge_op["source_match"] == {"id": 0}
+    assert edge_op["target_match"] == {"id": 1}
 
 
 def test_manage_graph_data_requires_confirm(monkeypatch):
