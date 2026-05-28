@@ -13,8 +13,6 @@
 
 from unittest.mock import Mock
 
-import requests
-
 
 def _schema_result(readonly: bool = False):
     raw_schema = {
@@ -51,29 +49,18 @@ def _schema_result(readonly: bool = False):
     }
 
 
-class FakeResponse:
-    def __init__(self, data=None, text="", status_error: Exception | None = None):
-        self._data = data
-        self.text = text
-        self._status_error = status_error
-
-    def raise_for_status(self):
-        if self._status_error:
-            raise self._status_error
-
-    def json(self):
-        if isinstance(self._data, Exception):
-            raise self._data
-        return self._data
-
-
 def _patch_ai_available(monkeypatch, inspect_graph_module):
-    def fake_get(url, timeout):
-        if url.endswith("/health"):
-            return FakeResponse({"status": "ok"})
-        return FakeResponse({"vid_embedding": "ready"})
-
-    monkeypatch.setattr(inspect_graph_module.requests, "get", fake_get)
+    monkeypatch.setattr(
+        inspect_graph_module,
+        "health_check",
+        Mock(
+            return_value={
+                "ok": True,
+                "data": {"status": "available", "vid_embedding": "ready"},
+                "warnings": [],
+            }
+        ),
+    )
 
 
 def test_inspect_graph_basic(monkeypatch):
@@ -103,6 +90,38 @@ def test_inspect_graph_basic(monkeypatch):
     assert result["data"]["index_status"] == {"total": 2}
     execute_read.assert_any_call("g.V().count()")
     execute_read.assert_any_call("g.E().count()")
+
+
+def test_inspect_graph_ai_status_uses_unified_health_check_config(monkeypatch):
+    from hugegraph_mcp.tools import inspect_graph as inspect_graph_module
+
+    monkeypatch.setenv("HUGEGRAPH_USER", "alice")
+    monkeypatch.setenv("HUGEGRAPH_PASSWORD", "secret")
+    monkeypatch.setenv("HUGEGRAPH_AI_URL", "http://ai.example:18001")
+    monkeypatch.setenv("HUGEGRAPH_MCP_TIMEOUT_SECONDS", "9")
+    monkeypatch.setattr(
+        inspect_graph_module, "get_live_schema", lambda: _schema_result()
+    )
+    monkeypatch.setattr(
+        inspect_graph_module,
+        "execute_gremlin_read",
+        Mock(return_value={"data": [1], "total": 1, "duration_ms": 1, "is_read": True}),
+    )
+    captured = []
+
+    def fake_health_check(*, cfg):
+        captured.append(cfg)
+        return {"ok": True, "data": {"status": "available"}, "warnings": []}
+
+    monkeypatch.setattr(inspect_graph_module, "health_check", fake_health_check)
+
+    result = inspect_graph_module.inspect_graph()
+
+    assert result["data"]["hugegraph_ai_status"] == "available"
+    assert captured[0].user == "alice"
+    assert captured[0].password == "secret"
+    assert captured[0].ai_url == "http://ai.example:18001"
+    assert captured[0].timeout_seconds == 9
 
 
 def test_inspect_graph_nested_count_result(monkeypatch):
@@ -194,9 +213,15 @@ def test_inspect_graph_ai_unavailable(monkeypatch):
         Mock(return_value={"data": [1], "total": 1, "duration_ms": 1, "is_read": True}),
     )
     monkeypatch.setattr(
-        inspect_graph_module.requests,
-        "get",
-        Mock(side_effect=ConnectionError("ai down")),
+        inspect_graph_module,
+        "health_check",
+        Mock(
+            return_value={
+                "ok": False,
+                "error": {"message": "HugeGraph-AI is unavailable: ai down"},
+                "warnings": [],
+            }
+        ),
     )
 
     result = inspect_graph_module.inspect_graph()
@@ -220,14 +245,23 @@ def test_inspect_graph_ai_available_when_openapi_fallback_works(monkeypatch):
         Mock(return_value={"data": [1], "total": 1, "duration_ms": 1, "is_read": True}),
     )
 
-    def fake_get(url, timeout):
-        if url.endswith("/graph-index-info"):
-            return FakeResponse(status_error=requests.exceptions.HTTPError("HTTP 404"))
-        if url.endswith("/openapi.json"):
-            return FakeResponse({"openapi": "3.1.0"})
-        raise AssertionError(f"Unexpected URL: {url}")
-
-    monkeypatch.setattr(inspect_graph_module.requests, "get", fake_get)
+    monkeypatch.setattr(
+        inspect_graph_module,
+        "health_check",
+        Mock(
+            return_value={
+                "ok": True,
+                "data": {
+                    "status": "available",
+                    "health_endpoint": "/openapi.json",
+                    "openapi": "3.1.0",
+                },
+                "warnings": [
+                    "/graph-index-info: HugeGraph-AI graph index info is unavailable"
+                ],
+            }
+        ),
+    )
 
     result = inspect_graph_module.inspect_graph()
 

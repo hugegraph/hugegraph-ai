@@ -65,6 +65,25 @@ def test_request_success(monkeypatch):
     )
 
 
+def test_request_passes_configured_auth_when_password_is_set(monkeypatch):
+    http_request = Mock(return_value=FakeResponse({"status": "ok"}))
+    monkeypatch.setattr(
+        "hugegraph_mcp.hugegraph_ai_client.requests.request", http_request
+    )
+
+    result = request("GET", "/health", cfg=_cfg(user="alice", password="secret"))
+
+    assert result["ok"] is True
+    http_request.assert_called_once_with(
+        "GET",
+        "http://ai.example:8001/health",
+        params=None,
+        headers=None,
+        timeout=7,
+        auth=("alice", "secret"),
+    )
+
+
 def test_request_connection_error(monkeypatch):
     monkeypatch.setattr(
         "hugegraph_mcp.hugegraph_ai_client.requests.request",

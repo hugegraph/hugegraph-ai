@@ -105,6 +105,40 @@ def test_warnings_are_logged(monkeypatch, caplog):
     )
 
 
+def test_duplicate_config_warnings_are_not_logged_for_unchanged_env(
+    monkeypatch, caplog
+):
+    clear_config_env(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_GRAPH_PATH", "cache_space/cache_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "cache_override")
+
+    with caplog.at_level(logging.WARNING, logger="hugegraph_mcp.config"):
+        first = MCPConfig.from_env()
+        second = MCPConfig.from_env()
+
+    assert first is second
+    assert (
+        caplog.messages.count(
+            "HUGEGRAPH_GRAPHSPACE/HUGEGRAPH_GRAPH override HUGEGRAPH_GRAPH_PATH"
+        )
+        == 1
+    )
+
+
+def test_invalid_integer_config_falls_back_to_default(monkeypatch, caplog):
+    clear_config_env(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_TIMEOUT_SECONDS", "not-a-number")
+
+    with caplog.at_level(logging.WARNING, logger="hugegraph_mcp.config"):
+        cfg = MCPConfig.from_env()
+
+    assert cfg.timeout_seconds == 30
+    assert (
+        "Invalid integer config value 'not-a-number'; using default 30"
+        in caplog.messages
+    )
+
+
 def test_readonly_and_allow_ai_are_controlled_independently(monkeypatch):
     clear_config_env(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")

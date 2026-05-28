@@ -103,6 +103,8 @@ def test_validate_graph_change_plan_rejects_unknown_op():
 def test_gremlin_literal_uses_single_quotes_to_avoid_gstring_interpolation():
     assert _g("${System.exit(0)}") == "'${System.exit(0)}'"
     assert _g("Alice's path\\name") == "'Alice\\'s path\\\\name'"
+    assert _g("line1\nline2\r\n\tend") == "'line1\\nline2\\r\\n\\tend'"
+    assert _g("bad\u0001char") == "'bad\\u0001char'"
 
 
 def test_validate_delete_vertex_requires_primary_key_match():

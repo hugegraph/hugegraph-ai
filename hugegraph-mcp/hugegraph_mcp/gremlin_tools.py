@@ -54,7 +54,11 @@ _GREMLIN_ERROR_TYPE_MAP = {
     "authentication_error": ErrorType.AUTHENTICATION_FAILED,
     "authorization_error": ErrorType.AUTHORIZATION_FAILED,
     "no_index_error": ErrorType.NO_INDEX,
-    "query_syntax_error": ErrorType.UNSAFE_GREMLIN,
+    "query_syntax_error": ErrorType.QUERY_SYNTAX_ERROR,
+    "server_error": ErrorType.SERVER_ERROR,
+    "http_error": ErrorType.SERVER_ERROR,
+    "not_found_error": ErrorType.SERVER_ERROR,
+    "unknown_error": ErrorType.SERVER_ERROR,
 }
 
 
@@ -69,7 +73,7 @@ def _get_write_client():
 def _gremlin_error_envelope(result: dict[str, Any]) -> dict[str, Any]:
     error_type = _GREMLIN_ERROR_TYPE_MAP.get(
         result.get("error_type"),
-        ErrorType.CONNECTION_FAILED,
+        ErrorType.SERVER_ERROR,
     )
     suggestions = result.get("suggestions") or []
     suggestion = "; ".join(suggestions) if suggestions else None
@@ -90,13 +94,12 @@ def _gremlin_result_count(data: Any) -> int:
         inner_data = data.get("data")
         if inner_data is None:
             return 0
-        if isinstance(inner_data, (list, tuple, set, dict, str, bytes)):
+        if isinstance(inner_data, (list, tuple, set)):
             return len(inner_data)
         return 1
-    try:
-        return len(data)  # type: ignore[arg-type]
-    except TypeError:
-        return 1
+    if isinstance(data, (list, tuple, set)):
+        return len(data)
+    return 1
 
 
 def _is_no_index_error(message: Any) -> bool:

@@ -21,11 +21,10 @@ inspect_graph() 做尽力而为的状态检查：HugeGraph Server 连接、schem
 import time
 from typing import Any
 
-import requests
-
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import envelope_ok
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read
+from hugegraph_mcp.hugegraph_ai_client import health_check
 from hugegraph_mcp.schema_tools import get_live_schema
 
 
@@ -58,40 +57,30 @@ def _count_indexes(raw_schema: dict[str, Any] | None) -> int | None:
     return 0
 
 
+def _has_graph_index_info(graph_index_info: Any) -> bool:
+    if graph_index_info is None:
+        return False
+    if isinstance(graph_index_info, dict):
+        return graph_index_info.get("health_endpoint") != "/openapi.json"
+    return True
+
+
 def _warning_from_exception(prefix: str, exc: Exception) -> str:
     message = str(exc).strip()
     return f"{prefix}: {message}" if message else prefix
 
 
-def _check_ai_status(ai_url: str, timeout_seconds: int) -> tuple[str, Any, list[str]]:
-    """探测 HugeGraph-AI 是否可用 — 先查 graph-index-info，失败回退到 openapi.json。"""
-    warnings: list[str] = []
-    base_url = ai_url.rstrip("/")
+def _check_ai_status(cfg: MCPConfig) -> tuple[str, Any, list[str]]:
+    """探测 HugeGraph-AI 是否可用 — 复用统一客户端的认证、超时和回退逻辑。"""
 
-    try:
-        index_info = requests.get(
-            f"{base_url}/graph-index-info", timeout=timeout_seconds
-        )
-        index_info.raise_for_status()
-        try:
-            graph_index_info: Any = index_info.json()
-        except ValueError:
-            graph_index_info = index_info.text
-        return "available", graph_index_info, warnings
-    except Exception as exc:
-        index_warning = _warning_from_exception(
-            "HugeGraph-AI graph index info is unavailable", exc
-        )
+    result = health_check(cfg=cfg)
+    warnings = list(result.get("warnings") or [])
+    if result.get("ok"):
+        return "available", result.get("data"), warnings
 
-    try:
-        openapi = requests.get(f"{base_url}/openapi.json", timeout=timeout_seconds)
-        openapi.raise_for_status()
-        warnings.append(index_warning)
-        return "available", None, warnings
-    except Exception as exc:
-        warnings.append(index_warning)
-        warnings.append(_warning_from_exception("HugeGraph-AI is unavailable", exc))
-        return "unavailable", None, warnings
+    error = result.get("error") or {}
+    message = error.get("message", "HugeGraph-AI is unavailable")
+    return "unavailable", None, [message, *warnings]
 
 
 def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:
@@ -127,9 +116,7 @@ def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:
         vertex_count = _run_count_query("g.V().count()", "vertex", warnings)
         edge_count = _run_count_query("g.E().count()", "edge", warnings)
 
-    ai_status, graph_index_info, ai_warnings = _check_ai_status(
-        cfg.ai_url, cfg.timeout_seconds
-    )
+    ai_status, graph_index_info, ai_warnings = _check_ai_status(cfg)
     warnings.extend(ai_warnings)
 
     data: dict[str, Any] = {
@@ -138,7 +125,7 @@ def inspect_graph(include_raw_schema: bool = False) -> dict[str, Any]:
         "hugegraph_server_status": server_status,
         "hugegraph_ai_status": ai_status,
         "vid_embedding_status": "available"
-        if graph_index_info is not None
+        if _has_graph_index_info(graph_index_info)
         else "unknown",
         "schema_summary": schema_summary,
         "vertex_count": vertex_count,

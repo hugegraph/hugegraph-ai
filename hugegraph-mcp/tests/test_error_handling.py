@@ -56,7 +56,7 @@ def test_http_500_error_handling(monkeypatch):
         result = execute_gremlin_write("g.addV('test')")
 
         assert result["ok"] is False
-        assert result["error"]["type"] == "CONNECTION_FAILED"
+        assert result["error"]["type"] == "SERVER_ERROR"
         assert "HugeGraph server internal error" in result["error"]["message"]
         assert result["error"]["details"]["error_type"] == "server_error"
         assert result["error"]["details"]["status_code"] == 500
@@ -113,7 +113,7 @@ def test_syntax_error_handling():
         result = execute_gremlin_read("g.V().count()")
 
         assert result["ok"] is False
-        assert result["error"]["type"] == "UNSAFE_GREMLIN"
+        assert result["error"]["type"] == "QUERY_SYNTAX_ERROR"
         assert "syntax error" in result["error"]["message"]
         assert result["error"]["details"]["error_type"] == "query_syntax_error"
 
@@ -128,7 +128,7 @@ def test_unknown_error_handling():
         result = execute_gremlin_read("g.V().count()")
 
         assert result["ok"] is False
-        assert result["error"]["type"] == "CONNECTION_FAILED"
+        assert result["error"]["type"] == "SERVER_ERROR"
         assert "Unexpected error" in result["error"]["message"]
         assert result["error"]["details"]["error_type"] == "unknown_error"
 

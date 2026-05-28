@@ -99,7 +99,7 @@ def _wrap_flow_call(flow_name: FlowName, *args: Any) -> dict[str, Any]:
 def graph_extract_api(req: GraphExtractRequest):
     return _wrap_flow_call(
         FlowName.GRAPH_EXTRACT,
-        req.schema,
+        req.graph_schema,
         req.text,
         req.example_prompt,
         "property_graph",
@@ -109,7 +109,7 @@ def graph_extract_api(req: GraphExtractRequest):
 
 @thin_router.post("/graph-import", status_code=status.HTTP_200_OK, response_model=ThinAPIResponse)
 def graph_import_api(req: GraphImportRequest):
-    return _wrap_flow_call(FlowName.IMPORT_GRAPH_DATA, req.data, req.schema)
+    return _wrap_flow_call(FlowName.IMPORT_GRAPH_DATA, req.data, req.graph_schema)
 
 
 @thin_router.post("/vid-embeddings/refresh", status_code=status.HTTP_200_OK, response_model=ThinAPIResponse)

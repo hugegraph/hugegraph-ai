@@ -74,9 +74,11 @@ def test_envelope_err_defaults():
 
 
 def test_envelope_err_all_error_types():
-    assert len(ErrorType) == 17
+    assert len(ErrorType) == 19
     assert ErrorType.VALIDATION_ERROR.value == "VALIDATION_ERROR"
     assert ErrorType.FEATURE_DISABLED.value == "FEATURE_DISABLED"
+    assert ErrorType.QUERY_SYNTAX_ERROR.value == "QUERY_SYNTAX_ERROR"
+    assert ErrorType.SERVER_ERROR.value == "SERVER_ERROR"
 
     for error_type in ErrorType:
         result = envelope_err(error_type, f"{error_type.value} failed")

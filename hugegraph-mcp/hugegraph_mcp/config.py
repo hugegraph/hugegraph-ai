@@ -22,6 +22,21 @@ from typing import Mapping
 
 TRUE_VALUES = {"1", "true", "yes"}
 LOGGER = logging.getLogger("hugegraph_mcp.config")
+CONFIG_ENV_NAMES = (
+    "HUGEGRAPH_URL",
+    "HUGEGRAPH_GRAPH_PATH",
+    "HUGEGRAPH_GRAPH",
+    "HUGEGRAPH_GRAPHSPACE",
+    "HUGEGRAPH_USER",
+    "HUGEGRAPH_PASSWORD",
+    "HUGEGRAPH_MCP_READONLY",
+    "HUGEGRAPH_AI_URL",
+    "HUGEGRAPH_AI_GRAPH_URL",
+    "HUGEGRAPH_MCP_ALLOW_AI",
+    "HUGEGRAPH_MCP_TIMEOUT_SECONDS",
+)
+_CONFIG_CACHE_KEY: tuple[tuple[str, str | None], ...] | None = None
+_CONFIG_CACHE_VALUE = None
 
 
 @dataclass
@@ -42,7 +57,18 @@ class MCPConfig:
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "MCPConfig":
+        global _CONFIG_CACHE_KEY, _CONFIG_CACHE_VALUE
+
+        use_cache = env is None
         env = env if env is not None else os.environ
+        cache_key = _env_cache_key(env) if use_cache else None
+        if (
+            use_cache
+            and cache_key == _CONFIG_CACHE_KEY
+            and _CONFIG_CACHE_VALUE is not None
+        ):
+            return _CONFIG_CACHE_VALUE
+
         warnings: list[str] = []
 
         path_graphspace, path_graph = _parse_graph_path(
@@ -80,6 +106,9 @@ class MCPConfig:
         )
         for warning in config.warnings:
             LOGGER.warning(warning)
+        if use_cache:
+            _CONFIG_CACHE_KEY = cache_key
+            _CONFIG_CACHE_VALUE = config
         return config
 
     def is_readonly(self) -> bool:
@@ -102,7 +131,13 @@ def _parse_bool(value: str) -> bool:
 def _parse_int(value: str | None, default: int) -> int:
     if value is None or value.strip() == "":
         return default
-    return int(value)
+    try:
+        return int(value)
+    except ValueError:
+        LOGGER.warning(
+            "Invalid integer config value %r; using default %s", value, default
+        )
+        return default
 
 
 def _non_empty(value: str, default: str) -> str:
@@ -114,6 +149,10 @@ def _optional_non_empty(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _env_cache_key(env: Mapping[str, str]) -> tuple[tuple[str, str | None], ...]:
+    return tuple((name, env.get(name)) for name in CONFIG_ENV_NAMES)
 
 
 class RuntimeConfigProxy:

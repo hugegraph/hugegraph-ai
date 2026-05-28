@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import importlib
+import warnings
 from unittest.mock import Mock
 
 from fastapi import FastAPI
@@ -93,6 +95,23 @@ def test_graph_import_api_calls_flow(monkeypatch):
     _assert_envelope(json_body, expected_ok=True)
     assert json_body["data"] == '{"imported": true}'
     scheduler.schedule_flow.assert_called_once_with(FlowName.IMPORT_GRAPH_DATA, "{}", None)
+
+
+def test_thin_api_request_models_do_not_emit_schema_shadow_warning():
+    import hugegraph_llm.api.models.rag_requests as rag_requests
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        module = importlib.reload(rag_requests)
+
+    assert not any("Field name \"schema\"" in str(item.message) for item in caught)
+
+    extract = module.GraphExtractRequest(text="Alice knows Bob.", schema="{}")
+    graph_import = module.GraphImportRequest(data="{}", schema=None)
+
+    assert extract.graph_schema == "{}"
+    assert graph_import.graph_schema is None
+    assert extract.model_dump(by_alias=True)["schema"] == "{}"
 
 
 def test_vid_embeddings_refresh_api_calls_flow(monkeypatch):

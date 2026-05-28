@@ -25,9 +25,33 @@ from typing import Any
 
 def _g(value: Any) -> str:
     if isinstance(value, str):
-        escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+        escaped = _escape_groovy_single_quoted(value)
         return f"'{escaped}'"
     return json.dumps(value, sort_keys=True)
+
+
+def _escape_groovy_single_quoted(value: str) -> str:
+    chars: list[str] = []
+    for char in value:
+        if char == "\\":
+            chars.append("\\\\")
+        elif char == "'":
+            chars.append("\\'")
+        elif char == "\n":
+            chars.append("\\n")
+        elif char == "\r":
+            chars.append("\\r")
+        elif char == "\t":
+            chars.append("\\t")
+        elif char == "\b":
+            chars.append("\\b")
+        elif char == "\f":
+            chars.append("\\f")
+        elif ord(char) < 0x20:
+            chars.append(f"\\u{ord(char):04x}")
+        else:
+            chars.append(char)
+    return "".join(chars)
 
 
 def _has_steps(match: dict[str, Any]) -> str:

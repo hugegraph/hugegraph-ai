@@ -100,6 +100,34 @@ def test_execute_gremlin_read_counts_empty_hugegraph_data_shape(monkeypatch):
     assert result["data"]["total"] == 0
 
 
+def test_execute_gremlin_read_counts_single_string_as_one(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeHugeGraphShapeClient({"data": "Alice", "meta": {}})
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().values('name').limit(1)")
+
+    assert result["ok"] is True
+    assert result["data"]["total"] == 1
+
+
+def test_execute_gremlin_read_counts_single_map_as_one(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeHugeGraphShapeClient({"data": {"id": "1", "label": "person"}})
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().limit(1).elementMap()")
+
+    assert result["ok"] is True
+    assert result["data"]["total"] == 1
+
+
 def test_execute_gremlin_read_rejects_obvious_writes(monkeypatch):
     """Queries with clear write keywords must be rejected even through read tool."""
 
