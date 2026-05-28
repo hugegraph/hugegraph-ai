@@ -13,17 +13,20 @@
 
 """Gremlin query generation for graph data change operations.
 
-Uses JSON-escaped values for injection prevention.
+Uses conservative literal escaping for injection prevention.
 """
 
 import json
 from typing import Any
 
 
-# ---- Gremlin 查询生成 — JSON 转义值防注入 ----
+# ---- Gremlin 查询生成 — 单引号字符串防止 Groovy GString 插值 ----
 
 
 def _g(value: Any) -> str:
+    if isinstance(value, str):
+        escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+        return f"'{escaped}'"
     return json.dumps(value, sort_keys=True)
 
 

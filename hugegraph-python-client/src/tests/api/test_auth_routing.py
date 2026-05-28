@@ -19,6 +19,8 @@ from urllib.parse import urljoin
 
 import pytest
 from pyhugegraph.api.auth import AuthManager
+from pyhugegraph.api.schema_manage.edge_label import EdgeLabel
+from pyhugegraph.utils.huge_config import HGraphConfig
 
 
 class DummyCfg:
@@ -48,6 +50,15 @@ class DummySession:
         # mirror behavior of real session.request used by router: resolve path
         self.last = self.resolve(path)
         return {"url": self.last, "method": method}
+
+
+class DummySchemaSession:
+    def __init__(self):
+        self.requests = []
+
+    def request(self, path: str, method: str = "GET", validator=None, **kwargs):
+        self.requests.append({"path": path, "method": method, **kwargs})
+        return {"ok": True}
 
 
 @pytest.mark.parametrize(
@@ -110,3 +121,53 @@ def test_groups_are_server_level():
     auth2 = AuthManager(sess2)
     auth2.list_groups()
     assert "auth/groups" in sess2.last
+
+
+class _VersionResponse:
+    def __init__(self, core: str):
+        self._core = core
+
+    def json(self):
+        return {"versions": {"core": self._core}}
+
+
+def test_hgraph_config_does_not_auto_enable_graphspace_before_1_7(monkeypatch):
+    monkeypatch.setattr(
+        "pyhugegraph.utils.huge_config.requests.get",
+        lambda *_args, **_kwargs: _VersionResponse("1.6.0"),
+    )
+
+    cfg = HGraphConfig("127.0.0.1:8080", "admin", "pwd", "hugegraph")
+
+    assert cfg.version == [1, 6, 0]
+    assert cfg.graphspace is None
+    assert cfg.gs_supported is False
+
+
+def test_hgraph_config_auto_enables_default_graphspace_for_1_7(monkeypatch):
+    monkeypatch.setattr(
+        "pyhugegraph.utils.huge_config.requests.get",
+        lambda *_args, **_kwargs: _VersionResponse("1.7.0"),
+    )
+
+    cfg = HGraphConfig("127.0.0.1:8080", "admin", "pwd", "hugegraph")
+
+    assert cfg.version == [1, 7, 0]
+    assert cfg.graphspace == "DEFAULT"
+    assert cfg.gs_supported is True
+
+
+def test_edge_label_parent_emits_sub_edge_payload():
+    sess = DummySchemaSession()
+    edge_label = EdgeLabel(sess)
+    edge_label.create_parameter_holder()
+    edge_label.add_parameter("name", "knows_more")
+    edge_label.add_parameter("not_exist", True)
+
+    edge_label.sourceLabel("person").targetLabel("person").parent("knows").create()
+
+    request = sess.requests[-1]
+    assert request["path"] == "schema/edgelabels"
+    assert request["method"] == "POST"
+    assert '"parent_label": "knows"' in request["data"]
+    assert '"edgelabel_type": "SUB"' in request["data"]

@@ -82,7 +82,7 @@ def _parse_numbers_from_string(text: str) -> tuple[int, int]:
     match = re.search(r"(?:added|add)\s+(\d+)", text, re.IGNORECASE)
     if match:
         added = int(match.group(1))
-    match = re.search(r"(?:removed|removed)\s+(\d+)", text, re.IGNORECASE)
+    match = re.search(r"(?:removed|remove)\s+(\d+)", text, re.IGNORECASE)
     if match:
         removed = int(match.group(1))
     return added, removed

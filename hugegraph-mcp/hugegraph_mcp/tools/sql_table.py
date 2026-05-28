@@ -20,6 +20,7 @@ BLOB 和不可序列化值替换为人类可读摘要。
 
 import json
 import os
+from pathlib import Path
 import re
 import sqlite3
 from typing import Any
@@ -140,8 +141,9 @@ def validate_readonly_sql(sql_query: str) -> dict[str, Any] | None:
         )
 
     query = select_statements[0].strip()
+    masked_query = _mask_sql_literals_and_comments(query)
 
-    if _UNSAFE_SQL_KEYWORDS.search(query):
+    if _UNSAFE_SQL_KEYWORDS.search(masked_query):
         return envelope_err(
             ErrorType.UNSAFE_SQL,
             "Only read-only SELECT queries are allowed.",
@@ -152,8 +154,8 @@ def validate_readonly_sql(sql_query: str) -> dict[str, Any] | None:
             ),
         )
 
-    if re.search(r"\bPRAGMA\b", query, re.IGNORECASE):
-        pragma_match = re.search(r"\bPRAGMA\s+(\w+)", query, re.IGNORECASE)
+    if re.search(r"\bPRAGMA\b", masked_query, re.IGNORECASE):
+        pragma_match = re.search(r"\bPRAGMA\s+(\w+)", masked_query, re.IGNORECASE)
         if pragma_match:
             pragma_name = pragma_match.group(1).lower()
             if pragma_name not in _READONLY_PRAGMAS:
@@ -167,7 +169,7 @@ def validate_readonly_sql(sql_query: str) -> dict[str, Any] | None:
                 )
         return None
 
-    upper = query.upper()
+    upper = masked_query.upper().lstrip()
     if not (
         upper.startswith("SELECT")
         or upper.startswith("WITH ")
@@ -417,7 +419,7 @@ def _preview_query(source_path: str, sql_query: str) -> dict[str, Any]:
 
 
 def _open_readonly_connection(path: str) -> sqlite3.Connection:
-    uri = f"file:///{path}?mode=ro"
+    uri = f"{Path(path).resolve().as_uri()}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, timeout=config.sql_timeout_seconds)
     conn.execute("PRAGMA query_only = ON")
     conn.set_authorizer(_readonly_authorizer)
@@ -490,17 +492,79 @@ def _split_sql_statements(sql: str) -> list[str]:
     current: list[str] = []
     in_single_quote = False
     in_double_quote = False
+    in_line_comment = False
+    in_block_comment = False
     i = 0
 
     while i < len(sql):
         char = sql[i]
-        if char == "'" and not in_double_quote:
-            in_single_quote = not in_single_quote
+
+        if in_line_comment:
             current.append(char)
-        elif char == '"' and not in_single_quote:
-            in_double_quote = not in_double_quote
+            if char in "\r\n":
+                in_line_comment = False
+            i += 1
+            continue
+
+        if in_block_comment:
             current.append(char)
-        elif char == ";" and not in_single_quote and not in_double_quote:
+            if char == "*" and i + 1 < len(sql) and sql[i + 1] == "/":
+                current.append("/")
+                i += 2
+                in_block_comment = False
+                continue
+            i += 1
+            continue
+
+        if in_single_quote:
+            current.append(char)
+            if char == "\\" and i + 1 < len(sql):
+                current.append(sql[i + 1])
+                i += 2
+                continue
+            if char == "'" and i + 1 < len(sql) and sql[i + 1] == "'":
+                current.append("'")
+                i += 2
+                continue
+            if char == "'":
+                in_single_quote = False
+            i += 1
+            continue
+
+        if in_double_quote:
+            current.append(char)
+            if char == "\\" and i + 1 < len(sql):
+                current.append(sql[i + 1])
+                i += 2
+                continue
+            if char == '"' and i + 1 < len(sql) and sql[i + 1] == '"':
+                current.append('"')
+                i += 2
+                continue
+            if char == '"':
+                in_double_quote = False
+            i += 1
+            continue
+
+        if char == "-" and i + 1 < len(sql) and sql[i + 1] == "-":
+            in_line_comment = True
+            current.extend((char, sql[i + 1]))
+            i += 2
+            continue
+
+        if char == "/" and i + 1 < len(sql) and sql[i + 1] == "*":
+            in_block_comment = True
+            current.extend((char, sql[i + 1]))
+            i += 2
+            continue
+
+        if char == "'":
+            in_single_quote = True
+            current.append(char)
+        elif char == '"':
+            in_double_quote = True
+            current.append(char)
+        elif char == ";":
             current.append(char)
             result.append("".join(current).strip())
             current = []
@@ -515,9 +579,92 @@ def _split_sql_statements(sql: str) -> list[str]:
     return result
 
 
+def _mask_sql_literals_and_comments(sql: str) -> str:
+    masked: list[str] = []
+    in_single_quote = False
+    in_double_quote = False
+    in_line_comment = False
+    in_block_comment = False
+    i = 0
+
+    while i < len(sql):
+        char = sql[i]
+
+        if in_line_comment:
+            masked.append(char if char in "\r\n" else " ")
+            if char in "\r\n":
+                in_line_comment = False
+            i += 1
+            continue
+
+        if in_block_comment:
+            if char == "*" and i + 1 < len(sql) and sql[i + 1] == "/":
+                masked.extend((" ", " "))
+                i += 2
+                in_block_comment = False
+                continue
+            masked.append(" ")
+            i += 1
+            continue
+
+        if in_single_quote:
+            masked.append(" ")
+            if char == "\\" and i + 1 < len(sql):
+                masked.append(" ")
+                i += 2
+                continue
+            if char == "'" and i + 1 < len(sql) and sql[i + 1] == "'":
+                masked.append(" ")
+                i += 2
+                continue
+            if char == "'":
+                in_single_quote = False
+            i += 1
+            continue
+
+        if in_double_quote:
+            masked.append(" ")
+            if char == "\\" and i + 1 < len(sql):
+                masked.append(" ")
+                i += 2
+                continue
+            if char == '"' and i + 1 < len(sql) and sql[i + 1] == '"':
+                masked.append(" ")
+                i += 2
+                continue
+            if char == '"':
+                in_double_quote = False
+            i += 1
+            continue
+
+        if char == "-" and i + 1 < len(sql) and sql[i + 1] == "-":
+            in_line_comment = True
+            masked.extend((" ", " "))
+            i += 2
+            continue
+
+        if char == "/" and i + 1 < len(sql) and sql[i + 1] == "*":
+            in_block_comment = True
+            masked.extend((" ", " "))
+            i += 2
+            continue
+
+        if char == "'":
+            in_single_quote = not in_single_quote
+            masked.append(" ")
+        elif char == '"':
+            in_double_quote = not in_double_quote
+            masked.append(" ")
+        else:
+            masked.append(char)
+        i += 1
+
+    return "".join(masked)
+
+
 def _add_limit(normalized_sql: str, limit: int) -> str:
-    upper = normalized_sql.upper().rstrip(";")
-    if "LIMIT" in upper:
+    masked_sql = _mask_sql_literals_and_comments(normalized_sql)
+    if re.search(r"\bLIMIT\b", masked_sql, re.IGNORECASE):
         return normalized_sql
 
     without_semicolon = normalized_sql.rstrip(";").rstrip()

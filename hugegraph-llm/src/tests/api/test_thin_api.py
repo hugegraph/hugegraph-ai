@@ -20,6 +20,7 @@ from unittest.mock import Mock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from hugegraph_llm.api.models.rag_response import ThinAPIError, ThinAPIMeta, ThinAPIResponse
 from hugegraph_llm.api.thin_api import thin_router
 from hugegraph_llm.flows import FlowName
 
@@ -124,7 +125,7 @@ def test_graph_index_info_api_calls_flow(monkeypatch):
 
 def test_thin_api_returns_flow_execution_failed(monkeypatch):
     scheduler = Mock()
-    scheduler.schedule_flow.side_effect = RuntimeError("boom")
+    scheduler.schedule_flow.side_effect = RuntimeError("secret path /tmp/token")
     client = _client(monkeypatch, scheduler)
 
     response = client.get("/graph-index-info")
@@ -134,6 +135,22 @@ def test_thin_api_returns_flow_execution_failed(monkeypatch):
     _assert_envelope(json_body, expected_ok=False)
     assert json_body["data"] is None
     assert json_body["error"]["type"] == "FLOW_EXECUTION_FAILED"
-    assert json_body["error"]["message"] == "boom"
+    assert json_body["error"]["message"] == "An internal error occurred during flow execution."
+    assert "secret" not in json_body["error"]["message"]
     assert json_body["error"]["source"] == "hugegraph-llm"
     assert "details" in json_body["error"]
+
+
+def test_thin_api_response_defaults_are_not_shared():
+    first = ThinAPIResponse(ok=True, meta=ThinAPIMeta(request_id="req-a"))
+    second = ThinAPIResponse(ok=True, meta=ThinAPIMeta(request_id="req-b"))
+    first.warnings.append("one")
+    first.next_actions.append("next")
+
+    assert second.warnings == []
+    assert second.next_actions == []
+
+    first_error = ThinAPIError(type="X", message="x")
+    second_error = ThinAPIError(type="Y", message="y")
+    first_error.details["secret"] = "value"
+    assert second_error.details == {}

@@ -131,11 +131,11 @@ def _execute_gremlin_with_error_handling(
     连接失败、HTTP 错误、语法错误等均返回结构化 dict 而非抛异常，
     便于上层统一处理。区分 401/403/404/500 等状态码给出针对性建议。
     """
-    start = time.time()
+    start = time.perf_counter()
 
     try:
         data = client.exec(gremlin_query)
-        duration_ms = (time.time() - start) * 1000.0
+        duration_ms = (time.perf_counter() - start) * 1000.0
 
         return {
             "success": True,
@@ -156,7 +156,7 @@ def _execute_gremlin_with_error_handling(
                 "Verify the HUGEGRAPH_URL environment variable",
                 "Check network connectivity to the server",
             ],
-            "duration_ms": (time.time() - start) * 1000.0,
+            "duration_ms": (time.perf_counter() - start) * 1000.0,
             "operation_type": operation_type,
         }
 
@@ -210,7 +210,7 @@ def _execute_gremlin_with_error_handling(
                 if _is_no_index_error(detail_message):
                     return _no_index_error_result(
                         f"Query requires an index: {detail_message}",
-                        (time.time() - start) * 1000.0,
+                        (time.perf_counter() - start) * 1000.0,
                         operation_type,
                     )
                 message = f"HugeGraph server internal error: {detail_message}"
@@ -233,7 +233,7 @@ def _execute_gremlin_with_error_handling(
             "message": message,
             "status_code": status_code,
             "suggestions": suggestions,
-            "duration_ms": (time.time() - start) * 1000.0,
+            "duration_ms": (time.perf_counter() - start) * 1000.0,
             "operation_type": operation_type,
         }
 
@@ -247,12 +247,12 @@ def _execute_gremlin_with_error_handling(
                 "Verify all steps and parameters are valid",
                 "Ensure proper use of Gremlin traversal steps",
             ],
-            "duration_ms": (time.time() - start) * 1000.0,
+            "duration_ms": (time.perf_counter() - start) * 1000.0,
             "operation_type": operation_type,
         }
 
     except Exception as e:
-        duration_ms = (time.time() - start) * 1000.0
+        duration_ms = (time.perf_counter() - start) * 1000.0
         message = f"Unexpected error: {e!s}"
         if _is_no_index_error(message):
             return _no_index_error_result(message, duration_ms, operation_type)

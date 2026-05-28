@@ -20,6 +20,7 @@ import pytest
 
 from hugegraph_mcp.envelope import ErrorType
 from hugegraph_mcp.tools.sql_table import (
+    _add_limit,
     execute_select_to_table_data,
     normalize_sql_query,
     preview_sql,
@@ -208,6 +209,14 @@ class TestValidateReadonlySql:
         result = validate_readonly_sql("PRAGMA integrity_check;")
         assert result is not None
         assert result["error"]["type"] == ErrorType.UNSAFE_SQL.value
+
+    def test_unsafe_keyword_inside_string_literal_allowed(self):
+        result = validate_readonly_sql("SELECT 'DROP TABLE chunks' AS text;")
+        assert result is None
+
+    def test_unsafe_keyword_inside_comment_allowed(self):
+        result = validate_readonly_sql("SELECT 1 -- DROP TABLE chunks;\n")
+        assert result is None
 
 
 # -- normalize_sql_query -----------------------------------------------------
@@ -405,3 +414,35 @@ class TestNestedQuotedSemicolon:
     def test_semicolon_inside_double_quotes_not_split(self):
         result = validate_readonly_sql('SELECT "col;name" FROM chunks')
         assert result is None
+
+    def test_semicolon_inside_escaped_quote_not_split(self):
+        result = validate_readonly_sql("SELECT 'it''s;ok' AS greeting")
+        assert result is None
+
+    def test_semicolon_inside_line_comment_not_split(self):
+        result = validate_readonly_sql("SELECT 1 -- comment;\n")
+        assert result is None
+
+    def test_semicolon_inside_block_comment_not_split(self):
+        result = validate_readonly_sql("SELECT 1 /* comment; */")
+        assert result is None
+
+
+class TestAddLimit:
+    def test_limit_inside_string_literal_does_not_suppress_limit(self):
+        assert (
+            _add_limit("SELECT 'LIMIT' AS word;", 1)
+            == "SELECT 'LIMIT' AS word LIMIT 2;"
+        )
+
+    def test_limit_inside_identifier_does_not_suppress_limit(self):
+        assert (
+            _add_limit("SELECT limit_value FROM chunks;", 1)
+            == "SELECT limit_value FROM chunks LIMIT 2;"
+        )
+
+    def test_existing_limit_keyword_is_preserved(self):
+        assert (
+            _add_limit("SELECT * FROM chunks LIMIT 1;", 20)
+            == "SELECT * FROM chunks LIMIT 1;"
+        )

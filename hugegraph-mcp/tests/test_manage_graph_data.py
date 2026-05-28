@@ -15,6 +15,7 @@ from copy import deepcopy
 import re
 
 from hugegraph_mcp.tools import manage_graph_data as manage_graph_data_module
+from hugegraph_mcp.tools.graph_data_gremlin import _g
 
 
 def _live_schema():
@@ -128,6 +129,11 @@ def test_validate_graph_change_plan_rejects_unknown_op():
     assert "unsupported op" in result["errors"][0]["reason"]
 
 
+def test_gremlin_literal_uses_single_quotes_to_avoid_gstring_interpolation():
+    assert _g("${System.exit(0)}") == "'${System.exit(0)}'"
+    assert _g("Alice's path\\name") == "'Alice\\'s path\\\\name'"
+
+
 def test_validate_update_vertex_rejects_primary_key_set():
     result = manage_graph_data_module.validate_graph_change_plan(
         {
@@ -207,7 +213,7 @@ def test_dry_run_update_vertex_returns_preview_and_hash(monkeypatch):
     assert result["valid"] is True
     assert re.fullmatch(r"[0-9a-f]{16}", result["plan_hash"])
     assert result["preview"][0]["matched_count"] == 1
-    assert queries == ['g.V().hasLabel("person").has("name","Alice").count()']
+    assert queries == ["g.V().hasLabel('person').has('name','Alice').count()"]
 
 
 def test_dry_run_update_vertex_accepts_nested_count_result(monkeypatch):
@@ -277,9 +283,9 @@ def test_dry_run_delete_edge_returns_preview_and_hash(monkeypatch):
     assert result["preview"][0]["target_matched_count"] == 1
     assert result["preview"][0]["matched_count"] == 1
     assert queries == [
-        'g.V().hasLabel("person").has("name","Alice").count()',
-        'g.V().hasLabel("person").has("name","Bob").count()',
-        'g.V().hasLabel("person").has("name","Alice").outE("knows").where(inV().hasLabel("person").has("name","Bob")).count()',
+        "g.V().hasLabel('person').has('name','Alice').count()",
+        "g.V().hasLabel('person').has('name','Bob').count()",
+        "g.V().hasLabel('person').has('name','Alice').outE('knows').where(inV().hasLabel('person').has('name','Bob')).count()",
     ]
 
 
@@ -539,8 +545,8 @@ def test_manage_graph_data_execute_delete_vertex_verifies_removed(monkeypatch):
     )
 
     assert result["ok"] is True
-    assert writes == ['g.V().hasLabel("person").has("name","Alice").drop()']
-    assert reads[-1] == 'g.V().hasLabel("person").has("name","Alice").count()'
+    assert writes == ["g.V().hasLabel('person').has('name','Alice').drop()"]
+    assert reads[-1] == "g.V().hasLabel('person').has('name','Alice').count()"
 
 
 def test_manage_graph_data_execute_delete_edge_verifies_removed(monkeypatch):
@@ -585,8 +591,8 @@ def test_manage_graph_data_execute_delete_edge_verifies_removed(monkeypatch):
     )
 
     edge_match_query = (
-        'g.V().hasLabel("person").has("name","Alice").outE("knows")'
-        '.where(inV().hasLabel("person").has("name","Bob"))'
+        "g.V().hasLabel('person').has('name','Alice').outE('knows')"
+        ".where(inV().hasLabel('person').has('name','Bob'))"
     )
     assert result["ok"] is True
     assert writes == [f"{edge_match_query}.drop()"]
@@ -667,9 +673,9 @@ def test_dry_run_update_edge_returns_preview_and_hash(monkeypatch):
     assert result["preview"][0]["target_matched_count"] == 1
     assert result["preview"][0]["matched_count"] == 1
     assert queries == [
-        'g.V().hasLabel("person").has("name","Alice").count()',
-        'g.V().hasLabel("person").has("name","Bob").count()',
-        'g.V().hasLabel("person").has("name","Alice").outE("knows").where(inV().hasLabel("person").has("name","Bob")).count()',
+        "g.V().hasLabel('person').has('name','Alice').count()",
+        "g.V().hasLabel('person').has('name','Bob').count()",
+        "g.V().hasLabel('person').has('name','Alice').outE('knows').where(inV().hasLabel('person').has('name','Bob')).count()",
     ]
 
 
@@ -1042,11 +1048,11 @@ def test_manage_graph_data_execute_update_vertex(monkeypatch):
     assert result["ok"] is True
     assert result["data"]["success"] is True
     assert reads == [
-        'g.V().hasLabel("person").has("name","Alice").count()',
-        'g.V().hasLabel("person").has("name","Alice").count()',
-        'g.V().hasLabel("person").has("name","Alice").count()',
+        "g.V().hasLabel('person').has('name','Alice').count()",
+        "g.V().hasLabel('person').has('name','Alice').count()",
+        "g.V().hasLabel('person').has('name','Alice').count()",
     ]
-    assert writes == ['g.V().hasLabel("person").has("name","Alice").property("age",31)']
+    assert writes == ["g.V().hasLabel('person').has('name','Alice').property('age',31)"]
 
 
 def test_manage_graph_data_partial_write_reports_written_count(monkeypatch):

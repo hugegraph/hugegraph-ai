@@ -17,7 +17,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RAGResponse(BaseModel):
@@ -31,7 +31,7 @@ class ThinAPIError(BaseModel):
     suggestion: str | None = None
     retryable: bool = False
     source: str = "hugegraph-llm"
-    details: dict[str, Any] = {}
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class ThinAPIMeta(BaseModel):
@@ -43,6 +43,6 @@ class ThinAPIResponse(BaseModel):
     ok: bool
     data: Any = None
     error: ThinAPIError | None = None
-    warnings: list[str] = []
-    next_actions: list[str] = []
+    warnings: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
     meta: ThinAPIMeta

@@ -33,6 +33,18 @@ def test_refresh_vid_embeddings_success(monkeypatch):
     post.assert_called_once_with("/vid-embeddings/refresh", json={})
 
 
+def test_refresh_vid_embeddings_parses_remove_variants(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    post = Mock(return_value=envelope_ok("Remove 2 vectors, add 3 vectors."))
+    monkeypatch.setattr(refresh_vid_embeddings_module, "post", post)
+
+    result = refresh_vid_embeddings_module.refresh_vid_embeddings(confirm=True)
+
+    assert result["ok"] is True
+    assert result["data"]["added"] == 3
+    assert result["data"]["removed"] == 2
+
+
 def test_refresh_vid_embeddings_readonly(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
     post = Mock()
