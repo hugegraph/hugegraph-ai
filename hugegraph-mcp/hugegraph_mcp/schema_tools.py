@@ -11,73 +11,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from dataclasses import dataclass
+"""HugeGraph Schema 操作层 — 底层 schema CRUD 和设计指导。
+
+get_live_schema() 从 HugeGraph 拉取全量 schema 并生成 LLM 精简版，
+execute_schema_operations() 执行幂等 schema 创建，
+design_schema() 提供链式思维引导的 schema 设计框架。
+"""
+
 from typing import Any
 
 from pyhugegraph.client import PyHugeClient
 
+from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.envelope import ErrorType, envelope_err
+from hugegraph_mcp.guard import Capability, guard
+from hugegraph_mcp.hugegraph_client import build_hugegraph_client
 
-@dataclass
-class HugeGraphMCPConfig:
-    graph_url: str = "http://127.0.0.1:8080"
-    graph_name: str = "hugegraph"
-    graph_user: str = "admin"
-    graph_pwd: str = "xxx"  # pragma: allowlist secret - value comes from env
-    graphspace: str | None = "DEFAULT"  # HugeGraph 1.7.0+ enhanced graph space support
-
-    @classmethod
-    def from_env(cls) -> "HugeGraphMCPConfig":
-        # 支持字符串拼接格式：HUGEGRAPH_GRAPH_PATH="DEFAULT/hugegraph"，仅此一种方式
-        graph_path = os.getenv("HUGEGRAPH_GRAPH_PATH") or "DEFAULT/hugegraph"
-
-        if "/" in graph_path:
-            graphspace, graph_name = graph_path.split("/", 1)
-        else:
-            graphspace, graph_name = "DEFAULT", graph_path
-
-        graphspace = (graphspace or "DEFAULT").strip() or "DEFAULT"
-        graph_name = (graph_name or "hugegraph").strip() or "hugegraph"
-
-        return cls(
-            graph_url=os.getenv("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
-            graph_name=graph_name,
-            graph_user=os.getenv("HUGEGRAPH_USER", "admin"),
-            graph_pwd=os.getenv("HUGEGRAPH_PASSWORD", "xxx"),
-            graphspace=graphspace,
-        )
+ALLOWED_SCHEMA_OPERATION_TYPES = frozenset(
+    {
+        "create_property_key",
+        "create_vertex_label",
+        "create_edge_label",
+        "create_index_label",
+    }
+)
 
 
-_config = HugeGraphMCPConfig.from_env()
+def _is_delete_schema_operation(op_type: Any) -> bool:
+    lowered = str(op_type).lower()
+    return "delete" in lowered or "drop" in lowered
 
 
 def _build_client() -> PyHugeClient:
-    # HugeGraph 1.7.0+ graph space support - resolved from config (HUGEGRAPH_GRAPH_PATH)
-    graphspace = _config.graphspace
-    # Only pass graphspace if it's not None and not empty string
-    if graphspace and graphspace.strip():
-        return PyHugeClient(
-            url=_config.graph_url,
-            graph=_config.graph_name,
-            user=_config.graph_user,
-            pwd=_config.graph_pwd,
-            graphspace=graphspace.strip(),
-        )
-    else:
-        # Default client without graphspace for backward compatibility
-        return PyHugeClient(
-            url=_config.graph_url,
-            graph=_config.graph_name,
-            user=_config.graph_user,
-            pwd=_config.graph_pwd,
-        )
+    return build_hugegraph_client(MCPConfig.from_env(), client_cls=PyHugeClient)
 
 
 def _simple_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Simplify HugeGraph schema for LLM consumption.
+    """精简 schema 供 LLM 消费 — 去掉冗余字段，只保留 name/properties/source_label/target_label。
 
-    This mirrors the behaviour of hugegraph_llm.SchemaManager.simple_schema
-    for the fields used in tests.
+    与 hugegraph_llm.SchemaManager.simple_schema 行为一致。
     """
 
     mini_schema: dict[str, Any] = {}
@@ -106,15 +78,14 @@ def _simple_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_live_schema() -> dict[str, Any]:
-    """Fetch live schema from HugeGraph and return both full and simplified forms.
+    """从 HugeGraph 拉取活跃 schema，同时返回原始版和 LLM 精简版。
 
-    This is written in a way that can be wrapped as a FastMCP tool later.
+    返回: {schema, simple_schema, graphspace?, readonly}
     """
 
     client = _build_client()
     raw_schema = client.schema().getSchema()
 
-    # Ensure raw_schema is not None before processing
     if raw_schema is None:
         raise ValueError("Failed to retrieve schema from HugeGraph server")
 
@@ -123,23 +94,20 @@ def get_live_schema() -> dict[str, Any]:
         "simple_schema": _simple_schema(raw_schema),
     }
 
-    # HugeGraph 1.7.0+ graph space handling - from resolved config
-    graphspace = _config.graphspace
+    graphspace = MCPConfig.from_env().graphspace
     if graphspace:
         result["graphspace"] = graphspace
 
-    readonly_env = os.getenv("HUGEGRAPH_MCP_READONLY", "").lower()
-    result["readonly"] = readonly_env in {"1", "true", "yes"}
+    result["readonly"] = MCPConfig.from_env().is_readonly()
 
     return result
 
 
 def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
-    """Low-level schema executor against HugeGraph REST schema API.
+    """底层 schema 执行器 — 对 HugeGraph REST schema API 的最小封装。
 
-    This is a minimal first version that supports a small subset of
-    operation types. It is intentionally simple and can be extended as
-    needed with more op kinds.
+    支持 create_property_key / create_vertex_label / create_edge_label / create_index_label，
+    使用 ifNotExist() 保证幂等，拒绝 delete/drop 操作。
     """
 
     client = _build_client()
@@ -151,9 +119,16 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
     for idx, op in enumerate(operations):
         op_type = op.get("type")
         try:
+            if _is_delete_schema_operation(op_type):
+                raise ValueError(
+                    f"Delete/drop schema operation is not supported: {op_type}"
+                )
+            if op_type not in ALLOWED_SCHEMA_OPERATION_TYPES:
+                raise ValueError(f"Unsupported schema operation type: {op_type}")
+
             if op_type == "create_property_key":
                 name = op["name"]
-                # Default to TEXT if caller没有指定类型；后续可以扩展 data_type 映射
+                # 未指定 data_type 时默认 TEXT
                 data_type = op.get("data_type", "TEXT").upper()
                 pk_builder = schema.propertyKey(name)
                 if data_type == "INT":
@@ -170,7 +145,6 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
                 vl_builder = schema.vertexLabel(name)
                 if properties:
                     vl_builder = vl_builder.properties(*properties)
-                # 使用 primaryKeys(name) 作为默认主键策略，后续可按需扩展
                 if op.get("primary_keys"):
                     vl_builder = vl_builder.primaryKeys(*op["primary_keys"])
                 vl_builder.ifNotExist().create()
@@ -230,11 +204,8 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
 
                 il_builder.ifNotExist().create()
 
-            else:
-                raise ValueError(f"Unsupported schema operation type: {op_type}")
-
             results.append({"op": op, "status": "ok"})
-        except Exception as exc:  # pragma: no cover - 错误路径由上层聚合
+        except Exception as exc:  # pragma: no cover - errors are aggregated above
             msg = str(exc)
             results.append({"op": op, "status": "failed", "error": msg})
             errors.append({"op_index": idx, "message": msg})
@@ -243,16 +214,26 @@ def _run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def execute_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
-    """Execute a sequence of idempotent schema operations.
+    """执行一组幂等 schema 操作 — 带 readonly 守卫和 delete 预检。
 
-    Behaviour covered by tests:
-    - Delegates actual execution to `_run_schema_operations`.
-    - Respects HUGEGRAPH_MCP_READONLY environment variable.
+    readonly 模式下拒绝执行，delete 操作在预检阶段直接拒绝。
     """
+
+    violation = guard(Capability.SCHEMA_WRITE)
+    if violation is not None:
+        return violation
+
+    for idx, operation in enumerate(operations):
+        op_type = operation.get("type") if isinstance(operation, dict) else None
+        if _is_delete_schema_operation(op_type):
+            return envelope_err(
+                ErrorType.SCHEMA_MISMATCH,
+                f"Delete/drop schema operation is not supported: {op_type}",
+                details={"op_index": idx, "operation": operation},
+            )
 
     result = _run_schema_operations(operations)
 
-    # Normalise result keys a bit so callers always get predictable fields.
     if "errors" not in result:
         result["errors"] = []
     if "success" not in result:
@@ -269,163 +250,21 @@ def design_schema(
     is_revision: bool = False,
     revision_of: int | None = None,
 ) -> dict:
-    """Schema design guidance tool - Reference Sequential Thinking pattern
+    """Schema 设计引导工具 — 参考 Sequential Thinking 模式。
 
-    HugeGraph uses a schema-based graph model. You must define schema
-    (PropertyKeys, VertexLabels, EdgeLabels, IndexLabels) before inserting data.
+    HugeGraph 使用 schema-based 图模型，数据写入前必须先定义 PropertyKeys、
+    VertexLabels、EdgeLabels、IndexLabels。本函数提供分步引导框架。
 
-    【Best Practices for Designing Schema in HugeGraph】
-
-    1. Define PropertyKeys first: All properties used in VertexLabel and EdgeLabel
-       must be predefined as PropertyKeys. This ensures data consistency and type enforcement.
-
-    2. Choose appropriate data types and cardinality: When defining PropertyKeys,
-       select the correct DataType (TEXT, INT, DATE, DOUBLE) and Cardinality
-       (SINGLE, SET, LIST) based on the nature of the data.
-
-    3. Specify Primary Keys for VertexLabels: VertexLabels should have primaryKeys
-       defined, which uniquely identify a vertex within that label.
-
-    4. Define Link for EdgeLabels: EdgeLabels must specify sourceLabel and targetLabel
-       to define the types of vertices it connects.
-
-    5. Consider Frequency for EdgeLabels: EdgeLabels can be SINGLE (one edge between
-       two vertices) or MULTIPLE (multiple edges between two vertices).
-
-    6. Use nullableKeys: Specify properties that can be null using nullableKeys.
-
-    7. Create Indexes for efficient queries: Define IndexLabels on PropertyKeys for
-       VertexLabels (onV) or EdgeLabels (onE). Choose between secondary, range,
-       or search indexes based on query patterns.
-
-    【Information to Collect from Users】
-
-    To design an effective HugeGraph schema, collect:
-
-    * Entities (Vertices):
-      - Main entity types (person, software, book) -> VertexLabels
-      - Properties for each entity (name, age, city for person) -> PropertyKeys
-      - Properties that uniquely identify an entity (primaryKeys)
-      - Data type and cardinality for each property
-
-    * Relationships (Edges):
-      - Relationships between entities (knows, created) -> EdgeLabels
-      - sourceLabel and targetLabel for each relationship
-      - Properties describing each relationship
-      - Frequency (singleTime vs multiTimes)
-
-    * Query Patterns:
-      - How will users query the graph?
-      - What properties will be used in filters, sorting, or range queries?
-      - Which IndexLabels to create (secondary, range, search)
-
-    【Complete Examples】
-
-    PropertyKey Definitions:
-    ```groovy
-    schema.propertyKey("name").asText().ifNotExist().create()
-    schema.propertyKey("age").asInt().ifNotExist().create()
-    schema.propertyKey("city").asText().ifNotExist().create()
-    schema.propertyKey("weight").asDouble().ifNotExist().create()
-    schema.propertyKey("date").asText().ifNotExist().create()
-    ```
-
-    VertexLabel Definitions:
-    ```groovy
-    schema.vertexLabel("person")
-          .properties("name", "age", "city")
-          .primaryKeys("name")
-          .ifNotExist().create()
-
-    schema.vertexLabel("software")
-          .properties("name", "lang", "price")
-          .primaryKeys("name")
-          .ifNotExist().create()
-    ```
-
-    EdgeLabel Definitions:
-    ```groovy
-    schema.edgeLabel("knows")
-          .sourceLabel("person")
-          .targetLabel("person")
-          .properties("date", "weight")
-          .ifNotExist().create()
-
-    schema.edgeLabel("created")
-          .sourceLabel("person")
-          .targetLabel("software")
-          .properties("date", "weight")
-          .ifNotExist().create()
-    ```
-
-    IndexLabel Definitions:
-    ```groovy
-    schema.indexLabel("personByCity").onV("person").by("city").secondary().ifNotExist().create()
-    schema.indexLabel("softwareByPrice").onV("software").by("price").range().ifNotExist().create()
-    schema.indexLabel("createdByDate").onE("created").by("date").secondary().ifNotExist().create()
-    ```
-
-    【Usage Example - Movie Recommendation Graph】
-
-    Turn 1 - Ask about scenario:
-    LLM asks: What is your graph for?
-    User: Movie recommendation system
-
-    Turn 2 - Ask about entities:
-    LLM asks: What are the main entities? (e.g., user, movie, actor, director)
-    User: user, movie, actor
-
-    Turn 3 - Ask about properties:
-    LLM asks: What properties does each entity have?
-    - user: name, age, gender, city
-    - movie: title, year, rating, genre
-    - actor: name, birthday, nationality
-
-    Turn 4 - Ask about relationships:
-    LLM asks: How do entities relate to each other?
-    - user -> movie: watched
-    - user -> user: follows
-    - actor -> movie: acted_in
-    - user -> actor: liked
-
-    After confirmation, generate operations:
-
-    [
-      {"type": "create_property_key", "name": "name", "data_type": "TEXT"},
-      {"type": "create_property_key", "name": "age", "data_type": "INT"},
-      {"type": "create_property_key", "name": "gender", "data_type": "TEXT"},
-      {"type": "create_property_key", "name": "city", "data_type": "TEXT"},
-      {"type": "create_property_key", "name": "title", "data_type": "TEXT"},
-      {"type": "create_property_key", "name": "year", "data_type": "INT"},
-      {"type": "create_property_key", "name": "rating", "data_type": "DOUBLE"},
-      {"type": "create_property_key", "name": "genre", "data_type": "TEXT"},
-      {"type": "create_property_key", "name": "birthday", "data_type": "TEXT"},
-      {"type": "create_property_key", "name": "nationality", "data_type": "TEXT"},
-
-      {"type": "create_vertex_label", "name": "person", "properties": ["name", "age", "gender", "city"], "primary_keys": ["name"]},
-      {"type": "create_vertex_label", "name": "movie", "properties": ["title", "year", "rating", "genre"], "primary_keys": ["title", "year"]},
-      {"type": "create_vertex_label", "name": "actor", "properties": ["name", "birthday", "nationality"], "primary_keys": ["name"]},
-
-      {"type": "create_edge_label", "name": "watched", "source_label": "person", "target_label": "movie"},
-      {"type": "create_edge_label", "name": "follows", "source_label": "person", "target_label": "person"},
-      {"type": "create_edge_label", "name": "acted_in", "source_label": "actor", "target_label": "movie"},
-      {"type": "create_edge_label", "name": "liked", "source_label": "person", "target_label": "actor"},
-
-      {"type": "create_index_label", "name": "personByCity", "base_type": "VERTEX", "base_label": "person", "fields": ["city"], "index_type": "SECONDARY"},
-      {"type": "create_index_label", "name": "movieByRating", "base_type": "VERTEX", "base_label": "movie", "fields": ["rating"], "index_type": "RANGE"},
-    ]
-
-    Args:
-        thought: Current thought or summary of user's answer
-        thought_number: Current iteration number
-        total_thoughts: Planned total iterations (3-5 recommended)
-        next_thought_needed: Whether to continue to next iteration
-        is_revision: Whether revising previous thought
-        revision_of: Which iteration being revised
-
-    Returns:
-        {"thought_number": 1, "total_thoughts": 4, "next_thought_needed": True}
+    【最佳实践】
+    1. 先定义 PropertyKeys — 所有属性必须在 VertexLabel/EdgeLabel 中预定义
+    2. 选择合适的 DataType (TEXT/INT/DATE/DOUBLE) 和 Cardinality (SINGLE/SET/LIST)
+    3. VertexLabel 需指定 primaryKeys 用于顶点唯一标识
+    4. EdgeLabel 需指定 sourceLabel 和 targetLabel
+    5. EdgeLabel 的 frequency 可选 SINGLE 或 MULTIPLE
+    6. 使用 nullableKeys 允许属性为空
+    7. 为常用查询字段创建 IndexLabels (secondary/range/search)
     """
+
     return {
         "thought_number": thought_number,
         "total_thoughts": total_thoughts,

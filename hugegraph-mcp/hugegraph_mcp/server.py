@@ -11,250 +11,382 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# FastMCP server bootstrap for HugeGraph MCP
+"""FastMCP 服务器入口 — MCP 工具注册和轻量 mode 路由。
+
+每个 @mcp.tool() 装饰的函数就是一个对外暴露的 MCP 工具。
+server.py 只负责参数校验和 mode 分发，具体业务逻辑委托给 tools/ 下的模块。
+"""
 
 import logging
 import logging.handlers
 import os
+import time
 from logging.handlers import RotatingFileHandler
+from typing import Any
 
-# MUST patch BEFORE importing any module that triggers pyhugegraph
-# pyhugegraph initializes logging at module level and tries to create 'logs' directory
-# We intercept both os.makedirs and RotatingFileHandler to prevent file logging in MCP context
+# ---- 启动时 patch：阻止 pyhugegraph 模块级日志初始化写入文件 ----
+# pyhugegraph 在 import 时会创建 RotatingFileHandler 写入 'logs/' 目录，
+# 在 MCP stdio 模式下这会破坏 JSON 协议流，因此拦截 makedirs 和 RotatingFileHandler。
 
-# 1. Patch os.makedirs to silently skip 'logs' directory creation
 _original_makedirs = os.makedirs
 
 
 def _safe_makedirs(name, mode=0o777, exist_ok=False):
-    # Silently succeed for 'logs' directory (don't actually create it)
-    if isinstance(name, str) and ("logs" in name or name == "logs"):
-        return None  # Pretend success
+    if _is_logs_dir(name):
+        return None
     return _original_makedirs(name, mode, exist_ok)
+
+
+def _is_logs_dir(name) -> bool:
+    try:
+        path = os.fspath(name)
+    except TypeError:
+        return False
+    return os.path.basename(os.path.normpath(path)).lower() == "logs"
 
 
 os.makedirs = _safe_makedirs
 
-# 2. Patch RotatingFileHandler to return NullHandler for 'logs/' files
 _OriginalRotatingFileHandler = RotatingFileHandler
 
 
 class _NoOpFileHandler(logging.NullHandler):
-    """A no-op handler that silently ignores all log records (used to disable file logging in MCP)."""
+    """无操作日志处理器 — 用于禁用文件日志记录。"""
 
     def __init__(self, *args, **kwargs):
-        # Ignore all arguments (filename, maxBytes, etc.) and just create a NullHandler
         super().__init__()
 
 
 def _patched_rotating_handler(filename, *args, **kwargs):
-    # If the filename contains 'logs', disable file logging by returning a no-op handler
-    if "logs" in str(filename):
+    if _is_logs_file(filename):
         return _NoOpFileHandler()
     return _OriginalRotatingFileHandler(filename, *args, **kwargs)
 
 
+def _is_logs_file(filename) -> bool:
+    try:
+        path = os.path.normpath(os.fspath(filename))
+    except TypeError:
+        return False
+    return any(part.lower() == "logs" for part in path.split(os.sep))
+
+
 logging.handlers.RotatingFileHandler = _patched_rotating_handler
 
-# Now safe to import modules that use pyhugegraph
+# ---- patch 完成，安全导入依赖 pyhugegraph 的模块 ----
+
 from fastmcp import FastMCP
 
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
-from hugegraph_mcp.schema_tools import (
-    design_schema,
-    execute_schema_operations,
-    get_live_schema,
-)
+from hugegraph_mcp.config import MCPConfig, TRUE_VALUES
+from hugegraph_mcp.envelope import ErrorType, envelope_err
+from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
+from hugegraph_mcp.tools.inspect_graph import inspect_graph
+from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
+from hugegraph_mcp.tools.manage_graph_data import manage_graph_data
+from hugegraph_mcp.tools.manage_schema import manage_schema
+from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
 
-# Suppress FastMCP info-level logs (e.g. "Starting server ...") so that
-# stdout is reserved for MCP JSON protocol only. Windsurf's MCP client
-# reads stdout as a pure JSON stream and will fail if human-readable logs
-# are mixed in.
+os.makedirs = _original_makedirs
+
+# 抑制 FastMCP info 日志 — stdout 必须保留为纯 JSON 协议流
 logging.disable(logging.CRITICAL)
 
-
-# Check if server should run in read-only mode
-def _is_readonly():
-    readonly_env = os.getenv("HUGEGRAPH_MCP_READONLY", "").lower()
-    return readonly_env in {"1", "true", "yes"}
-
-
-READONLY = _is_readonly()
+READONLY = MCPConfig.from_env().is_readonly()
+ADMIN_MODE = (
+    os.environ.get("HUGEGRAPH_MCP_ADMIN_MODE", "").strip().lower() in TRUE_VALUES
+)
 
 mcp = FastMCP("HugeGraph MCP")
 
 
+def _align_public_tool_envelope(
+    result: dict[str, Any],
+    *,
+    tool_name: str,
+    duration_ms: float,
+) -> dict[str, Any]:
+    """Add public wrapper metadata without changing the inner tool payload."""
+    aligned = dict(result)
+    meta = dict(aligned.get("meta") or {})
+    meta.setdefault("duration_ms", duration_ms)
+    aligned["meta"] = meta
+
+    if aligned.get("ok") is False and isinstance(aligned.get("error"), dict):
+        error = dict(aligned["error"])
+        error["source"] = tool_name
+        aligned["error"] = error
+
+    return aligned
+
+
+def _call_public_tool(tool_name: str, func, *args, **kwargs) -> dict[str, Any]:
+    start = time.perf_counter()
+    try:
+        result = func(*args, **kwargs)
+    except Exception as exc:
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            f"{tool_name} failed: {exc!s}",
+            source=tool_name,
+            details={"tool": tool_name},
+            duration_ms=(time.perf_counter() - start) * 1000.0,
+        )
+    return _align_public_tool_envelope(
+        result,
+        tool_name=tool_name,
+        duration_ms=(time.perf_counter() - start) * 1000.0,
+    )
+
+
+def _admin_gate(tool_name: str) -> dict | None:
+    """Return FEATURE_DISABLED envelope if admin mode is not enabled, else None."""
+    if ADMIN_MODE:
+        return None
+    return envelope_err(
+        ErrorType.FEATURE_DISABLED,
+        f"{tool_name} is disabled by default in V1. Enable with HUGEGRAPH_MCP_ADMIN_MODE=true.",
+        suggestion="Set HUGEGRAPH_MCP_ADMIN_MODE=true to enable this tool.",
+        source=tool_name,
+        details={"tool": tool_name, "enable_env": "HUGEGRAPH_MCP_ADMIN_MODE"},
+    )
+
+
+# ========== 工具 1：检视图状态和 schema ==========
+
+
 @mcp.tool()
-def get_live_schema_tool() -> dict:
-    """Fetch live HugeGraph schema via REST and return full & simplified schema.
+def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
+    """检视 HugeGraph 服务器状态、schema 摘要、点边计数和 AI 状态。
 
-    This tool provides comprehensive schema information including:
-    - Vertex labels with their properties
-    - Edge labels with source/target relationships
-    - Property keys and their data types
-    - Index labels for search optimization
-
-    The schema is fetched in real-time from your HugeGraph instance.
-    This tool is always available regardless of read-only mode settings.
-
-    Returns:
-        dict: Contains 'schema' (full raw schema), 'simple_schema' (LLM-friendly format),
-              and 'readonly' (boolean indicating if server is in read-only mode).
+    推荐作为连接后第一个调用的工具。
     """
+    return _call_public_tool(
+        "inspect_graph_tool",
+        inspect_graph,
+        include_raw_schema=include_raw_schema,
+    )
 
-    return get_live_schema()
+
+# ========== V1 稳定工具 ==========
+
+
+@mcp.tool()
+def generate_gremlin_tool(
+    query: str,
+    execute: bool = False,
+) -> dict:
+    """V1 稳定工具：自然语言 → Gremlin 生成。
+
+    默认不执行（execute=false），返回生成的 Gremlin 查询。
+    设置 execute=true 可执行生成的只读 Gremlin。
+    """
+    return _call_public_tool(
+        "generate_gremlin_tool",
+        generate_gremlin,
+        query=query,
+        execute=execute,
+    )
 
 
 @mcp.tool()
 def execute_gremlin_read_tool(gremlin_query: str) -> dict:
-    """Execute a read-only Gremlin query and return data/total/duration_ms/is_read.
+    """V1 稳定工具：执行只读 Gremlin 遍历查询。
 
-    This tool allows you to explore and query your graph data safely without
-    making any modifications. Use it for:
-    - Finding vertices and edges
-    - Counting nodes and relationships
-    - Traversing the graph structure
-    - Analyzing graph patterns
+    经过 GremlinPolicy 安全检查后执行。
+    """
+    return _call_public_tool(
+        "execute_gremlin_read_tool",
+        execute_gremlin_read,
+        gremlin_query,
+    )
 
-    The query will be validated to ensure it only contains read operations.
 
-    Args:
-        gremlin_query: A valid Gremlin query string (e.g., "g.V().count()",
-                      "g.V().hasLabel('person').limit(10)")
+@mcp.tool()
+def extract_graph_data_tool(
+    text: str,
+    schema: dict | None = None,
+    example_prompt: str | None = None,
+) -> dict:
+    """V1 稳定工具：自然语言文本 → 候选 graph_data（不写入）。
 
-    Returns:
-        dict: Contains 'data' (query results), 'total' (result count),
-              'duration_ms' (execution time), and 'is_read' (always true).
+    返回提取的顶点和边数据，供后续导入使用。
+    """
+    return _call_public_tool(
+        "extract_graph_data_tool",
+        extract_graph_data,
+        text=text,
+        schema=schema,
+        example_prompt=example_prompt,
+    )
+
+
+@mcp.tool()
+def design_schema_tool(operations: list[dict] | None = None) -> dict:
+    """V1 稳定工具：schema 设计指导。
+
+    提供 schema 设计建议和最佳实践。
+    """
+    return _call_public_tool(
+        "design_schema_tool",
+        manage_schema,
+        mode="design",
+        operations=operations,
+    )
+
+
+@mcp.tool()
+def apply_schema_tool(
+    mode: str,
+    operations: list[dict] | None = None,
+    confirm: bool = False,
+    plan_hash: str | None = None,
+) -> dict:
+    """V1 稳定工具：schema 校验和预览。
+
+    支持 validate 和 dry_run 模式。apply 模式在 V1 中返回 FEATURE_DISABLED。
+    """
+    start = time.perf_counter()
+    if mode == "apply":
+        return envelope_err(
+            ErrorType.FEATURE_DISABLED,
+            "Schema apply is disabled in V1. Use validate or dry_run mode.",
+            suggestion="Use mode='validate' or mode='dry_run' to preview schema changes.",
+            source="apply_schema_tool",
+            details={"mode": mode, "tool": "apply_schema_tool"},
+            duration_ms=(time.perf_counter() - start) * 1000.0,
+        )
+    return _call_public_tool(
+        "apply_schema_tool",
+        manage_schema,
+        mode=mode,
+        operations=operations,
+        confirm=confirm,
+        plan_hash=plan_hash,
+    )
+
+
+# ========== 图数据导入入口 ==========
+
+
+@mcp.tool()
+def import_graph_data_tool(
+    mode: str,
+    text: str | None = None,
+    schema: dict | None = None,
+    example_prompt: str | None = None,
+    graph_data: dict | None = None,
+    table_data: dict | None = None,
+    mapping: dict | None = None,
+    dry_run: bool = True,
+    confirm: bool = False,
+    plan_hash: str | None = None,
+    nonce: str | None = None,
+    expires_at: float | None = None,
+) -> dict:
+    """V1 图数据导入入口。
+
+    mode="extract": 自然语言文本 → 候选 graph_data
+    mode="ingest": MCP 本地校验+dry_run/confirm+Gremlin 导入 graph_data
+    mode="table": V1 禁用（返回 FEATURE_DISABLED）
     """
 
-    return execute_gremlin_read(gremlin_query)
-
-
-# Write tools - only registered when not in read-only mode
-if not READONLY:
-
-    @mcp.tool()
-    def design_schema_tool(
-        thought: str,
-        thought_number: int,
-        total_thoughts: int = 4,
-        next_thought_needed: bool = True,
-        is_revision: bool = False,
-        revision_of: int | None = None,
-    ) -> dict:
-        """Schema design guidance tool - Multi-turn interactive graph design
-
-        【When to Use This Tool】
-
-        Use this tool when:
-        - User requests to design a new HugeGraph schema but doesn't know the specific structure
-        - User describes a graph database use case and needs help planning entities, properties, and relationships
-        - User needs interactive guidance to complete schema definition
-
-        【When NOT to Use This Tool】
-        - User already knows exactly what vertex labels and edge labels to create
-        - User provides complete schema definition and only needs execution (use execute_schema_operations directly)
-        - Only querying existing schema (use get_live_schema)
-
-        【Workflow】
-        1. Call design_schema_tool to start interactive design
-        2. Iterate through questions based on returned thought_number
-        3. Generate operations list after collecting all information
-        4. Call execute_schema_operations to create the schema
-
-        Reference Sequential Thinking pattern, letting LLM autonomously guide users
-        through schema design. Tool only returns current iteration info.
-
-        See design_schema() docstring for best practices and examples.
-
-        Args:
-            thought: Current thought or summary of user's answer
-            thought_number: Current iteration number
-            total_thoughts: Planned total iterations (3-5 recommended)
-            next_thought_needed: Whether to continue to next iteration
-            is_revision: Whether revising previous thought
-            revision_of: Which iteration being revised
-
-        Returns:
-            dict: Contains 'thought_number', 'total_thoughts', 'next_thought_needed'
-        """
-
-        return design_schema(
-            thought=thought,
-            thought_number=thought_number,
-            total_thoughts=total_thoughts,
-            next_thought_needed=next_thought_needed,
-            is_revision=is_revision,
-            revision_of=revision_of,
+    if mode == "extract":
+        if not text:
+            return envelope_err(
+                "VALIDATION_ERROR", "text is required for mode='extract'"
+            )
+        return extract_graph_data(
+            text=text,
+            schema=schema,
+            example_prompt=example_prompt,
         )
 
-    @mcp.tool()
-    def execute_schema_operations_tool(operations: list[dict]) -> dict:
-        """Execute schema operations (create/modify vertex labels, edge labels, property keys, indexes).
+    if mode == "ingest":
+        if graph_data is None:
+            return envelope_err(
+                "VALIDATION_ERROR", "graph_data is required for mode='ingest'"
+            )
+        return manage_graph_data(
+            mode="import",
+            graph_data=graph_data,
+            dry_run=dry_run,
+            confirm=confirm,
+            plan_hash=plan_hash,
+            nonce=nonce,
+            expires_at=expires_at,
+            plan_tool_name="import_graph_data_tool",
+        )
 
-        This tool allows you to modify your graph schema by:
-        - Creating new property keys with specified data types
-        - Creating vertex and edge labels with defined properties
-        - Creating index labels for query optimization
+    if mode == "table":
+        return envelope_err(
+            ErrorType.FEATURE_DISABLED,
+            "Table import is not available in V1.",
+            suggestion="Use mode='extract' with extract_graph_data_tool instead.",
+            details={"mode": mode, "tool": "import_graph_data_tool"},
+        )
 
-        【Prerequisite - Must Read】
+    return envelope_err(
+        "VALIDATION_ERROR",
+        f"Unknown mode: {mode!r}. Use 'extract' or 'ingest'.",
+        details={"mode": mode},
+    )
 
-        ⚠️ Before using this tool, you MUST use design_schema_tool first if ANY of the following applies:
-        - User's design intent is not clear or obvious
-        - User's request lacks sufficient schema details (entities, properties, relationships)
-        - User is designing a new schema but has not gone through the interactive design process
-        - You are uncertain about the appropriate schema structure
 
-        If any of the above conditions are true, call design_schema_tool first to interactively
-        gather the required information, then use this tool to execute the operations.
+# ========== 受控图数据删除入口 ==========
 
-        ⚠️ WRITE TOOL - Only available when HUGEGRAPH_MCP_READONLY is false/undefined.
 
-        Args:
-            operations: List of schema operation dictionaries, each containing:
-                       - type: Operation type ("create_property_key", "create_vertex_label",
-                               "create_edge_label", "create_index_label")
-                       - Additional fields specific to each operation type
+@mcp.tool()
+def delete_graph_data_tool(
+    change_plan: dict,
+    dry_run: bool = True,
+    confirm: bool = False,
+    plan_hash: str | None = None,
+    nonce: str | None = None,
+    expires_at: float | None = None,
+) -> dict:
+    """V1 稳定工具：受控删除图数据。
 
-        Returns:
-            dict: Contains 'success' (boolean), 'results' (per-operation status),
-                  and 'errors' (list of any failures).
-        """
+    只支持精确 delete_vertex/delete_edge change_plan。
+    必须经过 dry_run -> plan_hash -> confirm；不支持批量条件删除或级联删除。
+    """
+    return _call_public_tool(
+        "delete_graph_data_tool",
+        manage_graph_data,
+        mode="delete",
+        change_plan=change_plan,
+        dry_run=dry_run,
+        confirm=confirm,
+        plan_hash=plan_hash,
+        nonce=nonce,
+        expires_at=expires_at,
+        plan_tool_name="delete_graph_data_tool",
+    )
 
-        return execute_schema_operations(operations)
 
-    @mcp.tool()
-    def execute_gremlin_write_tool(gremlin_query: str) -> dict:
-        """Execute a Gremlin write query and return affected/duration_ms/is_write.
+# ========== 高级调试工具 ==========
 
-        ⚠️ WRITE TOOL - Only available when HUGEGRAPH_MCP_READONLY is false/undefined.
 
-        This tool allows you to modify your graph data by:
-        - Adding new vertices and edges
-        - Updating vertex and edge properties
-        - Deleting graph elements
-        - Performing bulk data operations
+@mcp.tool()
+def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
+    """手动刷新 VID 嵌入 — V1 默认禁用，需 HUGEGRAPH_MCP_ADMIN_MODE=true。"""
+    blocked = _admin_gate("refresh_vid_embeddings_tool")
+    if blocked:
+        return blocked
+    return refresh_vid_embeddings(confirm=confirm)
 
-        Use with caution - write operations cannot be undone and will permanently
-        modify your graph data.
 
-        Args:
-            gremlin_query: A valid Gremlin write query string (e.g.,
-                          "g.addV('person').property('name', 'Alice')",
-                          "g.V().has('name', 'Alice').property('age', 30)")
-
-        Returns:
-            dict: Contains 'affected' (number of elements modified),
-                  'duration_ms' (execution time), and 'is_write' (always true).
-        """
-
-        return execute_gremlin_write(gremlin_query)
+@mcp.tool()
+def execute_gremlin_write_tool(gremlin_query: str) -> dict:
+    """执行 Gremlin 写查询 — V1 默认禁用，需 HUGEGRAPH_MCP_ADMIN_MODE=true。"""
+    blocked = _admin_gate("execute_gremlin_write_tool")
+    if blocked:
+        return blocked
+    return execute_gremlin_write(gremlin_query)
 
 
 def main() -> None:
-    """CLI entry point used by console_scripts."""
-
-    # Default to stdio; callers can also use `uv run fastmcp run` style entry.
+    """CLI 入口 — 默认 stdio 模式。"""
     mcp.run()
 
 

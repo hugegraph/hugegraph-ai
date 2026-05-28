@@ -1,0 +1,157 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""SQL 模式编排 — 将 sql_preview / sql_mapping_suggest / sql_import 三种模式
+统一路由到对应的 SQL 适配层和导入链。
+
+从 server.py 抽取出来的纯编排函数，不依赖 FastMCP。
+"""
+
+from hugegraph_mcp.envelope import envelope_err, envelope_ok
+from hugegraph_mcp.tools.import_table import import_table_data, suggest_table_mapping
+from hugegraph_mcp.tools.manage_graph_data import (
+    graph_data_to_change_plan,
+    manage_graph_data,
+)
+from hugegraph_mcp.tools.sql_table import (
+    execute_select_to_table_data,
+    preview_sql,
+)
+
+
+def _handle_sql_mode(
+    mode: str,
+    sql_source: dict | None,
+    sql_query: str | None,
+    table_name: str | None,
+    mapping: dict | None,
+    dry_run: bool,
+    confirm: bool,
+    plan_hash: str | None,
+) -> dict:
+    """SQL 三种模式的统一路由。
+
+    - sql_preview: 预览 SQLite 表结构或 SELECT 结果
+    - sql_mapping_suggest: 生成 SQL 列到图 schema 的映射建议
+    - sql_import: 执行 SQL → table_data → graph_data → manage_graph_data 导入链
+    """
+    if sql_source is None:
+        return envelope_err(
+            "VALIDATION_ERROR",
+            f"sql_source is required for mode='{mode}'",
+            suggestion=(
+                "Provide sql_source with type='sqlite' and path to the SQLite file."
+            ),
+        )
+
+    if mode == "sql_preview":
+        return preview_sql(
+            sql_source=sql_source,
+            table_name=table_name,
+            sql_query=sql_query,
+        )
+
+    if mode == "sql_mapping_suggest":
+        if sql_query is None and table_name is None:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "sql_query or table_name is required for mode='sql_mapping_suggest'",
+                suggestion="Provide a SELECT query or table name to generate a mapping suggestion.",
+            )
+        preview_result = preview_sql(
+            sql_source=sql_source,
+            table_name=table_name,
+            sql_query=sql_query,
+        )
+        if not preview_result.get("ok"):
+            return preview_result
+
+        # 映射建议只基于 SQL 预览结果生成，不触碰 HugeGraph 写入链。
+        # 用户可以先检查列名、样例行和 mapping，再决定是否进入 sql_import。
+        preview_data = preview_result.get("data") or {}
+        columns = preview_data.get("columns", [])
+        rows = preview_data.get("rows", [])
+        derived_table_name = (
+            table_name
+            or f"{preview_data.get('source_ref', {}).get('path', 'sql')}_preview"
+        )
+
+        mock_table_data = {
+            "table_name": derived_table_name,
+            "columns": [col["name"] for col in columns] if columns else [],
+            "rows": rows,
+        }
+        suggestion = suggest_table_mapping(mock_table_data, mapping)
+        return envelope_ok(
+            {
+                "mapping_suggestion": suggestion,
+                "source_ref": preview_data.get("source_ref"),
+                "columns": columns,
+            },
+            warnings=preview_result.get("warnings", []),
+        )
+
+    if mode == "sql_import":
+        if not sql_query:
+            return envelope_err(
+                "VALIDATION_ERROR",
+                "sql_query is required for mode='sql_import'",
+                suggestion="Provide a SELECT query to import rows as graph data.",
+            )
+
+        table_result = execute_select_to_table_data(
+            sql_source=sql_source,
+            sql_query=sql_query,
+            table_name=table_name,
+        )
+        if not table_result.get("ok"):
+            return table_result
+
+        table_data_output = (table_result.get("data") or {}).get("table_data")
+        if table_data_output is None:
+            return table_result
+
+        mapped = import_table_data(table_data=table_data_output, mapping=mapping)
+        if not mapped.get("ok"):
+            return mapped
+
+        mapped_graph_data = (mapped.get("data") or {}).get("graph_data")
+        if mapped_graph_data is None:
+            return mapped
+
+        # SQL 导入最终仍复用 graph_data 的安全链：先生成 change_plan，
+        # 再 dry-run/confirm/plan_hash。SQL 来源和 mapping 会进入 hash 上下文，
+        # 防止同一 change_plan 被不同 SQL 结果复用确认。
+        change_plan = graph_data_to_change_plan(mapped_graph_data)
+        sql_hash_context = {
+            "sql_source": sql_source,
+            "sql_query": sql_query,
+            "mapping": mapping,
+        }
+        import_result = manage_graph_data(
+            mode="import",
+            graph_data=mapped_graph_data,
+            change_plan=change_plan,
+            dry_run=dry_run,
+            confirm=confirm,
+            plan_hash=plan_hash,
+            extra_hash_context=sql_hash_context,
+        )
+
+        return import_result
+
+    return envelope_err(
+        "VALIDATION_ERROR",
+        f"Unknown SQL mode: {mode!r}.",
+        details={"mode": mode},
+    )
