@@ -65,15 +65,13 @@ pass; any failed request invalidates the run regardless of tick-gap health):
 import argparse
 import asyncio
 import json
-import statistics
 import sys
 import time
-from typing import List
 
 import httpx
 
 
-async def _sample_tick_gap(samples: List[float], stop: asyncio.Event, interval: float = 0.005) -> None:
+async def _sample_tick_gap(samples: list[float], stop: asyncio.Event, interval: float = 0.005) -> None:
     """Wake every `interval` seconds, record actual gap. Drift above interval
     means the loop was blocked (a sync call that did not yield)."""
     last = time.monotonic()
@@ -91,8 +89,8 @@ async def _one_request(
     endpoint: str,
     query: str,
     stream: bool,
-    latencies: List[float],
-    failures: List[str],
+    latencies: list[float],
+    failures: list[str],
 ) -> None:
     """Drive one request and record wall-clock latency.
 
@@ -123,7 +121,7 @@ async def _one_request(
         failures.append(repr(e))
 
 
-def _quantile(values: List[float], q: float) -> float:
+def _quantile(values: list[float], q: float) -> float:
     """Linear-interpolation quantile that works for any sample size ≥ 1.
 
     `statistics.quantiles(n=100)` requires len ≥ 2 and produces 99 cut points
@@ -144,12 +142,12 @@ def _quantile(values: List[float], q: float) -> float:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    tick_samples: List[float] = []
+    tick_samples: list[float] = []
     stop_sampler = asyncio.Event()
     sampler = asyncio.create_task(_sample_tick_gap(tick_samples, stop_sampler))
 
-    latencies: List[float] = []
-    failures: List[str] = []
+    latencies: list[float] = []
+    failures: list[str] = []
 
     sem = asyncio.Semaphore(args.concurrency)
 

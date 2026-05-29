@@ -71,15 +71,16 @@ class AsyncRequestsChecker(ast.NodeVisitor):
                 for alias in node.names:
                     if alias.name == "requests" or alias.name.startswith("requests."):
                         self._module_aliases.add(alias.asname or alias.name.split(".")[0])
-            elif isinstance(node, ast.ImportFrom):
-                if node.module == "requests" or (node.module is not None and node.module.startswith("requests.")):
-                    for alias in node.names:
-                        # ``from requests import *`` exposes every public symbol;
-                        # we can't enumerate them here, so flag the import itself.
-                        if alias.name == "*":
-                            self.errors.append((node.lineno, "from requests import *"))
-                            continue
-                        self._symbol_aliases.add(alias.asname or alias.name)
+            elif isinstance(node, ast.ImportFrom) and (
+                node.module == "requests" or (node.module is not None and node.module.startswith("requests."))
+            ):
+                for alias in node.names:
+                    # ``from requests import *`` exposes every public symbol;
+                    # we can't enumerate them here, so flag the import itself.
+                    if alias.name == "*":
+                        self.errors.append((node.lineno, "from requests import *"))
+                        continue
+                    self._symbol_aliases.add(alias.asname or alias.name)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self._depth += 1

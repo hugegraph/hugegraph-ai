@@ -25,7 +25,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from hugegraph_llm.utils.log import log
 
-
 # Phase 3 P3-T3: trace_id propagated via contextvars so async tasks spawned
 # inside a route (incl. sub-tasks awaited via asyncio.to_thread) inherit it
 # without requiring explicit threading. Streaming routes that need trace_id in

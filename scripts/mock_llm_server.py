@@ -66,12 +66,11 @@ import json
 import os
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-
 
 # 单 token "内容"——固定 1 字符是为了让 latency 完全由 sleep 决定，
 # 避免不同长度 token 的 JSON 序列化开销污染基线。
@@ -82,11 +81,11 @@ def _make_chat_chunk(
     completion_id: str,
     model: str,
     *,
-    role: Optional[str] = None,
-    content: Optional[str] = None,
-    finish_reason: Optional[str] = None,
-) -> Dict[str, Any]:
-    delta: Dict[str, Any] = {}
+    role: str | None = None,
+    content: str | None = None,
+    finish_reason: str | None = None,
+) -> dict[str, Any]:
+    delta: dict[str, Any] = {}
     if role is not None:
         delta["role"] = role
     if content is not None:
@@ -102,7 +101,7 @@ def _make_chat_chunk(
 
 def _make_full_completion(
     completion_id: str, model: str, content: str, prompt_tokens: int, completion_tokens: int
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "id": completion_id,
         "object": "chat.completion",
@@ -123,7 +122,7 @@ def _make_full_completion(
     }
 
 
-def _approx_prompt_tokens(messages: List[Dict[str, Any]]) -> int:
+def _approx_prompt_tokens(messages: list[dict[str, Any]]) -> int:
     # 不需要精准——usage.prompt_tokens 只为日志/监控好看；用字符数除以 4 估算。
     total_chars = 0
     for m in messages:
