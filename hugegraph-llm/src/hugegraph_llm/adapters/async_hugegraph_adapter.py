@@ -47,10 +47,18 @@ class AsyncHugeGraphAdapter:
         # Lazy: defer client construction (and any IO it triggers) to first use.
         self._factory = client_factory or _default_client_factory
         self._client: Optional[PyHugeClient] = None
+        # Guards lazy init against concurrent first-callers; without it a burst of
+        # in-flight requests on cold start would each spawn a redundant factory()
+        # in the executor and leak connections.
+        self._lock = asyncio.Lock()
 
     async def _get_client(self) -> PyHugeClient:
+        # Double-checked: the fast path stays lock-free once the client is set,
+        # the lock only protects the one-shot construction.
         if self._client is None:
-            self._client = await asyncio.to_thread(self._factory)
+            async with self._lock:
+                if self._client is None:
+                    self._client = await asyncio.to_thread(self._factory)
         return self._client
 
     async def execute_gremlin(self, query: str) -> Any:

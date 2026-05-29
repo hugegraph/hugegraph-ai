@@ -34,16 +34,23 @@ hugegraph-llm 当前的 HTTP API 层（`hugegraph-llm/src/hugegraph_llm/api/rag_
    - 首 chunk 在 `delta` 中带 `"role":"assistant"`，结束 chunk 中 `delta` 为空且 `finish_reason="stop"`，最后再发 `data: [DONE]`
    - 多 answer 类型（`raw_answer` / `vector_only_answer` / `graph_only_answer` / `graph_vector_answer`）映射到不同 `choices[].index`，单次响应内 index 与 answer_type 的对应关系稳定不变
    - 错误以独立 `event: error` 事件下发（见 1.5），不混在 `chat.completion.chunk` 里
+   - **非 token 控制 / 元数据通道**（post-review 加固）：上游 `post_deal_stream` 可 yield `{"warning": "...", ...}` 控制 dict——例如外部 reranker 失败时降级到 BLEU（`switch_to_bleu`）。HTTP SSE 必须以独立 `event: warning\ndata: {...}\n\n` 行下发，**不能**静默吞掉；Gradio `accumulate` wrapper 把它追加到 `snapshot["__events__"]` 列表透出。`{"error": ...}` 控制 dict 走与 1.5 相同的 `event: error` 通道。详见 [design.md §1.1 stream item contract](./design.md#11-新增路由设计)。
 
    当前 `AnswerSynthesize.async_streaming_generate()` 是把 token 追加到 context 后反复 yield 整个 context（类似 Gradio state snapshot），直接包进 `data:` 不是 delta chunk，前端无法复用 OpenAI ChatCompletionChunk 消费逻辑。
 
    **adapter 实现要求**：必须从源头按 token 流消费——即 `async_streaming_generate()`（或新增的 `async_streaming_delta()`）直接 yield `(answer_type, token_delta)`，由 adapter 包装成 ChatCompletionChunk。**禁止**用"本轮累计 - 上轮累计 = delta"这种字符串反推方式，因为多 answer 并发完成、空 token、token 末尾等于上一 token 后缀等边界场景会算错。
 
-   **测试断言要求**（见 [tasks.md](./tasks.md) P1-T5）：
+   **测试断言要求**（见 [tasks.md](./tasks.md) P1-T5 / P1-T6）：
    - 所有 chunk 的 `delta.content` 按 index 拼接后等于完整答案
    - 任意 chunk 的 `delta.content` **不得**是历史 chunk 累积内容的前缀超集（拒收累计全文实现的关键护栏）
    - 多 answer 场景下同一 `index` 始终对应同一 `answer_type`
    - 首 chunk 含 `delta.role="assistant"`，结束 chunk 含 `finish_reason="stop"`，`[DONE]` 在结束 chunk 之后
+   - **post-review contract 测试**（P1-T6）：
+     - `/rag` 与 `/rag/stream` 在同一 RAGRequest 下，`max_graph_items` / `topk_return_results` / `vector_dis_threshold` / `topk_per_keyword` 4 个检索调参必须用**非默认 sentinel 值**断言透传一致
+     - 上游 yield `{"warning": ..., "switch_to_bleu": True}` → SSE 必须输出 `event: warning` 行；**禁止**静默吞掉
+     - 上游 yield `{"error": ...}` → SSE 必须输出 `event: error` 行 + `[DONE]`；`accumulate()` 必须 raise `RuntimeError`，禁止解包 `ValueError` 掩盖根因
+     - `MergeDedupRerank.run()` 在 reranker 失败时必须把 `context["switch_to_bleu"] = True` 写出（对外 contract，仅断言私有 `merger.switch_to_bleu` 不够）
+     - Scheduler cold path 在 `pipeline.run` 期间被 `task.cancel()` 取消时必须仍调用 `manager.add(pipeline)` 一次（资源回收回归）
 
 1.5. 错误事件需以独立的 SSE event 类型（如 `event: error`）下发，不能简单 HTTP 5xx，因为流式响应在首字节后已无法回退到 HTTP 错误码。
 
@@ -81,7 +88,7 @@ hugegraph-llm 当前的 HTTP API 层（`hugegraph-llm/src/hugegraph_llm/api/rag_
 
 2.6. **嵌套事件循环消除**：删除 `operators/llm_op/answer_synthesize.py:73` 处的 `asyncio.run(...)` 调用；同步路径与异步路径分别提供独立入口（`run` / `run_async`），不在 async 上下文里嵌套新建事件循环。
 
-2.7. **测试基础设施**：引入 `pytest-asyncio`，在 `pyproject.toml` 显式声明 `fastapi`、`uvicorn`、`httpx`、`pytest-asyncio` 依赖。所有 `async def` 路由补 `@pytest.mark.asyncio` 测试。
+2.7. **测试基础设施**：异步路由补充 `@pytest.mark.asyncio` 测试。依赖声明策略以 [tasks.md](./tasks.md) P1-T1 为准（2026-05-29 用户决策回滚"显式声明"做法）：`fastapi` / `uvicorn` / `httpx` / `tenacity` 不在运行时 `dependencies` 中强制显式声明，由 `gradio` / `litellm` 等已声明依赖传递引入；`[project.optional-dependencies] dev` 段与 `[tool.pytest.ini_options] asyncio_mode = "auto"` 也不再强制写入——测试用例显式标 `@pytest.mark.asyncio` 故无需 auto 模式。
 
 2.8. **lint 防御**：通过 ruff 规则或自定义检查禁止在 `async def` 函数体内直接 `import requests` / 调用 `requests.*`，防止退回同步阻塞。
 

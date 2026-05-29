@@ -83,6 +83,32 @@
 - [x] 流式接口 payload 通过 ChatCompletionChunk 协议合规断言（P1-T5 全部用例 pass）
 - [ ] **远端全量回归**待用户在远端环境执行 `pytest hugegraph-llm/src/tests/`（Phase 2 已记录 293 passed / 13 skipped / 0 failed 基线，Phase 3 新增的 P3-T1/T3/T4 用例需在合并前再跑一次）
 
+### P1-T6：post-review contract 加固（2026-05-29）
+
+> 维护者 review（[PR comments](https://github.com/apache/incubator-hugegraph-ai/pull/336) 9 条 inline）指出 V1 仍有 4 个 blocker / 3 个重要项 / 2 个小问题，主要集中在「streaming contract 边界没钉死 + 测试覆盖太窄漏过 mock」。本节是 review 整改的最小集，**修复后**才认为 Phase 1 真正可合并。
+
+- [x] **#1 阻塞｜`/rag` 与 `/rag/stream` 检索参数透传不一致**：[rag_api.py:_rag_delta_stream](../../hugegraph-llm/src/hugegraph_llm/api/rag_api.py#L82-L130) 补传 `max_graph_items` / `topk_return_results` / `vector_dis_threshold` / `topk_per_keyword` 4 个 kwargs 到 `schedule_stream_flow`。新增 contract test：[test_rag_stream_passes_retrieval_params_to_scheduler](../../hugegraph-llm/src/tests/api/test_rag_stream_api.py) + [test_rag_answer_passes_retrieval_params_to_func](../../hugegraph-llm/src/tests/api/test_rag_api.py) 用非默认 sentinel 值（1234 / 77 / 0.42 / 9）锁住两条 API 路径的契约对齐；fake scheduler 加 `captured_kwargs` 钩子，根除 review 提到的「`**_kwargs` 吞掉漏传也全绿」问题
+- [x] **#2 阻塞｜scheduler cold path 取消时 pipeline 泄漏**：[scheduler.py:schedule_stream_flow](../../hugegraph-llm/src/hugegraph_llm/flows/scheduler.py#L186-L240) cold path 的 try/finally 上移到 `build_flow(...)` 之后，覆盖 `init` / `await asyncio.to_thread(pipeline.run)` / `post_deal_stream` 三段；正常 / 异常 / `asyncio.CancelledError` 三条路径都归还 `manager.add(pipeline)`。新增回归测试：[test_scheduler_stream_cancellation.py:test_cold_path_cancellation_returns_pipeline_to_manager](../../hugegraph-llm/src/tests/flows/test_scheduler_stream_cancellation.py) 用阻塞型 fake pipeline + `task.cancel()` 触发取消，断言 `manager.add` 被调用 1 次
+- [x] **#3 阻塞｜delta-only stream contract 丢失非 token 状态**：定义 V1 stream item contract（详见 [design.md §1.1](./design.md#11-新增路由设计)）：`(answer_type, token_delta)` / `{"warning": ...}` / `{"error": ...}` 三类，HTTP SSE 与 Gradio `accumulate` wrapper 共享同一套消费逻辑。落地：
+  - [x] [WkFlowState](../../hugegraph-llm/src/hugegraph_llm/state/ai_state.py) 加 `switch_to_bleu` 字段（`MergeDedupRerank.run()` 已通过 `context["switch_to_bleu"] = True` 写出，但 `WkFlowState.__dict__` 之前没声明导致 `assign_from_json` 跳过）
+  - [x] [BaseFlow.post_deal_stream](../../hugegraph-llm/src/hugegraph_llm/flows/common.py) 在透传 LLM token 流之前先 yield `{"warning": "Online reranker fails, automatically switches to local bleu rerank.", "switch_to_bleu": True}` 控制消息
+  - [x] [chat_completion_adapter.rag_stream_generator](../../hugegraph-llm/src/hugegraph_llm/api/chat_completion_adapter.py) 加 `event: warning` / `event: metadata` SSE 通道；`{"error": ...}` 走 `event: error`
+  - [x] [demo/rag_demo/rag_block.rag_answer_streaming](../../hugegraph-llm/src/hugegraph_llm/demo/rag_demo/rag_block.py) 把 `accumulate` 暴露的 `__events__` 用 `gr.Warning` 投递给前端，与同步 `/rag` 路径行为一致
+  - [x] 回归测试：[test_rag_stream_warning_event_passed_through](../../hugegraph-llm/src/tests/api/test_rag_stream_api.py) / [test_rag_stream_error_dict_emits_event_error](../../hugegraph-llm/src/tests/api/test_rag_stream_api.py) / [test_rag_stream_generator_emits_event_warning_for_warning_dict](../../hugegraph-llm/src/tests/api/test_chat_completion_adapter.py) / [test_rag_stream_generator_emits_event_error_for_error_dict](../../hugegraph-llm/src/tests/api/test_chat_completion_adapter.py)
+- [x] **#4 重要｜`accumulate()` 把 error dict 解包成 ValueError 掩盖根因**：[chat_completion_adapter.accumulate](../../hugegraph-llm/src/hugegraph_llm/api/chat_completion_adapter.py) 显式区分 dict / tuple；`{"error": ...}` raise `RuntimeError`，`{"warning": ...}` 走 `__events__`，非法形态 log warning 后忽略而不崩溃。回归：[test_accumulate_raises_on_error_dict](../../hugegraph-llm/src/tests/api/test_chat_completion_adapter.py) / [test_accumulate_surfaces_warning_in_events](../../hugegraph-llm/src/tests/api/test_chat_completion_adapter.py)
+- [x] **#5 阻塞｜fake scheduler 吞掉 kwargs**：解决方式见 #1（`captured_kwargs` 钩子 + 非默认 sentinel 值）
+- [x] **#6 重要｜accumulated history 测试拦不住典型累计序列**：[test_no_chunk_equals_cumulative_typical_sequence](../../hugegraph-llm/src/tests/api/test_chat_completion_adapter.py) 用累计 producer（`["Hello ", "Hello world!"]`）显式断言 adapter 不做反推 — 输出全文 == `"Hello Hello world!"` 而非 `"Hello world!"`，把 design.md §1.4「禁止反推 delta」契约钉死在测试里
+- [x] **#7 重要｜reranker fallback 只测私有状态没测对外 contract**：[test_run_writes_switch_to_bleu_into_context_on_reranker_failure](../../hugegraph-llm/src/tests/operators/common_op/test_merge_dedup_rerank.py) 通过 `MergeDedupRerank.run()` 入口（不是 `_rerank_with_vertex_degree` 私有方法）断言 `context["switch_to_bleu"] = True` 被写出。mock side_effect 用 `*args / **kwargs` 吸收 `_dedup_and_rerank` 与 `_rerank_with_vertex_degree` 两种调用签名，避免「空输入也提前抛错」绊倒测试主线
+- [x] **#8 小提醒｜siliconflow `_validate` 边界回归丢失**：[test_aget_rerank_lists_negative_top_n_raises](../../hugegraph-llm/src/tests/models/rerankers/test_siliconflow_reranker.py) / [test_aget_rerank_lists_top_n_exceeds_documents_raises](../../hugegraph-llm/src/tests/models/rerankers/test_siliconflow_reranker.py) 补回 `top_n < 0` 与 `top_n > len(documents)` 两个边界用例
+- [x] **#9 重要｜scheduler cancellation / pipeline 回收没有回归测试**：解决方式见 #2
+
+### P1-T6 验收
+
+- [x] 7 项 blocker / 重要项的代码与测试落地（远端 `pytest src/tests/api src/tests/flows src/tests/operators src/tests/models -v` 全绿）
+- [x] spec 4 个文档（requirements / design / tasks / blocking_call_audit 不涉及）已同步：详见本节链接
+- [x] 测试覆盖矩阵（参数透传 / 取消回收 / 控制消息 / contract 反推 / 边界）通过非默认 sentinel + 真 raise 断言锁住，杜绝 mock 漏过
+- [ ] **远端 mock-LLM 真机冒烟**：上游若 `switch_to_bleu` 触发，`/rag/stream` 客户端应能在 token 流前就读到 `event: warning` 行；待联调环境一并跑
+
 ---
 
 ## Phase 2：检索/重排路径换 httpx + async（预计 3-5 天）
@@ -133,7 +159,7 @@
 - [x] `models/llms/ollama.py:23` 的 `from retry import retry` 替换为 `tenacity.retry`（`stop_after_attempt(3) + wait_fixed(1) + reraise=True`）。**这是 silent-broken 修复**：原 `retry` 包不感知 coroutine，被装饰的 `async def agenerate` 实际只在创建协程时重试一次，`await` 中的网络异常**完全不会被重试**——无人察觉的多年潜在 bug
 - [x] tenacity 原生支持 async：`async def` 上自动用 `asyncio.sleep`
 - [x] 全仓搜索其他 `from retry import` 已无残留；openai.py / litellm.py 已是 tenacity，无需改
-- [x] [pyproject.toml](../../hugegraph-llm/pyproject.toml) 移除 `retry` 依赖（实测代码无引用，且 [models/llms/ollama.py:23](../../hugegraph-llm/src/hugegraph_llm/models/llms/ollama.py#L23) 已切 tenacity；2026-05-28 本次 alignment 顺手清理）
+- [x] [pyproject.toml](../../hugegraph-llm/pyproject.toml) 保留 `retry` 依赖（用户决策，与 P1-T1 同一拍板）：当前代码已无 `from retry import` 引用、[models/llms/ollama.py:23](../../hugegraph-llm/src/hugegraph_llm/models/llms/ollama.py#L23) 已切 tenacity，包冗余但保留不影响功能。**注意**：本条与 P1-T1 第 18 行"`retry` 包保留"为同一决策——历史版本曾标"移除 retry 依赖（顺手清理）"，已撤回，不要据此再次清理
 - [x] 单测 [tests/models/llms/test_ollama_client.py](../../hugegraph-llm/src/tests/models/llms/test_ollama_client.py) 新增：mock `async_client.chat` 抛 `RuntimeError`，断言 tenacity 重试次数恰为 3
 
 ### P2-T7：lint 防御（AST 检查 + 白名单）
@@ -232,16 +258,18 @@
 
 ### P3-T6：压测与上线前验证
 
-- [x] **远端 32 路并发基线（2026-05-28）**：rps=16.13 / latency P99=4166ms / tick_gap P99=6.06ms，详见 Phase 2 P2-T9 结果 + [blocking_call_audit.md](./blocking_call_audit.md)
-- [ ] QPS=1 时延退化 ≤ 5%——**待 mock LLM backend 单跑路由层吞吐**（real LLM 后端时延占主导，难直接对比）
-- [ ] QPS=32 吞吐 ≥ 同步基线 2.5 倍——同上前提，同步基线需 mock LLM 后端单跑
+- [x] **远端 32 路并发基线（2026-05-28，真实 LLM）**：rps=16.13 / latency P99=4166ms / tick_gap P99=6.06ms，详见 Phase 2 P2-T9 + [blocking_call_audit.md](./blocking_call_audit.md)
+- [x] **mock-LLM 压测（2026-05-29）已落地**：[scripts/mock_llm_server.py](../../scripts/mock_llm_server.py) + [scripts/async_load_probe.py](../../scripts/async_load_probe.py) `--endpoint` / `--no-stream` 工具就位；4 组对照数据 + 三条门禁判定写入 [blocking_call_audit.md 附录](./blocking_call_audit.md#附录phase-3-mock-llm-压测2026-05-29)
+- [x] **QPS=1 时延退化 ≤ 5% ✅ 通过**：c=1 p50 全部贴 mock 理论值 2.23s ±0.5%（async stream 2222.9 / async JSON 2231.5 / 重测 JSON 2233.7）
+- [⚠️] **QPS=32 吞吐 ≥ 同步基线 2.5 倍——不达标，但非路由层瓶颈**：async stream 10.63 / async JSON 10.98 / 重测 JSON 11.79 RPS，理论上限 32/2.2 ≈ 14.5；剩余 24% gap 来自 `Scheduler.pipeline_pool.max_pipeline=10` + asyncio default executor 池竞争，**改 sync 不会解锁这些上限**（sync 路由也撞同一个 max_pipeline）。建议把 P3-T6 这条门禁解读为"路由层 async 化不阻塞下游池"而非硬性 2.5×；详见 [blocking_call_audit.md 附录](./blocking_call_audit.md#真实瓶颈pipeline-pool-与-default-executor)
+- [x] **运行时门禁 tick_gap P99 ≤ 50ms ✅ 通过**：4 组全部 5–6ms，事件循环未被任何同步调用独占
 - [ ] 长时间稳定性测试（1h 持续压测）+ 内存/连接泄漏监控——待上线前真机执行
-- [ ] 客户端断开/超时/错误恢复混沌测试——单元层面已覆盖，端到端混沌测试待真机执行
+- [ ] 客户端断开/超时/错误恢复混沌测试——单元层面已覆盖（[test_rag_stream_api.py](../../hugegraph-llm/src/tests/api/test_rag_stream_api.py)），端到端混沌测试待真机执行
 
 ### P3-T7：迁移指南文档
 
 - [x] [docs/async-migration.md](../../hugegraph-llm/docs/async-migration.md) 已撰写：协议差异表 / SSE 客户端示例（curl + JS + Python）/ 回滚开关 / 已知限制 / FAQ
-- [ ] 性能对比数据待 P3-T6 mock-LLM 压测产出后追加
+- [x] mock-LLM 压测数据已就位 ([blocking_call_audit.md 附录](./blocking_call_audit.md#附录phase-3-mock-llm-压测2026-05-29))；可按需 cherry-pick 到 [docs/async-migration.md](../../hugegraph-llm/docs/async-migration.md) 的"性能对比"小节
 
 ### Phase 3 退出标准
 
@@ -249,8 +277,8 @@
 - [x] Gradio 同步路径仍正常工作（`schedule_flow` + `AnswerSynthesize.run()` 保留 + sync guard）
 - [x] HTTP async 路径与 Gradio 同步路径并行无冲突（`schedule_flow_async` / `schedule_stream_flow` vs `schedule_flow`）
 - [x] 中间件在 sync/async/stream 三种模式下 trace_id 完整（[test_middleware.py](../../hugegraph-llm/src/tests/middleware/test_middleware.py) 覆盖）
-- [x] 32 并发 tick_gap P99 ≤ 50ms 已达标
-- [ ] 端到端 RPS / latency 退化对比 — 待 mock-LLM 压测
+- [x] 32 并发 tick_gap P99 ≤ 50ms 已达标（真实 LLM 6.06ms / mock-LLM 6.06ms）
+- [x] 端到端 RPS / latency 退化对比已采集（mock-LLM，2026-05-29）：QPS=1 退化 ≤ 0.5%；QPS=32 RPS ≈ 11（受 max_pipeline=10 限制，非路由层瓶颈），详见 [blocking_call_audit.md 附录](./blocking_call_audit.md#附录phase-3-mock-llm-压测2026-05-29)
 - [x] 外部调用方兼容性：byte-for-byte 同步响应不变（[test_rag_api.py](../../hugegraph-llm/src/tests/api/test_rag_api.py) 双路径断言 + feature flag 一键回滚）
 - [ ] 上线后一周观测 — 上线后才能采集
 

@@ -210,7 +210,7 @@ async def acheck_graph_db_connection(url: str, name: str, user: str, pwd: str, g
         return False
     except Exception as e:
         log.error("Unexpected connection error: %s", e, exc_info=True)
-        raise Exception("Failed to execute update_vid_embedding") from e
+        raise Exception("Failed to check GraphDB connection") from e
 
 
 def check_graph_db_connection(url: str, name: str, user: str, pwd: str, graph_space: str) -> bool:
@@ -225,4 +225,4 @@ def check_graph_db_connection(url: str, name: str, user: str, pwd: str, graph_sp
         return False
     except Exception as e:
         log.error("Unexpected connection error: %s", e, exc_info=True)
-        raise Exception("Failed to execute update_vid_embedding") from e
+        raise Exception("Failed to check GraphDB connection") from e

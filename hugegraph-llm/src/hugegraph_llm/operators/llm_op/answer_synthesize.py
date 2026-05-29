@@ -71,8 +71,7 @@ class AnswerSynthesize:
             pass
         else:
             raise RuntimeError(
-                "AnswerSynthesize.run() called from a running event loop; "
-                "use AnswerSynthesize.run_async() instead."
+                "AnswerSynthesize.run() called from a running event loop; use AnswerSynthesize.run_async() instead."
             )
 
         context_head_str, context_tail_str = self.init_llm(context)

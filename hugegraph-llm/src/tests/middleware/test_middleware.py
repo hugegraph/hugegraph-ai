@@ -85,9 +85,9 @@ class TestUseTimeMiddlewareDispatch(unittest.IsolatedAsyncioTestCase):
         # Verify log.info was called with the correct arguments
         # Phase 3 P3-T3: format string now carries unit (%s) and trace_id (%s).
         process_time_logs = [
-            call_args for call_args in mock_log.info.call_args_list
-            if call_args.args
-            and call_args.args[0] == "Request process time: %.2f %s, code=%d, trace_id=%s"
+            call_args
+            for call_args in mock_log.info.call_args_list
+            if call_args.args and call_args.args[0] == "Request process time: %.2f %s, code=%d, trace_id=%s"
         ]
         self.assertEqual(len(process_time_logs), 1)
         self.assertEqual(process_time_logs[0].args[1:4], (500.0, "ms", 200))

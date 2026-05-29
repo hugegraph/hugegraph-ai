@@ -191,6 +191,10 @@ class WkFlowState(GParam):
 
     embed_dim: Optional[int] = None
     is_graph_rag_recall: Optional[bool] = None
+    # 在线 reranker 失败时由 MergeDedupRerank 写入；流式 post_deal_stream
+    # 会把它转成 ``{"warning": ...}`` 控制消息透出（见 review 关于
+    # "delta-only stream contract 丢失 switch_to_bleu" 的阻塞项）。
+    switch_to_bleu: Optional[bool] = None
 
     def setup(self) -> CStatus:
         self.schema = None
@@ -249,6 +253,7 @@ class WkFlowState(GParam):
 
         self.embed_dim = None
         self.is_graph_rag_recall = None
+        self.switch_to_bleu = None
         return CStatus()
 
     def to_json(self):

@@ -74,7 +74,7 @@ class TestBuildVectorIndex(unittest.TestCase):
         context = {"chunks": chunks}
 
         # Mock asyncio.run to avoid actual async execution in test
-        with patch('asyncio.run') as mock_asyncio_run:
+        with patch("asyncio.run") as mock_asyncio_run:
             mock_asyncio_run.return_value = mock_embeddings
 
             # Run the builder
@@ -111,7 +111,7 @@ class TestBuildVectorIndex(unittest.TestCase):
         context = {"chunks": []}
 
         # Mock asyncio.run
-        with patch('asyncio.run') as mock_asyncio_run:
+        with patch("asyncio.run") as mock_asyncio_run:
             mock_asyncio_run.return_value = []
 
             # Run the builder
@@ -124,7 +124,7 @@ class TestBuildVectorIndex(unittest.TestCase):
             # Check if the context is returned unchanged
             self.assertEqual(result, context)
 
-    @patch('hugegraph_llm.operators.index_op.build_vector_index.log')
+    @patch("hugegraph_llm.operators.index_op.build_vector_index.log")
     def test_logging(self, mock_log):
         # Mock get_embeddings_parallel
         mock_embeddings = [[0.1, 0.2, 0.3]]
@@ -137,7 +137,7 @@ class TestBuildVectorIndex(unittest.TestCase):
         context = {"chunks": chunks}
 
         # Mock asyncio.run
-        with patch('asyncio.run') as mock_asyncio_run:
+        with patch("asyncio.run") as mock_asyncio_run:
             mock_asyncio_run.return_value = mock_embeddings
 
             # Run the builder

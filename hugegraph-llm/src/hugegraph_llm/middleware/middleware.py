@@ -30,9 +30,7 @@ from hugegraph_llm.utils.log import log
 # inside a route (incl. sub-tasks awaited via asyncio.to_thread) inherit it
 # without requiring explicit threading. Streaming routes that need trace_id in
 # error payloads can call ``get_trace_id()`` instead of generating their own.
-_trace_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "hugegraph_llm_trace_id", default=None
-)
+_trace_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("hugegraph_llm_trace_id", default=None)
 
 
 def get_trace_id() -> Optional[str]:

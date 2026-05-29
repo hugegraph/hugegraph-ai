@@ -78,11 +78,38 @@ async def test_aget_rerank_lists_top_n_zero(reranker):
     assert result == []
 
 
-def test_get_rerank_lists_sync_wrapper(reranker, documents):
-    with patch(
-        "hugegraph_llm.models.rerankers.siliconflow.runtime.run_async_from_sync",
-        return_value=["Paris is known as the City of Light."],
-    ) as bridge:
+@pytest.mark.asyncio
+async def test_aget_rerank_lists_negative_top_n_raises(reranker, documents):
+    """``top_n < 0`` 必须由 ``_validate`` 拦下，避免静默退化为空 list 或下游崩溃。"""
+    with pytest.raises(ValueError):
+        await reranker.aget_rerank_lists("q", documents, top_n=-1)
+
+
+@pytest.mark.asyncio
+async def test_aget_rerank_lists_top_n_exceeds_documents_raises(reranker, documents):
+    """``top_n > len(documents)`` 必须拦下，避免被服务端 400 兜底掉。"""
+    with pytest.raises(ValueError):
+        await reranker.aget_rerank_lists("q", documents, top_n=len(documents) + 1)
+
+
+def test_get_rerank_lists_sync_uses_oneshot_httpx_client(reranker, documents):
+    """Sync path is now self-contained: builds its own httpx.Client (no main-loop
+    bridging), so we patch the local `httpx.Client` import instead of runtime."""
+    response = MagicMock()
+    response.json.return_value = {"results": [{"index": 2, "relevance_score": 0.9}]}
+    response.raise_for_status.return_value = None
+    sync_client = MagicMock()
+    sync_client.post.return_value = response
+    sync_client.__enter__ = MagicMock(return_value=sync_client)
+    sync_client.__exit__ = MagicMock(return_value=False)
+
+    with patch("httpx.Client", return_value=sync_client) as client_cls:
         result = reranker.get_rerank_lists("q", documents, top_n=1)
+
     assert result == ["Paris is known as the City of Light."]
-    bridge.assert_called_once()
+    client_cls.assert_called_once()
+    sync_client.post.assert_called_once()
+    args, kwargs = sync_client.post.call_args
+    assert args[0] == "https://api.siliconflow.cn/v1/rerank"
+    assert kwargs["json"]["top_n"] == 1
+    assert kwargs["headers"]["authorization"].startswith("Bearer ")

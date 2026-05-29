@@ -79,6 +79,38 @@ class SiliconReranker:
         documents: List[str],
         top_n: Optional[int] = None,
     ) -> List[str]:
-        """Sync wrapper: submits aget_rerank_lists to the main loop. Caller must
-        be on a worker thread (e.g. pycgraph pipeline node)."""
-        return runtime.run_async_from_sync(self.aget_rerank_lists(query, documents, top_n))
+        """Sync implementation using a one-shot httpx.Client.
+
+        Self-contained on purpose: bridging into the main async loop from a sync
+        caller on the loop thread (e.g. sync Gradio paths, startup checks) would
+        deadlock, and offline scripts / unit tests have no main loop running at
+        all. The standalone client side-steps both issues.
+        """
+        import httpx
+
+        top_n = self._validate(documents, top_n)
+        if top_n == 0:
+            return []
+
+        from pyhugegraph.utils.constants import Constants
+
+        headers = {
+            "accept": Constants.HEADER_CONTENT_TYPE,
+            "content-type": Constants.HEADER_CONTENT_TYPE,
+            "authorization": f"Bearer {self.api_key}",
+        }
+        payload = {
+            "model": self.model,
+            "query": query,
+            "documents": documents,
+            "return_documents": False,
+            "max_chunks_per_doc": 1024,
+            "overlap_tokens": 80,
+            "top_n": top_n,
+        }
+        url = "https://api.siliconflow.cn/v1/rerank"
+        with httpx.Client() as client:
+            response = client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            results = response.json()["results"]
+            return [documents[item["index"]] for item in results]

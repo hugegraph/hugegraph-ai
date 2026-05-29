@@ -134,6 +134,41 @@ async def test_rag_answer_async_route_runs_in_threadpool(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_rag_answer_passes_retrieval_params_to_func(monkeypatch):
+    """
+    Review contract test: /rag 必须把 RAGRequest 的检索调参 (max_graph_items /
+    topk_return_results / vector_dis_threshold / topk_per_keyword) 透传给
+    rag_answer_func。这条 test 与 /rag/stream 的同名 test 配对，锁住两条 API
+    路径的参数语义一致性。
+    """
+    rag_answer_func = Mock(return_value=("ok", None, None, None))
+    with _async_routes_env(monkeypatch, enabled=True) as rag_api_mod:
+        app = _build_app(rag_api_mod, rag_answer_func=rag_answer_func)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/rag",
+                json={
+                    "query": "q",
+                    "raw_answer": True,
+                    "vector_only": False,
+                    "graph_only": False,
+                    "graph_vector_answer": False,
+                    "max_graph_items": 1234,
+                    "topk_return_results": 77,
+                    "vector_dis_threshold": 0.42,
+                    "topk_per_keyword": 9,
+                },
+            )
+    assert resp.status_code == 200
+    rag_answer_func.assert_called_once()
+    kwargs = rag_answer_func.call_args.kwargs
+    assert kwargs["max_graph_items"] == 1234
+    assert kwargs["topk_return_results"] == 77
+    assert kwargs["vector_dis_threshold"] == 0.42
+    assert kwargs["topk_per_keyword"] == 9
+
+
+@pytest.mark.asyncio
 async def test_rag_answer_async_empty_query_400(monkeypatch):
     with _async_routes_env(monkeypatch, enabled=True) as rag_api_mod:
         app = _build_app(rag_api_mod)

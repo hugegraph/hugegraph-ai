@@ -68,22 +68,37 @@ hugegraph-llm/src/hugegraph_llm/
 
 ### 1.1 新增路由设计
 
-在 `api/rag_api.py` 中新增 `/rag/stream`，与原 `/rag` 并存：
+在 `api/rag_api.py` 中新增 `/rag/stream`，与原 `/rag` 并存。
+
+> ⚠️ **最终实现注意**（post-review，与下方原始设计代码有出入）：
+>
+> 实际落地后，HTTP `/rag/stream` 路由**不**调用 `rag_answer_streaming`，而是通过
+> `_rag_delta_stream(req, flow_key)` 直接调用 `scheduler.schedule_stream_flow(...)`，
+> 再把 raw delta 流喂给 `rag_stream_generator` 生成 SSE 行。
+> `rag_answer_streaming` 现在是 **Gradio-only** 入口（`rag_block.py`），内部用
+> `accumulate(delta_stream)` 把 delta 流转成"反复 yield 整个 snapshot"形态供 Gradio
+> 组件消费，并对 `{"warning": ...}` 事件调 `gr.Warning`。
+>
+> 关键点：两条路径共享同一个上游 contract（`schedule_stream_flow` → `post_deal_stream`
+> → `stream_generator`），但下游消费层不同（SSE adapter vs accumulate wrapper）——
+> 详见 §1.4 末尾与 `chat_completion_adapter.py` 模块 docstring。
+
+下方代码块是**原始设计草稿**，体现了设计意图（校验、错误通道、[DONE] 语义），
+与最终实现的关键差异已在注释中标注：
 
 ```python
-# api/rag_api.py（新增，原同步路由保持不变）
+# api/rag_api.py（原始设计草稿，最终实现见 rag_api.py _rag_delta_stream + event_generator）
 from fastapi.responses import StreamingResponse
-from hugegraph_llm.demo.rag_demo.rag_block import rag_answer_streaming
 import json
 
 @router.post("/rag/stream")
 async def rag_answer_stream_api(req: RAGRequest, request: Request):
     async def event_generator():
         try:
-            # rag_answer_streaming 必须 yield (answer_type, token_delta) 元组，
-            # 不再 yield 累计 context dict。adapter 负责包成 ChatCompletionChunk。
             first_chunks_emitted: set[int] = set()
-            async for answer_type, token_delta in rag_answer_streaming(...):
+            # 最终实现：此处迭代 _rag_delta_stream(req, flow_key)（而非 rag_answer_streaming），
+            # 再经 rag_stream_generator 生成 SSE 行，下方逻辑由 chat_completion_adapter.py 实现。
+            async for answer_type, token_delta in ...:
                 if await request.is_disconnected():
                     break
                 index = ANSWER_TYPE_TO_INDEX[answer_type]
@@ -93,7 +108,6 @@ async def rag_answer_stream_api(req: RAGRequest, request: Request):
                     token=token_delta, index=index, role="assistant" if include_role else None,
                 )
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-            # 结束 chunk：每个用过的 index 都发一个 finish_reason=stop
             for index in first_chunks_emitted:
                 final = to_chat_completion_stream_chunk(token=None, index=index, finish_reason="stop")
                 yield f"data: {json.dumps(final, ensure_ascii=False)}\n\n"
@@ -112,6 +126,16 @@ async def rag_answer_stream_api(req: RAGRequest, request: Request):
         headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
 ```
+
+**Stream item contract（V1，post-review 加固）**：上游 generator（`post_deal_stream` / `schedule_stream_flow`）可 yield 三类项，HTTP SSE 与 Gradio `accumulate` wrapper **共享同一套 contract**——避免 review 中提到的「一个通道处理 `{"error": ...}`、另一个解包阶段炸掉」：
+
+| 上游 yield | HTTP SSE | Gradio `accumulate` |
+|---|---|---|
+| `(answer_type, token_delta)` | `data: {chat.completion.chunk}\n\n` | 累加到 snapshot |
+| `{"warning": "...", ...}` | `event: warning\ndata: {...}\n\n` | 追加到 `snapshot["__events__"]` 列表 |
+| `{"error": "..."}` | `event: error\ndata: {trace_id, error}\n\n` + `[DONE]` | 直接 raise `RuntimeError` |
+
+`switch_to_bleu` 这种「reranker 在线降级」的非 token 状态走 warning 通道，保证 SSE 客户端 / Gradio 都能收到，而不是被默默吞掉。
 
 **adapter 函数签名**（位置建议：`api/chat_completion_adapter.py` 或 `api/sse_helpers.py`）：
 
@@ -140,6 +164,7 @@ def to_chat_completion_stream_chunk(
 
 **关键点**：
 
+- **`/rag` 与 `/rag/stream` 必须保持 RAGRequest 参数透传一致**（post-review 加固）：除了 `query`、`*_answer` 标志位、`graph_ratio`、`rerank_method` 等基础字段外，**4 个检索调参** `max_graph_items` / `topk_return_results` / `vector_dis_threshold` / `topk_per_keyword` 必须**同样**透传给 `schedule_stream_flow`，否则同一请求体在两条 API 路径上的召回 / 排序语义会不一致。两条路径都需要有"非默认 sentinel 值"的 contract test 锁住（详见 [tasks.md P1-T6 #1](./tasks.md)）。
 - `request.is_disconnected()` 在每次 yield 前检查，客户端断开后 SSE generator 停止写入。但需注意：`schedule_stream_flow()` 先执行 pipeline，再开始 `post_deal_stream()`；写法采用 `await asyncio.to_thread(pipeline.run)`（P1-T0 spike 选定的方案 b），事件循环不会被独占，但 pipeline 内部已发起的同步阻塞 IO（pyhugegraph 请求等）仍可能等待超时或自然返回。`AnswerSynthesize.async_streaming_generate()` 创建了 `anext(gen)` task 但没有 `finally` 去取消 pending task，SSE generator 被关闭时底层 LLM streaming task 可能清理不完整。需在 `finally` 中 cancel task、await gather、必要时 `aclose()`。
 - **多 generator 完成态管理**：`async_streaming_generate()` 同时跑多个 answer 的 streaming（raw / vector_only / graph_only / graph_vector），每个 answer 对应一个 generator 与一个 pending task。某个 generator `StopAsyncIteration` 后**必须立即从 active task set 移除**，不能再回填到 `asyncio.wait()` 的入参里——否则已完成的 task 会被反复传给 `wait()` 导致 busy loop（CPU 飙升）；同时若用 `len(async_tasks)` 与 `stop_task_num` 比对结束条件，已完成 task 没移除会让结束判定永远不达成或提前误判。建议改为以 `dict[task -> task_id]` 维护活跃 task 集合，命中 `StopAsyncIteration` 时 `del`，并以"集合非空"作为循环条件。
 - `X-Accel-Buffering: no` 禁止 nginx 缓冲，否则流式会被攒成一坨
@@ -165,6 +190,7 @@ async def schedule_stream_flow(self, ...):
 - scheduler 中 `schedule_flow`（同步路径，L120/L133）保留 `pipeline.run()` 同步调用不变——它由 Gradio 同步入口调用，本身是 `def`，无需 async 化。
 - `asyncio.to_thread(pipeline.run)` 是当前 pycgraph 上唯一可用的非阻塞接入方式（spike 已确认 `asyncRun()` 不是 awaitable 且 `wait()`/`get()` 阻塞）；**不要**给它加 lint 禁用规则。
 - P1-T3 修复同时随手补上"`manager.fetch() is None` 分支漏 `return` + `manager.add` 未在 finally"的既有 bug，否则首次请求会让 pipeline 跑两遍、LLM token 流被复发两遍。
+- **cold path try/finally 边界（post-review 加固）**：`manager.fetch() is None` 分支必须把 try/finally 上移到 `build_flow(...)` 之后，覆盖 `pipeline.init()` / `await asyncio.to_thread(pipeline.run)` / `post_deal_stream` 三段。否则首次流式请求若在 `pipeline.run` 期间被 `asyncio.CancelledError` 取消，刚 `build_flow` 出来的 pipeline 不会归还到 `GPipelineManager`，造成池资源泄漏；高并发取消下会消耗完池容量。回归测试需用阻塞型 fake pipeline + `task.cancel()` 触发取消，断言 `manager.add(pipeline)` 仍被调用一次（详见 [tasks.md P1-T6 #2](./tasks.md)）。
 
 ### 1.3 嵌套事件循环消除
 
@@ -248,6 +274,8 @@ async def async_streaming_generate(...) -> AsyncGenerator[Tuple[str, str], None]
 - **活跃 task 集合管理**：必须用 `dict[Task, task_id]` 维护活跃 task。任意 task 完成（含 `StopAsyncIteration`）后立即 `pop`，再决定是否 schedule 下一个 `anext`。**禁止**保留"已完成但还在原位"的 task 再传给 `asyncio.wait()`——它会立刻返回，造成 busy loop（CPU 100%）；也禁止用 `len(stop_count) == len(async_tasks)` 这种全量比对作为结束条件，应以"活跃集合非空"为循环条件。
 - 如需保留同步路径（Gradio）"反复 yield 整个 context"的旧行为，由 Gradio 适配层在外侧自行累加，不污染 operator 源头
 - 若 Gradio demo 当前依赖累计 context，新增一个轻量 wrapper（如 `async_streaming_generate_legacy()` 或 `accumulate(stream)` 适配函数）维持旧形态，其与新 delta 流共享同一份 token 源
+- **`accumulate(stream)` 必须按 contract 处理控制 dict（post-review 加固）**：上游若 yield `{"error": ...}`，wrapper **必须 raise `RuntimeError`** 而不是在 `answer_type, token_delta = item` 解包阶段炸出 `ValueError`（掩盖根因）；上游若 yield `{"warning": ...}`，wrapper 把它累加到 `snapshot["__events__"]` 列表暴露给 demo 层，由 Gradio 用 `gr.Warning(...)` 投递。这保证了 SSE 路径与 Gradio 路径在「reranker 在线降级」等场景上行为一致。
+- **`post_deal_stream` 必须将非 token 状态先 yield 出来**：`MergeDedupRerank` 在线 reranker 失败时会写 `context["switch_to_bleu"] = True` 到 `wkflow_state`（`WkFlowState.switch_to_bleu` 字段，post-review 新增）；`BaseFlow.post_deal_stream` 在透传 LLM token 流之前，先 yield `{"warning": "...", "switch_to_bleu": True}` 控制消息，避免 token 流启动后这些状态被埋没。
 
 ### 1.5 Phase 1 验收
 
@@ -332,9 +360,11 @@ class AsyncHugeGraphAdapter:
         )
 ```
 
-**覆盖范围**：Phase 2 内替换 ~15 个产线 callsite（含 `graph_query_node.py` 主路径 5 处），全部走 adapter 的 `to_thread` 包装。`schema_manager.py:28-34` 在 `__init__` 里隐式建 PyHugeClient 连接的现状必须解耦——构造期仅保存配置，首次方法调用时才走 `to_thread` 建连接，否则 await 链断在很尴尬的位置。
+**覆盖范围（最终落地，与 P2-T5 / [blocking_call_audit.md](./blocking_call_audit.md) 一致）**：方案 A 决策——Phase 2 **不**替换 pycgraph node 内 ~15 处 PyHugeClient callsite（`schema_manager.py:28-34` / `graph_query_node.py:96,131,153,359,374,404` / `commit_to_hugegraph.py` / `fetch_graph_data.py` / `semantic_id_query.py` / `graph_index_utils.py` / `indices/graph_index.py`）。这些 callsite 都在 pycgraph node 内部、被外层 `await asyncio.to_thread(pipeline.run)` 边界化（类别 B），再 wrap 一层 `to_thread` 不会让事件循环更不阻塞、徒增 worker→主loop→worker 跳跃。`AsyncHugeGraphAdapter` 仅作为 **Phase 3 HTTP 路由直连 HugeGraph** 时（不走 pipeline 的场景）的入口预留（类别 C 入口）。
 
-**前置设计任务**：在实现 adapter 前需对照 `pyhugegraph` router 和 HugeGraph graphspace 行为确认 REST 路径，并定义共享 `httpx.AsyncClient` 如何从 FastAPI lifespan 注入到 scheduler/flow/node/operator。否则可能写出无法被真实请求路径使用，或者 REST endpoint 不正确的 adapter。
+> ⚠️ 历史版本曾将"Phase 2 内替换 ~15 个产线 callsite"作为目标，且要求"对照 `pyhugegraph` router 和 HugeGraph graphspace 行为确认 REST 路径"——该计划在 P2-T5 被推翻，详见 [tasks.md P2-T5](./tasks.md) 的"范围决策"小节与 [blocking_call_audit.md](./blocking_call_audit.md)。本节保留 adapter 设计签名是为了 Phase 3 / 后续优化复用；不要据此重新引入 ~15 处 callsite 替换。
+
+**`schema_manager.py:28-34` 解耦说明**（保留）：在 `__init__` 里隐式建 PyHugeClient 连接的现状若要切换到 adapter，须改为 lazy 构造（构造期仅保存配置，首次方法调用时才建连接），避免 await 链在尴尬的位置断裂。当前 P2-T5 决策保留 sync `schema_manager`，此说明仅在未来 callsite 真正切到 adapter 时才需要兑现。
 
 ### 2.4 retry 统一为 tenacity async
 
@@ -448,9 +478,19 @@ grep -rn -B2 "requests\." hugegraph-llm/src/hugegraph_llm/ \
 
 ### 2.7 测试基础设施
 
-`pyproject.toml` 显式声明：
+> ⚠️ **P1-T1 最终决策（2026-05-29 用户拍板）已回滚此前的"显式声明"做法**，详见 [tasks.md P1-T1](./tasks.md)。下面 toml 片段是 *历史方案*，仅作记录。当前实施策略：
+>
+> - `fastapi` / `uvicorn` / `httpx` / `tenacity` **不**在 `dependencies` 中显式声明，由 `gradio` / `litellm` 等已声明依赖传递引入；
+> - `[project.optional-dependencies] dev` 段与 `[tool.pytest.ini_options] asyncio_mode = "auto"` **不**写入；
+> - 测试用例显式标 `@pytest.mark.asyncio` 故无需 auto 模式；
+> - `retry` 依赖在 [pyproject.toml:50](../../hugegraph-llm/pyproject.toml#L50) 用户决策保留（包冗余但不影响功能）。
+>
+> **不要**根据下面这段 toml 把上述依赖加回 `pyproject.toml`，否则会与 P1-T1 实施决策回潮相撞。
+
+历史方案（已回滚，仅供追溯）：
 
 ```toml
+# 历史方案（已回滚 — 不要应用）
 [project.optional-dependencies]
 dev = [
     "pytest~=8.0",
@@ -462,7 +502,7 @@ dev = [
 asyncio_mode = "auto"
 ```
 
-注意：`fastapi`、`uvicorn`、`httpx` 应作为直接依赖声明在 `dependencies` 中，不能仅靠 Gradio 传递引入，避免运行和测试依赖 Gradio 的传递依赖集合。
+历史注解（已不再适用）：~~`fastapi`、`uvicorn`、`httpx` 应作为直接依赖声明在 `dependencies` 中~~ — 见上文 P1-T1 决策。
 
 补 async 路由测试：
 

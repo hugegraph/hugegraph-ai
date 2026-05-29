@@ -16,14 +16,27 @@
 # under the License.
 
 """
-Phase 2 / 3 runtime gate: concurrent load probe with event-loop tick-gap sampling.
+Phase 2 / 3 runtime gate: concurrent load probe with **client-side**
+event-loop tick-gap sampling.
 
 Spawns N concurrent clients against a chosen RAG endpoint and concurrently
-samples the asyncio event-loop tick gap (i.e. how long between consecutive
-loop iterations the loop is blocked). Emits a summary with:
+samples the asyncio event-loop tick gap on **this load-test process** (i.e.
+how long between consecutive iterations of the *client* loop the loop went
+unscheduled). Emits a summary with:
     - completed / failed request counts
     - end-to-end latency P50 / P95 / P99
-    - tick-gap P50 / P95 / P99 (Phase 2 gate: P99 ≤ 50ms)
+    - client tick-gap P50 / P95 / P99 (Phase 2 gate: P99 ≤ 50ms)
+
+**Scope caveat — what this measures and what it does NOT**:
+    The tick-gap sampler runs in the *load-test client process*, not the
+    HugeGraph / hugegraph-llm server process. It catches client-side
+    scheduling latency — useful as a smoke check that the probe itself isn't
+    starved while waiting on responses, and a healthy client tick gap is a
+    *necessary* condition for the gate. It is **not sufficient**: a blocked
+    server event loop can still produce a low client-side tick_gap_ms here.
+    To enforce the "server event loop not blocked" gate end-to-end, sample
+    from inside the ASGI app process (e.g. middleware/background instrumen-
+    tation exposed via metrics) and pair both signals.
 
 Endpoint modes (Phase 3 P3-T6 mock-LLM 压测对比用):
     --endpoint /rag/stream      (default, SSE — needs --stream/auto-detected)
@@ -42,7 +55,11 @@ Standard 4-cell run for Phase 3 退出标准（搭配 scripts/mock_llm_server.py
     #        cell 2 to capture the sync baseline (cell 1 has no sync analogue —
     #        /rag/stream is always async by design).
 
-Exits 1 iff tick-gap P99 exceeds --tick-gate-ms (Phase 2/3 runtime gate).
+Exits 1 if **any** of the following hold (every condition is hard-required to
+pass; any failed request invalidates the run regardless of tick-gap health):
+    - client tick-gap P99 exceeds --tick-gate-ms; or
+    - any request failed (failures > 0); or
+    - completed request count != --requests.
 """
 
 import argparse
@@ -144,7 +161,13 @@ async def main_async(args: argparse.Namespace) -> int:
     async def _bounded(client):
         async with sem:
             await _one_request(
-                client, args.base_url, args.endpoint, args.query, stream, latencies, failures,
+                client,
+                args.base_url,
+                args.endpoint,
+                args.query,
+                stream,
+                latencies,
+                failures,
             )
 
     async with httpx.AsyncClient() as client:
@@ -169,7 +192,9 @@ async def main_async(args: argparse.Namespace) -> int:
             "p95": round(_quantile(latencies, 0.95), 1),
             "p99": round(_quantile(latencies, 0.99), 1),
         },
-        "tick_gap_ms": {
+        # NOTE: client_tick_gap_ms — sampled from THIS load-test process's loop,
+        # not the server's. See module docstring for the scope caveat.
+        "client_tick_gap_ms": {
             "samples": len(tick_samples),
             "p50": round(_quantile(tick_samples, 0.50), 2),
             "p95": round(_quantile(tick_samples, 0.95), 2),
@@ -179,12 +204,23 @@ async def main_async(args: argparse.Namespace) -> int:
     }
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
-    tick_p99 = summary["tick_gap_ms"]["p99"]
+    # Multi-condition gate. tick-gap alone can NOT carry the run: a misconfigured
+    # base-url or a fully-down service can produce 100% failures while the
+    # client loop happily idles at sub-millisecond tick gaps — without a request
+    # gate the probe would exit 0 and silently bless a broken endpoint.
+    failed = summary["failed"]
+    completed = summary["completed"]
+    requested = summary["requests"]
+    tick_p99 = summary["client_tick_gap_ms"]["p99"]
+    failures_summary: list[str] = []
+    if failed > 0:
+        failures_summary.append(f"failed requests = {failed} (>0)")
+    if completed != requested:
+        failures_summary.append(f"completed = {completed} != requests = {requested}")
     if tick_p99 > args.tick_gate_ms:
-        print(
-            f"\nFAIL: event-loop tick-gap P99 = {tick_p99}ms > gate {args.tick_gate_ms}ms",
-            file=sys.stderr,
-        )
+        failures_summary.append(f"client tick-gap P99 = {tick_p99}ms > gate {args.tick_gate_ms}ms")
+    if failures_summary:
+        print("\nFAIL: " + "; ".join(failures_summary), file=sys.stderr)
         return 1
     return 0
 
@@ -219,6 +255,15 @@ def main() -> int:
     parser.add_argument("--query", default="你好")
     parser.add_argument("--tick-gate-ms", type=float, default=50.0, help="Phase 2 gate (default 50ms)")
     args = parser.parse_args()
+    # Reject non-positive values up front: --concurrency=0 deadlocks on
+    # ``Semaphore(0)`` and --requests<=0 silently produces an empty success
+    # report — both are footguns for a CI gate utility.
+    if args.concurrency <= 0:
+        parser.error("--concurrency must be > 0")
+    if args.requests <= 0:
+        parser.error("--requests must be > 0")
+    if args.tick_gate_ms <= 0:
+        parser.error("--tick-gate-ms must be > 0")
     return asyncio.run(main_async(args))
 
 

@@ -36,8 +36,8 @@ class MultiLingualTextRank:
         self.max_len = 100
 
         self.pos_filter = {
-            'chinese': ('n', 'nr', 'ns', 'nt', 'nrt', 'nz', 'v', 'vd', 'vn', "eng", "j", "l"),
-            'english': ('NN', 'NNS', 'NNP', 'NNPS', 'VB', 'VBG', 'VBN', 'VBZ'),
+            "chinese": ("n", "nr", "ns", "nt", "nrt", "nz", "v", "vd", "vn", "eng", "j", "l"),
+            "english": ("NN", "NNS", "NNP", "NNPS", "VB", "VBG", "VBN", "VBZ"),
         }
         self.rules = [
             r"https?://\S+|www\.\S+",
@@ -58,25 +58,25 @@ class MultiLingualTextRank:
             placeholder_id_counter += 1
             return _placeholder
 
-        special_regex = regex.compile('|'.join(self.rules), regex.V1)
+        special_regex = regex.compile("|".join(self.rules), regex.V1)
         text = special_regex.sub(_create_placeholder, text)
 
         return text, placeholder_map
 
     @staticmethod
     def _get_valid_tokens(masked_text):
-        patterns_to_keep = [r'__shieldword_\d+__', r'\b\w+\b', r'[\u4e00-\u9fff]+']
-        combined_pattern = re.compile('|'.join(patterns_to_keep), re.IGNORECASE)
+        patterns_to_keep = [r"__shieldword_\d+__", r"\b\w+\b", r"[\u4e00-\u9fff]+"]
+        combined_pattern = re.compile("|".join(patterns_to_keep), re.IGNORECASE)
         tokens = combined_pattern.findall(masked_text)
-        text_for_nltk = ' '.join(tokens)
+        text_for_nltk = " ".join(tokens)
         nltk_tokens = nltk.word_tokenize(text_for_nltk)
         pos_tags = nltk.pos_tag(nltk_tokens)
         return pos_tags
 
     def _multi_preprocess(self, text):
         words = []
-        en_stop_words = NLTKHelper().stopwords(lang='english')
-        ch_stop_words = NLTKHelper().stopwords(lang='chinese')
+        en_stop_words = NLTKHelper().stopwords(lang="english")
+        ch_stop_words = NLTKHelper().stopwords(lang="chinese")
 
         # Filtering special words, cleansing punctuation marks, and filtering out invalid tokens
         masked_text, placeholder_map = self._word_mask(text)
@@ -88,14 +88,14 @@ class MultiLingualTextRank:
                 words.append(placeholder_map[word])
                 continue
 
-            if len(word) >= 1 and flag in self.pos_filter['english'] and word.lower() not in en_stop_words:
+            if len(word) >= 1 and flag in self.pos_filter["english"] and word.lower() not in en_stop_words:
                 words.append(word)
-                if re.compile('[\u4e00-\u9fff]').search(word):
+                if re.compile("[\u4e00-\u9fff]").search(word):
                     jieba_tokens = pseg.cut(word)
                     for ch_word, ch_flag in jieba_tokens:
-                        if len(ch_word) >= 1 and ch_flag in self.pos_filter['chinese'] and ch_word not in ch_stop_words:
+                        if len(ch_word) >= 1 and ch_flag in self.pos_filter["chinese"] and ch_word not in ch_stop_words:
                             words.append(ch_word)
-                elif len(word) >= 1 and flag in self.pos_filter['english'] and word.lower() not in en_stop_words:
+                elif len(word) >= 1 and flag in self.pos_filter["english"] and word.lower() not in en_stop_words:
                     words.append(word)
         return words
 
@@ -113,7 +113,7 @@ class MultiLingualTextRank:
         graph.add_nodes_from(unique_words)
         for (a, b), weight in edge_weights.items():
             if graph.has_edge(a, b):
-                graph[a][b]['weight'] += weight
+                graph[a][b]["weight"] += weight
             else:
                 graph.add_edge(a, b, weight=weight)
 
@@ -123,7 +123,7 @@ class MultiLingualTextRank:
         if not self.graph or self.graph.number_of_nodes() == 0:
             return {}
 
-        pagerank_scores = nx.pagerank(self.graph, alpha=0.85, weight='weight')
+        pagerank_scores = nx.pagerank(self.graph, alpha=0.85, weight="weight")
         max_score = max(pagerank_scores.values()) if pagerank_scores else 0
         if max_score > 0:
             pagerank_scores = {node: score / max_score for node, score in pagerank_scores.items()}

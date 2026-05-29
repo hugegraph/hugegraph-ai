@@ -82,7 +82,13 @@ def rag_http_api(
     async def _rag_delta_stream(req: RAGRequest, flow_key):
         """直接 yield ``(answer_type, token_delta)`` 元组；调用方需先在路由函数里
         校验 query 与 flow_key（错误必须在 StreamingResponse 启动前抛 HTTPException，
-        否则首字节后只能下发 ``event: error`` SSE 事件，HTTP status 已锁死 200）。"""
+        否则首字节后只能下发 ``event: error`` SSE 事件，HTTP status 已锁死 200）。
+
+        注意：必须把 RAGRequest 中的检索调参（``max_graph_items`` /
+        ``topk_return_results`` / ``vector_dis_threshold`` / ``topk_per_keyword``）
+        透传给 scheduler，否则 ``/rag`` 与 ``/rag/stream`` 在同一请求体上会出现
+        召回 / 排序语义不一致（详见 review）。
+        """
         graph_search = req.graph_only or req.graph_vector_answer
         vector_search = req.vector_only or req.graph_vector_answer
         scheduler = SchedulerSingleton.get_instance()
@@ -103,14 +109,21 @@ def rag_http_api(
             keywords_extract_prompt=req.keywords_extract_prompt or prompt.keywords_extract_prompt,
             gremlin_tmpl_num=req.gremlin_tmpl_num,
             gremlin_prompt=req.gremlin_prompt or prompt.gremlin_generate_prompt,
+            # 检索调参，必须与同步 /rag 路径保持一致。
+            max_graph_items=req.max_graph_items,
+            topk_return_results=req.topk_return_results,
+            vector_dis_threshold=req.vector_dis_threshold,
+            topk_per_keyword=req.topk_per_keyword,
         ):
             # operator 源头 yield (answer_type, token_delta)；post_deal_stream 透传，
             # 这里直接转发给 SSE adapter。
             if isinstance(item, tuple) and len(item) == 2:
                 yield item
-            elif isinstance(item, dict) and "error" in item:
-                # post_deal_stream 在 stream_generator 缺失时 yield {"error": ...}
-                raise RuntimeError(item["error"])
+            elif isinstance(item, dict):
+                # 控制 / 元数据通道：error / warning / metadata 等非 token 状态
+                # 直接透传给 adapter（``rag_stream_generator``）解释。post_deal_stream
+                # 在 stream_generator 缺失时 yield {"error": ...} 也走这条路径。
+                yield item
             else:
                 # 兼容兜底：忽略其他形态
                 log.warning("ignored unexpected stream item type=%s", type(item).__name__)

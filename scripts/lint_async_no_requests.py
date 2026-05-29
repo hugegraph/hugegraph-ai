@@ -44,11 +44,42 @@ EXEMPT_SUFFIXES = {
 
 
 class AsyncRequestsChecker(ast.NodeVisitor):
-    """Records every `requests.*` call that appears inside an async function."""
+    """Records every `requests.*` (or aliased) call inside an async function.
+
+    First pass over the module collects all import-level bindings that point at
+    the ``requests`` package — both module aliases (``import requests as req``)
+    and symbol-level imports (``from requests import get, post as p``). The
+    visit_Call path then resolves the call's root identifier against those
+    bindings, so aliased / star-imported entry points no longer slip past the
+    gate.
+    """
 
     def __init__(self) -> None:
         self.errors: list[tuple[int, str]] = []
         self._depth = 0
+        # Names bound to the requests module itself (via ``import requests`` /
+        # ``import requests as X``).
+        self._module_aliases: set[str] = set()
+        # Names bound to symbols pulled directly out of requests (via
+        # ``from requests import get`` / ``from requests import get as g``).
+        self._symbol_aliases: set[str] = set()
+
+    def collect_bindings(self, tree: ast.AST) -> None:
+        """Pre-scan: register every alias that ultimately refers to ``requests``."""
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "requests" or alias.name.startswith("requests."):
+                        self._module_aliases.add(alias.asname or alias.name.split(".")[0])
+            elif isinstance(node, ast.ImportFrom):
+                if node.module == "requests" or (node.module is not None and node.module.startswith("requests.")):
+                    for alias in node.names:
+                        # ``from requests import *`` exposes every public symbol;
+                        # we can't enumerate them here, so flag the import itself.
+                        if alias.name == "*":
+                            self.errors.append((node.lineno, "from requests import *"))
+                            continue
+                        self._symbol_aliases.add(alias.asname or alias.name)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self._depth += 1
@@ -62,7 +93,7 @@ class AsyncRequestsChecker(ast.NodeVisitor):
             root = node.func
             while isinstance(root, ast.Attribute):
                 root = root.value
-            if isinstance(root, ast.Name) and root.id == "requests":
+            if isinstance(root, ast.Name) and (root.id in self._module_aliases or root.id in self._symbol_aliases):
                 try:
                     snippet = ast.unparse(node.func)
                 except AttributeError:
@@ -85,6 +116,7 @@ def check_file(path: Path) -> list[tuple[Path, int, str]]:
         print(f"{path}: skipped (syntax error: {e})", file=sys.stderr)
         return []
     checker = AsyncRequestsChecker()
+    checker.collect_bindings(tree)
     checker.visit(tree)
     return [(path, ln, call) for ln, call in checker.errors]
 

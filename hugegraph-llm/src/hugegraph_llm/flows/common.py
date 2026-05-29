@@ -43,10 +43,16 @@ class BaseFlow(ABC):
         Post-processing interface.
         """
 
-    async def post_deal_stream(self, pipeline=None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def post_deal_stream(self, pipeline=None) -> AsyncGenerator[Any, None]:
         """
         Streaming post-processing interface.
         Subclasses can override this method as needed.
+
+        Stream item contract（V1，详见 ``api/chat_completion_adapter.py``
+        模块 docstring）：先把任何"非 token 状态"（warning / error / metadata）
+        以 dict 形式 yield 出来，再透传 LLM token tuple。这样下游 SSE adapter
+        与 Gradio ``accumulate`` wrapper 都能用同一套 contract 消费上游事件，
+        避免外部 reranker 失败之类的降级被静默吞掉（见 review）。
         """
         flow_name = self.__class__.__name__
         if pipeline is None:
@@ -54,6 +60,14 @@ class BaseFlow(ABC):
             return
         state_json = pipeline.getGParamWithNoEmpty("wkflow_state").to_json()
         log.info("%s post processing success", flow_name)
+
+        # 把非 token 控制 / 元数据先发出，避免 token 流启动后这些状态被埋没。
+        if state_json.get("switch_to_bleu"):
+            yield {
+                "warning": ("Online reranker fails, automatically switches to local bleu rerank."),
+                "switch_to_bleu": True,
+            }
+
         stream_flow = state_json.get("stream_generator")
         if stream_flow is None:
             yield {"error": "No stream_generator found in workflow state"}

@@ -96,9 +96,7 @@ def _make_chat_chunk(
         "object": "chat.completion.chunk",
         "created": int(time.time()),
         "model": model,
-        "choices": [
-            {"index": 0, "delta": delta, "finish_reason": finish_reason}
-        ],
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
     }
 
 
@@ -136,6 +134,10 @@ def _approx_prompt_tokens(messages: List[Dict[str, Any]]) -> int:
 
 
 def create_app(first_token_delay: float, per_token_delay: float, tokens: int) -> FastAPI:
+    # tokens=0 没有压测意义，且会让 stream/non-stream 两条路径在内容语义上分叉
+    # （流式仍发首字节，非流式返回空串），把它当作显式错误更干净。
+    if tokens < 1:
+        raise ValueError(f"tokens must be >= 1, got {tokens}")
     app = FastAPI(title="hugegraph-llm mock LLM server")
 
     @app.get("/v1/models")
@@ -159,7 +161,9 @@ def create_app(first_token_delay: float, per_token_delay: float, tokens: int) ->
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
 
         if not stream:
-            await asyncio.sleep(first_token_delay + per_token_delay * tokens)
+            # 与流式路径对齐：流式最后一个 token 在 first + per * (tokens - 1) 处发出，
+            # 非流式按相同总时长 sleep，避免给 sync 基线人为多算一个 token 周期。
+            await asyncio.sleep(first_token_delay + per_token_delay * (tokens - 1))
             content = _TOKEN_CHAR * tokens
             return JSONResponse(
                 _make_full_completion(
@@ -194,8 +198,9 @@ def create_app(first_token_delay: float, per_token_delay: float, tokens: int) ->
 
     @app.get("/healthz")
     async def healthz() -> JSONResponse:
-        return JSONResponse({"ok": True, "first_token_delay": first_token_delay,
-                             "per_token_delay": per_token_delay, "tokens": tokens})
+        return JSONResponse(
+            {"ok": True, "first_token_delay": first_token_delay, "per_token_delay": per_token_delay, "tokens": tokens}
+        )
 
     return app
 
@@ -222,7 +227,12 @@ def _parse_args() -> argparse.Namespace:
         default=int(os.getenv("MOCK_TOKENS", "100")),
         help="number of tokens (chunks) per response",
     )
-    return p.parse_args()
+    args = p.parse_args()
+    if args.tokens < 1:
+        p.error("--tokens must be >= 1 (0-token responses have no benchmark meaning)")
+    if args.first_token_delay < 0 or args.per_token_delay < 0:
+        p.error("--first-token-delay and --per-token-delay must be >= 0")
+    return args
 
 
 def main() -> None:

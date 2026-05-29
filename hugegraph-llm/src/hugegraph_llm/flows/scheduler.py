@@ -193,9 +193,16 @@ class Scheduler:
         线程池，保证事件循环不被独占。同步路径 :meth:`schedule_flow` 仍走同步
         ``pipeline.run()``，由 Gradio 等同步入口使用，互不影响。
 
-        修复 BUG：原实现在 ``manager.fetch() is None`` 分支中漏写 ``return``，
-        会让首次请求把 pipeline 跑两遍（一次走"新建分支"，一次走 try 块的"已存在
-        分支"），LLM token 流被复发两遍。本次随同方案 b 落地一并补上。
+        修复 BUG：
+          1. 原实现在 ``manager.fetch() is None`` 分支中漏写 ``return``，会让首次
+             请求把 pipeline 跑两遍（一次走"新建分支"，一次走 try 块的"已存在
+             分支"），LLM token 流被复发两遍 —— 本次随同方案 b 落地一并补上。
+          2. cold path（首次请求）原本只在 ``post_deal_stream`` 阶段加了
+             try/finally，``pipeline.init()`` / ``pipeline.run()`` 阶段如果被
+             ``asyncio.CancelledError`` 取消，刚 ``build_flow`` 创建出来的 pipeline
+             不会归还到 ``GPipelineManager``，造成池资源泄漏。本次把 cold path 的
+             try/finally 上移到 build_flow 之后，覆盖 init / run / post_deal_stream
+             的正常 / 异常 / 取消三条路径（详见 review 阻塞项）。
         """
         if flow_name not in self.pipeline_pool:
             raise ValueError(f"Unsupported workflow {flow_name}")
@@ -205,22 +212,23 @@ class Scheduler:
         if pipeline is None:
             # call coresponding flow_func to create new workflow
             pipeline = flow.build_flow(*args, **kwargs)
-            pipeline.getGParamWithNoEmpty("wkflow_input").stream = True
-            status = pipeline.init()
-            if status.isErr():
-                error_msg = f"Error in flow init: {status.getInfo()}"
-                log.error(error_msg)
-                raise RuntimeError(error_msg)
-            status = await asyncio.to_thread(pipeline.run)
-            if status.isErr():
-                manager.add(pipeline)
-                error_msg = f"Error in flow execution: {status.getInfo()}"
-                log.error(error_msg)
-                raise RuntimeError(error_msg)
             try:
+                pipeline.getGParamWithNoEmpty("wkflow_input").stream = True
+                status = pipeline.init()
+                if status.isErr():
+                    error_msg = f"Error in flow init: {status.getInfo()}"
+                    log.error(error_msg)
+                    raise RuntimeError(error_msg)
+                status = await asyncio.to_thread(pipeline.run)
+                if status.isErr():
+                    error_msg = f"Error in flow execution: {status.getInfo()}"
+                    log.error(error_msg)
+                    raise RuntimeError(error_msg)
                 async for res in flow.post_deal_stream(pipeline):
                     yield res
             finally:
+                # 无论成功 / 异常 / asyncio.CancelledError，都把 pipeline 归还到
+                # GPipelineManager，否则首次请求被取消时新建的 pipeline 永久泄漏。
                 manager.add(pipeline)
             return
         try:
