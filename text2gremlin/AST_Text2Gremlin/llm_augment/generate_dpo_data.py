@@ -41,12 +41,11 @@ import sys
 import time
 from datetime import datetime
 from glob import glob
-from typing import List, Optional
 
+from base.generator import check_gremlin_syntax
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
-from base.generator import check_gremlin_syntax
 from llm_augment.generalize_llm import get_llm_config, load_config
 
 
@@ -61,11 +60,11 @@ class DPOSampleAWithReject(BaseModel):
     """A 类：多任务组合的 LLM 输出（支持拒绝）"""
 
     reject: bool = Field(default=False, description="是否拒绝合成（命令冲突或无法合成）")
-    reject_reason: Optional[str] = Field(default=None, description="拒绝原因")
-    instruction: Optional[str] = Field(default=None, description="合成的自然语言任务描述")
-    chosen: Optional[DPOCandidate] = None
-    rejected: Optional[DPOCandidate] = None
-    preference_reason: Optional[List[str]] = None
+    reject_reason: str | None = Field(default=None, description="拒绝原因")
+    instruction: str | None = Field(default=None, description="合成的自然语言任务描述")
+    chosen: DPOCandidate | None = None
+    rejected: DPOCandidate | None = None
+    preference_reason: list[str] | None = None
 
 
 class DPOSampleA(BaseModel):
@@ -74,7 +73,7 @@ class DPOSampleA(BaseModel):
     instruction: str = Field(description="合成的自然语言任务描述")
     chosen: DPOCandidate
     rejected: DPOCandidate
-    preference_reason: List[str] = Field(description="偏好原因")
+    preference_reason: list[str] = Field(description="偏好原因")
 
 
 class DPOSampleB(BaseModel):
@@ -82,37 +81,37 @@ class DPOSampleB(BaseModel):
 
     chosen: DPOCandidate
     rejected: DPOCandidate
-    preference_reason: List[str] = Field(description="偏好原因")
+    preference_reason: list[str] = Field(description="偏好原因")
 
 
 class DPOSampleC(BaseModel):
     """C 类：复杂长链拆解的 LLM 输出"""
 
     chosen: DPOCandidate
-    preference_reason: List[str] = Field(description="偏好原因")
+    preference_reason: list[str] = Field(description="偏好原因")
 
 
 class DPOSampleCWithSkip(BaseModel):
     """C 类带跳过标识"""
 
     skip: bool = Field(description="是否跳过（该语句不适合改写为 groovy）")
-    chosen: Optional[DPOCandidate] = None
-    preference_reason: Optional[List[str]] = None
+    chosen: DPOCandidate | None = None
+    preference_reason: list[str] | None = None
 
 
-def load_pairs(input_path: str) -> List[dict]:
-    with open(input_path, "r", encoding="utf-8") as f:
+def load_pairs(input_path: str) -> list[dict]:
+    with open(input_path, encoding="utf-8") as f:
         data = json.load(f)
     return data.get("pairs", [])
 
 
-def find_latest_pairs(output_dir: str = "output") -> Optional[str]:
+def find_latest_pairs(output_dir: str = "output") -> str | None:
     pattern = os.path.join(output_dir, "text2gremlin_pairs_*.json")
     files = sorted(glob(pattern))
     return files[-1] if files else None
 
 
-def find_latest_migrated(output_dir: str = "output") -> Optional[str]:
+def find_latest_migrated(output_dir: str = "output") -> str | None:
     """查找最新的迁移数据文件"""
     pattern = os.path.join(output_dir, "migrated_*.json")
     files = sorted(glob(pattern))
@@ -121,7 +120,7 @@ def find_latest_migrated(output_dir: str = "output") -> Optional[str]:
 
 def load_migrated_data(migrated_path: str) -> dict:
     """加载迁移数据并按领域分组"""
-    with open(migrated_path, "r", encoding="utf-8") as f:
+    with open(migrated_path, encoding="utf-8") as f:
         data = json.load(f)
 
     migrations = data.get("migrations", [])
@@ -157,7 +156,7 @@ def count_gremlin_steps(gremlin: str) -> int:
     """粗略统计 gremlin 语句的步数（以 '.' 分隔的方法调用数）"""
     in_str = False
     dots = 0
-    for i, ch in enumerate(gremlin):
+    for _i, ch in enumerate(gremlin):
         if ch in ("'", '"'):
             in_str = not in_str
         elif ch == "." and not in_str:
@@ -165,7 +164,7 @@ def count_gremlin_steps(gremlin: str) -> int:
     return dots
 
 
-def classify_pairs(pairs: List[dict]) -> dict:
+def classify_pairs(pairs: list[dict]) -> dict:
     """将数据按步数分类。"""
     short, medium, long_ = [], [], []
     for p in pairs:
@@ -180,7 +179,7 @@ def classify_pairs(pairs: List[dict]) -> dict:
     return {"short": short, "medium": medium, "long": long_}
 
 
-def select_related_group(short_pairs: List[dict], n: int, check_duplicate_gremlin: bool = False) -> List[dict]:
+def select_related_group(short_pairs: list[dict], n: int, check_duplicate_gremlin: bool = False) -> list[dict]:
     """从短查询中选取 n 条相关的查询（同 label 或同操作类型优先）。
 
     Args:
@@ -237,7 +236,7 @@ def select_related_group(short_pairs: List[dict], n: int, check_duplicate_gremli
     return random.sample(short_pairs, min(n, len(short_pairs)))
 
 
-def build_prompt_type_a(selected_pairs: List[dict]) -> str:
+def build_prompt_type_a(selected_pairs: list[dict]) -> str:
     """A 类 prompt：多任务组合，合成 groovy 和纯 gremlin"""
     queries_text = ""
     for i, p in enumerate(selected_pairs, 1):
@@ -420,7 +419,7 @@ async def call_llm(
             if not content or not content.strip():
                 raise ValueError("LLM 返回内容为空")
             return content
-        except (APIConnectionError, APITimeoutError, RateLimitError) as e:
+        except (APIConnectionError, APITimeoutError, RateLimitError):
             if attempt < max_connection_retries - 1:
                 wait_time = 2 ** (attempt + 1)
                 await asyncio.sleep(wait_time)
@@ -438,7 +437,7 @@ def extract_json(content: str) -> dict:
     return json.loads(json_str.strip())
 
 
-def extract_gremlin_from_groovy(groovy_code: str) -> List[str]:
+def extract_gremlin_from_groovy(groovy_code: str) -> list[str]:
     """从 Groovy 代码中提取所有 g.V()/g.E()/g.addV() 等 Gremlin 语句"""
     import re
 
@@ -505,7 +504,7 @@ async def process_type_a(
     task: dict,
     semaphore: asyncio.Semaphore,
     llm_config: dict,
-) -> Optional[dict]:
+) -> dict | None:
     """处理 A 类任务：多任务组合"""
     max_retries = llm_config["max_retries"]
     domain = task.get("domain", "movie")
@@ -572,7 +571,7 @@ async def process_type_b(
     task: dict,
     semaphore: asyncio.Semaphore,
     llm_config: dict,
-) -> Optional[dict]:
+) -> dict | None:
     """处理 B 类任务：单任务，纯 gremlin 更好"""
     max_retries = llm_config["max_retries"]
     pair = task["pair"]
@@ -622,7 +621,7 @@ async def process_type_c(
     task: dict,
     semaphore: asyncio.Semaphore,
     llm_config: dict,
-) -> Optional[dict]:
+) -> dict | None:
     """处理 C 类任务：复杂长链拆解"""
     max_retries = llm_config["max_retries"]
     pair = task["pair"]
@@ -674,10 +673,10 @@ def prepare_tasks(
     classified: dict,
     num_a: int,
     num_b: int,
-    num_c: Optional[int] = None,
+    num_c: int | None = None,
     domain: str = "movie",
     check_duplicate_gremlin: bool = False,
-) -> List[dict]:
+) -> list[dict]:
     """准备所有任务。
 
     Args:
@@ -697,7 +696,7 @@ def prepare_tasks(
     medium_pairs = classified["medium"]
 
     # A 类：从 short 中选取相关组
-    for i in range(num_a):
+    for _i in range(num_a):
         n = random.randint(2, 5)
         group = select_related_group(short_pairs, n, check_duplicate_gremlin=check_duplicate_gremlin)
         if len(group) < 2:  # 至少需要 2 条才能组合
@@ -727,10 +726,7 @@ def prepare_tasks(
         )
 
     # C 类：从 long 中选取（如果指定了 num_c 则随机选取，否则全部）
-    if num_c is not None and num_c < len(long_pairs):
-        c_selected = random.sample(long_pairs, num_c)
-    else:
-        c_selected = long_pairs
+    c_selected = random.sample(long_pairs, num_c) if num_c is not None and num_c < len(long_pairs) else long_pairs
 
     for pair in c_selected:
         task_counter += 1
@@ -747,13 +743,13 @@ def prepare_tasks(
 
 
 async def run_pipeline(
-    tasks: List[dict],
+    tasks: list[dict],
     llm_config: dict,
     output_path: str,
     input_path: str,
     save_interval: int = 50,
-    migrated_path: str = None,
-) -> List[dict]:
+    migrated_path: str | None = None,
+) -> list[dict]:
     """流水线并发处理所有任务"""
     req_timeout = llm_config.get("timeout", 40)
     client = AsyncOpenAI(
@@ -824,7 +820,7 @@ async def run_pipeline(
             if len(results) - last_save >= save_interval and results:
                 _incremental_save(results, output_path, input_path, elapsed, migrated_path)
                 last_save = len(results)
-                print(f" [已保存]", end="", flush=True)
+                print(" [已保存]", end="", flush=True)
 
         # 补充新任务，保持 pending 队列有足够的任务
         if task_index < len(task_queue):
@@ -835,7 +831,7 @@ async def run_pipeline(
 
 
 def _incremental_save(
-    results: List[dict], output_path: str, input_path: str, elapsed: float, migrated_path: str = None
+    results: list[dict], output_path: str, input_path: str, elapsed: float, migrated_path: str | None = None
 ):
     # 分类：成功、拒绝、错误（拒绝的不保存到文件）
     success = [r for r in results if "_error" not in r and "_rejected" not in r]
@@ -872,7 +868,9 @@ def _incremental_save(
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
 
-def save_results(results: List[dict], output_path: str, input_path: str, elapsed: float, migrated_path: str = None):
+def save_results(
+    results: list[dict], output_path: str, input_path: str, elapsed: float, migrated_path: str | None = None
+):
     # 分类：成功、拒绝、错误（拒绝的不保存到文件）
     success = [r for r in results if "_error" not in r and "_rejected" not in r]
     rejected_count = sum(1 for r in results if "_rejected" in r)
@@ -965,7 +963,7 @@ def main():
                 )
 
                 actual_c = len(classified["long"]) if num_c is None else min(num_c, len(classified["long"]))
-                print(f"\n📊 Movie 领域数据分类:")
+                print("\n📊 Movie 领域数据分类:")
                 print(f"  短查询 (≤5步): {len(classified['short'])} 条 → A/B 类")
                 print(f"  中等查询 (6-8步): {len(classified['medium'])} 条 → B 类")
                 print(f"  长查询 (>8步): {len(classified['long'])} 条 → C 类")
@@ -976,7 +974,7 @@ def main():
             else:
                 print(f"⚠️ Movie 数据文件为空: {input_path}")
         else:
-            print(f"⚠️ 未找到 movie 领域数据文件")
+            print("⚠️ 未找到 movie 领域数据文件")
 
     # 处理 20 个迁移领域
     if not args.skip_migrated:
@@ -1019,7 +1017,7 @@ def main():
             else:
                 print(f"⚠️ 迁移数据文件为空: {migrated_path}")
         else:
-            print(f"⚠️ 未找到迁移数据文件")
+            print("⚠️ 未找到迁移数据文件")
 
     if not all_tasks:
         print("❌ 没有任务可执行")
@@ -1038,7 +1036,7 @@ def main():
     print("\n" + "=" * 60)
     print("🚀 DPO 偏好数据生成器")
     print("=" * 60)
-    print(f"\n📋 配置:")
+    print("\n📋 配置:")
     print(f"  Movie 数据: {input_path or '无'}")
     print(f"  迁移数据: {migrated_path or '无'}")
     print(f"  输出文件: {output_path}")
@@ -1046,7 +1044,7 @@ def main():
     print(f"  并发数: {llm_config['max_concurrency']}")
     print(f"  最大重试: {llm_config['max_retries']}")
     print(f"  保存间隔: 每 {llm_config['save_interval']} 条")
-    print(f"\n📊 任务分布:")
+    print("\n📊 任务分布:")
     print(f"  类型: {task_type_counts}")
     print(f"  领域: {len(domain_counts)} 个")
     print(f"  总计: {len(all_tasks)} 个任务")

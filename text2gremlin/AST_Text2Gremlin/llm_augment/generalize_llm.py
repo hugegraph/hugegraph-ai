@@ -41,11 +41,9 @@ import sys
 import time
 from datetime import datetime
 from glob import glob
-from typing import List, Optional
 
 from openai import AsyncOpenAI
 from pydantic import ValidationError, create_model
-
 
 # 4 种固定风格（每条必须生成）
 FIXED_STYLES = ["zh_formal", "zh_casual", "en_formal", "en_casual"]
@@ -78,15 +76,15 @@ STYLE_EXAMPLES = {
 }
 
 
-def create_translation_model(styles: List[str]):
+def create_translation_model(styles: list[str]):
     """动态创建 Pydantic 模型，字段名为实际风格名"""
-    fields = {style: (str, ...) for style in styles}
+    fields = dict.fromkeys(styles, (str, ...))
     return create_model("TranslationResult", **fields)
 
 
 def load_config(config_path: str = "config.json") -> dict:
     """加载配置文件"""
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -143,26 +141,26 @@ def get_llm_config(config: dict) -> dict:
     }
 
 
-def find_latest_corpus(output_dir: str = "output") -> Optional[str]:
+def find_latest_corpus(output_dir: str = "output") -> str | None:
     """找到 output 目录下最新的泛化结果文件"""
     pattern = os.path.join(output_dir, "generated_corpus_*.json")
     files = sorted(glob(pattern))
     return files[-1] if files else None
 
 
-def load_corpus(input_path: str) -> List[dict]:
+def load_corpus(input_path: str) -> list[dict]:
     """加载泛化结果文件，返回 corpus 列表"""
-    with open(input_path, "r", encoding="utf-8") as f:
+    with open(input_path, encoding="utf-8") as f:
         data = json.load(f)
     return data.get("corpus", [])
 
 
-def pick_random_styles(n: int = 2) -> List[str]:
+def pick_random_styles(n: int = 2) -> list[str]:
     """从可选风格中随机选取 n 种"""
     return random.sample(OPTIONAL_STYLES, n)
 
 
-def build_translation_prompt(item: dict, all_styles: List[str]) -> str:
+def build_translation_prompt(item: dict, all_styles: list[str]) -> str:
     """
     构建单条翻译 prompt。
 
@@ -288,7 +286,7 @@ async def translate_one(
                 return _fallback_result(item, all_styles, error=f"翻译异常: {e}")
 
 
-def _fallback_result(item: dict, all_styles: List[str], error: str = None) -> dict:
+def _fallback_result(item: dict, all_styles: list[str], error: str | None = None) -> dict:
     """生成兜底结果（翻译失败时用描述填充）"""
     desc = item["description"]
     result = {
@@ -302,12 +300,12 @@ def _fallback_result(item: dict, all_styles: List[str], error: str = None) -> di
 
 
 async def translate_all(
-    corpus: List[dict],
+    corpus: list[dict],
     llm_config: dict,
     output_path: str,
     input_path: str,
     save_interval: int = 50,
-) -> List[dict]:
+) -> list[dict]:
     """
     流水线并发翻译所有语料，支持增量保存。
     """
@@ -327,7 +325,7 @@ async def translate_all(
     print(f"  共 {len(corpus)} 条，流水线并发")
     print(f"  并发数: {llm_config['max_concurrency']}")
     print(f"  每 {save_interval} 条保存一次")
-    print(f"  每条生成 6 种风格翻译 (4固定 + 2随机)")
+    print("  每条生成 6 种风格翻译 (4固定 + 2随机)")
 
     # 创建所有任务
     tasks = {
@@ -356,7 +354,7 @@ async def translate_all(
     return results
 
 
-def _incremental_save(results: List[dict], output_path: str, input_path: str, elapsed: float):
+def _incremental_save(results: list[dict], output_path: str, input_path: str, elapsed: float):
     """增量保存当前结果"""
     success_count = sum(1 for r in results if "_error" not in r)
 
@@ -388,7 +386,7 @@ def _incremental_save(results: List[dict], output_path: str, input_path: str, el
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
 
-def save_results(results: List[dict], output_path: str, input_path: str, elapsed: float):
+def save_results(results: list[dict], output_path: str, input_path: str, elapsed: float):
     """保存最终翻译结果"""
     success_count = sum(1 for r in results if "_error" not in r)
     total_translations = sum(len(r["translations"]) for r in results)
@@ -463,12 +461,12 @@ def main():
     print("=" * 60)
     print("🚀 Gremlin LLM 多风格翻译器")
     print("=" * 60)
-    print(f"\n📋 配置:")
+    print("\n📋 配置:")
     print(f"  输入文件: {input_path}")
     print(f"  输出文件: {output_path}")
     print(f"  模型: {llm_config['model']}")
     print(f"  并发数: {llm_config['max_concurrency']}")
-    print(f"  每条翻译数: 6 (4固定 + 2随机)")
+    print("  每条翻译数: 6 (4固定 + 2随机)")
     print(f"  最大重试: {llm_config['max_retries']}")
     print(f"  保存间隔: 每 {llm_config['save_interval']} 条")
     print(f"\n  语料条数: {len(corpus)}")
@@ -502,7 +500,7 @@ def main():
     print(f"  成功: {success_count}，失败: {fail_count}")
     print(f"  生成翻译总数: {total_translations}")
     print(f"  吞吐量: {len(results) / elapsed:.2f} 条/秒")
-    print(f"\n📊 风格分布:")
+    print("\n📊 风格分布:")
     for style, count in sorted(style_counts.items(), key=lambda x: -x[1]):
         label = STYLE_DESCRIPTIONS.get(style, style).split("：")[0]
         print(f"  {label}: {count}")

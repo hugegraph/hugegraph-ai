@@ -22,18 +22,15 @@ Gremlin查询AST访问器模块。
 基于ANTLR访问器模式，将Gremlin查询字符串解析为结构化的配方对象。
 """
 
-import re
 from antlr4 import *
-from antlr4.InputStream import InputStream
 from antlr4.CommonTokenStream import CommonTokenStream
-from antlr4.tree.Tree import TerminalNode
+from antlr4.InputStream import InputStream
 
 from .gremlin.GremlinLexer import GremlinLexer
 from .gremlin.GremlinParser import GremlinParser
 from .gremlin.GremlinVisitor import GremlinVisitor
-
-from .GremlinParse import Traversal, Step
-from .GremlinExpr import Predicate, TextPredicate, AnonymousTraversal, Connector, Terminal
+from .GremlinExpr import AnonymousTraversal, Predicate, Terminal, TextPredicate
+from .GremlinParse import Step, Traversal
 
 
 class GremlinTransVisitor(GremlinVisitor):
@@ -1312,9 +1309,9 @@ class GremlinTransVisitor(GremlinVisitor):
             if hasattr(child, "getRuleIndex") and "StringLiteral" in type(child).__name__:
                 string_val = child.getText()
                 # 移除引号
-                if string_val.startswith('"') and string_val.endswith('"'):
-                    string_val = string_val[1:-1]
-                elif string_val.startswith("'") and string_val.endswith("'"):
+                if (string_val.startswith('"') and string_val.endswith('"')) or (
+                    string_val.startswith("'") and string_val.endswith("'")
+                ):
                     string_val = string_val[1:-1]
                 params.append(string_val)
                 break
@@ -1973,9 +1970,9 @@ class GremlinTransVisitor(GremlinVisitor):
             if hasattr(child, "getRuleIndex") and "StringLiteral" in type(child).__name__:
                 string_val = child.getText()
                 # 移除引号
-                if string_val.startswith('"') and string_val.endswith('"'):
-                    string_val = string_val[1:-1]
-                elif string_val.startswith("'") and string_val.endswith("'"):
+                if (string_val.startswith('"') and string_val.endswith('"')) or (
+                    string_val.startswith("'") and string_val.endswith("'")
+                ):
                     string_val = string_val[1:-1]
                 params.append(string_val)
                 break
@@ -1990,18 +1987,18 @@ class GremlinTransVisitor(GremlinVisitor):
                 if "StringLiteral" in type(child).__name__:
                     string_val = child.getText()
                     # 移除引号
-                    if string_val.startswith('"') and string_val.endswith('"'):
-                        string_val = string_val[1:-1]
-                    elif string_val.startswith("'") and string_val.endswith("'"):
+                    if (string_val.startswith('"') and string_val.endswith('"')) or (
+                        string_val.startswith("'") and string_val.endswith("'")
+                    ):
                         string_val = string_val[1:-1]
                     params.append(string_val)
                 elif "GenericArgument" in type(child).__name__:
                     # 处理GenericArgument，可能包含字符串或数字
                     arg_text = child.getText()
                     # 如果是字符串，移除引号
-                    if arg_text.startswith('"') and arg_text.endswith('"'):
-                        arg_text = arg_text[1:-1]
-                    elif arg_text.startswith("'") and arg_text.endswith("'"):
+                    if (arg_text.startswith('"') and arg_text.endswith('"')) or (
+                        arg_text.startswith("'") and arg_text.endswith("'")
+                    ):
                         arg_text = arg_text[1:-1]
                     params.append(arg_text)
         self.traversal.add_step(Step("with", params))

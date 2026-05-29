@@ -16,18 +16,17 @@
 # under the License.
 
 
+import json
 import os
 import random
 import string
-import json
-from typing import List, Dict, Any, Tuple, Set, Optional
+from typing import Any
 
-from .Schema import Schema
-from .GremlinParse import Traversal, Step
-from .GremlinExpr import Predicate
-from .GremlinBase import GremlinBase
-from .Config import Config
 from .CombinationController import CombinationController
+from .GremlinBase import GremlinBase
+from .GremlinExpr import Predicate
+from .GremlinParse import Step, Traversal
+from .Schema import Schema
 
 
 class TraversalGenerator:
@@ -231,7 +230,7 @@ class TraversalGenerator:
         schema: Schema,
         recipe: Traversal,
         gremlin_base: GremlinBase,
-        controller: Optional[CombinationController] = None,
+        controller: CombinationController | None = None,
     ):
         """
         初始化生成器
@@ -245,7 +244,7 @@ class TraversalGenerator:
         self.schema = schema
         self.recipe = recipe
         self.gremlin_base = gremlin_base
-        self.generated_pairs: Set[Tuple[str, str]] = set()
+        self.generated_pairs: set[tuple[str, str]] = set()
 
         # 集成组合控制器
         if controller is None:
@@ -258,14 +257,14 @@ class TraversalGenerator:
                 config_loaded = False
                 for config_path in possible_paths:
                     if os.path.exists(config_path):
-                        with open(config_path, "r", encoding="utf-8") as f:
+                        with open(config_path, encoding="utf-8") as f:
                             config = json.load(f)
                         self.controller = CombinationController(config)
                         config_loaded = True
                         break
 
                 if not config_loaded:
-                    print(f"⚠️  未找到CombinationController配置文件")
+                    print("⚠️  未找到CombinationController配置文件")
                     self.controller = None
 
             except (FileNotFoundError, json.JSONDecodeError) as e:
@@ -275,12 +274,12 @@ class TraversalGenerator:
             self.controller = controller
 
         # 随机增强计数器（跟踪每个查询路径的增强次数）
-        self.enhancement_counts: Dict[str, int] = {}
+        self.enhancement_counts: dict[str, int] = {}
 
         # 配方路径完成标记
         self.recipe_path_completed = False
 
-    def generate(self) -> List[Tuple[str, str]]:
+    def generate(self) -> list[tuple[str, str]]:
         """
         主生成函数，启动递归生成过程
 
@@ -333,7 +332,7 @@ class TraversalGenerator:
         return results
 
     def _recursive_generate(
-        self, recipe_steps: List[Step], current_query: str, current_desc: str, current_label: str, current_type: str
+        self, recipe_steps: list[Step], current_query: str, current_desc: str, current_label: str, current_type: str
     ):
         """
         核心递归生成函数 - 深度优先搜索 + 回溯
@@ -411,8 +410,8 @@ class TraversalGenerator:
     # 步骤选项生成（分发器）
 
     def _get_valid_options_for_step(
-        self, step_recipe: Step, current_label: str, current_type: str, remaining_steps: List[Step] = None
-    ) -> List[Dict]:
+        self, step_recipe: Step, current_label: str, current_type: str, remaining_steps: list[Step] | None = None
+    ) -> list[dict]:
         """
         根据步骤类型分发到对应的处理器
 
@@ -485,7 +484,7 @@ class TraversalGenerator:
 
     #   A. 简单步骤处理器
 
-    def _handle_simple_step(self, step_name: str, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_simple_step(self, step_name: str, current_label: str, current_type: str) -> list[dict]:
         """
         处理简单步骤（无参数）
 
@@ -518,7 +517,7 @@ class TraversalGenerator:
 
     #   F. 转换步骤处理器
 
-    def _handle_transform_step(self, step_recipe: Step, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_transform_step(self, step_recipe: Step, current_label: str, current_type: str) -> list[dict]:
         """
         处理转换步骤（order, dedup等）
 
@@ -719,7 +718,7 @@ class TraversalGenerator:
 
     #   G. 聚合步骤处理器
 
-    def _handle_aggregate_step(self, step_recipe: Step, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_aggregate_step(self, step_recipe: Step, current_label: str, current_type: str) -> list[dict]:
         """
         处理聚合步骤（group, sum等）
 
@@ -766,7 +765,7 @@ class TraversalGenerator:
 
     #   G2. 副作用步骤处理器
 
-    def _handle_side_effect_step(self, step_recipe: Step, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_side_effect_step(self, step_recipe: Step, current_label: str, current_type: str) -> list[dict]:
         """
         处理副作用步骤（aggregate, store, sideEffect等）
 
@@ -867,7 +866,7 @@ class TraversalGenerator:
 
     #   H. 终端步骤处理器
 
-    def _handle_terminal_step(self, step_recipe: Step, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_terminal_step(self, step_recipe: Step, current_label: str, current_type: str) -> list[dict]:
         """
         处理终端步骤（toList, next等）
 
@@ -919,8 +918,8 @@ class TraversalGenerator:
     #   C. 数值参数步骤处理器
 
     def _handle_numeric_param_step(
-        self, step_name: str, params: List, current_label: str, current_type: str
-    ) -> List[Dict]:
+        self, step_name: str, params: list, current_label: str, current_type: str
+    ) -> list[dict]:
         """
         处理数值参数步骤（limit, skip等）
 
@@ -961,7 +960,7 @@ class TraversalGenerator:
 
     #   K. 图算法步骤处理器
 
-    def _handle_graph_algorithm_step(self, step_name: str, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_graph_algorithm_step(self, step_name: str, current_label: str, current_type: str) -> list[dict]:
         """
         处理图算法步骤（pageRank, connectedComponent等）
 
@@ -989,7 +988,7 @@ class TraversalGenerator:
 
     #   L. 工具步骤处理器
 
-    def _handle_utility_step(self, step_recipe: Step, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_utility_step(self, step_recipe: Step, current_label: str, current_type: str) -> list[dict]:
         """
         处理工具步骤（math, subgraph, timeLimit, inject, call, io等）
 
@@ -1073,10 +1072,7 @@ class TraversalGenerator:
 
         # call, io - 需要字符串参数
         elif step_info.get("needs_string"):
-            if step_params:
-                value = step_params[0]
-            else:
-                value = "service" if step_name == "call" else "file.json"
+            value = step_params[0] if step_params else "service" if step_name == "call" else "file.json"
             return [
                 {
                     "query_part": f".{step_name}('{value}')",
@@ -1098,7 +1094,7 @@ class TraversalGenerator:
 
     #   M. 边修改步骤处理器
 
-    def _handle_edge_modification_step(self, step_recipe: Step, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_edge_modification_step(self, step_recipe: Step, current_label: str, current_type: str) -> list[dict]:
         """
         处理边修改步骤（from, to）
 
@@ -1172,7 +1168,7 @@ class TraversalGenerator:
 
     #   B. 属性访问步骤处理器
 
-    def _handle_property_access_step(self, step_recipe: Step, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_property_access_step(self, step_recipe: Step, current_label: str, current_type: str) -> list[dict]:
         """
         处理属性访问步骤（values, properties, valueMap等）
 
@@ -1244,10 +1240,7 @@ class TraversalGenerator:
                         step_desc = self.gremlin_base.get_token_desc(f"{step_name}_with_key")
                         if not step_desc or step_desc == f"{step_name}_with_key":
                             step_desc = self.gremlin_base.get_token_desc(step_name)
-                        if "{}" in step_desc:
-                            step_desc = step_desc.format(prop_desc)
-                        else:
-                            step_desc = f"{step_desc}：{prop_desc}"
+                        step_desc = step_desc.format(prop_desc) if "{}" in step_desc else f"{step_desc}：{prop_desc}"
                         options.append(
                             {
                                 "query_part": f'.{step_name}("{prop_name}")',
@@ -1268,10 +1261,7 @@ class TraversalGenerator:
                         step_desc = self.gremlin_base.get_token_desc(f"{step_name}_with_key")
                         if not step_desc or step_desc == f"{step_name}_with_key":
                             step_desc = self.gremlin_base.get_token_desc(step_name)
-                        if "{}" in step_desc:
-                            step_desc = step_desc.format(props_desc)
-                        else:
-                            step_desc = f"{step_desc}：{props_desc}"
+                        step_desc = step_desc.format(props_desc) if "{}" in step_desc else f"{step_desc}：{props_desc}"
                         options.append(
                             {
                                 "query_part": f'.{step_name}("{props_str}")',
@@ -1289,10 +1279,7 @@ class TraversalGenerator:
                         step_desc = self.gremlin_base.get_token_desc(f"{step_name}_with_key")
                         if not step_desc or step_desc == f"{step_name}_with_key":
                             step_desc = self.gremlin_base.get_token_desc(step_name)
-                        if "{}" in step_desc:
-                            step_desc = step_desc.format(prop_desc)
-                        else:
-                            step_desc = f"{step_desc}：{prop_desc}"
+                        step_desc = step_desc.format(prop_desc) if "{}" in step_desc else f"{step_desc}：{prop_desc}"
                         options.append(
                             {
                                 "query_part": f'.{step_name}("{prop_name}")',
@@ -1307,10 +1294,7 @@ class TraversalGenerator:
                     step_desc = self.gremlin_base.get_token_desc(f"{step_name}_with_key")
                     if not step_desc or step_desc == f"{step_name}_with_key":
                         step_desc = self.gremlin_base.get_token_desc(step_name)
-                    if "{}" in step_desc:
-                        step_desc = step_desc.format(props_desc)
-                    else:
-                        step_desc = f"{step_desc}：{props_desc}"
+                    step_desc = step_desc.format(props_desc) if "{}" in step_desc else f"{step_desc}：{props_desc}"
                     options.append(
                         {
                             "query_part": f'.{step_name}("{props_str}")',
@@ -1352,10 +1336,7 @@ class TraversalGenerator:
                         if not step_desc or step_desc == f"{step_name}_with_key":
                             step_desc = self.gremlin_base.get_token_desc(step_name)
                         # 替换占位符
-                        if "{}" in step_desc:
-                            step_desc = step_desc.format(prop_desc)
-                        else:
-                            step_desc = f"{step_desc}：{prop_desc}"
+                        step_desc = step_desc.format(prop_desc) if "{}" in step_desc else f"{step_desc}：{prop_desc}"
                         options.append(
                             {
                                 "query_part": f'.{step_name}("{prop_name}")',
@@ -1414,7 +1395,7 @@ class TraversalGenerator:
 
             if has_nested:
                 # 步骤包含嵌套遍历，递归处理
-                for param_idx, param in enumerate(step.params):
+                for _param_idx, param in enumerate(step.params):
                     if isinstance(param, AnonymousTraversal):
                         # 递归生成嵌套的变体
                         nested_variants = self._generate_nested_traversal_variants(param, current_depth + 1)
@@ -1470,7 +1451,7 @@ class TraversalGenerator:
         Returns:
             中文描述字符串
         """
-        from .GremlinExpr import AnonymousTraversal, Predicate
+        from .GremlinExpr import AnonymousTraversal
 
         if not anonymous_trav or not anonymous_trav.steps:
             return "执行附加操作"
@@ -1795,7 +1776,7 @@ class TraversalGenerator:
                 param_str = self._format_param(step_params[0])
                 variants.append(f"has({param_str})")
             else:
-                variants.append(f"has(...)")
+                variants.append("has(...)")
 
         elif step_name in ["hasKey", "hasValue"]:
             # hasKey/hasValue: 保留原样（数据值，不泛化）
@@ -1829,7 +1810,6 @@ class TraversalGenerator:
 
     def _format_param(self, param):
         """格式化参数为字符串"""
-        from .GremlinExpr import Predicate
 
         if isinstance(param, str):
             return f"'{param}'"
@@ -1843,8 +1823,8 @@ class TraversalGenerator:
     #   E. 过滤步骤处理器
 
     def _handle_filter_step(
-        self, step_recipe: Step, current_label: str, current_type: str, remaining_steps: List[Step]
-    ) -> List[Dict]:
+        self, step_recipe: Step, current_label: str, current_type: str, remaining_steps: list[Step]
+    ) -> list[dict]:
         """
         处理过滤步骤（hasLabel, has等）
 
@@ -2008,7 +1988,7 @@ class TraversalGenerator:
                             for value in selected_values:
                                 options.append(
                                     {
-                                        "query_part": f".has('{prop_name}', {repr(value)})",
+                                        "query_part": f".has('{prop_name}', {value!r})",
                                         "desc_part": f"，其'{prop_desc}'为'{value}'",
                                         "new_label": current_label,
                                         "new_type": current_type,
@@ -2099,7 +2079,7 @@ class TraversalGenerator:
                             for value in selected_values:
                                 options.append(
                                     {
-                                        "query_part": f".has('{recipe_prop}', {repr(value)})",
+                                        "query_part": f".has('{recipe_prop}', {value!r})",
                                         "desc_part": f"，其'{prop_desc}'为'{value}'",
                                         "new_label": label,
                                         "new_type": current_type,
@@ -2169,9 +2149,10 @@ class TraversalGenerator:
                     recipe_id = recipe_ids[0]
                     strategy = self.controller.config["property_generalization"][chain_category]
                     max_ids = strategy.get("additional_random_max", 3)
-                    selected_ids = [recipe_id] + random.sample(
-                        [i for i in all_ids if i != recipe_id], min(max_ids, len(all_ids) - 1)
-                    )
+                    selected_ids = [
+                        recipe_id,
+                        *random.sample([i for i in all_ids if i != recipe_id], min(max_ids, len(all_ids) - 1)),
+                    ]
 
                     for id_val in selected_ids:
                         options.append(
@@ -2264,8 +2245,8 @@ class TraversalGenerator:
             for value in selected_values:
                 options.append(
                     {
-                        "query_part": f".is({repr(value)})",
-                        "desc_part": f"，判断值是否为{repr(value)}",
+                        "query_part": f".is({value!r})",
+                        "desc_part": f"，判断值是否为{value!r}",
                         "new_label": current_label,
                         "new_type": current_type,
                     }
@@ -2374,8 +2355,8 @@ class TraversalGenerator:
             for value in selected_values:
                 options.append(
                     {
-                        "query_part": f".hasValue({repr(value)})",
-                        "desc_part": f"，筛选包含值{repr(value)}的属性",
+                        "query_part": f".hasValue({value!r})",
+                        "desc_part": f"，筛选包含值{value!r}的属性",
                         "new_label": current_label,
                         "new_type": current_type,
                     }
@@ -2451,7 +2432,7 @@ class TraversalGenerator:
                 # 其他情况：保留原结构
                 options.append(
                     {
-                        "query_part": f".where(...)",
+                        "query_part": ".where(...)",
                         "desc_part": "，条件过滤",
                         "new_label": current_label,
                         "new_type": current_type,
@@ -2490,7 +2471,7 @@ class TraversalGenerator:
                 # 其他类型的参数：保留原结构
                 options.append(
                     {
-                        "query_part": f".not(...)",
+                        "query_part": ".not(...)",
                         "desc_part": "，否定过滤",
                         "new_label": current_label,
                         "new_type": current_type,
@@ -2523,7 +2504,7 @@ class TraversalGenerator:
             else:
                 options.append(
                     {
-                        "query_part": f".filter(...)",
+                        "query_part": ".filter(...)",
                         "desc_part": "，通用过滤",
                         "new_label": current_label,
                         "new_type": current_type,
@@ -2557,7 +2538,7 @@ class TraversalGenerator:
             else:
                 options.append(
                     {
-                        "query_part": f".and(...)",
+                        "query_part": ".and(...)",
                         "desc_part": "，逻辑与过滤",
                         "new_label": current_label,
                         "new_type": current_type,
@@ -2591,7 +2572,7 @@ class TraversalGenerator:
             else:
                 options.append(
                     {
-                        "query_part": f".or(...)",
+                        "query_part": ".or(...)",
                         "desc_part": "，逻辑或过滤",
                         "new_label": current_label,
                         "new_type": current_type,
@@ -2622,7 +2603,7 @@ class TraversalGenerator:
 
     #   D. 导航步骤处理器
 
-    def _handle_navigation_step(self, step_recipe: Step, current_label: str, current_type: str) -> List[Dict]:
+    def _handle_navigation_step(self, step_recipe: Step, current_label: str, current_type: str) -> list[dict]:
         """
         处理导航步骤（out, in, both, outE, inE, bothE等）
 
@@ -2720,7 +2701,7 @@ class TraversalGenerator:
             return options
 
         # 提取边标签
-        edge_labels = list(set([edge["label"] for edge in all_edges]))
+        edge_labels = list({edge["label"] for edge in all_edges})
 
         # 如果配方指定了边标签
         if step_params and step_params[0]:
@@ -2823,8 +2804,8 @@ class TraversalGenerator:
     #   J. 特殊步骤处理器
 
     def _handle_special_step(
-        self, step_recipe: Step, current_label: str, current_type: str, remaining_steps: List[Step]
-    ) -> List[Dict]:
+        self, step_recipe: Step, current_label: str, current_type: str, remaining_steps: list[Step]
+    ) -> list[dict]:
         """
         处理特殊步骤
 
@@ -2889,7 +2870,7 @@ class TraversalGenerator:
                 )
                 if prop_info:
                     prop_value = self._get_random_value(label, prop_info, for_update=True)
-                    query_part += f".property('{prop_name}', {repr(prop_value)})"
+                    query_part += f".property('{prop_name}', {prop_value!r})"
                     desc_part += f"，并设置其'{self.gremlin_base.get_schema_desc(prop_name)}'为'{prop_value}'"
 
             return [{"query_part": query_part, "desc_part": desc_part, "new_label": label, "new_type": "vertex"}]
@@ -3124,7 +3105,7 @@ class TraversalGenerator:
             return [
                 {
                     "query_part": f".project('{keys_str}')",
-                    "desc_part": f"投影字段",
+                    "desc_part": "投影字段",
                     "new_label": None,
                     "new_type": "map",
                 }
@@ -3566,7 +3547,7 @@ class TraversalGenerator:
 
     def _apply_random_enhancement(
         self, query: str, desc: str, current_label: str, current_type: str
-    ) -> List[Tuple[str, str]]:
+    ) -> list[tuple[str, str]]:
         """
         应用随机增强（可选功能）
 
@@ -3651,10 +3632,7 @@ class TraversalGenerator:
             # sample - 30% 权重
             if random.random() < 0.3:
                 # 80% 使用常见值，20% 使用随机值
-                if random.random() < 0.8:
-                    sample_value = random.choice([1, 2, 3, 5, 10])
-                else:
-                    sample_value = random.randint(1, 50)
+                sample_value = random.choice([1, 2, 3, 5, 10]) if random.random() < 0.8 else random.randint(1, 50)
 
                 sample_desc = self.gremlin_base.get_token_desc("sample")
                 if "{}" in sample_desc:
@@ -3689,10 +3667,7 @@ class TraversalGenerator:
             # limit - 40% 权重
             if random.random() < 0.4:
                 # 70% 使用常见值，30% 使用随机值
-                if random.random() < 0.7:
-                    limit_value = random.choice([1, 3, 5, 10, 20, 50])
-                else:
-                    limit_value = random.randint(1, 100)
+                limit_value = random.choice([1, 3, 5, 10, 20, 50]) if random.random() < 0.7 else random.randint(1, 100)
 
                 limit_desc = self.gremlin_base.get_token_desc("limit")
                 if "{}" in limit_desc:
@@ -3731,7 +3706,7 @@ class TraversalGenerator:
 
     #   辅助方法
 
-    def _get_random_value(self, label: str, prop_info: Dict, for_update: bool = False) -> Any:
+    def _get_random_value(self, label: str, prop_info: dict, for_update: bool = False) -> Any:
         """根据属性类型生成随机值"""
         prop_name, prop_type = prop_info["name"], prop_info["type"]
         instance = self.schema.get_instance(label)
@@ -3748,7 +3723,7 @@ class TraversalGenerator:
 
         return "default_value"
 
-    def _get_multiple_values(self, label: str, prop_info: Dict, for_update: bool = False) -> List[Any]:
+    def _get_multiple_values(self, label: str, prop_info: dict, for_update: bool = False) -> list[Any]:
         """获取多个真实数据值"""
         prop_name, prop_type = prop_info["name"], prop_info["type"]
         instances = self.schema.get_instances(label)

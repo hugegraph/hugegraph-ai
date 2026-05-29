@@ -22,22 +22,20 @@ Gremlin语料库生成器主入口脚本。
 从Gremlin查询模板生成大量多样化的查询-描述对，用于Text-to-Gremlin任务的训练数据。
 """
 
-import os
 import json
+import os
 from datetime import datetime
-from antlr4 import InputStream, CommonTokenStream
+
+from antlr4 import CommonTokenStream, InputStream
 from antlr4.error.ErrorListener import ErrorListener
 
 from .Config import Config
-from .Schema import Schema
-from .GremlinBase import GremlinBase
-from .GremlinParse import Traversal
-from .TraversalGenerator import TraversalGenerator
-from .GremlinTransVisitor import GremlinTransVisitor
-
 from .gremlin.GremlinLexer import GremlinLexer
 from .gremlin.GremlinParser import GremlinParser
-import random
+from .GremlinBase import GremlinBase
+from .GremlinTransVisitor import GremlinTransVisitor
+from .Schema import Schema
+from .TraversalGenerator import TraversalGenerator
 
 
 class SyntaxErrorListener(ErrorListener):
@@ -90,7 +88,7 @@ def check_gremlin_syntax(query_string: str) -> tuple[bool, str]:
             return (True, "Syntax OK")
 
     except Exception as e:
-        return (False, f"Parser Exception: {str(e)}")
+        return (False, f"Parser Exception: {e!s}")
 
 
 def generate_corpus_from_template(
@@ -159,7 +157,7 @@ def generate_corpus_from_template(
                     continue
 
                 # 再进行语法检查
-                is_valid, error_msg = check_gremlin_syntax(query)
+                is_valid, _error_msg = check_gremlin_syntax(query)
 
                 if not is_valid:
                     syntax_error_count += 1
@@ -169,7 +167,7 @@ def generate_corpus_from_template(
                 global_corpus_dict[query] = description
                 new_pairs_count += 1
 
-            except Exception as e:
+            except Exception:
                 syntax_error_count += 1
                 continue
 
@@ -195,7 +193,7 @@ def generate_corpus_from_template(
 
 
 def generate_gremlin_corpus(
-    templates: list[str], config_path: str, schema_path: str, data_path: str, output_file: str = None
+    templates: list[str], config_path: str, schema_path: str, data_path: str, output_file: str | None = None
 ) -> dict:
     """
     从Gremlin模板列表生成完整的语料库。
@@ -232,7 +230,7 @@ def generate_gremlin_corpus(
         import csv
 
         template_list = []
-        with open(templates, "r", encoding="utf-8") as f:
+        with open(templates, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if "gremlin_query" in row:
@@ -317,11 +315,11 @@ def generate_gremlin_corpus(
                     "error_message": str(e),
                 }
             )
-            print(f"[{i}/{len(templates)}] ❌ 意外错误: {str(e)}")
+            print(f"[{i}/{len(templates)}] ❌ 意外错误: {e!s}")
             continue  # 继续处理下一个模板
 
     # 转换为列表格式以便后续处理
-    full_corpus = [(query, desc) for query, desc in global_corpus_dict.items()]
+    full_corpus = list(global_corpus_dict.items())
 
     # --- Save the full corpus to a local file (if output_file is provided) ---
     if output_file:
@@ -407,7 +405,7 @@ def _generate_statistics(templates: list, full_corpus: list, output_file: str) -
 def _display_final_results(full_corpus: list, stats: dict):
     """显示最终生成结果和统计信息"""
     print(f"\n{'=' * 50}")
-    print(f"📊 生成完成统计")
+    print("📊 生成完成统计")
     print(f"{'=' * 50}")
     print(f"处理的模板数量: {stats.get('total_templates', 0)}")
     print(f"成功处理: {stats.get('successful_templates', 0)}")
@@ -417,7 +415,7 @@ def _display_final_results(full_corpus: list, stats: dict):
     if "output_file" in stats:
         print(f"语料库已保存到: {stats['output_file']}")
     else:
-        print(f"语料库未保存到文件（仅返回结果）")
+        print("语料库未保存到文件（仅返回结果）")
 
     # 按查询长度分类统计
     print(f"\n{'=' * 50}")

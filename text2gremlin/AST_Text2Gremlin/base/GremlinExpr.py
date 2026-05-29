@@ -22,11 +22,12 @@ Gremlin复杂表达式定义模块。
 定义谓词、匿名遍历、连接器等复杂Gremlin表达式的数据结构。
 """
 
-from typing import Any, List
+from __future__ import annotations
 
-# 由于 AnonymousTraversal 包含 Step 对象，而 Step 将在 GremlinParse 中定义，
-# 而 GremlinParse 又导入了本文件，因此使用前向声明避免循环导入问题。
-"Step"
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from GremlinParse import Step
 
 
 class Predicate:
@@ -45,7 +46,7 @@ class Predicate:
         self.value = value
 
     def __repr__(self) -> str:
-        return f"P.{self.operator}({repr(self.value)})"
+        return f"P.{self.operator}({self.value!r})"
 
 
 class TextPredicate:
@@ -64,7 +65,7 @@ class TextPredicate:
         self.value = value
 
     def __repr__(self) -> str:
-        return f"TextP.{self.operator}({repr(self.value)})"
+        return f"TextP.{self.operator}({self.value!r})"
 
 
 class AnonymousTraversal:
@@ -78,9 +79,9 @@ class AnonymousTraversal:
     def __init__(self):
         # 构成此匿名遍历的 Step 对象列表。
         # 'Step' 是前向声明，以避免与 GremlinParse 的循环导入。
-        self.steps: List["Step"] = []
+        self.steps: list[Step] = []
 
-    def add_step(self, step: "Step"):
+    def add_step(self, step: Step):
         """向匿名遍历中添加一个步骤。"""
         self.steps.append(step)
 
@@ -95,7 +96,7 @@ class Connector:
     示例：g.V().where(__.out('knows').and().out('likes'))
     """
 
-    def __init__(self, operator: str, traversals: List[AnonymousTraversal]):
+    def __init__(self, operator: str, traversals: list[AnonymousTraversal]):
         """
         参数:
             operator (str): 逻辑操作符，通常是 'and' 或 'or'。

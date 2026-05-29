@@ -42,12 +42,11 @@ import sys
 import time
 from datetime import datetime
 from glob import glob
-from typing import List, Optional
 
+from base.generator import check_gremlin_syntax
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
-from base.generator import check_gremlin_syntax
 from llm_augment.generalize_llm import get_llm_config, load_config
 
 
@@ -67,12 +66,12 @@ class MigrationResult(BaseModel):
     source_intent: str = Field(description="原始查询意图")
     target_domain: str = Field(description="目标领域")
     mapping_explanation: str = Field(description="映射说明")
-    generated_samples: List[GeneratedSample] = Field(min_length=1)
+    generated_samples: list[GeneratedSample] = Field(min_length=1)
 
 
-def load_schemas(path: str = "db_data/reference/schemas_data.json") -> List[dict]:
+def load_schemas(path: str = "db_data/reference/schemas_data.json") -> list[dict]:
     """加载场景 schema 列表，按 index 排序"""
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     scenarios = data.get("scenarios", {})
     result = []
@@ -93,21 +92,21 @@ def load_schemas(path: str = "db_data/reference/schemas_data.json") -> List[dict
 PICK_STYLES = ["zh_formal", "zh_casual", "en_formal", "en_casual"]
 
 
-def find_latest_translated(output_dir: str = "output") -> Optional[str]:
+def find_latest_translated(output_dir: str = "output") -> str | None:
     """找到 output 目录下最新的 LLM 翻译结果文件"""
     pattern = os.path.join(output_dir, "llm_translated_*.json")
     files = sorted(glob(pattern))
     return files[-1] if files else None
 
 
-def prepare_pairs(translated_path: str, output_dir: str = "output") -> tuple[str, List[dict]]:
+def prepare_pairs(translated_path: str, output_dir: str = "output") -> tuple[str, list[dict]]:
     """
     从 LLM 翻译结果中提取 text2gremlin 数据对。
 
     对每条数据，从 zh_formal/zh_casual/en_formal/en_casual 中随机选一个作为 text，
     与 gremlin query 组成一对，打乱后保存。
     """
-    with open(translated_path, "r", encoding="utf-8") as f:
+    with open(translated_path, encoding="utf-8") as f:
         data = json.load(f)
 
     corpus = data.get("corpus", [])
@@ -159,14 +158,14 @@ def prepare_pairs(translated_path: str, output_dir: str = "output") -> tuple[str
     return pairs_path, pairs
 
 
-def find_latest_pairs(output_dir: str = "output") -> Optional[str]:
+def find_latest_pairs(output_dir: str = "output") -> str | None:
     pattern = os.path.join(output_dir, "text2gremlin_pairs_*.json")
     files = sorted(glob(pattern))
     return files[-1] if files else None
 
 
-def load_pairs(input_path: str) -> List[dict]:
-    with open(input_path, "r", encoding="utf-8") as f:
+def load_pairs(input_path: str) -> list[dict]:
+    with open(input_path, encoding="utf-8") as f:
         data = json.load(f)
     return data.get("pairs", [])
 
@@ -218,7 +217,7 @@ def build_migration_prompt(source_nl: str, source_query: str, target_schema: dic
 1. 生成 5 条样本，优先包含：
    - 2 条 read类型语句
    - 1 条 create类型语句
-   - 1 条 update类型 
+   - 1 条 update类型
    - 1 条 delete类型语句
 2. 若 create / update / delete 三种类型不适合，请全部生成 read类型语句，但要保证模式多样化。
 3. 在常见场景之外，部分生成的样本可以考虑不常见或难度高的场景和 Gremlin 用法，以增加泛化性。
@@ -328,7 +327,7 @@ async def migrate_one(
                 # 语法检查：过滤掉语法错误的 sample
                 valid_samples = []
                 for s in validated.generated_samples:
-                    ok, msg = check_gremlin_syntax(s.query)
+                    ok, _msg = check_gremlin_syntax(s.query)
                     if ok:
                         valid_samples.append(s.model_dump())
 
@@ -370,13 +369,13 @@ def _fallback_migration(pair: dict, target_schema: dict, error: str) -> dict:
 
 
 async def migrate_all(
-    pairs: List[dict],
-    schemas: List[dict],
+    pairs: list[dict],
+    schemas: list[dict],
     llm_config: dict,
     output_path: str,
     input_path: str,
     save_interval: int = 50,
-) -> List[dict]:
+) -> list[dict]:
     """
     流水线并发迁移所有数据。
 
@@ -440,7 +439,7 @@ def _load_existing_keys(output_path: str) -> set:
     if not os.path.exists(output_path):
         return set()
     try:
-        with open(output_path, "r", encoding="utf-8") as f:
+        with open(output_path, encoding="utf-8") as f:
             data = json.load(f)
         keys = set()
         for m in data.get("migrations", []):
@@ -451,7 +450,7 @@ def _load_existing_keys(output_path: str) -> set:
         return set()
 
 
-def _dedup_results(results: List[dict], existing_keys: set) -> tuple[List[dict], set]:
+def _dedup_results(results: list[dict], existing_keys: set) -> tuple[list[dict], set]:
     """对 results 中的 generated_samples 去重。"""
     deduped = []
     for r in results:
@@ -473,7 +472,7 @@ def _dedup_results(results: List[dict], existing_keys: set) -> tuple[List[dict],
     return deduped, existing_keys
 
 
-def _incremental_save(results: List[dict], output_path: str, input_path: str, elapsed: float):
+def _incremental_save(results: list[dict], output_path: str, input_path: str, elapsed: float):
     existing_keys = _load_existing_keys(output_path)
     deduped, _ = _dedup_results(results, existing_keys)
 
@@ -499,7 +498,7 @@ def _incremental_save(results: List[dict], output_path: str, input_path: str, el
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
 
-def save_results(results: List[dict], output_path: str, input_path: str, elapsed: float):
+def save_results(results: list[dict], output_path: str, input_path: str, elapsed: float):
     existing_keys = set()
     deduped, _ = _dedup_results(results, existing_keys)
 
@@ -573,7 +572,7 @@ def main():
             print(f"📂 使用已有数据: {input_path} ({len(pairs)} 条)")
 
     if not pairs:
-        print(f"❌ 数据为空")
+        print("❌ 数据为空")
         sys.exit(1)
 
     # ---- 阶段 2: 场景迁移 ----
@@ -587,7 +586,7 @@ def main():
     print(f"\n{'=' * 60}")
     print("🚀 阶段 2: 场景迁移")
     print("=" * 60)
-    print(f"\n📋 配置:")
+    print("\n📋 配置:")
     print(f"  输入文件: {input_path}")
     print(f"  输出文件: {output_path}")
     print(f"  模型: {llm_config['model']}")
@@ -595,7 +594,7 @@ def main():
     print(f"  最大重试: {llm_config['max_retries']}")
     print(f"  保存间隔: 每 {llm_config['save_interval']} 条")
     print(f"\n  数据条数: {len(pairs)}")
-    print(f"  每条迁移: 4 个场景")
+    print("  每条迁移: 4 个场景")
     print(f"  总任务数: {total_tasks}")
     print(f"  场景数: {len(schemas)}")
     print("-" * 60)

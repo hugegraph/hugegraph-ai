@@ -39,7 +39,6 @@ from collections import Counter
 from datetime import datetime
 from glob import glob
 
-
 # Gremlin 步骤的正则匹配模式
 STEP_PATTERN = re.compile(r"\.(\w+)\s*\(")
 # 起始步骤
@@ -245,7 +244,7 @@ def print_results(stats: dict, total_queries: int):
     print(f"\n{'─' * 70}")
     print("📈 累计占比")
     print(f"{'─' * 70}")
-    for milestone_pct, step_count, last_step in compute_cumulative(steps):
+    for milestone_pct, step_count, _last_step in compute_cumulative(steps):
         print(f"  前 {step_count:2d} 个步骤覆盖 {milestone_pct}% 的使用")
 
     print()
@@ -292,8 +291,8 @@ def generate_report(stats: dict, total_queries: int, input_file: str, report_pat
 
     # 概览
     lines.append("## 概览\n")
-    lines.append(f"| 指标 | 值 |")
-    lines.append(f"|------|---:|")
+    lines.append("| 指标 | 值 |")
+    lines.append("|------|---:|")
     lines.append(f"| 总查询数 | {total_queries:,} |")
     lines.append(f"| 总步骤数 | {total_steps:,} |")
     lines.append(f"| 不同步骤类型 | {len(steps)} |")
@@ -345,7 +344,7 @@ def generate_report(stats: dict, total_queries: int, input_file: str, report_pat
 
     # 累计占比
     lines.append("## 累计占比\n")
-    for milestone_pct, step_count, last_step in compute_cumulative(steps):
+    for milestone_pct, step_count, _last_step in compute_cumulative(steps):
         lines.append(f"- 前 **{step_count}** 个步骤覆盖 **{milestone_pct}%** 的使用")
     lines.append("")
 
@@ -371,18 +370,18 @@ def main():
     # 加载配置获取 output_dir
     output_dir = "output"
     if os.path.exists(args.config):
-        with open(args.config, "r", encoding="utf-8") as f:
+        with open(args.config, encoding="utf-8") as f:
             config = json.load(f)
         output_dir = config.get("output_dir", "output")
 
     # 定位输入文件
     input_path = args.input or find_latest_corpus(output_dir)
     if not input_path or not os.path.exists(input_path):
-        print(f"❌ 未找到语料库文件，请用 --input 指定")
+        print("❌ 未找到语料库文件，请用 --input 指定")
         return
 
     # 加载语料
-    with open(input_path, "r", encoding="utf-8") as f:
+    with open(input_path, encoding="utf-8") as f:
         data = json.load(f)
     corpus = data.get("corpus", [])
     total_queries = len(corpus)

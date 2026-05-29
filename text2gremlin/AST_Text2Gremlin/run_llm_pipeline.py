@@ -71,7 +71,7 @@ def run_stage(stage: str, extra_args: list[str]) -> int:
     print(f"▶ 阶段: {name} ({module})")
     print(f"{'=' * 60}\n")
 
-    cmd = [sys.executable, "-m", module] + extra_args
+    cmd = [sys.executable, "-m", module, *extra_args]
     result = subprocess.run(cmd)
     return result.returncode
 

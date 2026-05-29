@@ -24,6 +24,7 @@ Gremlin翻译引擎模块。
 
 import os
 import random
+
 from .gremlin.GremlinParser import GremlinParser
 
 
@@ -307,7 +308,7 @@ class GremlinBase:
             if not os.path.exists(file_path):
                 print(f"[WARNING] Dictionary file not found: {file_path}")
                 continue
-            with open(file_path, "r", encoding="utf-8") as file:
+            with open(file_path, encoding="utf-8") as file:
                 for line in file:
                     elements = line.strip().split()
                     if elements:
@@ -319,7 +320,7 @@ class GremlinBase:
         """从加载的字典中获取一个随机的同义词或描述。"""
         try:
             # 确保键存在
-            if key in self.schema_dict and self.schema_dict[key]:
+            if self.schema_dict.get(key):
                 return random.choice(self.schema_dict[key])
             return key  # 如果没有同义词，返回原词
         except KeyError:

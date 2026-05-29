@@ -30,11 +30,11 @@ Gremlin 查询语料库生成脚本
 """
 
 import argparse
-import sys
-import os
 import json
-from pathlib import Path
+import os
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # 添加 base 包到 Python 路径
 sys.path.insert(0, str(Path(__file__).parent))
@@ -45,7 +45,7 @@ from base import generate_gremlin_corpus
 def load_config(config_path="config.json"):
     """加载配置文件"""
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         print(f"⚠️  警告: 无法加载配置文件 {config_path}: {e}")
@@ -60,13 +60,13 @@ def main():
 示例:
   # 使用默认配置
   python generate_corpus.py
-  
+
   # 使用自定义模板文件
   python generate_corpus.py --templates my_templates.csv
-  
+
   # 使用自定义配置文件
   python generate_corpus.py --config my_config.json
-  
+
   # 完全自定义
   python generate_corpus.py --templates templates.csv --schema schema.json --data data/ --output output.json
 
@@ -76,7 +76,7 @@ def main():
   - db_schema_path: schema 文件路径
   - data_path: 数据目录路径（默认: db_data/）
   - output_dir: 输出目录（默认: output）
-  
+
   查询数量控制:
   - 由 combination_control_config.json 中的 max_total_combinations 控制
   - 根据查询复杂度自动调整（short/medium/long/ultra）
@@ -145,7 +145,7 @@ def main():
         print("=" * 60)
         print("🚀 Gremlin 查询语料库生成器")
         print("=" * 60)
-        print(f"\n📋 配置信息:")
+        print("\n📋 配置信息:")
         print(f"  模板文件: {args.templates}")
         print(f"  配置文件: {args.config}")
         print(f"  模式文件: {args.schema}")
@@ -166,7 +166,7 @@ def main():
         print("\n" + "=" * 60)
         print("✅ 生成完成！")
         print("=" * 60)
-        print(f"\n📊 统计信息:")
+        print("\n📊 统计信息:")
         print(f"  总模板数: {result['total_templates']}")
         print(f"  成功处理: {result['successful_templates']}")
         print(f"  处理失败: {result['failed_templates']}")
@@ -174,14 +174,14 @@ def main():
 
         if "output_file" in result:
             print(f"\n💾 结果已保存到: {result['output_file']}")
-            print(f"\n💡 提示:")
+            print("\n💡 提示:")
             print(f"  - 可以在 {args.templates} 中添加更多模板")
-            print(f"  - 查询数量由 combination_control_config.json 控制")
+            print("  - 查询数量由 combination_control_config.json 控制")
         else:
             print(f"\n生成了 {len(result['queries'])} 个查询 (未保存到文件)")
 
     except Exception as e:
-        print(f"❌ 错误: {str(e)}")
+        print(f"❌ 错误: {e!s}")
         import traceback
 
         traceback.print_exc()

@@ -34,16 +34,15 @@ import re
 from collections import Counter
 from datetime import datetime
 from glob import glob
-from typing import Optional
 
 
-def find_latest_translated(output_dir: str = "output") -> Optional[str]:
+def find_latest_translated(output_dir: str = "output") -> str | None:
     pattern = os.path.join(output_dir, "llm_translated_*.json")
     files = sorted(glob(pattern))
     return files[-1] if files else None
 
 
-def find_latest_migrated(output_dir: str = "output") -> Optional[str]:
+def find_latest_migrated(output_dir: str = "output") -> str | None:
     pattern = os.path.join(output_dir, "migrated_*.json")
     files = sorted(glob(pattern))
     return files[-1] if files else None
@@ -53,7 +52,7 @@ def load_from_translated(path: str) -> list[dict]:
     """从 llm_translated 文件提取数据对。
     每条 gremlin 对应多种语气翻译，展开为多条。
     """
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     corpus = data.get("corpus", [])
@@ -81,7 +80,7 @@ def load_from_translated(path: str) -> list[dict]:
 
 def load_from_migrated(path: str) -> list[dict]:
     """从 migrated 文件提取所有场景迁移后的数据对。"""
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     migrations = data.get("migrations", [])
@@ -226,7 +225,7 @@ def main():
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
     print(f"\n💾 数据集已保存: {output_path}")
-    print(f"   (corpus 格式兼容 analyze_syntax.py)")
+    print("   (corpus 格式兼容 analyze_syntax.py)")
 
     print("\n" + "=" * 60)
     print("✅ 完成")

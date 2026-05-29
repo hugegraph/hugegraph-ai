@@ -24,7 +24,6 @@
 
 import json
 import os
-import sys
 
 
 class Config:
@@ -36,12 +35,12 @@ class Config:
 
     def load_config(self):
         try:
-            with open(self.file_path, "r", encoding="utf-8") as file:
+            with open(self.file_path, encoding="utf-8") as file:
                 return json.load(file)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"配置文件不存在: {self.file_path}")
-        except json.JSONDecodeError as e:
-            raise ValueError(f"配置文件 JSON 格式错误: {self.file_path}, 错误: {e}")
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(f"配置文件不存在: {self.file_path}") from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"配置文件 JSON 格式错误: {self.file_path}, 错误: {exc}") from exc
 
     def get_input_query_path(self):
         return self.config_data.get("input_query_path")

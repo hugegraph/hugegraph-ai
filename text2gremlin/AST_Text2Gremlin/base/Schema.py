@@ -22,22 +22,23 @@
 负责解析Schema定义和CSV数据文件，为查询生成器提供图结构信息和真实数据实例。
 """
 
-import os
 import json
+import os
 import random
+from typing import Any
+
 import pandas as pd
-from typing import List, Dict, Any, Tuple
 
 
 class Schema:
     def __init__(self, schema_file: str, data_dir: str):
         self.data_dir = data_dir
-        self.vertices: Dict[str, Dict[str, Any]] = {}
-        self.edges: Dict[str, Dict[str, Any]] = {}
-        self.vertex_data: Dict[str, pd.DataFrame] = {}
-        self.edge_data: Dict[str, pd.DataFrame] = {}
+        self.vertices: dict[str, dict[str, Any]] = {}
+        self.edges: dict[str, dict[str, Any]] = {}
+        self.vertex_data: dict[str, pd.DataFrame] = {}
+        self.edge_data: dict[str, pd.DataFrame] = {}
 
-        with open(schema_file, "r", encoding="utf-8") as f:
+        with open(schema_file, encoding="utf-8") as f:
             schema_data = json.load(f)
 
         # 解析 schema 定义
@@ -62,8 +63,8 @@ class Schema:
                 }
 
         # 2. 解析 files 定义，获取路径、header行数和边的端点
-        self.vertex_files: Dict[str, Dict] = {}
-        self.edge_files: Dict[str, Dict] = {}
+        self.vertex_files: dict[str, dict] = {}
+        self.edge_files: dict[str, dict] = {}
         for file_info in schema_data.get("files", []):
             label = file_info["label"]
             path = os.path.join(self.data_dir, file_info["path"])
@@ -83,7 +84,7 @@ class Schema:
     def _parse_custom_csv(self, file_path: str, header_line_index: int) -> pd.DataFrame:
         """解析自定义多行表头的 CSV 文件。"""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             # 从第二行解析列名
@@ -131,19 +132,19 @@ class Schema:
             self.edge_data[label] = self._parse_custom_csv(file_info["path"], file_info["header_rows"])
 
     # --- Schema 查询方法 (保持不变) ---
-    def get_vertex_labels(self) -> List[str]:
+    def get_vertex_labels(self) -> list[str]:
         return list(self.vertices.keys())
 
-    def get_edge_labels(self) -> List[str]:
+    def get_edge_labels(self) -> list[str]:
         return list(self.edges.keys())
 
-    def get_properties_with_type(self, label: str) -> List[Dict[str, str]]:
+    def get_properties_with_type(self, label: str) -> list[dict[str, str]]:
         props_dict = self.vertices.get(label, {}).get("properties", {}) or self.edges.get(label, {}).get(
             "properties", {}
         )
         return [{"name": name, "type": meta["type"]} for name, meta in props_dict.items()]
 
-    def get_valid_steps(self, current_label: str, element_type: str = "vertex") -> List[Dict]:
+    def get_valid_steps(self, current_label: str, element_type: str = "vertex") -> list[dict]:
         if element_type == "vertex":
             if current_label not in self.vertices:
                 return []
@@ -161,7 +162,7 @@ class Schema:
             return valid_steps
         return []
 
-    def get_step_result_label(self, start_label: str, step: Dict) -> Tuple[str, str]:
+    def get_step_result_label(self, start_label: str, step: dict) -> tuple[str, str]:
         step_name, step_param = step.get("step"), step.get("param")
         if step_name == "out":
             if step_param not in self.edges:
@@ -175,19 +176,19 @@ class Schema:
             return start_label, "vertex"
         return None, None
 
-    def get_vertex_creation_info(self, label: str) -> Dict:
+    def get_vertex_creation_info(self, label: str) -> dict:
         if label not in self.vertices:
             return {}
         schema_info = self.vertices[label]
         required = [name for name, meta in schema_info["properties"].items() if not meta["optional"]]
         return {"primary": schema_info.get("primary"), "required": required}
 
-    def get_edge_creation_info(self, label: str) -> Tuple[str, str]:
+    def get_edge_creation_info(self, label: str) -> tuple[str, str]:
         if label in self.edges:
             return (self.edges[label]["source"], self.edges[label]["destination"])
         return (None, None)
 
-    def get_updatable_properties(self, label: str) -> List[Dict[str, str]]:
+    def get_updatable_properties(self, label: str) -> list[dict[str, str]]:
         if label not in self.vertices:
             return []
         schema_info = self.vertices[label]
@@ -198,12 +199,12 @@ class Schema:
             if name != primary_key
         ]
 
-    def get_instance(self, label: str) -> Dict:
+    def get_instance(self, label: str) -> dict:
         """获取单个实例（保持向后兼容）"""
         instances = self.get_instances(label, count=1)
         return instances[0] if instances else {}
 
-    def get_instances(self, label: str, count: int = None) -> List[Dict]:
+    def get_instances(self, label: str, count: int | None = None) -> list[dict]:
         """获取多个实例
 
         Args:

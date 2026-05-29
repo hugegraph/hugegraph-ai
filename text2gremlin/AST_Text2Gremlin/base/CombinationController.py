@@ -23,13 +23,12 @@
 """
 
 import random
-from typing import List, Dict, Any
 
 
 class CombinationController:
     """组合爆炸控制器 - 基于配置文件的统一控制策略"""
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
         """
         初始化控制器
 
@@ -137,7 +136,7 @@ class CombinationController:
             target = random.randint(min_count, max_count)
             return min(target, available_count)
 
-    def select_sibling_options(self, recipe_option: str, all_options: List[str], chain_category: str) -> List[str]:
+    def select_sibling_options(self, recipe_option: str, all_options: list[str], chain_category: str) -> list[str]:
         """
         通用的同级选项选择器 - 核心泛化方法
 
@@ -183,8 +182,8 @@ class CombinationController:
         return selected
 
     def select_multi_param_schema_options(
-        self, recipe_params: List[str], all_options: List[str], chain_category: str
-    ) -> List[List[str]]:
+        self, recipe_params: list[str], all_options: list[str], chain_category: str
+    ) -> list[list[str]]:
         """
         多参数Schema填充选择器
 
@@ -305,7 +304,7 @@ class CombinationController:
         category = self.get_chain_category(step_count)
         strategy = self.property_gen[category]
 
-        print(f"🎯 组合控制策略")
+        print("🎯 组合控制策略")
         print(f"  步骤数: {step_count}")
         print(f"  类别: {category}")
         print(f"  总数限制: {self.max_total.get(category, '无')}")
@@ -329,7 +328,7 @@ if __name__ == "__main__":
     import json
 
     # 加载配置
-    with open("combination_control_config.json", "r", encoding="utf-8") as f:
+    with open("combination_control_config.json", encoding="utf-8") as f:
         config = json.load(f)
 
     # 创建控制器

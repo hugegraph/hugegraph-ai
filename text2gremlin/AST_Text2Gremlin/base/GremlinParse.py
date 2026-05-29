@@ -22,10 +22,9 @@ Gremlin查询结构化表示模块。
 定义Step和Traversal数据结构，将解析后的Gremlin查询表示为结构化的"配方"对象。
 """
 
-from typing import List, Any
+from typing import Any
 
 # 导入将在 Step 参数中存储的结构化表达式类。
-from .GremlinExpr import Predicate, AnonymousTraversal, TextPredicate, Connector
 
 
 class Step:
@@ -34,7 +33,7 @@ class Step:
     例如：.V(), .has('name', 'marko'), .out('knows'), .addV('person')
     """
 
-    def __init__(self, name: str, params: List[Any] = None):
+    def __init__(self, name: str, params: list[Any] | None = None):
         """
         初始化一个 Step 实例。
 
@@ -68,7 +67,7 @@ class Traversal:
         """
         初始化一个空的 Traversal 实例。
         """
-        self.steps: List[Step] = []
+        self.steps: list[Step] = []
 
     def add_step(self, step: Step):
         """
