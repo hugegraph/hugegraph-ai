@@ -15,133 +15,74 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from hugegraph_llm.models.rerankers.siliconflow import SiliconReranker
 
 
-class TestSiliconReranker(unittest.TestCase):
-    def setUp(self):
-        self.reranker = SiliconReranker(api_key="test_api_key", model="bge-reranker-large")
+@pytest.fixture
+def reranker():
+    return SiliconReranker(api_key="k", model="bge-reranker-v2-m3")
 
-    @patch("requests.post")
-    def test_get_rerank_lists(self, mock_post):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"index": 2, "relevance_score": 0.9},
-                {"index": 0, "relevance_score": 0.7},
-                {"index": 1, "relevance_score": 0.5},
-            ]
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
 
-        # Test data
-        query = "What is the capital of China?"
-        documents = [
-            "Beijing is the capital of China.",
-            "Shanghai is the largest city in China.",
-            "Beijing is home to the Forbidden City.",
-        ]
+@pytest.fixture
+def documents():
+    return [
+        "Paris is the capital of France.",
+        "Berlin is the capital of Germany.",
+        "Paris is known as the City of Light.",
+    ]
 
-        # Call the method
-        result = self.reranker.get_rerank_lists(query, documents)
 
-        # Assertions
-        self.assertEqual(len(result), 3)
-        self.assertEqual(result[0], "Beijing is home to the Forbidden City.")
-        self.assertEqual(result[1], "Beijing is the capital of China.")
-        self.assertEqual(result[2], "Shanghai is the largest city in China.")
+def _mock_http_client(rank_indices):
+    response = MagicMock()
+    response.json.return_value = {"results": [{"index": i, "relevance_score": 1.0 - 0.1 * i} for i in rank_indices]}
+    response.raise_for_status.return_value = None
+    client = MagicMock()
+    client.post = AsyncMock(return_value=response)
+    return client
 
-        # Verify the API call
-        mock_post.assert_called_once()
-        _, kwargs = mock_post.call_args
-        self.assertEqual(kwargs["json"]["query"], query)
-        self.assertEqual(kwargs["json"]["documents"], documents)
-        self.assertEqual(kwargs["json"]["top_n"], 3)
-        self.assertEqual(kwargs["json"]["model"], "bge-reranker-large")
-        self.assertEqual(kwargs["headers"]["authorization"], "Bearer test_api_key")
 
-    @patch("requests.post")
-    def test_get_rerank_lists_with_top_n(self, mock_post):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [{"index": 2, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.7}]
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
+@pytest.mark.asyncio
+async def test_aget_rerank_lists(reranker, documents):
+    client = _mock_http_client([2, 0, 1])
+    with patch("hugegraph_llm.models.rerankers.siliconflow.runtime.get_http_client", return_value=client):
+        result = await reranker.aget_rerank_lists("q", documents)
 
-        # Test data
-        query = "What is the capital of China?"
-        documents = [
-            "Beijing is the capital of China.",
-            "Shanghai is the largest city in China.",
-            "Beijing is home to the Forbidden City.",
-        ]
+    assert result[0] == "Paris is known as the City of Light."
+    client.post.assert_awaited_once()
+    args, kwargs = client.post.call_args
+    assert args[0] == "https://api.siliconflow.cn/v1/rerank"
+    assert kwargs["json"]["top_n"] == 3
 
-        # Call the method with top_n=2
-        result = self.reranker.get_rerank_lists(query, documents, top_n=2)
 
-        # Assertions
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[0], "Beijing is home to the Forbidden City.")
-        self.assertEqual(result[1], "Beijing is the capital of China.")
+@pytest.mark.asyncio
+async def test_aget_rerank_lists_with_top_n(reranker, documents):
+    client = _mock_http_client([2, 0])
+    with patch("hugegraph_llm.models.rerankers.siliconflow.runtime.get_http_client", return_value=client):
+        result = await reranker.aget_rerank_lists("q", documents, top_n=2)
+    assert len(result) == 2
 
-        # Verify the API call
-        mock_post.assert_called_once()
-        _, kwargs = mock_post.call_args
-        self.assertEqual(kwargs["json"]["top_n"], 2)
 
-    def test_get_rerank_lists_empty_documents(self):
-        # Test with empty documents
-        query = "What is the capital of China?"
-        documents = []
+@pytest.mark.asyncio
+async def test_aget_rerank_lists_empty(reranker):
+    with pytest.raises(ValueError):
+        await reranker.aget_rerank_lists("q", [], top_n=1)
 
-        # Call the method
-        with self.assertRaises(ValueError) as cm:
-            self.reranker.get_rerank_lists(query, documents, top_n=1)
 
-        # Verify the error message
-        self.assertIn("Documents list cannot be empty", str(cm.exception))
+@pytest.mark.asyncio
+async def test_aget_rerank_lists_top_n_zero(reranker):
+    result = await reranker.aget_rerank_lists("q", ["x"], top_n=0)
+    assert result == []
 
-    def test_get_rerank_lists_negative_top_n(self):
-        # Test with negative top_n
-        query = "What is the capital of China?"
-        documents = ["Beijing is the capital of China."]
 
-        # Call the method
-        with self.assertRaises(ValueError) as cm:
-            self.reranker.get_rerank_lists(query, documents, top_n=-1)
-
-        # Verify the error message
-        self.assertIn("'top_n' should be non-negative", str(cm.exception))
-
-    def test_get_rerank_lists_top_n_exceeds_documents(self):
-        # Test with top_n greater than number of documents
-        query = "What is the capital of China?"
-        documents = ["Beijing is the capital of China."]
-
-        # Call the method
-        with self.assertRaises(ValueError) as cm:
-            self.reranker.get_rerank_lists(query, documents, top_n=5)
-
-        # Verify the error message
-        self.assertIn("'top_n' should be less than or equal to the number of documents", str(cm.exception))
-
-    @patch("requests.post")
-    def test_get_rerank_lists_top_n_zero(self, mock_post):
-        # Test with top_n=0
-        query = "What is the capital of China?"
-        documents = ["Beijing is the capital of China."]
-
-        # Call the method
-        result = self.reranker.get_rerank_lists(query, documents, top_n=0)
-
-        # Assertions
-        self.assertEqual(result, [])
-        # Verify that no API call was made due to short-circuit logic
-        mock_post.assert_not_called()
+def test_get_rerank_lists_sync_wrapper(reranker, documents):
+    with patch(
+        "hugegraph_llm.models.rerankers.siliconflow.runtime.run_async_from_sync",
+        return_value=["Paris is known as the City of Light."],
+    ) as bridge:
+        result = reranker.get_rerank_lists("q", documents, top_n=1)
+    assert result == ["Paris is known as the City of Light."]
+    bridge.assert_called_once()

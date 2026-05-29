@@ -200,6 +200,33 @@ class TestMergeDedupRerankReranker(BaseMergeDedupRerankTest):
         # Verify the results
         self.assertEqual(len(reranked), 2)
 
+    @patch("hugegraph_llm.operators.common_op.merge_dedup_rerank.llm_settings")
+    @patch("hugegraph_llm.operators.common_op.merge_dedup_rerank.Rerankers")
+    def test_rerank_with_vertex_degree_falls_back_to_bleu_on_httpx_error(
+        self, mock_rerankers_class, mock_llm_settings
+    ):
+        """When reranker raises httpx.RequestError, must switch to bleu fallback."""
+        import httpx
+
+        mock_llm_settings.reranker_type = "mock_reranker"
+        mock_reranker = MagicMock()
+        mock_reranker.get_rerank_lists.side_effect = httpx.ConnectError("boom")
+        mock_rerankers_instance = MagicMock()
+        mock_rerankers_instance.get_reranker.return_value = mock_reranker
+        mock_rerankers_class.return_value = mock_rerankers_instance
+
+        merger = MergeDedupRerank(self.mock_embedding, method="reranker", near_neighbor_first=True)
+        results = ["result1", "result2"]
+        vertex_degree_list = [["vertex1_1", "vertex1_2"], ["vertex2_1", "vertex2_2"]]
+        knowledge_with_degree = {
+            "result1": ["vertex1_1", "vertex2_1"],
+            "result2": ["vertex1_2", "vertex2_2"],
+        }
+        merger._rerank_with_vertex_degree(self.query, results, 2, vertex_degree_list, knowledge_with_degree)
+
+        self.assertEqual(merger.method, "bleu")
+        self.assertTrue(merger.switch_to_bleu)
+
     def test_rerank_with_vertex_degree_no_list(self):
         """Test the _rerank_with_vertex_degree method with no vertex degree list."""
         # Create merger

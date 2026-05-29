@@ -18,8 +18,8 @@
 
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
+import httpx
 import jieba
-import requests
 from nltk.translate.bleu_score import sentence_bleu
 
 from hugegraph_llm.config import huge_settings, llm_settings
@@ -128,7 +128,7 @@ class MergeDedupRerank:
                 vertex_rerank_res = [
                     reranker.get_rerank_lists(query, vertex_degree) + [""] for vertex_degree in vertex_degree_list
                 ]
-            except requests.exceptions.RequestException as e:
+            except (httpx.RequestError, httpx.HTTPStatusError) as e:
                 log.warning("Online reranker fails, automatically switches to local bleu method: %s", e)
                 self.method = "bleu"
                 self.switch_to_bleu = True

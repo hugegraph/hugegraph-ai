@@ -17,7 +17,7 @@
 
 from typing import List, Optional
 
-import requests
+from hugegraph_llm import runtime
 
 
 class CohereReranker:
@@ -31,23 +31,27 @@ class CohereReranker:
         self.base_url = base_url
         self.model = model
 
-    def get_rerank_lists(self, query: str, documents: List[str], top_n: Optional[int] = None) -> List[str]:
+    def _validate(self, documents: List[str], top_n: Optional[int]) -> int:
         if not documents:
             raise ValueError("Documents list cannot be empty")
-
         if top_n is None:
             top_n = len(documents)
-
         if top_n < 0:
             raise ValueError("'top_n' should be non-negative")
-
         if top_n > len(documents):
             raise ValueError("'top_n' should be less than or equal to the number of documents")
+        return top_n
 
+    async def aget_rerank_lists(
+        self,
+        query: str,
+        documents: List[str],
+        top_n: Optional[int] = None,
+    ) -> List[str]:
+        top_n = self._validate(documents, top_n)
         if top_n == 0:
             return []
 
-        url = self.base_url
         from pyhugegraph.utils.constants import Constants
 
         headers = {
@@ -61,8 +65,18 @@ class CohereReranker:
             "top_n": top_n,
             "documents": documents,
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=(1.0, 10.0))
-        response.raise_for_status()  # Raise an error for bad status codes
+        client = runtime.get_http_client()
+        response = await client.post(self.base_url, headers=headers, json=payload)
+        response.raise_for_status()
         results = response.json()["results"]
-        sorted_docs = [documents[item["index"]] for item in results]
-        return sorted_docs
+        return [documents[item["index"]] for item in results]
+
+    def get_rerank_lists(
+        self,
+        query: str,
+        documents: List[str],
+        top_n: Optional[int] = None,
+    ) -> List[str]:
+        """Sync wrapper: submits aget_rerank_lists to the main loop. Caller must
+        be on a worker thread (e.g. pycgraph pipeline node)."""
+        return runtime.run_async_from_sync(self.aget_rerank_lists(query, documents, top_n))

@@ -24,7 +24,7 @@ prompt.extract_graph_prompt changes after the system loads, this does not seem t
 # pylint: disable=W0621
 
 import asyncio
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional, Tuple
 
 from hugegraph_llm.config import prompt
 from hugegraph_llm.models.llms.base import BaseLLM
@@ -60,6 +60,21 @@ class AnswerSynthesize:
         self._graph_vector_answer = graph_vector_answer
 
     def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """同步入口：仅供同步路径调用（pycgraph node operator_schedule、Gradio 同步链）。
+
+        async 路径**禁止**调用本方法，必须改用 run_async；否则会触发
+        "Cannot run nested event loops" RuntimeError。
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError(
+                "AnswerSynthesize.run() called from a running event loop; "
+                "use AnswerSynthesize.run_async() instead."
+            )
+
         context_head_str, context_tail_str = self.init_llm(context)
 
         if self._context_body is not None:
@@ -80,6 +95,26 @@ class AnswerSynthesize:
             )
         )
         return context
+
+    async def run_async(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """异步入口：供 HTTP async 路径直接 await，不嵌套新建事件循环。"""
+        context_head_str, context_tail_str = self.init_llm(context)
+
+        if self._context_body is not None:
+            context_str = f"{context_head_str}\n{self._context_body}\n{context_tail_str}".strip("\n")
+
+            final_prompt = self._prompt_template.format(context_str=context_str, query_str=self._question)
+            response = await self._llm.agenerate(prompt=final_prompt)
+            return {"answer": response}
+
+        graph_result_context, vector_result_context = self.handle_vector_graph(context)
+        return await self.async_generate(
+            context,
+            context_head_str,
+            context_tail_str,
+            vector_result_context,
+            graph_result_context,
+        )
 
     def init_llm(self, context):
         if self._llm is None:
@@ -110,23 +145,31 @@ class AnswerSynthesize:
             log.warning(graph_result_context)
         return graph_result_context, vector_result_context
 
-    async def run_streaming(self, context: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+    async def run_streaming(self, context: Dict[str, Any]) -> AsyncGenerator[Tuple[str, str], None]:
+        """流式入口：yield ``(answer_type, token_delta)`` 元组。
+
+        与历史"反复 yield 累计 context"的语义不同——本接口由 P1-T2.5 改造，
+        delta 直传到 SSE adapter（见 ``api/chat_completion_adapter.py``）。
+        Gradio 等需要累计快照的调用方请用 ``accumulate(...)`` 适配 wrapper。
+        """
         context_head_str, context_tail_str = self.init_llm(context)
 
         if self._context_body is not None:
             context_str = f"{context_head_str}\n{self._context_body}\n{context_tail_str}".strip("\n")
 
             final_prompt = self._prompt_template.format(context_str=context_str, query_str=self._question)
-            response = self._llm.generate(prompt=final_prompt)
-            yield {"answer": response}
+            # 单一 answer 路径：流式逐 token 透传到 raw_answer 通道。
+            async for token in self._llm.agenerate_streaming(prompt=final_prompt):
+                if token:
+                    yield "raw_answer", token
             return
 
         graph_result_context, vector_result_context = self.handle_vector_graph(context)
 
-        async for context in self.async_streaming_generate(
+        async for answer_type, token in self.async_streaming_generate(
             context, context_head_str, context_tail_str, vector_result_context, graph_result_context
         ):
-            yield context
+            yield answer_type, token
 
     async def async_generate(
         self,
@@ -191,73 +234,108 @@ class AnswerSynthesize:
         context_tail_str: str,
         vector_result_context: str,
         graph_result_context: str,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        # async_tasks stores the async tasks for different answer types
-        async_generators = []
-        auto_id = 0
+    ) -> AsyncGenerator[Tuple[str, str], None]:
+        """并发跑多路 LLM streaming，yield ``(answer_type, token_delta)`` 元组。
+
+        关键正确性约束（见 design.md §1.4 / requirements.md 1.4）：
+
+        1. 用 ``dict[Task, task_id]`` 维护"活跃" task；任意 task 完成（含
+           ``StopAsyncIteration``）后 **立即 pop**，再决定是否 schedule 下一个
+           ``anext``。**禁止**把已完成的 task 留在原位再传给 ``asyncio.wait()``——
+           那样它会立刻返回，造成 busy loop（CPU 100%），且 ``len`` 比对结束条件
+           会永远不达成或提前误判。
+        2. 循环条件改为"活跃集合非空"，不再用 ``len(stop) == len(async_tasks)``。
+        3. ``finally`` 中 cancel 所有 pending task + ``gather(return_exceptions=True)``
+           + ``aclose()`` 子 generator，配合需求 1.3 的 cancel 语义。
+        """
+        async_generators: list[AsyncGenerator[Tuple[int, str, str], None]] = []
+        target_keys: list[str] = []
+
         if self._raw_answer:
             final_prompt = self._question
-            async_generators.append(
-                self.__llm_generate_with_meta_info(task_id=auto_id, target_key="raw_answer", prompt=final_prompt)
-            )
-            auto_id += 1
-        if self._vector_only_answer:
-            context_str = f"{context_head_str}\n{vector_result_context}\n{context_tail_str}".strip("\n")
-
-            final_prompt = self._prompt_template.format(context_str=context_str, query_str=self._question)
+            target_keys.append("raw_answer")
             async_generators.append(
                 self.__llm_generate_with_meta_info(
-                    task_id=auto_id, target_key="vector_only_answer", prompt=final_prompt
+                    task_id=len(target_keys) - 1,
+                    target_key="raw_answer",
+                    prompt=final_prompt,
                 )
             )
-            auto_id += 1
+        if self._vector_only_answer:
+            context_str = f"{context_head_str}\n{vector_result_context}\n{context_tail_str}".strip("\n")
+            final_prompt = self._prompt_template.format(context_str=context_str, query_str=self._question)
+            target_keys.append("vector_only_answer")
+            async_generators.append(
+                self.__llm_generate_with_meta_info(
+                    task_id=len(target_keys) - 1,
+                    target_key="vector_only_answer",
+                    prompt=final_prompt,
+                )
+            )
         if self._graph_only_answer:
             context_str = f"{context_head_str}\n{graph_result_context}\n{context_tail_str}".strip("\n")
-
             final_prompt = self._prompt_template.format(context_str=context_str, query_str=self._question)
+            target_keys.append("graph_only_answer")
             async_generators.append(
-                self.__llm_generate_with_meta_info(task_id=auto_id, target_key="graph_only_answer", prompt=final_prompt)
+                self.__llm_generate_with_meta_info(
+                    task_id=len(target_keys) - 1,
+                    target_key="graph_only_answer",
+                    prompt=final_prompt,
+                )
             )
-            auto_id += 1
         if self._graph_vector_answer:
             context_body_str = f"{vector_result_context}\n{graph_result_context}"
             if context.get("graph_ratio", 0.5) < 0.5:
                 context_body_str = f"{graph_result_context}\n{vector_result_context}"
             context_str = f"{context_head_str}\n{context_body_str}\n{context_tail_str}".strip("\n")
-
             final_prompt = self._prompt_template.format(context_str=context_str, query_str=self._question)
+            target_keys.append("graph_vector_answer")
             async_generators.append(
                 self.__llm_generate_with_meta_info(
-                    task_id=auto_id, target_key="graph_vector_answer", prompt=final_prompt
+                    task_id=len(target_keys) - 1,
+                    target_key="graph_vector_answer",
+                    prompt=final_prompt,
                 )
             )
-            auto_id += 1
 
-        ops = sum(
-            [
-                self._raw_answer,
-                self._vector_only_answer,
-                self._graph_only_answer,
-                self._graph_vector_answer,
-            ]
-        )
+        ops = len(async_generators)
         context["call_count"] = context.get("call_count", 0) + ops
 
-        async_tasks = [asyncio.create_task(anext(gen)) for gen in async_generators]
-        while True:
-            done, _ = await asyncio.wait(async_tasks, return_when=asyncio.FIRST_COMPLETED)
-            stop_task_num = 0
-            for task in done:
+        # 活跃 task -> task_id；StopAsyncIteration 后立即从 active 中删除，
+        # 不再回填到 asyncio.wait()，避免已完成 task 反复被 wait 返回造成 busy loop。
+        active: Dict[asyncio.Task, int] = {
+            asyncio.create_task(anext(gen)): tid for tid, gen in enumerate(async_generators)
+        }
+
+        try:
+            while active:
+                done, _ = await asyncio.wait(
+                    list(active.keys()),
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in done:
+                    tid = active.pop(task)
+                    try:
+                        _task_id, target_key, token = task.result()
+                    except StopAsyncIteration:
+                        # 该 generator 结束：不再 schedule 下一个 anext，active 收缩。
+                        continue
+                    if token:
+                        yield target_key, token
+                    next_task = asyncio.create_task(anext(async_generators[tid]))
+                    active[next_task] = tid
+        finally:
+            # 客户端断开 / 异常退出时释放上游 LLM streaming 资源（见需求 1.3）。
+            for t in list(active.keys()):
+                if not t.done():
+                    t.cancel()
+            if active:
+                await asyncio.gather(*active.keys(), return_exceptions=True)
+            for gen in async_generators:
                 try:
-                    task_id, target_key, token = task.result()
-                    context[target_key] = context.get(target_key, "") + token
-                    gen = async_generators[task_id]
-                    async_tasks[task_id] = asyncio.create_task(anext(gen))
-                except StopAsyncIteration:
-                    stop_task_num += 1
-            if stop_task_num == len(async_tasks):
-                break
-            yield context
+                    await gen.aclose()
+                except Exception:  # noqa: BLE001
+                    pass
 
     async def __llm_generate_with_meta_info(self, task_id: int, target_key: str, prompt: str):
         # FIXME: Expected type 'AsyncIterable', got 'Coroutine[Any, Any, AsyncGenerator[str, None]]' instead

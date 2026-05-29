@@ -19,10 +19,13 @@ import asyncio
 from contextlib import asynccontextmanager
 
 import gradio as gr
+import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 
+from hugegraph_llm import runtime
+from hugegraph_llm.config import async_settings
 from hugegraph_llm.demo.rag_demo.vector_graph_block import timely_update_vid_embedding
 from hugegraph_llm.utils.hugegraph_utils import backup_data, init_hg_test_data, run_gremlin_query
 from hugegraph_llm.utils.log import log
@@ -52,6 +55,23 @@ def create_other_block():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # pylint: disable=W0621
+    log.info("Initializing shared httpx.AsyncClient...")
+    limits = httpx.Limits(
+        max_connections=async_settings.http_max_connections,
+        max_keepalive_connections=async_settings.http_max_keepalive_connections,
+    )
+    timeout = httpx.Timeout(
+        connect=async_settings.http_connect_timeout,
+        read=async_settings.http_read_timeout,
+        write=async_settings.http_write_timeout,
+        pool=async_settings.http_pool_timeout,
+    )
+    http_client = httpx.AsyncClient(limits=limits, timeout=timeout)
+    app.state.http_client = http_client
+
+    runtime.set_main_loop(asyncio.get_running_loop())
+    runtime.set_http_client(http_client)
+
     log.info("Starting background scheduler...")
     scheduler = AsyncIOScheduler()
     scheduler.add_job(backup_data, trigger=CronTrigger(hour=1, minute=0), id="daily_backup", replace_existing=True)
@@ -70,3 +90,6 @@ async def lifespan(app: FastAPI):  # pylint: disable=W0621
 
     log.info("Shutting down background scheduler...")
     scheduler.shutdown()
+
+    log.info("Closing shared httpx.AsyncClient...")
+    await http_client.aclose()

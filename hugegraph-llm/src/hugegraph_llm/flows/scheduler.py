@@ -13,6 +13,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import asyncio
 import threading
 from typing import Any, Dict
 
@@ -140,7 +141,62 @@ class Scheduler:
             manager.release(pipeline)
         return res
 
+    async def schedule_flow_async(self, flow_name: str, *args, **kwargs):
+        """非流式异步调度入口（HTTP async 路径，Phase 3 P3-T2）。
+
+        与 :meth:`schedule_flow` 等价，但把同步 ``pipeline.run()`` 推到默认线程池
+        执行（``await asyncio.to_thread(pipeline.run)``，与 P1-T0 spike 选定方案 b
+        保持一致），保证事件循环不被独占。Gradio 同步路径仍调用 :meth:`schedule_flow`。
+        """
+        if flow_name not in self.pipeline_pool:
+            raise ValueError(f"Unsupported workflow {flow_name}")
+        manager: GPipelineManager = self.pipeline_pool[flow_name]["manager"]
+        flow: BaseFlow = self.pipeline_pool[flow_name]["flow"]
+        pipeline: GPipeline = manager.fetch()
+        if pipeline is None:
+            pipeline = flow.build_flow(*args, **kwargs)
+            status = pipeline.init()
+            if status.isErr():
+                error_msg = f"Error in flow init: {status.getInfo()}"
+                log.error(error_msg)
+                raise RuntimeError(error_msg)
+            try:
+                status = await asyncio.to_thread(pipeline.run)
+                if status.isErr():
+                    error_msg = f"Error in flow execution: {status.getInfo()}"
+                    log.error(error_msg)
+                    raise RuntimeError(error_msg)
+                res = flow.post_deal(pipeline)
+            finally:
+                manager.add(pipeline)
+            return res
+        try:
+            prepared_input = pipeline.getGParamWithNoEmpty("wkflow_input")
+            flow.prepare(prepared_input, *args, **kwargs)
+            status = await asyncio.to_thread(pipeline.run)
+            if status.isErr():
+                error_msg = f"Error in flow execution {status.getInfo()}"
+                log.error(error_msg)
+                raise RuntimeError(error_msg)
+            res = flow.post_deal(pipeline)
+        finally:
+            manager.release(pipeline)
+        return res
+
     async def schedule_stream_flow(self, flow_name: str, *args, **kwargs):
+        """流式调度入口（HTTP async 路径）。
+
+        P1-T3：基于 P1-T0 spike 结论（pycgraph 3.2.4 上 ``GPipeline.asyncRun()`` 返回
+        ``StdFutureCStatus``，**不是** Python awaitable，``wait()`` / ``get()`` 也是
+        阻塞调用，详见 ``spec/async_streaming_api/pycgraph_async_spike.md``），采用
+        **方案 b**：``await asyncio.to_thread(pipeline.run)`` 把同步 ``run()`` 推到
+        线程池，保证事件循环不被独占。同步路径 :meth:`schedule_flow` 仍走同步
+        ``pipeline.run()``，由 Gradio 等同步入口使用，互不影响。
+
+        修复 BUG：原实现在 ``manager.fetch() is None`` 分支中漏写 ``return``，
+        会让首次请求把 pipeline 跑两遍（一次走"新建分支"，一次走 try 块的"已存在
+        分支"），LLM token 流被复发两遍。本次随同方案 b 落地一并补上。
+        """
         if flow_name not in self.pipeline_pool:
             raise ValueError(f"Unsupported workflow {flow_name}")
         manager: GPipelineManager = self.pipeline_pool[flow_name]["manager"]
@@ -155,21 +211,24 @@ class Scheduler:
                 error_msg = f"Error in flow init: {status.getInfo()}"
                 log.error(error_msg)
                 raise RuntimeError(error_msg)
-            status = pipeline.run()
+            status = await asyncio.to_thread(pipeline.run)
             if status.isErr():
                 manager.add(pipeline)
                 error_msg = f"Error in flow execution: {status.getInfo()}"
                 log.error(error_msg)
                 raise RuntimeError(error_msg)
-            async for res in flow.post_deal_stream(pipeline):
-                yield res
-            manager.add(pipeline)
+            try:
+                async for res in flow.post_deal_stream(pipeline):
+                    yield res
+            finally:
+                manager.add(pipeline)
+            return
         try:
             # fetch pipeline & prepare input for flow
             prepared_input: WkFlowInput = pipeline.getGParamWithNoEmpty("wkflow_input")
             prepared_input.stream = True
             flow.prepare(prepared_input, *args, **kwargs)
-            status = pipeline.run()
+            status = await asyncio.to_thread(pipeline.run)
             if status.isErr():
                 raise RuntimeError(f"Error in flow execution {status.getInfo()}")
             async for res in flow.post_deal_stream(pipeline):

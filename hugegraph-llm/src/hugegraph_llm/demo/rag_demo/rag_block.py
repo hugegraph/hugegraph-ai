@@ -24,6 +24,7 @@ import gradio as gr
 import pandas as pd
 from gradio.utils import NamedString
 
+from hugegraph_llm.api.chat_completion_adapter import accumulate
 from hugegraph_llm.config import llm_settings, prompt, resource_path
 from hugegraph_llm.flows import FlowName
 from hugegraph_llm.flows.scheduler import SchedulerSingleton
@@ -198,7 +199,7 @@ async def rag_answer_streaming(
         else:
             raise RuntimeError("Unsupported flow type")
 
-        async for res in scheduler.schedule_stream_flow(
+        delta_stream = scheduler.schedule_stream_flow(
             flow_key,
             query=text,
             vector_search=vector_search,
@@ -215,14 +216,16 @@ async def rag_answer_streaming(
             keywords_extract_prompt=keywords_extract_prompt,
             gremlin_tmpl_num=gremlin_tmpl_num,
             gremlin_prompt=gremlin_prompt,
-        ):
-            if res.get("switch_to_bleu"):
-                gr.Warning("Online reranker fails, automatically switches to local bleu rerank.")
+        )
+        # operator 源头已改为 yield (answer_type, token_delta)（见 P1-T2.5），
+        # Gradio 仍依赖"反复 yield 整个累计 context"的旧形态，因此在外层套
+        # accumulate(...) wrapper 维持快照语义，禁止反向修改 operator。
+        async for snapshot in accumulate(delta_stream):
             yield (
-                res.get("raw_answer", ""),
-                res.get("vector_only_answer", ""),
-                res.get("graph_only_answer", ""),
-                res.get("graph_vector_answer", ""),
+                snapshot.get("raw_answer", ""),
+                snapshot.get("vector_only_answer", ""),
+                snapshot.get("graph_only_answer", ""),
+                snapshot.get("graph_vector_answer", ""),
             )
     except ValueError as e:
         log.critical(e)

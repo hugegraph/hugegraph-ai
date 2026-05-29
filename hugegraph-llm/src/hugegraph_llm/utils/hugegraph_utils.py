@@ -15,15 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import asyncio
 import json
 import os
 import shutil
 from datetime import datetime
 
-import requests
+import httpx
 from pyhugegraph.client import PyHugeClient
-from requests.auth import HTTPBasicAuth
 
+from hugegraph_llm import runtime
 from hugegraph_llm.config import huge_settings, resource_path
 from hugegraph_llm.utils.log import log
 
@@ -34,8 +35,18 @@ BACKUP_DIR = str(os.path.join(resource_path, "backup-graph-data-4020", huge_sett
 
 
 def run_gremlin_query(query, fmt=True):
+    """Sync entry — used by Gradio buttons, admin API, and pycgraph nodes
+    (already on a worker thread via `await asyncio.to_thread(pipeline.run)`).
+    PyHugeClient is sync, so we just call it directly here."""
     res = get_hg_client().gremlin().exec(query)
     return json.dumps(res, indent=4, ensure_ascii=False) if fmt else res
+
+
+async def arun_gremlin_query(query, fmt=True):
+    """Async entry — for HTTP routes that want to call Gremlin without going
+    through the pipeline. Pushes the sync PyHugeClient call to a worker thread
+    so the event loop is not blocked."""
+    return await asyncio.to_thread(run_gremlin_query, query, fmt)
 
 
 def get_hg_client():
@@ -176,16 +187,40 @@ def manage_backup_retention():
 # TODO: In the path demo/rag_demo/configs_block.py,
 # there is a function test_api_connection that is similar to this function,
 # but it is not straightforward to reuse
-def check_graph_db_connection(url: str, name: str, user: str, pwd: str, graph_space: str) -> bool:
+def _build_db_check_url(url: str, name: str, graph_space: str) -> str:
+    if graph_space and graph_space.strip():
+        return f"{url}/graphspaces/{graph_space}/graphs/{name}/schema"
+    return f"{url}/graphs/{name}/schema"
+
+
+_DB_CHECK_TIMEOUT = httpx.Timeout(connect=1.0, read=5.0, write=5.0, pool=2.0)
+
+
+async def acheck_graph_db_connection(url: str, name: str, user: str, pwd: str, graph_space: str) -> bool:
     try:
-        if graph_space and graph_space.strip():
-            test_url = f"{url}/graphspaces/{graph_space}/graphs/{name}/schema"
-        else:
-            test_url = f"{url}/graphs/{name}/schema"
-        auth = HTTPBasicAuth(user, pwd)
-        response = requests.get(test_url, timeout=(1.0, 5.0), auth=auth)
+        client = runtime.get_http_client()
+        response = await client.get(
+            _build_db_check_url(url, name, graph_space),
+            timeout=_DB_CHECK_TIMEOUT,
+            auth=(user, pwd),
+        )
         return response.status_code == 200
-    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+    except (httpx.RequestError, httpx.HTTPStatusError, httpx.TimeoutException) as e:
+        log.warning("GraphDB connection error: %s", str(e))
+        return False
+    except Exception as e:
+        log.error("Unexpected connection error: %s", e, exc_info=True)
+        raise Exception("Failed to execute update_vid_embedding") from e
+
+
+def check_graph_db_connection(url: str, name: str, user: str, pwd: str, graph_space: str) -> bool:
+    """Sync entry used by Gradio configs_block (often invoked at startup before
+    lifespan registers a shared httpx client). Uses a one-shot httpx.Client."""
+    try:
+        with httpx.Client(timeout=_DB_CHECK_TIMEOUT) as client:
+            response = client.get(_build_db_check_url(url, name, graph_space), auth=(user, pwd))
+        return response.status_code == 200
+    except (httpx.RequestError, httpx.HTTPStatusError, httpx.TimeoutException) as e:
         log.warning("GraphDB connection error: %s", str(e))
         return False
     except Exception as e:

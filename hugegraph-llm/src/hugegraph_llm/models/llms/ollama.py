@@ -20,7 +20,7 @@ import json
 from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Optional
 
 import ollama
-from retry import retry
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.utils.log import log
@@ -34,7 +34,7 @@ class OllamaClient(BaseLLM):
         self.client = ollama.Client(host=f"http://{host}:{port}", **kwargs)
         self.async_client = ollama.AsyncClient(host=f"http://{host}:{port}", **kwargs)
 
-    @retry(tries=3, delay=1)
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), reraise=True)
     def generate(
         self,
         messages: Optional[List[Dict[str, Any]]] = None,
@@ -60,7 +60,7 @@ class OllamaClient(BaseLLM):
             print(f"Retrying LLM call {e}")
             raise e
 
-    @retry(tries=3, delay=1)
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), reraise=True)
     async def agenerate(
         self,
         messages: Optional[List[Dict[str, Any]]] = None,
