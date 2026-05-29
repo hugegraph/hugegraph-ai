@@ -53,8 +53,8 @@ class TestBuildGremlinExampleIndex(unittest.TestCase):
         self.assertEqual(self.index_builder.vector_index, self.mock_vector_store_class)
         self.assertEqual(self.index_builder.vector_index_name, "gremlin_examples")
 
-    @patch('asyncio.run')
-    @patch('hugegraph_llm.utils.embedding_utils.get_embeddings_parallel')
+    @patch("asyncio.run")
+    @patch("hugegraph_llm.utils.embedding_utils.get_embeddings_parallel")
     def test_run_with_examples(self, mock_get_embeddings_parallel, mock_asyncio_run):
         """Test run method with examples"""
         # Setup mocks
@@ -77,8 +77,8 @@ class TestBuildGremlinExampleIndex(unittest.TestCase):
         self.assertEqual(result["embed_dim"], 3)
         self.assertEqual(context["embed_dim"], 3)
 
-    @patch('asyncio.run')
-    @patch('hugegraph_llm.utils.embedding_utils.get_embeddings_parallel')
+    @patch("asyncio.run")
+    @patch("hugegraph_llm.utils.embedding_utils.get_embeddings_parallel")
     def test_run_with_empty_examples(self, mock_get_embeddings_parallel, mock_asyncio_run):
         """Test run method with empty examples"""
         # Create new mocks for this test
@@ -102,8 +102,8 @@ class TestBuildGremlinExampleIndex(unittest.TestCase):
         with self.assertRaises(IndexError):
             empty_index_builder.run(context)
 
-    @patch('asyncio.run')
-    @patch('hugegraph_llm.utils.embedding_utils.get_embeddings_parallel')
+    @patch("asyncio.run")
+    @patch("hugegraph_llm.utils.embedding_utils.get_embeddings_parallel")
     def test_run_single_example(self, mock_get_embeddings_parallel, mock_asyncio_run):
         """Test run method with single example"""
         # Create new mocks for this test
@@ -133,8 +133,8 @@ class TestBuildGremlinExampleIndex(unittest.TestCase):
         # Verify context
         self.assertEqual(result["embed_dim"], 4)
 
-    @patch('asyncio.run')
-    @patch('hugegraph_llm.utils.embedding_utils.get_embeddings_parallel')
+    @patch("asyncio.run")
+    @patch("hugegraph_llm.utils.embedding_utils.get_embeddings_parallel")
     def test_run_preserves_existing_context(self, mock_get_embeddings_parallel, mock_asyncio_run):
         """Test that run method preserves existing context data"""
         # Setup mocks
@@ -154,5 +154,5 @@ class TestBuildGremlinExampleIndex(unittest.TestCase):
         self.assertEqual(context["embed_dim"], 3)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

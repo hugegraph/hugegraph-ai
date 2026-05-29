@@ -43,6 +43,7 @@ from hugegraph_llm.demo.rag_demo.text2gremlin_block import (
     gremlin_generate_selective,
 )
 from hugegraph_llm.demo.rag_demo.vector_graph_block import create_vector_graph_block
+from hugegraph_llm.middleware.middleware import UseTimeMiddleware
 from hugegraph_llm.resources.demo.css import CSS
 from hugegraph_llm.utils.log import log
 
@@ -158,6 +159,11 @@ def init_rag_ui() -> gr.Interface:
 
 def create_app():
     app = FastAPI(lifespan=lifespan)
+    # Phase 3 P3-T3: register the trace_id / process-time middleware so async
+    # routes have a stable trace_id ContextVar across sync / async / SSE modes
+    # and StreamingResponse passes through untouched (BaseHTTPMiddleware does
+    # NOT consume the body of StreamingResponse).
+    app.add_middleware(UseTimeMiddleware)
     # we don't need to manually check the env now
     # settings.check_env()
     prompt.update_yaml_file()

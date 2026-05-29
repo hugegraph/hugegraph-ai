@@ -43,12 +43,18 @@ class TestUseTimeMiddlewareDispatch(unittest.IsolatedAsyncioTestCase):
         self.mock_request = MagicMock()
         self.mock_request.method = "GET"
         self.mock_request.query_params = {}
+        # Phase 3 P3-T3: middleware reads X-Trace-Id from headers; explicitly
+        # return None so the middleware mints a fresh uuid (not a MagicMock).
+        self.mock_request.headers = MagicMock()
+        self.mock_request.headers.get = MagicMock(return_value=None)
         # Create a simple client object to avoid read-only property issues
         self.mock_request.client = type("Client", (), {"host": "127.0.0.1"})()
         self.mock_request.url = "http://localhost:8000/api"
 
         # Create a mock response with necessary attributes
         # Use plain MagicMock to avoid AttributeError with FastAPI's read-only properties
+        # Phase 3 P3-T3: middleware uses ``response.headers.setdefault`` for
+        # X-Trace-Id, so a real dict (not MagicMock) is required here.
         self.mock_response = MagicMock()
         self.mock_response.status_code = 200
         self.mock_response.headers = {}
@@ -71,9 +77,23 @@ class TestUseTimeMiddlewareDispatch(unittest.IsolatedAsyncioTestCase):
 
         # Verify the response headers were set correctly
         self.assertEqual(self.mock_response.headers["X-Process-Time"], "500.00 ms")
+        # Phase 3 P3-T3: middleware stamps an X-Trace-Id (32-char hex uuid) when
+        # no inbound header is supplied.
+        self.assertIn("X-Trace-Id", self.mock_response.headers)
+        self.assertEqual(len(self.mock_response.headers["X-Trace-Id"]), 32)
 
         # Verify log.info was called with the correct arguments
-        mock_log.info.assert_any_call("Request process time: %.2f ms, code=%d", 500.0, 200)
+        # Phase 3 P3-T3: format string now carries unit (%s) and trace_id (%s).
+        process_time_logs = [
+            call_args
+            for call_args in mock_log.info.call_args_list
+            if call_args.args and call_args.args[0] == "Request process time: %.2f %s, code=%d, trace_id=%s"
+        ]
+        self.assertEqual(len(process_time_logs), 1)
+        self.assertEqual(process_time_logs[0].args[1:4], (500.0, "ms", 200))
+        # trace_id matches the one stamped on the response header.
+        self.assertEqual(process_time_logs[0].args[4], self.mock_response.headers["X-Trace-Id"])
+
         mock_log.info.assert_any_call(
             "%s - Args: %s, IP: %s, URL: %s", "GET", {}, "127.0.0.1", "http://localhost:8000/api"
         )

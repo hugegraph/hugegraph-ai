@@ -200,6 +200,88 @@ class TestMergeDedupRerankReranker(BaseMergeDedupRerankTest):
         # Verify the results
         self.assertEqual(len(reranked), 2)
 
+    @patch("hugegraph_llm.operators.common_op.merge_dedup_rerank.llm_settings")
+    @patch("hugegraph_llm.operators.common_op.merge_dedup_rerank.Rerankers")
+    def test_rerank_with_vertex_degree_falls_back_to_bleu_on_httpx_error(self, mock_rerankers_class, mock_llm_settings):
+        """When reranker raises httpx.RequestError, must switch to bleu fallback."""
+        import httpx
+
+        mock_llm_settings.reranker_type = "mock_reranker"
+        mock_reranker = MagicMock()
+        mock_reranker.get_rerank_lists.side_effect = httpx.ConnectError("boom")
+        mock_rerankers_instance = MagicMock()
+        mock_rerankers_instance.get_reranker.return_value = mock_reranker
+        mock_rerankers_class.return_value = mock_rerankers_instance
+
+        merger = MergeDedupRerank(self.mock_embedding, method="reranker", near_neighbor_first=True)
+        results = ["result1", "result2"]
+        vertex_degree_list = [["vertex1_1", "vertex1_2"], ["vertex2_1", "vertex2_2"]]
+        knowledge_with_degree = {
+            "result1": ["vertex1_1", "vertex2_1"],
+            "result2": ["vertex1_2", "vertex2_2"],
+        }
+        merger._rerank_with_vertex_degree(self.query, results, 2, vertex_degree_list, knowledge_with_degree)
+
+        self.assertEqual(merger.method, "bleu")
+        self.assertTrue(merger.switch_to_bleu)
+
+    @patch("hugegraph_llm.operators.common_op.merge_dedup_rerank.llm_settings")
+    @patch("hugegraph_llm.operators.common_op.merge_dedup_rerank.Rerankers")
+    def test_run_writes_switch_to_bleu_into_context_on_reranker_failure(self, mock_rerankers_class, mock_llm_settings):
+        """
+        Review 阻塞项：reranker 降级状态必须通过 ``MergeDedupRerank.run()`` 写回
+        context（``context["switch_to_bleu"] = True``），下游 ``post_deal_stream``
+        才能把它转成 ``{"warning": ...}`` SSE 控制消息。仅断言私有
+        ``merger.switch_to_bleu`` 不够 —— 这条 test 锁住对外 contract。
+        """
+        import httpx
+
+        mock_llm_settings.reranker_type = "mock_reranker"
+        mock_reranker = MagicMock()
+
+        # 注意：``MergeDedupRerank.run()`` 即便在 vector_search=False 时也会先把
+        # 空的 vector_result 喂给 ``_dedup_and_rerank``（method="reranker" 路径
+        # 会调一次 ``get_rerank_lists(query, [], 0)``）。所以 side_effect 不能
+        # 设成"无条件抛 ConnectError"，否则会在还没走到 vertex-degree 分支前
+        # 就把测试炸掉。这里用"空输入返回空列表，非空输入抛错"的智能 mock，
+        # 精确触发 ``_rerank_with_vertex_degree`` 中的 httpx 异常 fallback。
+        #
+        # 用 *args 兼容生产代码两种调用：
+        #   _dedup_and_rerank → get_rerank_lists(query, results, topn)   （3 args）
+        #   _rerank_with_vertex_degree → get_rerank_lists(query, vd)     （2 args）
+        def _rerank_side_effect(*args, **kwargs):
+            del kwargs  # signature kept for mock side_effect compatibility
+            results = args[1] if len(args) >= 2 else []
+            if not results:
+                return []
+            raise httpx.ConnectError("boom")
+
+        mock_reranker.get_rerank_lists.side_effect = _rerank_side_effect
+        mock_rerankers_instance = MagicMock()
+        mock_rerankers_instance.get_reranker.return_value = mock_reranker
+        mock_rerankers_class.return_value = mock_rerankers_instance
+
+        merger = MergeDedupRerank(
+            self.mock_embedding, method="reranker", near_neighbor_first=True, topk_return_results=2
+        )
+        context = {
+            "query": self.query,
+            "vector_search": False,
+            "graph_search": True,
+            "graph_result": ["result1", "result2"],
+            "vertex_degree_list": [["vertex1_1", "vertex1_2"], ["vertex2_1", "vertex2_2"]],
+            "knowledge_with_degree": {
+                "result1": ["vertex1_1", "vertex2_1"],
+                "result2": ["vertex1_2", "vertex2_2"],
+            },
+        }
+        out = merger.run(context)
+
+        # 对外 contract：context 中可见 switch_to_bleu，供 stream / 同步路径下游消费
+        self.assertTrue(out.get("switch_to_bleu"))
+        # 内部状态也降级到 bleu
+        self.assertEqual(merger.method, "bleu")
+
     def test_rerank_with_vertex_degree_no_list(self):
         """Test the _rerank_with_vertex_degree method with no vertex degree list."""
         # Create merger

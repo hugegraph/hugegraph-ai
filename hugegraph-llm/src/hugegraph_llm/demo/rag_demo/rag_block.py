@@ -24,6 +24,7 @@ import gradio as gr
 import pandas as pd
 from gradio.utils import NamedString
 
+from hugegraph_llm.api.chat_completion_adapter import accumulate
 from hugegraph_llm.config import llm_settings, prompt, resource_path
 from hugegraph_llm.flows import FlowName
 from hugegraph_llm.flows.scheduler import SchedulerSingleton
@@ -164,10 +165,18 @@ async def rag_answer_streaming(
     keywords_extract_prompt: str,
     gremlin_tmpl_num: Optional[int] = -1,
     gremlin_prompt: Optional[str] = None,
+    max_graph_items: int = 30,
+    topk_return_results: int = 20,
+    vector_dis_threshold: float = 0.9,
+    topk_per_keyword: int = 1,
 ) -> AsyncGenerator[Tuple[str, str, str, str], None]:
     """
     Generate an answer using the RAG (Retrieval-Augmented Generation) pipeline.
     Fetch the Scheduler to deal with the request
+
+    注意：``max_graph_items`` / ``topk_return_results`` / ``vector_dis_threshold`` /
+    ``topk_per_keyword`` 四个检索调参必须与 HTTP ``/rag`` / ``/rag/stream`` 保持对等
+    透传（Gradio UI 不暴露这些控件，使用默认值；但程序化调用可指定非默认值）。
     """
     graph_search, gremlin_prompt, vector_search = update_ui_configs(
         answer_prompt,
@@ -198,7 +207,7 @@ async def rag_answer_streaming(
         else:
             raise RuntimeError("Unsupported flow type")
 
-        async for res in scheduler.schedule_stream_flow(
+        delta_stream = scheduler.schedule_stream_flow(
             flow_key,
             query=text,
             vector_search=vector_search,
@@ -215,14 +224,32 @@ async def rag_answer_streaming(
             keywords_extract_prompt=keywords_extract_prompt,
             gremlin_tmpl_num=gremlin_tmpl_num,
             gremlin_prompt=gremlin_prompt,
-        ):
-            if res.get("switch_to_bleu"):
-                gr.Warning("Online reranker fails, automatically switches to local bleu rerank.")
+            # 检索调参：与 HTTP /rag、/rag/stream 路径保持语义对等。
+            # Gradio UI 不暴露这些控件，走默认值；程序化调用时可指定非默认值。
+            max_graph_items=max_graph_items,
+            topk_return_results=topk_return_results,
+            vector_dis_threshold=vector_dis_threshold,
+            topk_per_keyword=topk_per_keyword,
+        )
+        # operator 源头已改为 yield (answer_type, token_delta)（见 P1-T2.5），
+        # Gradio 仍依赖"反复 yield 整个累计 context"的旧形态，因此在外层套
+        # accumulate(...) wrapper 维持快照语义，禁止反向修改 operator。
+        warned_events: set = set()
+        async for snapshot in accumulate(delta_stream):
+            # 把上游通过 ``__events__`` 透出的 warning（例如 reranker 降级）
+            # 用 ``gr.Warning`` 投递给前端，与同步 /rag 路径保持行为一致。
+            for event in snapshot.get("__events__", []) or []:
+                if not isinstance(event, dict):
+                    continue
+                key = (event.get("warning"), event.get("switch_to_bleu"))
+                if "warning" in event and key not in warned_events:
+                    warned_events.add(key)
+                    gr.Warning(str(event["warning"]))
             yield (
-                res.get("raw_answer", ""),
-                res.get("vector_only_answer", ""),
-                res.get("graph_only_answer", ""),
-                res.get("graph_vector_answer", ""),
+                snapshot.get("raw_answer", ""),
+                snapshot.get("vector_only_answer", ""),
+                snapshot.get("graph_only_answer", ""),
+                snapshot.get("graph_vector_answer", ""),
             )
     except ValueError as e:
         log.critical(e)

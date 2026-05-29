@@ -165,6 +165,7 @@ ignore = [
     "N802",    # invalid-function-name (API compatibility)
     "C901",    # complexity (non-critical for now)
     "RUF001", # ambiguous-unicode-character-string
+    "RUF002", # ambiguous-unicode-character-docstring (Chinese punctuation is intentional)
     "RUF003", # ambiguous-unicode-character-comment
 ]
 # No need to ignore E501 (line-too-long), `ruff format` will handle it automatically.
@@ -173,6 +174,10 @@ ignore = [
 "tests/**/*.py" = ["T20"]
 "hugegraph-ml/src/hugegraph_ml/examples/**/*.py" = ["T20"]
 "hugegraph-python-client/src/pyhugegraph/structure/*.py" = ["N802"]
+# CLI / probe / spike scripts intentionally use ``print`` for human-facing
+# stdout — they are tools, not library code.
+"scripts/**/*.py" = ["T20"]
+"spec/**/*.py" = ["T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["hugegraph_llm", "hugegraph_python_client", "hugegraph_ml", "vermeer_python_client"]

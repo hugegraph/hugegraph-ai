@@ -15,8 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import asyncio
 import os
 import unittest
+from unittest.mock import AsyncMock, MagicMock
 
 from hugegraph_llm.models.llms.ollama import OllamaClient
 
@@ -39,3 +41,35 @@ class TestOllamaClient(unittest.TestCase):
             print(chunk, end="", flush=True)
 
         ollama_client.generate_streaming(prompt="What is the capital of France?", on_token_callback=on_token_callback)
+
+
+class TestOllamaRetry(unittest.TestCase):
+    """Verify tenacity retry actually wraps async agenerate (regression: the
+    previous `from retry import retry` decorator did not retry async failures —
+    it only retried at coroutine *creation*, which never raised)."""
+
+    def test_agenerate_retries_three_times_on_exception(self):
+        client = OllamaClient.__new__(OllamaClient)
+        client.model = "x"
+        client.client = None
+        client.async_client = AsyncMock()
+        client.async_client.chat = AsyncMock(side_effect=RuntimeError("network fail"))
+
+        async def _run():
+            with self.assertRaises(RuntimeError):
+                await client.agenerate(prompt="hi")
+
+        asyncio.run(_run())
+        # tenacity stop_after_attempt(3) → exactly 3 underlying calls
+        self.assertEqual(client.async_client.chat.await_count, 3)
+
+    def test_generate_retries_three_times_on_exception(self):
+        client = OllamaClient.__new__(OllamaClient)
+        client.model = "x"
+        client.async_client = None
+        client.client = MagicMock()
+        client.client.chat.side_effect = RuntimeError("network fail")
+
+        with self.assertRaises(RuntimeError):
+            client.generate(prompt="hi")
+        self.assertEqual(client.client.chat.call_count, 3)

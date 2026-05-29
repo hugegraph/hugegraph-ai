@@ -15,33 +15,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from typing import Optional
 
-__all__ = [
-    "huge_settings",
-    "admin_settings",
-    "llm_settings",
-    "resource_path",
-    "index_settings",
-    "async_settings",
-]
+from .models import BaseConfig
 
-import os
 
-from .admin_config import AdminConfig
-from .async_config import AsyncConfig
-from .hugegraph_config import HugeGraphConfig
-from .index_config import IndexConfig
-from .llm_config import LLMConfig
-from .prompt_config import PromptConfig
+class AsyncConfig(BaseConfig):
+    """HTTP async client / executor settings (Phase 2)."""
 
-llm_settings = LLMConfig()
-prompt = PromptConfig(llm_settings)
-prompt.ensure_yaml_file_exists()
-
-huge_settings = HugeGraphConfig()
-admin_settings = AdminConfig()
-index_settings = IndexConfig()
-async_settings = AsyncConfig()
-
-package_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-resource_path = os.path.join(package_path, "resources")
+    http_max_connections: Optional[int] = 100
+    http_max_keepalive_connections: Optional[int] = 20
+    http_connect_timeout: Optional[float] = 5.0
+    http_read_timeout: Optional[float] = 60.0
+    http_write_timeout: Optional[float] = 10.0
+    http_pool_timeout: Optional[float] = 2.0

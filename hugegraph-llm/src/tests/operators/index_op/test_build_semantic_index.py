@@ -119,14 +119,14 @@ class TestBuildSemanticIndex(unittest.TestCase):
         builder = BuildSemanticIndex(self.mock_embedding, self.mock_vector_store_class)
 
         # Mock _get_embeddings_parallel to avoid async complexity in test
-        with patch.object(builder, '_get_embeddings_parallel') as mock_get_embeddings:
+        with patch.object(builder, "_get_embeddings_parallel") as mock_get_embeddings:
             mock_get_embeddings.return_value = [[0.1, 0.2], [0.3, 0.4]]
 
             # Create a context with new vertices
             context = {"vertices": ["label1:vertex3", "label2:vertex4"]}
 
             # Run the builder
-            with patch('asyncio.run', return_value=[[0.1, 0.2], [0.3, 0.4]]):
+            with patch("asyncio.run", return_value=[[0.1, 0.2], [0.3, 0.4]]):
                 result = builder.run(context)
 
             # Check if the context is updated correctly
@@ -151,14 +151,14 @@ class TestBuildSemanticIndex(unittest.TestCase):
         builder = BuildSemanticIndex(self.mock_embedding, self.mock_vector_store_class)
 
         # Mock _get_embeddings_parallel
-        with patch.object(builder, '_get_embeddings_parallel') as mock_get_embeddings:
+        with patch.object(builder, "_get_embeddings_parallel") as mock_get_embeddings:
             mock_get_embeddings.return_value = [[0.1, 0.2], [0.3, 0.4]]
 
             # Create a context with new vertices
             context = {"vertices": ["vertex3", "vertex4"]}
 
             # Run the builder
-            with patch('asyncio.run', return_value=[[0.1, 0.2], [0.3, 0.4]]):
+            with patch("asyncio.run", return_value=[[0.1, 0.2], [0.3, 0.4]]):
                 result = builder.run(context)
 
             # Check if the context is updated correctly
