@@ -291,13 +291,19 @@ def import_graph_data_tool(
     mode="ingest": MCP 本地校验+dry_run/confirm+Gremlin 导入 graph_data
     mode="table": V1 禁用（返回 FEATURE_DISABLED）
     """
+    start = time.perf_counter()
 
     if mode == "extract":
         if not text:
             return envelope_err(
-                ErrorType.VALIDATION_ERROR, "text is required for mode='extract'"
+                ErrorType.VALIDATION_ERROR,
+                "text is required for mode='extract'",
+                source="import_graph_data_tool",
+                duration_ms=(time.perf_counter() - start) * 1000.0,
             )
-        return extract_graph_data(
+        return _call_public_tool(
+            "import_graph_data_tool",
+            extract_graph_data,
             text=text,
             schema=graph_schema,
             example_prompt=example_prompt,
@@ -308,8 +314,12 @@ def import_graph_data_tool(
             return envelope_err(
                 ErrorType.VALIDATION_ERROR,
                 "graph_data is required for mode='ingest'",
+                source="import_graph_data_tool",
+                duration_ms=(time.perf_counter() - start) * 1000.0,
             )
-        return manage_graph_data(
+        return _call_public_tool(
+            "import_graph_data_tool",
+            manage_graph_data,
             mode="import",
             graph_data=graph_data,
             dry_run=dry_run,
@@ -325,13 +335,17 @@ def import_graph_data_tool(
             ErrorType.FEATURE_DISABLED,
             "Table import is not available in V1.",
             suggestion="Use mode='extract' with extract_graph_data_tool instead.",
+            source="import_graph_data_tool",
             details={"mode": mode, "tool": "import_graph_data_tool"},
+            duration_ms=(time.perf_counter() - start) * 1000.0,
         )
 
     return envelope_err(
         ErrorType.VALIDATION_ERROR,
         f"Unknown mode: {mode!r}. Use 'extract' or 'ingest'.",
+        source="import_graph_data_tool",
         details={"mode": mode},
+        duration_ms=(time.perf_counter() - start) * 1000.0,
     )
 
 

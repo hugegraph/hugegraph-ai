@@ -524,7 +524,11 @@ def test_ingest_graph_data_readonly(monkeypatch):
 def test_ingest_graph_data_success(monkeypatch):
     _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
-    post = Mock(return_value=envelope_ok({"ok": True, "data": {"inserted": 2}}))
+    post = Mock(
+        return_value=envelope_ok(
+            {"ok": True, "data": {"written": {"vertices": 2, "edges": 1}}}
+        )
+    )
     monkeypatch.setattr(ingest_graph_data_module, "post", post)
     graph_data = _graph_data()
     dry_run = ingest_graph_data_module.ingest_graph_data(graph_data)
@@ -542,8 +546,9 @@ def test_ingest_graph_data_success(monkeypatch):
 
     assert result["ok"] is True
     assert result["data"]["batch_id"].startswith("batch-")
-    assert result["data"]["status"] in ("success", "partial", "degraded")
+    assert result["data"]["status"] == "success"
     assert result["data"]["planned"] == {"vertices": 2, "edges": 1}
+    assert result["data"]["written"] == {"vertices": 2, "edges": 1}
     post.assert_called_once()
     assert post.call_args.args == ("/graph-import",)
     assert post.call_args.kwargs["json"]["schema"] == "hugegraph"
@@ -557,7 +562,7 @@ def test_ingest_graph_data_success(monkeypatch):
     assert import_payload["edges"][0]["properties"] == {}
 
 
-def test_ingest_graph_data_assumes_planned_counts_when_ai_omits_counts(monkeypatch):
+def test_ingest_graph_data_degrades_when_ai_omits_counts(monkeypatch):
     _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     post = Mock(return_value=envelope_ok({"message": "import finished"}))
@@ -575,12 +580,12 @@ def test_ingest_graph_data_assumes_planned_counts_when_ai_omits_counts(monkeypat
         expires_at=plan_ctx["expires_at"],
     )
 
-    assert result["ok"] is True
-    assert result["data"]["status"] == "success"
-    assert result["data"]["written"] == {"vertices": 2, "edges": 1}
-    assert any(
-        "did not return explicit written counts" in w for w in result["warnings"]
-    )
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FLOW_EXECUTION_FAILED"
+    details = result["error"]["details"]
+    assert details["status"] == "degraded"
+    assert details["written"] == {"vertices": 0, "edges": 0}
+    assert any("write outcome is unknown" in w for w in result["warnings"])
 
 
 def test_ingest_graph_data_splits_total_written_count(monkeypatch):
@@ -601,7 +606,53 @@ def test_ingest_graph_data_splits_total_written_count(monkeypatch):
         expires_at=plan_ctx["expires_at"],
     )
 
-    assert result["ok"] is True
-    assert result["data"]["status"] == "partial"
-    assert result["data"]["written"] == {"vertices": 2, "edges": 0}
+    assert result["ok"] is False
+    assert result["error"]["details"]["status"] == "partial"
+    assert result["error"]["details"]["written"] == {"vertices": 2, "edges": 0}
     assert any("total written count" in w for w in result["warnings"])
+
+
+def test_ingest_graph_data_does_not_promote_ai_failure_without_counts(monkeypatch):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    post = Mock(return_value=envelope_ok({"success": False, "status": "partial"}))
+    monkeypatch.setattr(ingest_graph_data_module, "post", post)
+    graph_data = _graph_data()
+    dry_run = ingest_graph_data_module.ingest_graph_data(graph_data)
+    plan_ctx = dry_run["data"]["plan_context"]
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        graph_data,
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=plan_ctx["nonce"],
+        expires_at=plan_ctx["expires_at"],
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["details"]["status"] == "error"
+    assert result["error"]["details"]["written"] == {"vertices": 0, "edges": 0}
+
+
+def test_ingest_graph_data_does_not_promote_failed_items_without_counts(monkeypatch):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    post = Mock(return_value=envelope_ok({"failed_items": [{"index": 0}]}))
+    monkeypatch.setattr(ingest_graph_data_module, "post", post)
+    graph_data = _graph_data()
+    dry_run = ingest_graph_data_module.ingest_graph_data(graph_data)
+    plan_ctx = dry_run["data"]["plan_context"]
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        graph_data,
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=plan_ctx["nonce"],
+        expires_at=plan_ctx["expires_at"],
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["details"]["status"] == "degraded"
+    assert result["error"]["details"]["failed_items"] == [{"index": 0}]

@@ -109,6 +109,27 @@ def test_generate_gremlin_safe_execute(monkeypatch):
     execute_read.assert_called_once_with("g.V().limit(2)")
 
 
+def test_generate_gremlin_propagates_execute_failure(monkeypatch):
+    post = Mock(return_value=_ai_ok("g.V().has('name','Alice')"))
+    execution_error = envelope_err(
+        ErrorType.NO_INDEX,
+        "Query requires an index",
+        suggestion="Create an index",
+    )
+    execute_read = Mock(return_value=execution_error)
+    monkeypatch.setattr(generate_gremlin_module, "post", post)
+    monkeypatch.setattr(generate_gremlin_module, "execute_gremlin_read", execute_read)
+
+    result = generate_gremlin_module.generate_gremlin("find Alice", execute=True)
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "NO_INDEX"
+    assert result["error"]["details"]["gremlin"] == "g.V().has('name','Alice')"
+    assert result["error"]["details"]["execution_error"]["message"] == (
+        "Query requires an index"
+    )
+
+
 def test_generate_gremlin_unsafe_no_execute(monkeypatch):
     post = Mock(return_value=_ai_ok("g.addV('person')"))
     execute_read = Mock()

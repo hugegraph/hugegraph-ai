@@ -126,6 +126,7 @@ def _validate_field_map(
     field: str,
     allowed_properties: set[str],
     errors: list[ValidationError],
+    allow_id: bool = False,
 ) -> None:
     values = operation.get(field)
     if values is None:
@@ -140,7 +141,10 @@ def _validate_field_map(
             )
         )
         return
-    unknown = sorted(set(values) - allowed_properties)
+    allowed = set(allowed_properties)
+    if allow_id:
+        allowed.add("id")
+    unknown = sorted(set(values) - allowed)
     if unknown:
         errors.append(
             _validation_error(
@@ -170,6 +174,8 @@ def _validate_primary_key_match(
                 f"Use {field} to identify a vertex by its primary key.",
             )
         )
+        return
+    if match.get("id") not in (None, ""):
         return
     missing = [
         pk for pk in primary_keys if pk not in match or match.get(pk) in (None, "")
@@ -326,6 +332,7 @@ def validate_graph_change_plan(
                 field="match",
                 allowed_properties=allowed,
                 errors=errors,
+                allow_id=True,
             )
             if op == "delete_vertex":
                 _validate_primary_key_match(
@@ -410,6 +417,7 @@ def validate_graph_change_plan(
                     field="source_match",
                     allowed_properties=vertex_properties.get(source_label, set()),
                     errors=errors,
+                    allow_id=True,
                 )
             if isinstance(target_label, str) and target_label in vertex_labels:
                 _validate_primary_key_match(
@@ -425,6 +433,7 @@ def validate_graph_change_plan(
                     field="target_match",
                     allowed_properties=vertex_properties.get(target_label, set()),
                     errors=errors,
+                    allow_id=True,
                 )
 
     return {"valid": not bool(errors), "errors": errors, "warnings": warnings}

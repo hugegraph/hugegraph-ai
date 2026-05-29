@@ -294,7 +294,21 @@ def manage_graph_data(
             details=_normalize_execute_result(execute_result, plan),
         )
 
-    return envelope_ok(_normalize_execute_result(execute_result, plan))
+    normalized = _normalize_execute_result(execute_result, plan)
+    if normalized.get("success") is False or normalized.get("status") in {
+        "partial",
+        "error",
+        "degraded",
+    }:
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            "Graph change execution did not complete successfully.",
+            retryable=bool(normalized.get("retryable")),
+            details=normalized,
+            warnings=normalized.get("warnings", []),
+        )
+
+    return envelope_ok(normalized)
 
 
 def _build_manage_graph_data_plan_context(

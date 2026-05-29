@@ -61,8 +61,32 @@ def _has_graph_index_info(graph_index_info: Any) -> bool:
     if graph_index_info is None:
         return False
     if isinstance(graph_index_info, dict):
-        return graph_index_info.get("health_endpoint") != "/openapi.json"
-    return True
+        if graph_index_info.get("health_endpoint") == "/openapi.json":
+            return False
+        explicit_values = (
+            graph_index_info.get("vid_embedding"),
+            graph_index_info.get("vid_embedding_status"),
+            graph_index_info.get("vid_index"),
+            graph_index_info.get("vid_index_status"),
+            graph_index_info.get("embedding_index"),
+            graph_index_info.get("embedding_index_status"),
+            graph_index_info.get("index_status"),
+        )
+        return any(_is_ready_index_value(value) for value in explicit_values)
+    return False
+
+
+def _is_ready_index_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dict):
+        if value.get("available") is True or value.get("ready") is True:
+            return True
+        status = value.get("status") or value.get("state")
+        return _is_ready_index_value(status)
+    if isinstance(value, str):
+        return value.strip().lower() in {"available", "ready", "loaded", "enabled"}
+    return False
 
 
 def _warning_from_exception(prefix: str, exc: Exception) -> str:

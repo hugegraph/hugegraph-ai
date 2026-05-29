@@ -165,6 +165,21 @@ def dry_run_graph_change_plan(
             "label": operation.get("label"),
             "action": op,
         }
+        if op == "create_edge":
+            endpoint_failed = _append_edge_endpoint_counts(
+                idx=idx,
+                operation=operation,
+                op=op,
+                item=item,
+                errors=errors,
+                planned_operations=operations,
+            )
+            preview.append(item)
+            if endpoint_failed:
+                continue
+            item["matched_count"] = None
+            continue
+
         if op not in WRITE_OPS:
             # create 操作没有“必须命中唯一旧数据”的要求；真正的 schema/payload
             # 合法性已经在 validate 阶段检查，因此 dry-run 只展示计划。
@@ -175,35 +190,13 @@ def dry_run_graph_change_plan(
         if op == "delete_edge":
             # 边删除先分别确认两个端点唯一，再确认边本身唯一。
             # 这样错误能定位到 source/target，而不是只得到一条模糊的边匹配失败。
-            endpoint_failed = False
-            for endpoint, endpoint_query in (
-                ("source", _source_vertex_match_query(operation)),
-                ("target", _target_vertex_match_query(operation)),
-            ):
-                endpoint_count_result = _read_count(endpoint_query)
-                if not endpoint_count_result.get("ok"):
-                    errors.append(
-                        _validation_error(
-                            idx,
-                            operation,
-                            f"{endpoint} endpoint count query failed",
-                            "Verify HugeGraph Server is available and retry the dry run.",
-                        )
-                    )
-                    endpoint_failed = True
-                    continue
-                endpoint_count = endpoint_count_result["data"]["matched_count"]
-                item[f"{endpoint}_matched_count"] = endpoint_count
-                if endpoint_count != 1:
-                    errors.append(
-                        _validation_error(
-                            idx,
-                            operation,
-                            f"{op} {endpoint} endpoint matched_count must be 1, got {endpoint_count}",
-                            "Narrow the endpoint match criteria so exactly one vertex is selected.",
-                        )
-                    )
-                    endpoint_failed = True
+            endpoint_failed = _append_edge_endpoint_counts(
+                idx=idx,
+                operation=operation,
+                op=op,
+                item=item,
+                errors=errors,
+            )
             if endpoint_failed:
                 preview.append(item)
                 continue
@@ -314,6 +307,109 @@ def dry_run_graph_change_plan(
     }
 
 
+def _append_edge_endpoint_counts(
+    *,
+    idx: int,
+    operation: dict[str, Any],
+    op: str,
+    item: dict[str, Any],
+    errors: list[ValidationError],
+    planned_operations: list[Any] | None = None,
+) -> bool:
+    endpoint_failed = False
+    for endpoint, endpoint_query in (
+        ("source", _source_vertex_match_query(operation)),
+        ("target", _target_vertex_match_query(operation)),
+    ):
+        planned_count = _planned_endpoint_match_count(
+            operation=operation,
+            endpoint=endpoint,
+            planned_operations=planned_operations,
+        )
+        if planned_count > 0:
+            item[f"{endpoint}_matched_count"] = planned_count
+            if planned_count != 1:
+                errors.append(
+                    _validation_error(
+                        idx,
+                        operation,
+                        f"{op} {endpoint} endpoint matched_count must be 1, got {planned_count}",
+                        "Narrow the endpoint match criteria so exactly one planned vertex is selected.",
+                    )
+                )
+                endpoint_failed = True
+            continue
+
+        endpoint_count_result = _read_count(endpoint_query)
+        if not endpoint_count_result.get("ok"):
+            errors.append(
+                _validation_error(
+                    idx,
+                    operation,
+                    f"{endpoint} endpoint count query failed",
+                    "Verify HugeGraph Server is available and retry the dry run.",
+                )
+            )
+            endpoint_failed = True
+            continue
+        endpoint_count = endpoint_count_result["data"]["matched_count"]
+        item[f"{endpoint}_matched_count"] = endpoint_count
+        if endpoint_count != 1:
+            errors.append(
+                _validation_error(
+                    idx,
+                    operation,
+                    f"{op} {endpoint} endpoint matched_count must be 1, got {endpoint_count}",
+                    "Narrow the endpoint match criteria so exactly one vertex is selected.",
+                )
+            )
+            endpoint_failed = True
+    return endpoint_failed
+
+
+def _planned_endpoint_match_count(
+    *,
+    operation: dict[str, Any],
+    endpoint: str,
+    planned_operations: list[Any] | None,
+) -> int:
+    if not planned_operations:
+        return 0
+
+    if endpoint == "source":
+        label = operation.get("source_label") or operation.get("outVLabel")
+        match = operation.get("source_match")
+    else:
+        label = operation.get("target_label") or operation.get("inVLabel")
+        match = operation.get("target_match")
+
+    if not isinstance(label, str) or not isinstance(match, dict):
+        return 0
+
+    count = 0
+    for planned in planned_operations:
+        if not isinstance(planned, dict):
+            continue
+        planned_op = str(planned.get("op") or planned.get("type") or "")
+        if planned_op != "create_vertex" or planned.get("label") != label:
+            continue
+        if _planned_vertex_matches(planned, match):
+            count += 1
+    return count
+
+
+def _planned_vertex_matches(operation: dict[str, Any], match: dict[str, Any]) -> bool:
+    for key, value in match.items():
+        if key == "id":
+            if operation.get("id") != value:
+                return False
+            continue
+        properties = operation.get("properties")
+        if not isinstance(properties, dict) or properties.get(key) != value:
+            return False
+    return bool(match)
+
+
 # ---- 执行 — 写入前再次校验 matched_count ----
 
 
@@ -326,6 +422,32 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     for idx, operation in enumerate(operations):
         op = str(operation.get("op") or operation.get("type"))
+        if op == "create_edge":
+            for endpoint, endpoint_query in (
+                ("source", _source_vertex_match_query(operation)),
+                ("target", _target_vertex_match_query(operation)),
+            ):
+                endpoint_count_result = _read_count(endpoint_query)
+                if not endpoint_count_result.get("ok"):
+                    return _execution_failure(
+                        endpoint_count_result, operation, idx, results
+                    )
+                endpoint_count = endpoint_count_result["data"]["matched_count"]
+                if endpoint_count != 1:
+                    return _execution_failure(
+                        envelope_err(
+                            ErrorType.INVALID_GRAPH_DATA,
+                            f"{op} {endpoint} endpoint matched_count must be 1 before execution.",
+                            details={
+                                "operation_index": idx,
+                                "matched_count": endpoint_count,
+                            },
+                        ),
+                        operation,
+                        idx,
+                        results,
+                    )
+
         if op in WRITE_OPS:
             # 执行前再次读取 matched_count，处理 dry-run 和 confirm 之间图状态变化
             # 的 TOCTOU 风险；只要匹配不再唯一，就拒绝写入。
@@ -426,6 +548,24 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                 idx,
                 results,
             )
+        if op in {"create_vertex", "create_edge"}:
+            affected = _write_affected_count(write_result)
+            if affected != 1:
+                return _execution_failure(
+                    envelope_err(
+                        ErrorType.FLOW_EXECUTION_FAILED,
+                        f"{op} execution affected {affected if affected is not None else 'unknown'} element(s), expected 1.",
+                        details={
+                            "operation_index": idx,
+                            "op": op,
+                            "affected": affected,
+                            "write_result": write_result,
+                        },
+                    ),
+                    operation,
+                    idx,
+                    results,
+                )
         if op in {"delete_vertex", "delete_edge"}:
             # 删除后立即反查，确保 HugeGraph 已经实际移除目标。
             # 这能捕获后端静默失败或异步状态异常，而不是只信任写接口返回。
@@ -466,6 +606,22 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
         "results": results,
         "mutation_summary": _mutation_summary(operations),
     }
+
+
+def _write_affected_count(write_result: Any) -> int | None:
+    data = write_result
+    if isinstance(write_result, dict) and "ok" in write_result:
+        data = write_result.get("data")
+    if not isinstance(data, dict):
+        return None
+    for key in ("affected", "count"):
+        if key not in data:
+            continue
+        try:
+            return int(data.get(key))
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 def _execution_failure(

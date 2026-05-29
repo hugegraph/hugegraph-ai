@@ -271,6 +271,39 @@ def test_inspect_graph_ai_available_when_openapi_fallback_works(monkeypatch):
     assert any("graph index info is unavailable" in w for w in result["warnings"])
 
 
+def test_inspect_graph_requires_explicit_vid_index_status(monkeypatch):
+    from hugegraph_mcp.tools import inspect_graph as inspect_graph_module
+
+    monkeypatch.setattr(
+        inspect_graph_module, "get_live_schema", lambda: _schema_result()
+    )
+    monkeypatch.setattr(
+        inspect_graph_module,
+        "execute_gremlin_read",
+        Mock(return_value={"data": [1], "total": 1, "duration_ms": 1, "is_read": True}),
+    )
+    monkeypatch.setattr(
+        inspect_graph_module,
+        "health_check",
+        Mock(
+            return_value={
+                "ok": True,
+                "data": {
+                    "status": "available",
+                    "health_endpoint": "/graph-index-info",
+                },
+                "warnings": [],
+            }
+        ),
+    )
+
+    result = inspect_graph_module.inspect_graph()
+
+    assert result["ok"] is True
+    assert result["data"]["hugegraph_ai_status"] == "available"
+    assert result["data"]["vid_embedding_status"] == "unknown"
+
+
 def test_inspect_graph_includes_next_actions(monkeypatch):
     from hugegraph_mcp.tools import inspect_graph as inspect_graph_module
 

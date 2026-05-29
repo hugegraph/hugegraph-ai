@@ -871,6 +871,15 @@ def ingest_graph_data(
         cfg=cfg,
     )
 
+    if normalized.get("status") != "success":
+        return envelope_err(
+            ErrorType.FLOW_EXECUTION_FAILED,
+            "Graph data import did not complete successfully.",
+            retryable=bool(normalized.get("retryable")),
+            details=normalized,
+            warnings=normalized.get("warnings", []),
+        )
+
     return envelope_ok(normalized, warnings=normalized.get("warnings", []))
 
 
@@ -922,24 +931,45 @@ def _normalize_import_result(
             "request_id": request_id,
         }
 
-    # 尝试从 AI 结果中提取写入计数
     written, count_source = _extract_written_counts(ai_result, planned)
     failed_items = _extract_failed_items(ai_result)
     warnings = _extract_import_warnings(ai_result)
+    remote_success = ai_result.get("success") if isinstance(ai_result, dict) else None
+    remote_status = (
+        str(ai_result.get("status")).lower()
+        if isinstance(ai_result, dict) and ai_result.get("status") is not None
+        else None
+    )
 
     if written is None:
         if failed_items:
             written = {"vertices": 0, "edges": 0}
-            status = "degraded"
+            status = "error" if remote_success is False else "degraded"
             warnings.append(
                 "HugeGraph-AI import returned failures without explicit written counts."
             )
-        else:
-            written = dict(planned)
-            status = "success"
+        elif remote_success is False:
+            written = {"vertices": 0, "edges": 0}
+            status = "error"
             warnings.append(
-                "HugeGraph-AI import did not return explicit written counts; assuming planned writes succeeded because the endpoint returned ok."
+                "HugeGraph-AI import reported failure without explicit written counts."
             )
+        else:
+            written = {"vertices": 0, "edges": 0}
+            status = (
+                remote_status
+                if remote_status in {"partial", "error", "degraded"}
+                else "degraded"
+            )
+            warnings.append(
+                "HugeGraph-AI import did not return explicit written counts; write outcome is unknown."
+            )
+    elif remote_success is False and (written["vertices"] > 0 or written["edges"] > 0):
+        status = "partial"
+    elif remote_success is False:
+        status = "error"
+    elif remote_status in {"partial", "error", "degraded"}:
+        status = remote_status
     elif written == planned and not failed_items:
         status = "success"
     elif written["vertices"] > 0 or written["edges"] > 0:

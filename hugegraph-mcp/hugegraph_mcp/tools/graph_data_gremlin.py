@@ -55,7 +55,13 @@ def _escape_groovy_single_quoted(value: str) -> str:
 
 
 def _has_steps(match: dict[str, Any]) -> str:
-    return "".join(f".has({_g(key)},{_g(value)})" for key, value in match.items())
+    steps: list[str] = []
+    for key, value in match.items():
+        if key == "id":
+            steps.append(f".hasId({_g(value)})")
+        else:
+            steps.append(f".has({_g(key)},{_g(value)})")
+    return "".join(steps)
 
 
 def _vertex_match_query(operation: dict[str, Any]) -> str:
@@ -87,6 +93,8 @@ def _target_vertex_match_query(operation: dict[str, Any]) -> str:
 
 def _create_vertex_query(operation: dict[str, Any]) -> str:
     query = f"g.addV({_g(operation['label'])})"
+    if operation.get("id") not in (None, ""):
+        query += f".property(T.id,{_g(operation['id'])})"
     for prop, value in (operation.get("properties") or {}).items():
         query += f".property({_g(prop)},{_g(value)})"
     return query

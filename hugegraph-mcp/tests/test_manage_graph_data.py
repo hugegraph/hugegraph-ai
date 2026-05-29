@@ -640,7 +640,7 @@ def test_graph_data_to_change_plan_maps_create_operations():
     assert result["operations"][1]["source_match"] == {"name": "Alice"}
 
 
-def test_graph_data_to_change_plan_maps_outv_inv_to_vertex_properties():
+def test_graph_data_to_change_plan_preserves_outv_inv_id_contract():
     result = manage_graph_data_module.graph_data_to_change_plan(
         {
             "vertices": [
@@ -660,12 +660,14 @@ def test_graph_data_to_change_plan_maps_outv_inv_to_vertex_properties():
         }
     )
 
+    assert result["operations"][0]["id"] == "1:Alice"
+    assert result["operations"][1]["id"] == "1:Bob"
     edge_op = result["operations"][2]
-    assert edge_op["source_match"] == {"name": "Alice"}
-    assert edge_op["target_match"] == {"name": "Bob"}
+    assert edge_op["source_match"] == {"id": "1:Alice"}
+    assert edge_op["target_match"] == {"id": "1:Bob"}
 
 
-def test_graph_data_to_change_plan_normalizes_vertex_id_lookup():
+def test_graph_data_to_change_plan_does_not_degrade_numeric_ids_to_properties():
     result = manage_graph_data_module.graph_data_to_change_plan(
         {
             "vertices": [
@@ -685,8 +687,204 @@ def test_graph_data_to_change_plan_normalizes_vertex_id_lookup():
     )
 
     edge_op = result["operations"][2]
-    assert edge_op["source_match"] == {"name": "Alice"}
-    assert edge_op["target_match"] == {"name": "Bob"}
+    assert edge_op["source_match"] == {"id": 123}
+    assert edge_op["target_match"] == {"id": 456}
+
+
+def test_create_vertex_query_preserves_explicit_id():
+    query = manage_graph_data_module._create_vertex_query(
+        {
+            "op": "create_vertex",
+            "label": "person",
+            "id": "1:Alice",
+            "properties": {"name": "Alice"},
+        }
+    )
+
+    assert query == "g.addV('person').property(T.id,'1:Alice').property('name','Alice')"
+
+
+def test_create_edge_query_matches_endpoints_by_id():
+    query = manage_graph_data_module._create_edge_query(
+        {
+            "op": "create_edge",
+            "label": "knows",
+            "source_label": "person",
+            "source_match": {"id": "1:Alice"},
+            "target_label": "person",
+            "target_match": {"id": "1:Bob"},
+        }
+    )
+
+    assert (
+        query == "g.V().hasLabel('person').hasId('1:Alice').as('s')"
+        ".V().hasLabel('person').hasId('1:Bob').addE('knows').from('s')"
+    )
+
+
+def test_dry_run_create_edge_rejects_non_unique_source(monkeypatch):
+    counts = iter([2, 1])
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(
+        {
+            "operations": [
+                {
+                    "op": "create_edge",
+                    "label": "knows",
+                    "source_label": "person",
+                    "source_match": {"id": "1:Alice"},
+                    "target_label": "person",
+                    "target_match": {"id": "1:Bob"},
+                }
+            ]
+        },
+        _live_schema(),
+    )
+
+    assert result["valid"] is False
+    assert (
+        "create_edge source endpoint matched_count must be 1, got 2"
+        in (result["errors"][0]["reason"])
+    )
+    assert result["preview"][0]["source_matched_count"] == 2
+
+
+def test_dry_run_create_edge_accepts_same_batch_vertex_id_without_live_lookup(
+    monkeypatch,
+):
+    read = []
+
+    def fake_read(query):
+        read.append(query)
+        return {"data": [0], "total": 1, "duration_ms": 1, "is_read": True}
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        fake_read,
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(
+        {
+            "operations": [
+                {
+                    "op": "create_vertex",
+                    "label": "person",
+                    "id": "1:Alice",
+                    "properties": {"name": "Alice"},
+                },
+                {
+                    "op": "create_vertex",
+                    "label": "person",
+                    "id": "1:Bob",
+                    "properties": {"name": "Bob"},
+                },
+                {
+                    "op": "create_edge",
+                    "label": "knows",
+                    "source_label": "person",
+                    "source_match": {"id": "1:Alice"},
+                    "target_label": "person",
+                    "target_match": {"id": "1:Bob"},
+                },
+            ]
+        },
+        _live_schema(),
+    )
+
+    assert result["valid"] is True
+    assert result["preview"][2]["source_matched_count"] == 1
+    assert result["preview"][2]["target_matched_count"] == 1
+    assert read == []
+
+
+def test_dry_run_create_edge_normalizes_same_batch_numeric_ids(monkeypatch):
+    read = []
+
+    def fake_read(query):
+        read.append(query)
+        return {"data": [0], "total": 1, "duration_ms": 1, "is_read": True}
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        fake_read,
+    )
+
+    plan = manage_graph_data_module.graph_data_to_change_plan(
+        {
+            "vertices": [
+                {"id": 123, "label": "person", "properties": {"name": "Alice"}},
+                {"id": 456, "label": "person", "properties": {"name": "Bob"}},
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "outV": "123",
+                    "outVLabel": "person",
+                    "inV": "456",
+                    "inVLabel": "person",
+                }
+            ],
+        }
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(plan, _live_schema())
+
+    assert result["valid"] is True
+    assert result["preview"][2]["source_matched_count"] == 1
+    assert result["preview"][2]["target_matched_count"] == 1
+    assert read == []
+
+
+def test_execute_create_edge_rejects_zero_affected(monkeypatch):
+    counts = iter([1, 1])
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
+    )
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_write",
+        lambda _query: {"success": True, "affected": 0, "is_write": True},
+    )
+
+    result = manage_graph_data_module.execute_graph_change_plan(
+        {
+            "operations": [
+                {
+                    "op": "create_edge",
+                    "label": "knows",
+                    "source_label": "person",
+                    "source_match": {"id": "1:Alice"},
+                    "target_label": "person",
+                    "target_match": {"id": "1:Bob"},
+                }
+            ]
+        }
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FLOW_EXECUTION_FAILED"
+    assert "affected 0 element" in result["error"]["message"]
 
 
 def test_graph_data_to_change_plan_preserves_explicit_zero_endpoint_id():
@@ -911,7 +1109,7 @@ def test_manage_graph_data_readonly_rejects_execution(monkeypatch):
     assert writes == []
 
 
-def test_manage_graph_data_partial_write_reports_written_count(monkeypatch):
+def test_manage_graph_data_partial_write_returns_error_envelope(monkeypatch):
     _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
@@ -952,13 +1150,15 @@ def test_manage_graph_data_partial_write_reports_written_count(monkeypatch):
         expires_at=dry_run["data"]["plan_context"]["expires_at"],
     )
 
-    assert result["ok"] is True
-    assert result["data"]["status"] == "partial"
-    assert result["data"]["success"] is False
-    assert result["data"]["planned"] == {"create_vertex": 2}
-    assert result["data"]["written"] == {"create_vertex": 1}
-    assert result["data"]["failed_items"][0]["operation_index"] == 1
-    assert result["data"]["failed_items"][0]["op"] == "create_vertex"
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FLOW_EXECUTION_FAILED"
+    details = result["error"]["details"]
+    assert details["status"] == "partial"
+    assert details["success"] is False
+    assert details["planned"] == {"create_vertex": 2}
+    assert details["written"] == {"create_vertex": 1}
+    assert details["failed_items"][0]["operation_index"] == 1
+    assert details["failed_items"][0]["op"] == "create_vertex"
     assert len(writes) == 2
 
 
