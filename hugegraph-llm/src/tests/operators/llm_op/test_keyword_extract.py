@@ -20,8 +20,12 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.operators.llm_op.keyword_extract import KeywordExtract
+
+pytestmark = pytest.mark.contract
 
 
 class TestKeywordExtract(unittest.TestCase):

@@ -19,9 +19,12 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from litellm.exceptions import APIError, BudgetExceededError
 
 from hugegraph_llm.models.llms.litellm import LiteLLMClient
+
+pytestmark = pytest.mark.contract
 
 
 class TestLiteLLMClient(unittest.TestCase):

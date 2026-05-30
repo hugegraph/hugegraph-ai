@@ -41,7 +41,8 @@ def download_nltk_resources():
 
 # Download NLTK resources before tests start
 download_nltk_resources()
-# Set environment variable to skip external service tests
-os.environ["SKIP_EXTERNAL_SERVICES"] = "true"
+# Default local tests away from external services while allowing selected
+# integration runs to opt in explicitly.
+os.environ.setdefault("SKIP_EXTERNAL_SERVICES", "true")
 # Log current Python path for debugging
 logging.debug("Python path: %s", sys.path)

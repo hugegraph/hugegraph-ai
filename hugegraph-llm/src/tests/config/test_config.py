@@ -18,6 +18,10 @@
 
 import unittest
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 class TestConfig(unittest.TestCase):
     def test_config(self):

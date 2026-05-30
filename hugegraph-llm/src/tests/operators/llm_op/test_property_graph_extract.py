@@ -21,6 +21,8 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.operators.llm_op.property_graph_extract import (
     PropertyGraphExtract,
@@ -28,6 +30,8 @@ from hugegraph_llm.operators.llm_op.property_graph_extract import (
     generate_extract_property_graph_prompt,
     split_text,
 )
+
+pytestmark = pytest.mark.contract
 
 
 class TestPropertyGraphExtract(unittest.TestCase):

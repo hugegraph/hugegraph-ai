@@ -231,7 +231,7 @@ git commit -m "docs(quality): add quality program preflight ledger" -m "- initia
 - Create/Update: `.workflow/quality-program/coverage/client-baseline.json`
 - Create/Update: `.workflow/quality-program/coverage/llm-baseline.json`
 
-- [ ] **Step G0.1: Add strict pytest marker definitions**
+- [x] **Step G0.1: Add strict pytest marker definitions**
 
 Modify root `pyproject.toml` by adding this section if no `[tool.pytest.ini_options]` exists:
 
@@ -251,7 +251,7 @@ addopts = "--strict-markers --strict-config"
 
 If `[tool.pytest.ini_options]` exists, merge the marker list without removing existing options.
 
-- [ ] **Step G0.2: Create test taxonomy documentation**
+- [x] **Step G0.2: Create test taxonomy documentation**
 
 Create `docs/quality/test-taxonomy.md`:
 
@@ -290,7 +290,7 @@ Do not silently skip selected Layer B tests. Prefer not selecting integration te
 If `HUGEGRAPH_REQUIRED=true`, unavailable HugeGraph is a failure.
 ```
 
-- [ ] **Step G0.3: Mark current tests in small batches**
+- [x] **Step G0.3: Mark current tests in small batches**
 
 Add `pytestmark = pytest.mark.unit` or `pytestmark = pytest.mark.contract` to existing deterministic tests that do not require Docker or network.
 
@@ -323,7 +323,7 @@ import pytest
 pytestmark = [pytest.mark.integration, pytest.mark.hugegraph]
 ```
 
-- [ ] **Step G0.4: Remove global forced external skip from LLM conftest**
+- [x] **Step G0.4: Remove global forced external skip from LLM conftest**
 
 Modify `hugegraph-llm/src/tests/conftest.py` so it does not always set `SKIP_EXTERNAL_SERVICES=true`.
 
@@ -341,7 +341,7 @@ os.environ.setdefault("SKIP_EXTERNAL_SERVICES", "true")
 
 Rationale: Layer A remains safe by default, while integration runs can override the variable.
 
-- [ ] **Step G0.5: Run marker collection checks**
+- [x] **Step G0.5: Run marker collection checks**
 
 Run:
 
@@ -354,7 +354,7 @@ uv run pytest hugegraph-llm/src/tests -m "unit or contract" --collect-only -q
 
 Expected: no unknown marker errors. If a selected set is empty, mark more existing deterministic tests before continuing.
 
-- [ ] **Step G0.6: Generate baseline coverage artifacts**
+- [x] **Step G0.6: Generate baseline coverage artifacts**
 
 Run:
 
@@ -366,7 +366,7 @@ uv run pytest hugegraph-llm/src/tests -m "unit or contract" --cov=hugegraph_llm 
 
 Expected: coverage JSON files exist. If legacy failures appear, record them in `.workflow/quality-program/baseline.md` and continue only if they are unrelated to marker setup.
 
-- [ ] **Step G0.7: Write taxonomy checkpoint**
+- [x] **Step G0.7: Write taxonomy checkpoint**
 
 Create `.workflow/quality-program/checkpoints/01-taxonomy.md`:
 
@@ -397,7 +397,7 @@ Update `quality-state.json`:
 
 Preserve existing arrays and append touched files, tests, and commands.
 
-- [ ] **Step G0.8: Commit G0**
+- [x] **Step G0.8: Commit G0**
 
 Run:
 

@@ -21,8 +21,12 @@ import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.operators.llm_op.gremlin_generate import GremlinGenerateSynthesize
+
+pytestmark = pytest.mark.contract
 
 
 class TestGremlinGenerateSynthesize(unittest.TestCase):

@@ -17,10 +17,13 @@
 
 from unittest.mock import Mock
 
+import pytest
 from fastapi import APIRouter, FastAPI, status
 from fastapi.testclient import TestClient
 
 from hugegraph_llm.api.rag_api import rag_http_api
+
+pytestmark = pytest.mark.contract
 
 
 def test_graph_config_api_passes_graph_field_to_apply_graph_conf():

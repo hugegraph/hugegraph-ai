@@ -1,10 +1,11 @@
 {
-  "current_goal": "G0",
+  "current_goal": "G1",
   "repo_sha_start": "d048bc9fa07042833549dd1def5ff3222c47be70",
   "base_branch": "main",
   "open_pr_snapshot_time": "2026-05-30T17:18:30Z",
   "goals_completed": [
-    "P0"
+    "P0",
+    "G0"
   ],
   "files_touched": [
     ".workflow/quality-program/README.md",
@@ -12,10 +13,45 @@
     ".workflow/quality-program/checkpoints/00-preflight.md",
     ".workflow/quality-program/reports/test-matrix.md",
     ".workflow/quality-program/reports/service-matrix.md",
-    ".workflow/quality-program/reports/flaky-risk-ledger.md"
+    ".workflow/quality-program/reports/flaky-risk-ledger.md",
+    "pyproject.toml",
+    "docs/quality/test-taxonomy.md",
+    ".workflow/quality-program/baseline.md",
+    ".workflow/quality-program/checkpoints/01-taxonomy.md",
+    ".workflow/quality-program/coverage/client-baseline.json",
+    ".workflow/quality-program/coverage/llm-baseline.json",
+    "hugegraph-llm/src/tests/conftest.py",
+    "hugegraph-llm/src/tests/api/test_rag_api.py",
+    "hugegraph-llm/src/tests/config/test_config.py",
+    "hugegraph-llm/src/tests/config/test_prompt_config.py",
+    "hugegraph-llm/src/tests/document/test_document.py",
+    "hugegraph-llm/src/tests/document/test_document_splitter.py",
+    "hugegraph-llm/src/tests/document/test_text_loader.py",
+    "hugegraph-llm/src/tests/middleware/test_middleware.py",
+    "hugegraph-llm/src/tests/models/llms/test_litellm_client.py",
+    "hugegraph-llm/src/tests/models/llms/test_openai_client.py",
+    "hugegraph-llm/src/tests/operators/llm_op/test_disambiguate_data.py",
+    "hugegraph-llm/src/tests/operators/llm_op/test_gremlin_generate.py",
+    "hugegraph-llm/src/tests/operators/llm_op/test_info_extract.py",
+    "hugegraph-llm/src/tests/operators/llm_op/test_keyword_extract.py",
+    "hugegraph-llm/src/tests/operators/llm_op/test_property_graph_extract.py",
+    "hugegraph-python-client/src/tests/api/test_auth.py",
+    "hugegraph-python-client/src/tests/api/test_auth_routing.py",
+    "hugegraph-python-client/src/tests/api/test_graph.py",
+    "hugegraph-python-client/src/tests/api/test_graphs.py",
+    "hugegraph-python-client/src/tests/api/test_gremlin.py",
+    "hugegraph-python-client/src/tests/api/test_metric.py",
+    "hugegraph-python-client/src/tests/api/test_response_validation.py",
+    "hugegraph-python-client/src/tests/api/test_schema.py",
+    "hugegraph-python-client/src/tests/api/test_task.py",
+    "hugegraph-python-client/src/tests/api/test_traverser.py",
+    "hugegraph-python-client/src/tests/api/test_variable.py",
+    "hugegraph-python-client/src/tests/api/test_version.py"
   ],
   "production_changes": [],
-  "tests_added_or_changed": [],
+  "tests_added_or_changed": [
+    "Added file-level unit/contract/integration/hugegraph markers to selected existing tests for Layer A and Layer B selection."
+  ],
   "commands_run": [
     "sed -n '1,220p' AGENTS.md",
     "sed -n '1,260p' hugegraph-llm/AGENTS.md",
@@ -29,9 +65,24 @@
     "git diff -- . ':!/.workflow/quality-program'",
     "git status --short",
     "git add .workflow/quality-program docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md",
-    "git commit -m \"docs(quality): add quality program preflight ledger\" -m \"- initialize restartable campaign state and checkpoints\n- document current CI and service matrix scaffolds\n- capture PR collision and skip-control audit structure\""
+    "git commit -m \"docs(quality): add quality program preflight ledger\" -m \"- initialize restartable campaign state and checkpoints\n- document current CI and service matrix scaffolds\n- capture PR collision and skip-control audit structure\"",
+    "uv run pytest hugegraph-python-client/src/tests --collect-only -q",
+    "uv run pytest hugegraph-llm/src/tests --collect-only -q",
+    "uv run pytest hugegraph-python-client/src/tests -m \"unit or contract\" --collect-only -q",
+    "uv run pytest hugegraph-llm/src/tests -m \"unit or contract\" --collect-only -q",
+    "uv run pytest src/tests --collect-only -q",
+    "uv run pytest src/tests -m \"unit or contract\" --collect-only -q",
+    "uv sync --extra dev --extra python-client --extra llm",
+    "uv run pytest hugegraph-python-client/src/tests -m \"unit or contract\" --cov=pyhugegraph --cov-report=term --cov-report=json:.workflow/quality-program/coverage/client-baseline.json",
+    "uv run pytest src/tests -m \"unit or contract\" --cov=hugegraph_llm --cov-report=term --cov-report=json:../.workflow/quality-program/coverage/llm-baseline.json",
+    "uv run ruff format --check hugegraph-llm/src/tests hugegraph-python-client/src/tests pyproject.toml",
+    "uv run ruff check hugegraph-llm/src/tests hugegraph-python-client/src/tests pyproject.toml",
+    "uv run ruff check hugegraph-python-client/src/tests/api/test_auth.py hugegraph-python-client/src/tests/api/test_graph.py hugegraph-python-client/src/tests/api/test_task.py --fix"
   ],
-  "known_failures": [],
+  "known_failures": [
+    "Root-level LLM collection command fails before collection because existing prompt config requires cwd hugegraph-llm.",
+    "Initial coverage command failed before uv sync because pytest-cov was missing from the active environment."
+  ],
   "deferred_items": [
     "Avoid #350/#277 YAML config migration files unless tests require a narrow compatibility assertion.",
     "Avoid #179 async/streaming API refactor surface.",
@@ -39,5 +90,5 @@
     "Avoid #240 vector/property embedding abstraction surface.",
     "Quarantine client/test fixes overlapping #323/#329/#342 until exact changed files are inspected."
   ],
-  "next_recommended_action": "Start G0 baseline and test taxonomy"
+  "next_recommended_action": "Standardize HugeGraph service fixture and CI readiness"
 }

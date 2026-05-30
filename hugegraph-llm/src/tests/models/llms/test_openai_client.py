@@ -19,7 +19,11 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from hugegraph_llm.models.llms.openai import OpenAIClient
+
+pytestmark = pytest.mark.contract
 
 
 class TestOpenAIClient(unittest.TestCase):

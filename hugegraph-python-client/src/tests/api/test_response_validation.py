@@ -18,8 +18,11 @@
 import unittest
 from unittest.mock import Mock
 
+import pytest
 import requests
 from pyhugegraph.utils.util import ResponseValidation
+
+pytestmark = pytest.mark.contract
 
 
 class TestResponseValidation(unittest.TestCase):
