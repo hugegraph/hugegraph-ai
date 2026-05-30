@@ -57,7 +57,8 @@
     ".github/workflows/hugegraph-python-client.yml",
     ".github/workflows/hugegraph-llm.yml",
     "docs/quality/hugegraph-integration.md",
-    ".workflow/quality-program/checkpoints/02-service-fixture.md"
+    ".workflow/quality-program/checkpoints/02-service-fixture.md",
+    ".workflow/quality-program/checkpoints/03-client-contract.md"
   ],
   "production_changes": [],
   "tests_added_or_changed": [
@@ -97,12 +98,15 @@
     "uv run ruff format --check hugegraph-python-client/src/tests hugegraph-llm/src/tests",
     "uv run ruff check hugegraph-python-client/src/tests hugegraph-llm/src/tests",
     "git diff --check",
-    "uv run python -c \"import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text()) for p in ['.github/workflows/hugegraph-llm.yml','.github/workflows/hugegraph-python-client.yml']]\""
+    "uv run python -c \"import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text()) for p in ['.github/workflows/hugegraph-llm.yml','.github/workflows/hugegraph-python-client.yml']]\"",
+    "docker ps --format '{{.Names}} {{.Image}} {{.Ports}}'",
+    "uv run python -c \"import requests; print(requests.get('http://127.0.0.1:8080/versions', timeout=5).text[:200])\""
   ],
   "known_failures": [
     "Root-level LLM collection command fails before collection because existing prompt config requires cwd hugegraph-llm.",
     "Initial coverage command failed before uv sync because pytest-cov was missing from the active environment.",
-    "LLM integration and hugegraph collection is empty before G3 adds real-boundary tests; pytest returns exit code 5."
+    "LLM integration and hugegraph collection is empty before G3 adds real-boundary tests; pytest returns exit code 5.",
+    "G2 blocked: Docker daemon is unavailable and no HugeGraph service is reachable at http://127.0.0.1:8080/versions."
   ],
   "deferred_items": [
     "Avoid #350/#277 YAML config migration files unless tests require a narrow compatibility assertion.",
@@ -111,5 +115,5 @@
     "Avoid #240 vector/property embedding abstraction surface.",
     "Quarantine client/test fixes overlapping #323/#329/#342 until exact changed files are inspected."
   ],
-  "next_recommended_action": "Harden pyhugegraph contract coverage"
+  "next_recommended_action": "Start Docker/OrbStack and HugeGraph 1.7.0, then resume G2 from Step G2.1"
 }
