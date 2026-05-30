@@ -1359,7 +1359,7 @@ git commit -m "test(llm): add core pipeline smoke gates" -m "- add deterministic
 - Create/Update: `.workflow/quality-program/coverage/combined-baseline.json`
 - Create/Update: `.workflow/quality-program/checkpoints/07-coverage-ratchet.md`
 
-- [ ] **Step G6.1: Create coverage ratchet documentation**
+- [x] **Step G6.1: Create coverage ratchet documentation**
 
 Create `docs/quality/coverage-ratchet.md`:
 
@@ -1383,7 +1383,7 @@ Create `docs/quality/coverage-ratchet.md`:
 - `hugegraph_llm.api.models`
 ```
 
-- [ ] **Step G6.2: Generate combined coverage baseline**
+- [x] **Step G6.2: Generate combined coverage baseline**
 
 Run:
 
@@ -1398,7 +1398,7 @@ uv run pytest hugegraph-python-client/src/tests hugegraph-llm/src/tests \
 
 Expected: combined baseline file exists. Do not enforce a high threshold yet.
 
-- [ ] **Step G6.3: Split client CI into layer jobs**
+- [x] **Step G6.3: Split client CI into layer jobs**
 
 Modify `.github/workflows/hugegraph-python-client.yml` into at least:
 
@@ -1416,7 +1416,7 @@ Required properties:
 - coverage artifact is uploaded when feasible
 ```
 
-- [ ] **Step G6.4: Split LLM CI into layer jobs**
+- [x] **Step G6.4: Split LLM CI into layer jobs**
 
 Modify `.github/workflows/hugegraph-llm.yml` into at least:
 
@@ -1435,7 +1435,7 @@ Required properties:
 - external tests are not default PR gates
 ```
 
-- [ ] **Step G6.5: Add local ratchet commands**
+- [x] **Step G6.5: Add local ratchet commands**
 
 Document commands in `docs/quality/coverage-ratchet.md`:
 
@@ -1446,7 +1446,7 @@ uv run pytest hugegraph-llm/src/tests/operators/llm_op -m "unit or contract" --c
 uv run pytest hugegraph-llm/src/tests/api -m "unit or contract" --cov=hugegraph_llm.api --cov-report=term
 ```
 
-- [ ] **Step G6.6: Run full local verification**
+- [x] **Step G6.6: Run full local verification**
 
 Run:
 
@@ -1462,7 +1462,7 @@ uv run pytest hugegraph-llm/src/tests/integration -m "smoke" -v --tb=short
 
 Expected: failures are either fixed or recorded with classification and next action.
 
-- [ ] **Step G6.7: Write checkpoint and commit**
+- [x] **Step G6.7: Write checkpoint and commit**
 
 Run:
 

@@ -1,5 +1,5 @@
 {
-  "current_goal": "G6",
+  "current_goal": "G7",
   "repo_sha_start": "d048bc9fa07042833549dd1def5ff3222c47be70",
   "base_branch": "main",
   "open_pr_snapshot_time": "2026-05-30T17:18:30Z",
@@ -10,7 +10,8 @@
     "G2",
     "G3",
     "G4",
-    "G5"
+    "G5",
+    "G6"
   ],
   "files_touched": [
     ".workflow/quality-program/README.md",
@@ -84,7 +85,10 @@
     "hugegraph-llm/src/tests/data/quality_program/text2gremlin_schema.json",
     "hugegraph-llm/src/tests/integration/test_core_kg_smoke.py",
     "hugegraph-llm/src/tests/integration/test_core_graphrag_smoke.py",
-    "hugegraph-llm/src/tests/integration/test_core_text2gremlin_smoke.py"
+    "hugegraph-llm/src/tests/integration/test_core_text2gremlin_smoke.py",
+    "docs/quality/coverage-ratchet.md",
+    ".workflow/quality-program/coverage/combined-baseline.json",
+    ".workflow/quality-program/checkpoints/07-coverage-ratchet.md"
   ],
   "production_changes": [
     {
@@ -189,7 +193,18 @@
     "uv run pytest hugegraph-llm/src/tests/integration -m 'smoke and not hugegraph' -v --tb=short",
     "uv run ruff format --check hugegraph-llm/src/tests/integration/test_core_kg_smoke.py hugegraph-llm/src/tests/integration/test_core_graphrag_smoke.py hugegraph-llm/src/tests/integration/test_core_text2gremlin_smoke.py",
     "uv run ruff check hugegraph-llm/src/tests/integration/test_core_kg_smoke.py hugegraph-llm/src/tests/integration/test_core_graphrag_smoke.py hugegraph-llm/src/tests/integration/test_core_text2gremlin_smoke.py",
-    "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests/integration -m 'smoke' -q"
+    "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests/integration -m 'smoke' -q",
+    "uv run pytest hugegraph-python-client/src/tests hugegraph-llm/src/tests -m 'unit or contract' --cov=pyhugegraph --cov=hugegraph_llm --cov-report=term --cov-report=json:.workflow/quality-program/coverage/combined-baseline.json",
+    "uv run pytest --import-mode=importlib hugegraph-python-client/src/tests hugegraph-llm/src/tests -m 'unit or contract' --cov=pyhugegraph --cov=hugegraph_llm --cov-report=term --cov-report=json:.workflow/quality-program/coverage/combined-baseline.json",
+    "uv run python -c \"import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text()) for p in ['.github/workflows/hugegraph-llm.yml','.github/workflows/hugegraph-python-client.yml']]\"",
+    "git diff --check",
+    "uv run ruff format --check .",
+    "uv run ruff check .",
+    "uv run pytest hugegraph-python-client/src/tests -m \"unit or contract\" -q",
+    "uv run pytest hugegraph-llm/src/tests -m \"unit or contract\" -q",
+    "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-python-client/src/tests -m \"integration and hugegraph\" -v --tb=short",
+    "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests -m \"integration and hugegraph\" -v --tb=short",
+    "uv run pytest hugegraph-llm/src/tests/integration -m \"smoke\" -v --tb=short"
   ],
   "known_failures": [],
   "deferred_items": [
@@ -199,5 +214,5 @@
     "Avoid #240 vector/property embedding abstraction surface.",
     "Quarantine client/test fixes overlapping #323/#329/#342 until exact changed files are inspected."
   ],
-  "next_recommended_action": "Start G6 coverage ratchet and CI split"
+  "next_recommended_action": "Start G7 deferred refactor queue and final report"
 }
