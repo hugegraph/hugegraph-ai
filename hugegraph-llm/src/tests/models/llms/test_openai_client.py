@@ -113,6 +113,18 @@ class TestOpenAIClient(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Empty choices in LLM response"):
             openai_client.generate(prompt="What is the capital of France?")
 
+    @patch("hugegraph_llm.models.llms.openai.OpenAI")
+    def test_generate_malformed_sdk_response_raises_attribute_error(self, mock_openai_class):
+        """Test malformed SDK responses surface the missing contract."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = object()
+        mock_openai_class.return_value = mock_client
+
+        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+
+        with self.assertRaises(AttributeError):
+            openai_client.generate(prompt="What is the capital of France?")
+
     @patch("hugegraph_llm.models.llms.openai.AsyncOpenAI")
     def test_agenerate(self, mock_async_openai_class):
         """Test agenerate method with mocked async OpenAI client."""

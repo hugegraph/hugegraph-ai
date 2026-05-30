@@ -1061,7 +1061,7 @@ git commit -m "test(llm): harden hugegraph boundary coverage" -m "- add real Hug
 - Create: `hugegraph-llm/src/tests/fixtures/fake_llm.py`
 - Create/Update: `.workflow/quality-program/checkpoints/05-parser-api-operator.md`
 
-- [ ] **Step G4.1: Add deterministic fake LLM fixture**
+- [x] **Step G4.1: Add deterministic fake LLM fixture**
 
 Create `hugegraph-llm/src/tests/fixtures/fake_llm.py`:
 
@@ -1081,7 +1081,7 @@ class FakeLLM:
         return self.generate(prompt=prompt, messages=messages, **kwargs)
 ```
 
-- [ ] **Step G4.2: Add adversarial graph JSON parser tests**
+- [x] **Step G4.2: Add adversarial graph JSON parser tests**
 
 In `test_property_graph_extract.py`, add cases for:
 
@@ -1108,7 +1108,7 @@ def test_property_graph_extract_strips_fenced_json():
     assert result == []
 ```
 
-- [ ] **Step G4.3: Add keyword parser malformed output tests**
+- [x] **Step G4.3: Add keyword parser malformed output tests**
 
 In `test_keyword_extract.py`, add tests for fenced output, empty output, duplicate keywords, and non-list provider text.
 
@@ -1120,7 +1120,7 @@ Expected assertions:
 - markdown fences do not leak into keywords
 ```
 
-- [ ] **Step G4.4: Add Gremlin-only contract tests**
+- [x] **Step G4.4: Add Gremlin-only contract tests**
 
 In `test_gremlin_generate.py`, add tests for:
 
@@ -1133,7 +1133,7 @@ In `test_gremlin_generate.py`, add tests for:
 
 Assert the public contract expected by callers: Gremlin-only string or explicit failure.
 
-- [ ] **Step G4.5: Expand API public-surface tests**
+- [x] **Step G4.5: Expand API public-surface tests**
 
 In `hugegraph-llm/src/tests/api/test_rag_api.py`, add FastAPI TestClient tests for:
 
@@ -1148,7 +1148,7 @@ In `hugegraph-llm/src/tests/api/test_rag_api.py`, add FastAPI TestClient tests f
 
 Do not test private helper calls when the public route can prove the contract.
 
-- [ ] **Step G4.6: Expand provider wrapper error tests**
+- [x] **Step G4.6: Expand provider wrapper error tests**
 
 For OpenAI, LiteLLM, Ollama, embedding, and reranker wrappers:
 
@@ -1162,7 +1162,7 @@ For OpenAI, LiteLLM, Ollama, embedding, and reranker wrappers:
 
 Use mocked SDK calls only. Do not use real credentials.
 
-- [ ] **Step G4.7: Run deterministic LLM contract suites**
+- [x] **Step G4.7: Run deterministic LLM contract suites**
 
 Run:
 
@@ -1174,7 +1174,7 @@ uv run pytest hugegraph-llm/src/tests/models -m "unit or contract" -v --tb=short
 
 Expected: no external calls.
 
-- [ ] **Step G4.8: Apply minimal parser/API/operator fixes**
+- [x] **Step G4.8: Apply minimal parser/API/operator fixes**
 
 Allowed fixes:
 
@@ -1187,7 +1187,7 @@ Allowed fixes:
 
 Every fix requires a regression test added in this goal.
 
-- [ ] **Step G4.9: Write checkpoint and commit**
+- [x] **Step G4.9: Write checkpoint and commit**
 
 Run:
 

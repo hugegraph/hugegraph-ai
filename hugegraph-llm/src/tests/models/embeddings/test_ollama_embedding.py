@@ -20,8 +20,12 @@ import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from hugegraph_llm.models.embeddings.base import SimilarityMode
 from hugegraph_llm.models.embeddings.ollama import OllamaEmbedding
+
+pytestmark = pytest.mark.contract
 
 
 class TestOllamaEmbedding(unittest.TestCase):
@@ -82,6 +86,13 @@ class TestOllamaEmbedding(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing 'embeddings'"):
             ollama_embedding.get_texts_embeddings(["a"])
 
+    def test_get_texts_embeddings_requires_embed_method(self):
+        ollama_embedding = OllamaEmbedding(model="test-model")
+        ollama_embedding.client = object()
+
+        with self.assertRaisesRegex(AttributeError, "required 'embed' method"):
+            ollama_embedding.get_texts_embeddings(["a"])
+
     def test_get_texts_embeddings_requires_non_empty_embeddings(self):
         ollama_embedding = OllamaEmbedding(model="test-model")
         ollama_embedding.client = MagicMock()
@@ -97,6 +108,18 @@ class TestOllamaEmbedding(unittest.TestCase):
 
         async def run_async_test():
             with self.assertRaisesRegex(ValueError, "returned no embeddings"):
+                await ollama_embedding.async_get_text_embedding("a")
+
+        import asyncio
+
+        asyncio.run(run_async_test())
+
+    def test_async_get_text_embedding_requires_embed_method(self):
+        ollama_embedding = OllamaEmbedding(model="test-model")
+        ollama_embedding.async_client = object()
+
+        async def run_async_test():
+            with self.assertRaisesRegex(AttributeError, "required 'embed' method"):
                 await ollama_embedding.async_get_text_embedding("a")
 
         import asyncio
