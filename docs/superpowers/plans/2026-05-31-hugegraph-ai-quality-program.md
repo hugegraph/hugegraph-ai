@@ -97,7 +97,7 @@ Production files may be edited only when a task says so and a test proves the be
 - Create: `.workflow/quality-program/reports/service-matrix.md`
 - Create: `.workflow/quality-program/reports/flaky-risk-ledger.md`
 
-- [ ] **Step P0.1: Read mandatory repository guidance**
+- [x] **Step P0.1: Read mandatory repository guidance**
 
 Read:
 
@@ -109,7 +109,7 @@ sed -n '1,260p' rules/README.md
 
 Expected: confirm this is a uv workspace; client is a lower-level dependency; `hugegraph-llm` is the main high-risk module; staged workflow requires research-first and explicit checkpoints.
 
-- [ ] **Step P0.2: Snapshot branch and open PR collision state**
+- [x] **Step P0.2: Snapshot branch and open PR collision state**
 
 Run:
 
@@ -120,7 +120,7 @@ gh pr list --repo apache/hugegraph-ai --state open --limit 50 --json number,titl
 
 Expected: capture current branch, dirty files, and open PRs. If an open PR touches the same files planned for the current goal, add it to the quarantine section of `00-preflight.md`.
 
-- [ ] **Step P0.3: Create initial workflow state**
+- [x] **Step P0.3: Create initial workflow state**
 
 Create `.workflow/quality-program/quality-state.json` with this exact shape:
 
@@ -143,7 +143,7 @@ Create `.workflow/quality-program/quality-state.json` with this exact shape:
 
 Fill `repo_sha_start` with `git rev-parse HEAD`. Fill `open_pr_snapshot_time` with `date -u +"%Y-%m-%dT%H:%M:%SZ"`.
 
-- [ ] **Step P0.4: Create preflight checkpoint**
+- [x] **Step P0.4: Create preflight checkpoint**
 
 Create `.workflow/quality-program/checkpoints/00-preflight.md` with sections:
 
@@ -171,7 +171,7 @@ Populate it using the commands in P0.1 and P0.2 plus:
 rg -n "SKIP_EXTERNAL_SERVICES|SKIP_GREMLIN_TESTS|skip|xfail|pytest.mark|hugegraph:1\\.[0-9]" hugegraph-llm/src/tests hugegraph-python-client/src/tests .github/workflows
 ```
 
-- [ ] **Step P0.5: Create test and service matrix reports**
+- [x] **Step P0.5: Create test and service matrix reports**
 
 Create `.workflow/quality-program/reports/test-matrix.md` with this table header:
 
@@ -197,7 +197,7 @@ At minimum, add HugeGraph:
 | HugeGraph Server | hugegraph/hugegraph:1.7.0 | Layer B, Layer C graph-boundary smoke | `GET /versions` | `HUGEGRAPH_URL`, `HUGEGRAPH_REQUIRED` | fail if selected and required |
 ```
 
-- [ ] **Step P0.6: Verify no production code changed**
+- [x] **Step P0.6: Verify no production code changed**
 
 Run:
 
@@ -208,7 +208,7 @@ git diff -- . ':!/.workflow/quality-program'
 
 Expected: only `.workflow/quality-program/*` changes exist. If production code changed, stop and revert the smallest accidental patch.
 
-- [ ] **Step P0.7: Commit P0**
+- [x] **Step P0.7: Commit P0**
 
 Run:
 

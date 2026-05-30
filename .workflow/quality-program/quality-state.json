@@ -1,0 +1,43 @@
+{
+  "current_goal": "G0",
+  "repo_sha_start": "d048bc9fa07042833549dd1def5ff3222c47be70",
+  "base_branch": "main",
+  "open_pr_snapshot_time": "2026-05-30T17:18:30Z",
+  "goals_completed": [
+    "P0"
+  ],
+  "files_touched": [
+    ".workflow/quality-program/README.md",
+    ".workflow/quality-program/quality-state.json",
+    ".workflow/quality-program/checkpoints/00-preflight.md",
+    ".workflow/quality-program/reports/test-matrix.md",
+    ".workflow/quality-program/reports/service-matrix.md",
+    ".workflow/quality-program/reports/flaky-risk-ledger.md"
+  ],
+  "production_changes": [],
+  "tests_added_or_changed": [],
+  "commands_run": [
+    "sed -n '1,220p' AGENTS.md",
+    "sed -n '1,260p' hugegraph-llm/AGENTS.md",
+    "sed -n '1,260p' rules/README.md",
+    "git status --short --branch",
+    "gh pr list --repo apache/hugegraph-ai --state open --limit 50 --json number,title,headRefName,baseRefName,updatedAt,mergeable,changedFiles,labels",
+    "sed -n '1,220p' .github/workflows/hugegraph-python-client.yml",
+    "sed -n '1,180p' .github/workflows/hugegraph-llm.yml",
+    "rg -n \"SKIP_EXTERNAL_SERVICES|SKIP_GREMLIN_TESTS|skip|xfail|pytest.mark|hugegraph:1\\\\.[0-9]|markers|addopts\" pyproject.toml hugegraph-llm/pyproject.toml hugegraph-python-client/pyproject.toml hugegraph-llm/src/tests hugegraph-python-client/src/tests .github/workflows",
+    "git diff --stat",
+    "git diff -- . ':!/.workflow/quality-program'",
+    "git status --short",
+    "git add .workflow/quality-program docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md",
+    "git commit -m \"docs(quality): add quality program preflight ledger\" -m \"- initialize restartable campaign state and checkpoints\n- document current CI and service matrix scaffolds\n- capture PR collision and skip-control audit structure\""
+  ],
+  "known_failures": [],
+  "deferred_items": [
+    "Avoid #350/#277 YAML config migration files unless tests require a narrow compatibility assertion.",
+    "Avoid #179 async/streaming API refactor surface.",
+    "Avoid #315 flow integration redesign surface.",
+    "Avoid #240 vector/property embedding abstraction surface.",
+    "Quarantine client/test fixes overlapping #323/#329/#342 until exact changed files are inspected."
+  ],
+  "next_recommended_action": "Start G0 baseline and test taxonomy"
+}
