@@ -5,8 +5,8 @@ Quality Program v2.
 
 ## Source of Truth
 
-- `docs/superpowers/specs/2026-05-31-hugegraph-ai-quality-program-design.md`
-- `docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md`
+- `docs/specs/2026-05-31-hugegraph-ai-quality-program-design.md`
+- `docs/plans/2026-05-31-hugegraph-ai-quality-program.md`
 - `AGENTS.md`
 - `hugegraph-llm/AGENTS.md`
 - `rules/README.md`

@@ -3,7 +3,7 @@
 Date: 2026-05-31
 Target repo: `apache/hugegraph-ai`
 Primary execution mode: Codex `/goal`, long-running, unattended, restartable, high-signal test refactor.
-Implementation plan: `docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md`
+Implementation plan: `docs/plans/2026-05-31-hugegraph-ai-quality-program.md`
 
 ## Executive Summary
 

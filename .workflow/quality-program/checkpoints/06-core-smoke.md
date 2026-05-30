@@ -52,7 +52,7 @@ None.
 
 - `.workflow/quality-program/checkpoints/06-core-smoke.md`
 - `.workflow/quality-program/quality-state.json`
-- `docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md`
+- `docs/plans/2026-05-31-hugegraph-ai-quality-program.md`
 - `hugegraph-llm/src/tests/data/quality_program/kg_text.txt`
 - `hugegraph-llm/src/tests/data/quality_program/kg_graph_output.json`
 - `hugegraph-llm/src/tests/data/quality_program/graphrag_documents.json`

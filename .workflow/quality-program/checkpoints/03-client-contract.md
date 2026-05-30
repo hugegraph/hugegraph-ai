@@ -64,7 +64,7 @@ The small coverage increase is expected; G2 primarily improves service-boundary 
 - `.workflow/quality-program/quality-state.json`
 - `.workflow/quality-program/reports/flaky-risk-ledger.md`
 - `.workflow/quality-program/reports/production-change-ledger.md`
-- `docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md`
+- `docs/plans/2026-05-31-hugegraph-ai-quality-program.md`
 - `hugegraph-python-client/src/tests/conftest.py`
 - `hugegraph-python-client/src/tests/client_utils.py`
 - `hugegraph-python-client/src/tests/api/test_response_validation.py`

@@ -66,7 +66,7 @@ git diff --check
 - `.workflow/quality-program/checkpoints/04-llm-boundary.md`
 - `.workflow/quality-program/quality-state.json`
 - `.workflow/quality-program/reports/production-change-ledger.md`
-- `docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md`
+- `docs/plans/2026-05-31-hugegraph-ai-quality-program.md`
 - `hugegraph-llm/src/hugegraph_llm/operators/hugegraph_op/commit_to_hugegraph.py`
 - `hugegraph-llm/src/tests/conftest.py`
 - `hugegraph-llm/src/tests/integration/test_hugegraph_boundary.py`

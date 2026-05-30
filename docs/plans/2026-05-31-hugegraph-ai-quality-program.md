@@ -14,7 +14,7 @@
 
 Implement from:
 
-- `docs/superpowers/specs/2026-05-31-hugegraph-ai-quality-program-design.md`
+- `docs/specs/2026-05-31-hugegraph-ai-quality-program-design.md`
 
 Do not use the older v1 design if it conflicts with this v2 spec.
 
@@ -1482,7 +1482,7 @@ git commit -m "ci(quality): split test gates and add coverage ratchet" -m "- sep
 - Create/Update: `.workflow/quality-program/reports/final-quality-report.md`
 - Create/Update: `.workflow/quality-program/checkpoints/08-deferred-refactors.md`
 
-- [ ] **Step G7.1: Create deferred refactor report**
+- [x] **Step G7.1: Create deferred refactor report**
 
 Create `.workflow/quality-program/reports/deferred-refactors.md` with one section per item:
 
@@ -1501,7 +1501,7 @@ Create `.workflow/quality-program/reports/deferred-refactors.md` with one sectio
 
 Add matching sections for YAML config, demo UI decomposition, flow/node/operator boundary redesign, vector DB backend abstraction cleanup, broader dependency/config cleanup, and optional MCP/tool-surface integration.
 
-- [ ] **Step G7.2: Finalize production change ledger**
+- [x] **Step G7.2: Finalize production change ledger**
 
 Ensure `.workflow/quality-program/reports/production-change-ledger.md` contains:
 
@@ -1514,7 +1514,7 @@ Ensure `.workflow/quality-program/reports/production-change-ledger.md` contains:
 
 Every production file edit from G2-G6 must have a row.
 
-- [ ] **Step G7.3: Finalize flaky risk ledger**
+- [x] **Step G7.3: Finalize flaky risk ledger**
 
 Ensure `.workflow/quality-program/reports/flaky-risk-ledger.md` contains:
 
@@ -1527,7 +1527,7 @@ Ensure `.workflow/quality-program/reports/flaky-risk-ledger.md` contains:
 
 Include Docker readiness, HugeGraph cleanup, external provider exclusion, and smoke fixture determinism.
 
-- [ ] **Step G7.4: Write final quality report**
+- [x] **Step G7.4: Write final quality report**
 
 Create `.workflow/quality-program/reports/final-quality-report.md` with:
 
@@ -1555,7 +1555,7 @@ Create `.workflow/quality-program/reports/final-quality-report.md` with:
 
 Include exact commands and final status for each layer.
 
-- [ ] **Step G7.5: Run final sanity checks**
+- [x] **Step G7.5: Run final sanity checks**
 
 Run:
 
@@ -1568,7 +1568,7 @@ uv run ruff check .
 
 Expected: no placeholder text. Ruff checks pass or failures are recorded with exact reason.
 
-- [ ] **Step G7.6: Commit final reports**
+- [x] **Step G7.6: Commit final reports**
 
 Run:
 
@@ -1581,16 +1581,16 @@ git commit -m "docs(quality): finalize quality program report" -m "- document de
 
 ## Plan Self-Review Checklist
 
-- [ ] Spec coverage: P0 maps to preflight/collision gate and state ledger.
-- [ ] Spec coverage: G0 maps to strict marker definitions and coverage baseline.
-- [ ] Spec coverage: G1 maps to deterministic HugeGraph 1.7.0 service fixtures and CI readiness.
-- [ ] Spec coverage: G2 maps to pyhugegraph contract hardening.
-- [ ] Spec coverage: G3 maps to `hugegraph-llm` HugeGraph boundary hardening.
-- [ ] Spec coverage: G4 maps to parser/API/operator deterministic contract coverage.
-- [ ] Spec coverage: G5 maps to production-code core smoke gates and anti mock-only integration rules.
-- [ ] Spec coverage: G6 maps to coverage ratchet and CI split.
-- [ ] Spec coverage: G7 maps to deferred refactor queue and final report.
-- [ ] No task requires real LLM, embedding, reranker, vector DB, or UI credentials in default gates.
-- [ ] No task performs async/streaming, YAML config, demo UI, flow/node/operator architecture, dependency-system, or vector DB abstraction refactors.
-- [ ] Every production-code change task requires a proving test and ledger entry.
-- [ ] Every goal ends with a checkpoint and commit.
+- [x] Spec coverage: P0 maps to preflight/collision gate and state ledger.
+- [x] Spec coverage: G0 maps to strict marker definitions and coverage baseline.
+- [x] Spec coverage: G1 maps to deterministic HugeGraph 1.7.0 service fixtures and CI readiness.
+- [x] Spec coverage: G2 maps to pyhugegraph contract hardening.
+- [x] Spec coverage: G3 maps to `hugegraph-llm` HugeGraph boundary hardening.
+- [x] Spec coverage: G4 maps to parser/API/operator deterministic contract coverage.
+- [x] Spec coverage: G5 maps to production-code core smoke gates and anti mock-only integration rules.
+- [x] Spec coverage: G6 maps to coverage ratchet and CI split.
+- [x] Spec coverage: G7 maps to deferred refactor queue and final report.
+- [x] No task requires real LLM, embedding, reranker, vector DB, or UI credentials in default gates.
+- [x] No task performs async/streaming, YAML config, demo UI, flow/node/operator architecture, dependency-system, or vector DB abstraction refactors.
+- [x] Every production-code change task requires a proving test and ledger entry.
+- [x] Every goal ends with a checkpoint and commit.

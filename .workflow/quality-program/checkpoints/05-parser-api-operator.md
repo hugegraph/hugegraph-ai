@@ -54,7 +54,7 @@ git diff --check
 - `.workflow/quality-program/checkpoints/05-parser-api-operator.md`
 - `.workflow/quality-program/quality-state.json`
 - `.workflow/quality-program/reports/production-change-ledger.md`
-- `docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md`
+- `docs/plans/2026-05-31-hugegraph-ai-quality-program.md`
 - `hugegraph-llm/src/hugegraph_llm/api/rag_api.py`
 - `hugegraph-llm/src/tests/fixtures/fake_llm.py`
 - `hugegraph-llm/src/tests/operators/llm_op/test_property_graph_extract.py`

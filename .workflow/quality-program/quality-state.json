@@ -1,5 +1,5 @@
 {
-  "current_goal": "G7",
+  "current_goal": "complete",
   "repo_sha_start": "d048bc9fa07042833549dd1def5ff3222c47be70",
   "base_branch": "main",
   "open_pr_snapshot_time": "2026-05-30T17:18:30Z",
@@ -11,7 +11,8 @@
     "G3",
     "G4",
     "G5",
-    "G6"
+    "G6",
+    "G7"
   ],
   "files_touched": [
     ".workflow/quality-program/README.md",
@@ -69,7 +70,7 @@
     ".workflow/quality-program/checkpoints/06-core-smoke.md",
     ".workflow/quality-program/coverage/client-g2.json",
     ".workflow/quality-program/reports/production-change-ledger.md",
-    "docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md",
+    "docs/plans/2026-05-31-hugegraph-ai-quality-program.md",
     "hugegraph-python-client/src/pyhugegraph/utils/util.py",
     "hugegraph-llm/src/hugegraph_llm/operators/hugegraph_op/commit_to_hugegraph.py",
     "hugegraph-llm/src/tests/integration/test_hugegraph_boundary.py",
@@ -88,7 +89,10 @@
     "hugegraph-llm/src/tests/integration/test_core_text2gremlin_smoke.py",
     "docs/quality/coverage-ratchet.md",
     ".workflow/quality-program/coverage/combined-baseline.json",
-    ".workflow/quality-program/checkpoints/07-coverage-ratchet.md"
+    ".workflow/quality-program/checkpoints/07-coverage-ratchet.md",
+    ".workflow/quality-program/checkpoints/08-deferred-refactors.md",
+    ".workflow/quality-program/reports/deferred-refactors.md",
+    ".workflow/quality-program/reports/final-quality-report.md"
   ],
   "production_changes": [
     {
@@ -135,7 +139,7 @@
     "git diff --stat",
     "git diff -- . ':!/.workflow/quality-program'",
     "git status --short",
-    "git add .workflow/quality-program docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md",
+    "git add .workflow/quality-program docs/plans/2026-05-31-hugegraph-ai-quality-program.md",
     "git commit -m \"docs(quality): add quality program preflight ledger\" -m \"- initialize restartable campaign state and checkpoints\n- document current CI and service matrix scaffolds\n- capture PR collision and skip-control audit structure\"",
     "uv run pytest hugegraph-python-client/src/tests --collect-only -q",
     "uv run pytest hugegraph-llm/src/tests --collect-only -q",
@@ -204,7 +208,11 @@
     "uv run pytest hugegraph-llm/src/tests -m \"unit or contract\" -q",
     "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-python-client/src/tests -m \"integration and hugegraph\" -v --tb=short",
     "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests -m \"integration and hugegraph\" -v --tb=short",
-    "uv run pytest hugegraph-llm/src/tests/integration -m \"smoke\" -v --tb=short"
+    "uv run pytest hugegraph-llm/src/tests/integration -m \"smoke\" -v --tb=short",
+    "placeholder scan over .workflow/quality-program docs/quality",
+    "git status --short",
+    "uv run ruff format --check .",
+    "uv run ruff check ."
   ],
   "known_failures": [],
   "deferred_items": [
@@ -214,5 +222,5 @@
     "Avoid #240 vector/property embedding abstraction surface.",
     "Quarantine client/test fixes overlapping #323/#329/#342 until exact changed files are inspected."
   ],
-  "next_recommended_action": "Start G7 deferred refactor queue and final report"
+  "next_recommended_action": "Quality program complete; review final report and CI workflow split"
 }
