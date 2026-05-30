@@ -1,0 +1,158 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: "AI Review Watchdog"
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to inspect"
+        required: true
+        type: number
+      dry_run:
+        description: "Do not post retry comments"
+        required: false
+        default: "true"
+
+concurrency:
+  group: ai-review-watchdog-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  watchdog:
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    env:
+      MIN_REVIEW_CHARS: "800"
+      MAX_RETRIES: "2"
+      REVIEW_WAIT_SECONDS: "1200"
+    steps:
+      - name: Wait for AI reviewer
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        run: sleep "$REVIEW_WAIT_SECONDS"
+
+      - name: Checkout watchdog script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts/check-ai-review-quality.py
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve PR number
+        id: pr
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch PR comments and reviews
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" > comments.json
+          gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/reviews" > reviews.json
+
+      - name: Evaluate AI review quality
+        id: quality
+        shell: bash
+        run: |
+          result="$(python .github/scripts/check-ai-review-quality.py \
+            --comments comments.json \
+            --reviews reviews.json \
+            --min-chars "$MIN_REVIEW_CHARS" \
+            --max-retries "$MAX_RETRIES")"
+          echo "$result"
+          echo "$result" > result.json
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+
+          with open("result.json", encoding="utf-8") as f:
+              result = json.load(f)
+          print(f"needs_retry={str(result['needs_retry']).lower()}")
+          print(f"reason={result['reason']}")
+          print(f"next_retry_count={result['next_retry_count']}")
+          PY
+
+      - name: Find existing AI review trigger comment
+        id: find-comment
+        if: ${{ steps.quality.outputs.needs_retry == 'true' && steps.pr.outputs.dry_run != 'true' }}
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ steps.pr.outputs.number }}
+          comment-author: github-actions[bot]
+          body-includes: ai-review-watchdog:trigger
+
+      - name: Retry AI review
+        if: ${{ steps.quality.outputs.needs_retry == 'true' && steps.pr.outputs.dry_run != 'true' }}
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ steps.pr.outputs.number }}
+          edit-mode: replace
+          body: |
+            @codecov-ai-reviewer review
+
+            Previous AI review check did not find a complete review after 20 minutes.
+            Reason: `${{ steps.quality.outputs.reason }}`.
+            Please review correctness, tests, edge cases, and failure handling.
+
+            <!-- ai-review-watchdog:trigger -->
+            <!-- ai-review-watchdog:retry-count=${{ steps.quality.outputs.next_retry_count }} -->
+
+      - name: Report dry run result
+        if: ${{ steps.pr.outputs.dry_run == 'true' }}
+        run: |
+          echo "Dry run enabled; no retry comment was posted."
+          echo '${{ steps.quality.outputs.result }}'
+
+      - name: Find existing watchdog limit comment
+        id: find-limit-comment
+        if: ${{ steps.quality.outputs.reason == 'max_retries_reached' && steps.pr.outputs.dry_run != 'true' }}
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ steps.pr.outputs.number }}
+          comment-author: github-actions[bot]
+          body-includes: ai-review-watchdog:max-retries-reached
+
+      - name: Report max retries reached
+        if: ${{ steps.quality.outputs.reason == 'max_retries_reached' && steps.pr.outputs.dry_run != 'true' }}
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-limit-comment.outputs.comment-id }}
+          issue-number: ${{ steps.pr.outputs.number }}
+          edit-mode: replace
+          body: |
+            AI review watchdog reached the retry limit without finding a complete review.
+            Please inspect this PR manually.
+
+            <!-- ai-review-watchdog:max-retries-reached -->
+            <!-- ai-review-watchdog:retry-count=${{ env.MAX_RETRIES }} -->

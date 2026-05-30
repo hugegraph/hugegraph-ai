@@ -19,17 +19,38 @@ name: "Auto PR Commenter"
 
 on:
   pull_request_target:
-    types: [opened]
+    types: [opened, synchronize]
+
+concurrency:
+  group: ai-review-trigger-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   add-review-comment:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
+      contents: read
       pull-requests: write
+      issues: write
     steps:
+      - name: Find existing AI review trigger comment
+        id: find-comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: ai-review-watchdog:trigger
+
       - name: Add review comment
         uses: peter-evans/create-or-update-comment@v4
         with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
           body: |
             @codecov-ai-reviewer review
+
+            <!-- ai-review-watchdog:trigger -->
+            <!-- ai-review-watchdog:retry-count=0 -->

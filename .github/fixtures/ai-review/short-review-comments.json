@@ -1,0 +1,16 @@
+[
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "@codecov-ai-reviewer review\n\n<!-- ai-review-watchdog:trigger -->\n<!-- ai-review-watchdog:retry-count=0 -->",
+    "created_at": "2026-05-30T01:00:00Z"
+  },
+  {
+    "user": {
+      "login": "codecov-ai-reviewer"
+    },
+    "body": "LGTM",
+    "created_at": "2026-05-30T01:20:00Z"
+  }
+]

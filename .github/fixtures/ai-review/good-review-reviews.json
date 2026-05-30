@@ -1,0 +1,9 @@
+[
+  {
+    "user": {
+      "login": "codecov-ai-reviewer"
+    },
+    "body": "The change looks coherent overall, and I reviewed the write-path behavior, retry handling, and tests. The most important point is that the workflow now separates deterministic local checks from asynchronous AI review behavior, which reduces the chance that an external reviewer outage blocks unrelated CI. I do not see a correctness issue in the trigger path. The retry cap and marker comments are important because repeated synchronize events can otherwise create duplicate comments. The local quality check script is also useful because it makes the missing-review and short-review branches testable without calling the external bot. Please keep the watchdog as a soft fallback rather than a required merge gate, since the external reviewer service can be unavailable or deprecated independently of this repository. Tests should include missing review, shallow review, valid review, and retry-limit behavior.",
+    "submitted_at": "2026-05-30T01:20:00Z"
+  }
+]

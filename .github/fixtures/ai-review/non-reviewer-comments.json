@@ -1,0 +1,18 @@
+[
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "@codecov-ai-reviewer review\n\n<!-- ai-review-watchdog:trigger -->\n<!-- ai-review-watchdog:retry-count=0 -->",
+    "created_at": "2026-05-30T03:00:00Z",
+    "updated_at": "2026-05-30T03:00:00Z"
+  },
+  {
+    "user": {
+      "login": "review-helper"
+    },
+    "body": "This is a long review-like comment from a different actor. It should not count as a Codecov AI review even though it contains enough text to pass the length threshold. The watchdog must filter by reviewer login before evaluating content length, otherwise unrelated bot comments or human status messages could accidentally suppress a needed retry. This fixture keeps that behavior explicit and locally testable.",
+    "created_at": "2026-05-30T03:20:00Z",
+    "updated_at": "2026-05-30T03:20:00Z"
+  }
+]

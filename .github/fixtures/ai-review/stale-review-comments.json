@@ -1,0 +1,18 @@
+[
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "@codecov-ai-reviewer review\n\n<!-- ai-review-watchdog:trigger -->\n<!-- ai-review-watchdog:retry-count=0 -->",
+    "created_at": "2026-05-30T02:00:00Z",
+    "updated_at": "2026-05-30T02:00:00Z"
+  },
+  {
+    "user": {
+      "login": "codecov-ai-reviewer"
+    },
+    "body": "The previous commit was reviewed in detail, but this response is stale for the current trigger.",
+    "created_at": "2026-05-30T01:20:00Z",
+    "updated_at": "2026-05-30T01:20:00Z"
+  }
+]
