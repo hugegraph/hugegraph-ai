@@ -17,9 +17,21 @@
 
 import pytest
 
+from .client_utils import ClientUtils
 from .fixtures.hugegraph_service import hugegraph_service
 
-__all__ = ["hugegraph_service"]
+__all__ = ["client_utils", "hugegraph_service"]
+
+
+@pytest.fixture()
+def client_utils(hugegraph_service):
+    utils = ClientUtils(service=hugegraph_service)
+    utils.clear_graph_all_data()
+    utils.init_property_key()
+    utils.init_vertex_label()
+    utils.init_edge_label()
+    yield utils
+    utils.clear_graph_all_data()
 
 
 @pytest.fixture(scope="class", autouse=True)

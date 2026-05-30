@@ -712,7 +712,7 @@ def client_utils(hugegraph_service):
     utils.clear_graph_all_data()
 ```
 
-- [ ] **Step G2.2: Add schema CRUD contract tests**
+- [x] **Step G2.2: Add schema CRUD contract tests**
 
 Add tests in `hugegraph-python-client/src/tests/api/test_schema.py` that prove:
 
@@ -736,7 +736,7 @@ def test_schema_create_and_fetch_property_vertex_edge_index(client_utils):
 
 If the existing API returns typed objects instead of dicts, assert the public fields exposed by those objects.
 
-- [ ] **Step G2.3: Add graph ID behavior tests**
+- [x] **Step G2.3: Add graph ID behavior tests**
 
 Add tests in `hugegraph-python-client/src/tests/api/test_graph.py` for:
 
@@ -754,7 +754,7 @@ def test_graph_supports_primary_key_and_custom_string_id(client_utils):
 
 If `addVertex` does not accept an `id` property for custom ID labels, write the failing test against the existing public method and fix only the minimal contract gap.
 
-- [ ] **Step G2.4: Add Gremlin envelope and error tests**
+- [x] **Step G2.4: Add Gremlin envelope and error tests**
 
 Extend `hugegraph-python-client/src/tests/api/test_gremlin.py`:
 
@@ -825,7 +825,7 @@ For each production fix:
 | G2 | `path` | `summary` | `pytest path::test_name` | `contract gap` |
 ```
 
-- [ ] **Step G2.8: Write checkpoint and commit**
+- [x] **Step G2.8: Write checkpoint and commit**
 
 Create `.workflow/quality-program/checkpoints/03-client-contract.md` and include commands, failures, fixes, and coverage delta.
 

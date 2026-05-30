@@ -136,3 +136,11 @@ class TestGremlinSetupBehavior(unittest.TestCase):
             client.gremlin = mock.Mock()
             with mock.patch.dict(os.environ, {"SKIP_GREMLIN_TESTS": "true"}), self.assertRaises(unittest.SkipTest):
                 TestGremlin.setUpClass()
+
+
+def test_gremlin_error_surface_is_explicit(client_utils):
+    with pytest.raises(Exception) as exc_info:
+        client_utils.gremlin.exec("g.V2()")
+
+    message = str(exc_info.value)
+    assert "g.V2" in message or "No signature" in message or "NotFound" in message
