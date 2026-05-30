@@ -29,6 +29,10 @@ Edit `config.json` with your LLM API configuration:
     "max_concurrency": 5,
     "save_interval": 50,
     "timeout": 40
+},
+"migration": {
+    "migration_mode": "same_operation",
+    "same_operation_sample_count": 3
 }
 ```
 
@@ -61,6 +65,9 @@ python -m llm_augment.generalize_llm
 # Scenario migration
 python -m llm_augment.migrate_scenario
 
+# Optional: generate mixed CRUD samples during scenario migration
+python -m llm_augment.migrate_scenario --migration-mode mixed_operations
+
 # Dataset merging
 python -m llm_augment.merge_dataset
 
@@ -86,7 +93,7 @@ Stage 2: LLM Multi-style       llm_augment/generalize_llm.py
           ×6 styles → ~9000 entries (4 fixed + 2 random tones)
                ↓
 Stage 3: Scenario Migration     llm_augment/migrate_scenario.py
-          ×20 domains → ~30000 entries (balanced CRUD, syntax-checked)
+          ×20 domains → same-operation samples by default, optional mixed CRUD, syntax-checked
                ↓
 Stage 4: Dataset Merging        llm_augment/merge_dataset.py
           Merge translations + migrations → unified text2gremlin dataset
@@ -152,6 +159,20 @@ Stage 5: DPO Preference Data    llm_augment/generate_dpo_data.py
 | max_concurrency | Concurrent requests | 5 |
 | save_interval | Incremental save interval | 50 |
 | timeout | Request timeout (seconds) | 40 |
+
+### Scenario Migration Configuration (`config.json` → `migration`)
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| migration_mode | `same_operation` generates samples with the same operation type as the source query. `mixed_operations` keeps the legacy mixed CRUD prompt. | `same_operation` |
+| same_operation_sample_count | Number of samples requested per migration task in `same_operation` mode. The model may return fewer if the source pattern does not fit the target schema. | 3 |
+
+CLI arguments override `config.json` for one run:
+
+```bash
+python -m llm_augment.migrate_scenario --migration-mode same_operation --same-operation-sample-count 5
+python -m llm_augment.migrate_scenario --migration-mode mixed_operations
+```
 
 ### Template File (`gremlin_templates.csv`)
 
@@ -256,7 +277,7 @@ Each query is translated into 6 styles (4 fixed + 2 random):
 - Mixed Chinese-English / Abbreviated / Q&A style / With typos
 
 ### Scenario Migration
-Migrates movie-domain data to 20 business domains with balanced CRUD operations. Every generated Gremlin query is validated via ANTLR syntax checking.
+Migrates movie-domain data to 20 business domains. By default, each migrated sample keeps the same operation type as the source query and asks for 3 samples per target scenario. The legacy mixed CRUD mode can still be enabled with `--migration-mode mixed_operations`. Every generated Gremlin query is validated via ANTLR syntax checking.
 
 ### DPO Preference Data
 Three task types generate Groovy vs Gremlin preference pairs across 21 domains (movie + 20 migrated), totaling 8920 samples:

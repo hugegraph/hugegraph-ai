@@ -20,7 +20,13 @@
         "temperature": 0.7,
         "max_retries": 3,
         "max_concurrency": 5,
-        "save_interval": 50
+        "save_interval": 50,
+        "timeout": 40
+    },
+
+    "_comment_migration": "场景迁移配置",
+    "migration": {
+        "migration_mode": "same_operation",
+        "same_operation_sample_count": 3
     }
 }
-

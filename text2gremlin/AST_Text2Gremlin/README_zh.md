@@ -29,6 +29,10 @@ cp config_example.json config.json
     "max_concurrency": 5,
     "save_interval": 50,
     "timeout": 40
+},
+"migration": {
+    "migration_mode": "same_operation",
+    "same_operation_sample_count": 3
 }
 ```
 
@@ -61,6 +65,9 @@ python -m llm_augment.generalize_llm
 # 场景迁移
 python -m llm_augment.migrate_scenario
 
+# 可选：场景迁移时生成混合 CRUD 样本
+python -m llm_augment.migrate_scenario --migration-mode mixed_operations
+
 # 数据集合并
 python -m llm_augment.merge_dataset
 
@@ -85,7 +92,7 @@ python analyze_syntax.py
          ×6 风格 → ~9000 条 (4固定 + 2随机语气)
               ↓
 阶段 3: 场景迁移           llm_augment/migrate_scenario.py
-         ×20 场景 → ~30000 条 (CRUD 均衡, 语法检查)
+         ×20 场景 → 默认同类型迁移, 可选混合 CRUD, 语法检查
               ↓
 阶段 4: 数据集合并         llm_augment/merge_dataset.py
          合并翻译+迁移 → 统一 text2gremlin 数据集
@@ -151,6 +158,20 @@ python analyze_syntax.py
 | max_concurrency | 并发请求数 | 5 |
 | save_interval | 增量保存间隔 | 50 |
 | timeout | 单次请求超时 (秒) | 40 |
+
+### 场景迁移配置 (`config.json` → `migration`)
+
+| 字段 | 说明 | 默认值 |
+|------|------|--------|
+| migration_mode | `same_operation` 表示只生成与源 Gremlin 同类型的目标场景样本；`mixed_operations` 保留原来的混合 CRUD prompt。 | `same_operation` |
+| same_operation_sample_count | `same_operation` 模式下每个迁移任务请求生成的样本数。若源模式不适合目标 schema，模型可以少生成。 | 3 |
+
+CLI 参数会覆盖 `config.json`，只对本次运行生效：
+
+```bash
+python -m llm_augment.migrate_scenario --migration-mode same_operation --same-operation-sample-count 5
+python -m llm_augment.migrate_scenario --migration-mode mixed_operations
+```
 
 ### 模板文件 (`gremlin_templates.csv`)
 
@@ -255,7 +276,7 @@ python analyze_syntax.py
 - 中英混合 / 省略表达 / 问答式 / 错别字
 
 ### 场景迁移
-将电影领域数据迁移到 20 个业务场景，生成 CRUD 均衡的数据，每条 Gremlin 经过 ANTLR 语法检查。
+将电影领域数据迁移到 20 个业务场景。默认保持源语句的操作类型，每个目标场景请求生成 3 条样本；如需保留原来的混合 CRUD 生成方式，可使用 `--migration-mode mixed_operations`。每条 Gremlin 经过 ANTLR 语法检查。
 
 ### DPO 偏好数据
 三类任务生成 Groovy vs Gremlin 偏好对，覆盖 21 个领域（movie + 20 个迁移领域），合计 8920 条：
