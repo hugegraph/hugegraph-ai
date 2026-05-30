@@ -19,10 +19,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
 from pyhugegraph.utils.exceptions import CreateError, NotFoundError
 
 from hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph import Commit2Graph
 from hugegraph_llm.operators.llm_op.property_graph_extract import PropertyGraphExtract
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestCommit2Graph(unittest.TestCase):
@@ -520,6 +523,26 @@ class TestCommit2Graph(unittest.TestCase):
             "2:Forrest Gump",
             {"role": "Forrest Gump"},
         )
+
+    @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")
+    def test_load_into_graph_raises_explicit_error_when_vertex_creation_fails(self, mock_handle_graph_creation):
+        """Test failed vertex creation is reported before edge creation."""
+        mock_handle_graph_creation.return_value = None
+
+        vertices = [{"label": "person", "properties": {"name": "Tom Hanks", "age": 67}}]
+        edges = [
+            {
+                "label": "acted_in",
+                "properties": {"role": "Forrest Gump"},
+                "outV": "person:Tom Hanks",
+                "inV": "movie:Forrest Gump",
+            }
+        ]
+
+        with self.assertRaisesRegex(ValueError, "Failed to create vertex"):
+            self.commit2graph.load_into_graph(vertices, edges, self.schema)
+
+        mock_handle_graph_creation.assert_called_once()
 
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")
     def test_load_into_graph_with_data_type_validation_failure(self, mock_handle_graph_creation):

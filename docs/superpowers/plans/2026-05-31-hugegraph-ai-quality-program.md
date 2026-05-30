@@ -850,7 +850,7 @@ git commit -m "test(client): harden hugegraph contract coverage" -m "- add real 
 - Update: `.workflow/quality-program/reports/production-change-ledger.md`
 - Create/Update: `.workflow/quality-program/checkpoints/04-llm-boundary.md`
 
-- [ ] **Step G3.1: Add real-boundary fixture data**
+- [x] **Step G3.1: Add real-boundary fixture data**
 
 Create helper functions inside `hugegraph-llm/src/tests/integration/test_hugegraph_boundary.py`:
 
@@ -893,7 +893,7 @@ QUALITY_GRAPH = {
 
 Use this fixture as a source for `Commit2Graph.run({"schema": schema, "vertices": vertices, "edges": edges})`. Convert the compact fixture into the schema format already consumed by `Commit2Graph`: `propertykeys`, `vertexlabels`, and `edgelabels`.
 
-- [ ] **Step G3.2: Add schema manager real-service test**
+- [x] **Step G3.2: Add schema manager real-service test**
 
 Add a test that imports production `SchemaManager` and asserts real schema readback:
 
@@ -914,7 +914,7 @@ def test_schema_manager_reads_real_schema(hugegraph_service):
     assert isinstance(context["schema"]["vertexlabels"], list)
 ```
 
-- [ ] **Step G3.3: Add Commit2Graph write/read integration test**
+- [x] **Step G3.3: Add Commit2Graph write/read integration test**
 
 Add a failing integration test that writes fixture data through production `Commit2Graph`, then reads it using pyhugegraph or production fetch code.
 
@@ -973,7 +973,7 @@ The test must assert:
 - creation failures raise explicit errors, not secondary NoneType.id errors
 ```
 
-- [ ] **Step G3.4: Add FetchGraphData integration test**
+- [x] **Step G3.4: Add FetchGraphData integration test**
 
 Add a test that imports `FetchGraphData`, reads known graph data, and asserts stable shape:
 
@@ -995,7 +995,7 @@ def test_fetch_graph_data_returns_counts_and_samples(hugegraph_service):
     assert isinstance(result["edges"], list)
 ```
 
-- [ ] **Step G3.5: Add Gremlin failure-surface test**
+- [x] **Step G3.5: Add Gremlin failure-surface test**
 
 Add a test for the production Gremlin execution boundary:
 
@@ -1012,7 +1012,7 @@ def test_gremlin_execute_surfaces_invalid_query(hugegraph_service):
 
 This documents the current node contract: the node surfaces execution errors as result strings instead of raising. If the task changes that production contract, add a regression test and ledger row.
 
-- [ ] **Step G3.6: Run LLM boundary suites**
+- [x] **Step G3.6: Run LLM boundary suites**
 
 Run:
 
@@ -1023,7 +1023,7 @@ HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests/integration/test_h
 
 Expected: boundary failures classify as service setup, pyhugegraph contract, server contract, or LLM conversion.
 
-- [ ] **Step G3.7: Apply minimal LLM boundary fixes**
+- [x] **Step G3.7: Apply minimal LLM boundary fixes**
 
 Allowed fixes include:
 
@@ -1036,7 +1036,7 @@ Allowed fixes include:
 
 For each production edit, add a production ledger row.
 
-- [ ] **Step G3.8: Write checkpoint and commit**
+- [x] **Step G3.8: Write checkpoint and commit**
 
 Run:
 
