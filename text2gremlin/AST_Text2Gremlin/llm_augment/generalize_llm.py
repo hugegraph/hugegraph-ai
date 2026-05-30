@@ -186,7 +186,7 @@ def build_translation_prompt(item: dict, all_styles: list[str]) -> str:
 
 ### 输出要求
 1. 准确反映查询语义，不遗漏过滤条件、排序、限制数量等
-2. 各风格表达方式要有明显差异，长度
+2. 各风格表达方式要有明显差异，长度要自然，可根据风格适当变化
 3. 专有名词保持原样，不要出现 Gremlin 术语
 4. typo 风格只引入 1-2 个错别字，不影响语义
 5. abbreviated 风格极度精简到核心关键词
@@ -209,12 +209,13 @@ Gremlin: g.V().hasLabel('movie').out('has_genre').dedup().values('name')
 {{
     {example_fields}
 }}
+```
 
 ### 实际输入
 结合以上要求，将以下输入的gremlin语句进行翻译：
 Gremlin: {item["query"]}
 简单描述: {item["description"]}
-```"""
+"""
 
     return prompt
 
@@ -242,10 +243,13 @@ async def translate_one(
             try:
                 prompt = build_translation_prompt(item, all_styles)
 
-                response = await client.chat.completions.create(
-                    model=llm_config["model"],
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=llm_config["temperature"],
+                response = await asyncio.wait_for(
+                    client.chat.completions.create(
+                        model=llm_config["model"],
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=llm_config["temperature"],
+                    ),
+                    timeout=llm_config.get("timeout", 40),
                 )
 
                 content = response.choices[0].message.content
@@ -283,6 +287,9 @@ async def translate_one(
                 else:
                     return _fallback_result(item, all_styles, error=f"翻译失败(重试{max_retries}次): {e}")
             except Exception as e:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(min(2**attempt, 8) + random.random() * 0.25)
+                    continue
                 return _fallback_result(item, all_styles, error=f"翻译异常: {e}")
 
 

@@ -17,6 +17,7 @@
 
 # ruff: noqa: E402
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -45,3 +46,16 @@ def test_compute_crud_stats_fills_unknown_operations_in_place():
 
     assert stats == {"read": 1, "update": 1, "delete": 1}
     assert [pair["operation"] for pair in pairs] == ["read", "update", "delete"]
+
+
+def test_main_exits_nonzero_when_required_inputs_are_missing(tmp_path):
+    result = subprocess.run(
+        [sys.executable, "-m", "llm_augment.merge_dataset", "--output-dir", str(tmp_path)],
+        cwd=PROJECT_DIR,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "未找到 llm_translated" in result.stdout

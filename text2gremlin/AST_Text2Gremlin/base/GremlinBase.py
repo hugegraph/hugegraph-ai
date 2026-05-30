@@ -54,52 +54,39 @@ class GremlinBase:
 
     def _load_schema_translations(self):
         """加载schema翻译字典"""
-        # 从Config获取路径，如果失败则使用默认路径
-        file_paths = []
+        current_dir = os.path.dirname(os.path.abspath(__file__))
 
-        try:
-            if hasattr(self.config, "get_schema_dict_path"):
-                schema_dict_paths = self.config.get_schema_dict_path()
-                # 为列表或字符串的情况
-                if isinstance(schema_dict_paths, list):
-                    file_paths.extend(schema_dict_paths)
-                elif isinstance(schema_dict_paths, str):
-                    file_paths.append(schema_dict_paths)
+        def collect_config_paths(method_name: str) -> list[str]:
+            if not hasattr(self.config, method_name):
+                return []
+            try:
+                configured_paths = getattr(self.config, method_name)()
+            except Exception as e:
+                print(f"[INFO] Config path {method_name} not available: {e}")
+                return []
+            if isinstance(configured_paths, list):
+                return configured_paths
+            if isinstance(configured_paths, str):
+                return [configured_paths]
+            return []
 
-            if hasattr(self.config, "get_syn_dict_path"):
-                syn_dict_path = self.config.get_syn_dict_path()
-                if syn_dict_path:
-                    file_paths.append(syn_dict_path)
-
-        except Exception as e:
-            print(f"[INFO] Config paths not available: {e}")
-
-        # 如果没有从Config获取到路径，使用默认路径
-        if not file_paths:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            file_paths = [
-                os.path.join(current_dir, "template", "schema_dict.txt"),
-                os.path.join(current_dir, "template", "syn_dict.txt"),
-            ]
-
-        # 加载schema翻译字典
-        existing_paths = [path for path in file_paths if os.path.exists(path)]
-
-        # 如果没有找到配置的路径，尝试默认路径
-        if not existing_paths:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            default_paths = [
-                os.path.join(current_dir, "template", "schema_dict.txt"),
-                os.path.join(current_dir, "template", "syn_dict.txt"),
-            ]
-            existing_paths = [path for path in default_paths if os.path.exists(path)]
+        def existing_or_default(configured_paths: list[str], default_filename: str) -> list[str]:
+            existing_paths = [path for path in configured_paths if os.path.exists(path)]
             if existing_paths:
-                print(f"[INFO] Using default dictionary paths: {existing_paths}")
+                return existing_paths
+            default_path = os.path.join(current_dir, "template", default_filename)
+            if os.path.exists(default_path):
+                return [default_path]
+            return []
+
+        schema_paths = existing_or_default(collect_config_paths("get_schema_dict_path"), "schema_dict.txt")
+        syn_paths = existing_or_default(collect_config_paths("get_syn_dict_path"), "syn_dict.txt")
+        existing_paths = schema_paths + syn_paths
 
         if existing_paths:
             self.load_dict_from_file(existing_paths)
         else:
-            print(f"[WARNING] No dictionary files found in: {file_paths}")
+            print("[WARNING] No dictionary files found")
 
     def _initialize_translation_templates(self):
         """

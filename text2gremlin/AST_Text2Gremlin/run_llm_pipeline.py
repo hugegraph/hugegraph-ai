@@ -76,6 +76,13 @@ def run_stage(stage: str, extra_args: list[str]) -> int:
     return result.returncode
 
 
+def get_stage_extra_args(stage: str, stages_to_run: list[str], extra_args: list[str]) -> list[str]:
+    """Only pass extra CLI args to the first selected stage."""
+    if stage == stages_to_run[0]:
+        return extra_args
+    return []
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="LLM 增强数据生成流水线",
@@ -122,10 +129,10 @@ def main():
     print("=" * 60)
     print(f"  执行阶段: {' → '.join(stages_to_run)}")
     if extra:
-        print(f"  额外参数: {extra}")
+        print(f"  额外参数: {extra} (仅传给首个执行阶段: {stages_to_run[0]})")
 
     for stage in stages_to_run:
-        rc = run_stage(stage, extra)
+        rc = run_stage(stage, get_stage_extra_args(stage, stages_to_run, extra))
         if rc != 0:
             print(f"\n❌ 阶段 {stage} 失败 (exit code: {rc})，流水线中止")
             sys.exit(rc)

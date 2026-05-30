@@ -104,14 +104,18 @@ def analyze_query(query: str) -> dict:
 
     # 起始步骤
     start_match = START_PATTERN.search(query)
+    start_step_span = None
     if start_match:
         stats["steps"][start_match.group(1)] += 1
+        start_step_span = start_match.span(1)
 
     # 链式步骤
     for match in STEP_PATTERN.finditer(query):
+        if start_step_span and match.span(1) == start_step_span:
+            continue
         step_name = match.group(1)
         # 排除非步骤的方法调用（如 property 的值参数中的方法）
-        if step_name not in ("group", "get", "put", "toString"):
+        if step_name not in ("get", "put", "toString"):
             stats["steps"][step_name] += 1
 
     # 谓词
@@ -182,7 +186,7 @@ def print_bar(name: str, count: int, max_count: int, total: int, rank: int, bar_
     print(f"  {rank:2d}. {name:<20} {'█' * bar_len} {count:>6} ({pct:5.2f}%)")
 
 
-def print_results(stats: dict, total_queries: int):
+def print_results(stats: dict, total_queries: int, top_n: int = 25):
     """终端打印统计结果"""
     steps = stats["steps"]
     total_steps = sum(steps.values())
@@ -202,9 +206,9 @@ def print_results(stats: dict, total_queries: int):
 
     # Top 步骤
     print(f"\n{'─' * 70}")
-    print("🏆 步骤分布 (Top 25)")
+    print(f"🏆 步骤分布 (Top {top_n})")
     print(f"{'─' * 70}")
-    sorted_steps = steps.most_common(25)
+    sorted_steps = steps.most_common(top_n)
     max_count = sorted_steps[0][1] if sorted_steps else 1
     for i, (name, count) in enumerate(sorted_steps, 1):
         print_bar(name, count, max_count, total_steps, i)
@@ -393,7 +397,7 @@ def main():
     stats = analyze_corpus(corpus)
 
     # 终端输出
-    print_results(stats, total_queries)
+    print_results(stats, total_queries, args.top)
 
     # 保存 JSON
     stats_path = os.path.join(output_dir, "syntax_distribution_stats.json")

@@ -48,8 +48,8 @@ def load_config(config_path="config.json"):
         with open(config_path, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"⚠️  警告: 无法加载配置文件 {config_path}: {e}")
-        return {}
+        print(f"❌ 错误: 无法加载配置文件 {config_path}: {e}")
+        sys.exit(1)
 
 
 def main():

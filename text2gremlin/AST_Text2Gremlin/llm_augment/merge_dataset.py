@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import re
+import sys
 from collections import Counter
 from datetime import datetime
 from glob import glob
@@ -143,10 +144,10 @@ def main():
 
     if not translated_path or not os.path.exists(translated_path):
         print("❌ 未找到 llm_translated 文件，请用 --translated 指定")
-        return
+        sys.exit(1)
     if not migrated_path or not os.path.exists(migrated_path):
         print("❌ 未找到 migrated 文件，请用 --migrated 指定")
-        return
+        sys.exit(1)
 
     print("=" * 60)
     print("📦 合并 text2gremlin 数据集")
