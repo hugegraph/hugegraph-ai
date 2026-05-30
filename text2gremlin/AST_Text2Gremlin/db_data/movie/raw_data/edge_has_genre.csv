@@ -1,3 +1,5 @@
+LABEL=has_genre,SRC_LABEL=movie,DST_LABEL=genre
+id:INT32:SRC_ID,id:INT32:DST_ID
 1,16
 1,17
 1,18

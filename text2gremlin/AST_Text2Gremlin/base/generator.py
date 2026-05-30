@@ -179,7 +179,7 @@ def generate_corpus_from_template(
 
         # 添加生成数量的警告信息
         if stats["generated_count"] > 5000:
-            stats["warning"] = f"由于本条模版的Recip复杂,生成了大量查询({stats['generated_count']}条)"
+            stats["warning"] = f"由于本条模版的Recipe复杂,生成了大量查询({stats['generated_count']}条)"
         elif new_pairs_count == 0 and stats["generated_count"] > 0:
             stats["warning"] = f"生成了{stats['generated_count']}条查询但全部重复"
 
