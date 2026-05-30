@@ -45,3 +45,29 @@ def test_schema_and_syn_dictionaries_fall_back_independently(tmp_path):
 
     assert gremlin_base.schema_dict["custom"] == ["自定义"]
     assert gremlin_base.schema_dict["1"] == ["一"]
+
+
+def test_default_dictionary_entries_are_loadable():
+    class DefaultConfig:
+        def get_schema_dict_path(self):
+            return None
+
+        def get_syn_dict_path(self):
+            return None
+
+    gremlin_base = GremlinBase(DefaultConfig())
+
+    assert gremlin_base.schema_dict["insertrate"] == ["利率"]
+    assert gremlin_base.schema_dict["person_organization"] == ["人物和组织间的关系"]
+    assert "perosn_organization" not in gremlin_base.schema_dict
+
+    for dictionary_path in PROJECT_DIR.glob("base/template/*_dict.txt"):
+        for line in dictionary_path.read_text(encoding="utf-8").splitlines():
+            assert line == line.rstrip()
+
+    schema_dict_path = PROJECT_DIR / "base/template/schema_dict.txt"
+    schema_keys = []
+    for line in schema_dict_path.read_text(encoding="utf-8").splitlines():
+        assert len(line.split()) >= 2
+        schema_keys.append(line.split()[0])
+    assert len(schema_keys) == len(set(schema_keys))

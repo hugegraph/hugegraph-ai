@@ -36,7 +36,7 @@ createTime 创建时间
 loanAmount 贷款金额
 balance 贷款余额
 usage 贷款用途
-insertrate 
+insertrate 利率
 riskLevel 风险等级
 timestamp 时间戳
 amount 数额 金额
@@ -67,11 +67,10 @@ important_events 重要事件
 relation 关系
 person_person 人物关系 人物间关系
 person_plan 人物和计划间的关系 人物和计划的关系
-perosn_organization 人物和组织间的关系
+person_organization 人物和组织间的关系
 organization_plan 组织和计划间的关系
 organization_organization 组织间的关系
 time_time 时间上的关系 时间关系
-Person 人
 birthyear 出生年份
 phone 电话号码 手机号码
 City 城市
