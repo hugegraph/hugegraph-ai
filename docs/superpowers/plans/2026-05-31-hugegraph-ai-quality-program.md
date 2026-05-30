@@ -1208,7 +1208,7 @@ git commit -m "test(llm): expand deterministic contract coverage" -m "- add fake
 - Modify if needed: production code under `hugegraph-llm/src/hugegraph_llm/flows/`, `nodes/`, `operators/`
 - Create/Update: `.workflow/quality-program/checkpoints/06-core-smoke.md`
 
-- [ ] **Step G5.1: Add smoke fixture data**
+- [x] **Step G5.1: Add smoke fixture data**
 
 Create:
 
@@ -1233,7 +1233,7 @@ Example `kg_graph_output.json`:
 }
 ```
 
-- [ ] **Step G5.2: Add KG construction smoke**
+- [x] **Step G5.2: Add KG construction smoke**
 
 Create `test_core_kg_smoke.py`:
 
@@ -1284,7 +1284,7 @@ def test_kg_construction_smoke_uses_production_code(hugegraph_service):
 
 Import or duplicate `QUALITY_COMMIT_SCHEMA` in this test module. Do not define a local `KGConstructor` replacement.
 
-- [ ] **Step G5.3: Add GraphRAG smoke**
+- [x] **Step G5.3: Add GraphRAG smoke**
 
 Create `test_core_graphrag_smoke.py` that imports production retrieval/flow code and uses deterministic embedding/vector fixtures.
 
@@ -1297,7 +1297,7 @@ Required assertions:
 - no real provider credential is read
 ```
 
-- [ ] **Step G5.4: Add Text2Gremlin smoke**
+- [x] **Step G5.4: Add Text2Gremlin smoke**
 
 Create `test_core_text2gremlin_smoke.py` that imports production Text2Gremlin/Gremlin generation code and uses fake LLM output.
 
@@ -1309,7 +1309,7 @@ Required assertions:
 - invalid fake output produces explicit failure
 ```
 
-- [ ] **Step G5.5: Convert weak mock-only integration tests**
+- [x] **Step G5.5: Convert weak mock-only integration tests**
 
 Inspect:
 
@@ -1327,7 +1327,7 @@ For each test:
 - If it only asserts mocks were called, add a stronger behavior assertion or document replacement in flaky-risk ledger.
 ```
 
-- [ ] **Step G5.6: Run smoke gates**
+- [x] **Step G5.6: Run smoke gates**
 
 Run:
 
@@ -1338,7 +1338,7 @@ uv run pytest hugegraph-llm/src/tests/integration -m "smoke and not hugegraph" -
 
 Expected: smoke tests are deterministic. HugeGraph-required smoke fails only for classified service/setup/boundary reasons.
 
-- [ ] **Step G5.7: Write checkpoint and commit**
+- [x] **Step G5.7: Write checkpoint and commit**
 
 Run:
 

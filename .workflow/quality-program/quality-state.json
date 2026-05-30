@@ -1,5 +1,5 @@
 {
-  "current_goal": "G5",
+  "current_goal": "G6",
   "repo_sha_start": "d048bc9fa07042833549dd1def5ff3222c47be70",
   "base_branch": "main",
   "open_pr_snapshot_time": "2026-05-30T17:18:30Z",
@@ -9,7 +9,8 @@
     "G1",
     "G2",
     "G3",
-    "G4"
+    "G4",
+    "G5"
   ],
   "files_touched": [
     ".workflow/quality-program/README.md",
@@ -64,6 +65,7 @@
     ".workflow/quality-program/checkpoints/03-client-contract.md",
     ".workflow/quality-program/checkpoints/04-llm-boundary.md",
     ".workflow/quality-program/checkpoints/05-parser-api-operator.md",
+    ".workflow/quality-program/checkpoints/06-core-smoke.md",
     ".workflow/quality-program/coverage/client-g2.json",
     ".workflow/quality-program/reports/production-change-ledger.md",
     "docs/superpowers/plans/2026-05-31-hugegraph-ai-quality-program.md",
@@ -75,7 +77,14 @@
     "hugegraph-llm/src/tests/operators/hugegraph_op/test_schema_manager.py",
     "hugegraph-llm/src/hugegraph_llm/api/rag_api.py",
     "hugegraph-llm/src/tests/fixtures/fake_llm.py",
-    "hugegraph-llm/src/tests/models/embeddings/test_ollama_embedding.py"
+    "hugegraph-llm/src/tests/models/embeddings/test_ollama_embedding.py",
+    "hugegraph-llm/src/tests/data/quality_program/kg_text.txt",
+    "hugegraph-llm/src/tests/data/quality_program/kg_graph_output.json",
+    "hugegraph-llm/src/tests/data/quality_program/graphrag_documents.json",
+    "hugegraph-llm/src/tests/data/quality_program/text2gremlin_schema.json",
+    "hugegraph-llm/src/tests/integration/test_core_kg_smoke.py",
+    "hugegraph-llm/src/tests/integration/test_core_graphrag_smoke.py",
+    "hugegraph-llm/src/tests/integration/test_core_text2gremlin_smoke.py"
   ],
   "production_changes": [
     {
@@ -107,7 +116,8 @@
     "Marked existing hugegraph_op unittest files as unit so strict marker selection exercises them.",
     "Added FakeLLM fixture and deterministic parser/operator tests for property graph, keyword, and Gremlin generation contracts.",
     "Added API public-surface tests for config field mapping, invalid request bodies, and callback exception responses.",
-    "Added provider wrapper tests for OpenAI, LiteLLM, and Ollama malformed/error surfaces."
+    "Added provider wrapper tests for OpenAI, LiteLLM, and Ollama malformed/error surfaces.",
+    "Added deterministic KG, GraphRAG, and Text2Gremlin smoke tests that import production code."
   ],
   "commands_run": [
     "sed -n '1,220p' AGENTS.md",
@@ -174,7 +184,12 @@
     "uv run pytest hugegraph-llm/src/tests/api -m 'unit or contract' -v --tb=short",
     "uv run pytest hugegraph-llm/src/tests/models -m 'unit or contract' -v --tb=short",
     "uv run ruff format --check hugegraph-llm/src/hugegraph_llm/api/rag_api.py hugegraph-llm/src/tests/fixtures/fake_llm.py hugegraph-llm/src/tests/operators/llm_op/test_property_graph_extract.py hugegraph-llm/src/tests/operators/llm_op/test_keyword_extract.py hugegraph-llm/src/tests/operators/llm_op/test_gremlin_generate.py hugegraph-llm/src/tests/api/test_rag_api.py hugegraph-llm/src/tests/models/llms/test_openai_client.py hugegraph-llm/src/tests/models/llms/test_litellm_client.py hugegraph-llm/src/tests/models/embeddings/test_ollama_embedding.py",
-    "uv run ruff check hugegraph-llm/src/hugegraph_llm/api/rag_api.py hugegraph-llm/src/tests/fixtures/fake_llm.py hugegraph-llm/src/tests/operators/llm_op/test_property_graph_extract.py hugegraph-llm/src/tests/operators/llm_op/test_keyword_extract.py hugegraph-llm/src/tests/operators/llm_op/test_gremlin_generate.py hugegraph-llm/src/tests/api/test_rag_api.py hugegraph-llm/src/tests/models/llms/test_openai_client.py hugegraph-llm/src/tests/models/llms/test_litellm_client.py hugegraph-llm/src/tests/models/embeddings/test_ollama_embedding.py"
+    "uv run ruff check hugegraph-llm/src/hugegraph_llm/api/rag_api.py hugegraph-llm/src/tests/fixtures/fake_llm.py hugegraph-llm/src/tests/operators/llm_op/test_property_graph_extract.py hugegraph-llm/src/tests/operators/llm_op/test_keyword_extract.py hugegraph-llm/src/tests/operators/llm_op/test_gremlin_generate.py hugegraph-llm/src/tests/api/test_rag_api.py hugegraph-llm/src/tests/models/llms/test_openai_client.py hugegraph-llm/src/tests/models/llms/test_litellm_client.py hugegraph-llm/src/tests/models/embeddings/test_ollama_embedding.py",
+    "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests/integration -m 'smoke' -v --tb=short",
+    "uv run pytest hugegraph-llm/src/tests/integration -m 'smoke and not hugegraph' -v --tb=short",
+    "uv run ruff format --check hugegraph-llm/src/tests/integration/test_core_kg_smoke.py hugegraph-llm/src/tests/integration/test_core_graphrag_smoke.py hugegraph-llm/src/tests/integration/test_core_text2gremlin_smoke.py",
+    "uv run ruff check hugegraph-llm/src/tests/integration/test_core_kg_smoke.py hugegraph-llm/src/tests/integration/test_core_graphrag_smoke.py hugegraph-llm/src/tests/integration/test_core_text2gremlin_smoke.py",
+    "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests/integration -m 'smoke' -q"
   ],
   "known_failures": [],
   "deferred_items": [
@@ -184,5 +199,5 @@
     "Avoid #240 vector/property embedding abstraction surface.",
     "Quarantine client/test fixes overlapping #323/#329/#342 until exact changed files are inspected."
   ],
-  "next_recommended_action": "Start G5 core RAG, KG, and Text2Gremlin smoke gates"
+  "next_recommended_action": "Start G6 coverage ratchet and CI split"
 }
