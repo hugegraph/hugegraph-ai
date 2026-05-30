@@ -58,6 +58,12 @@ jobs:
           uv run python hugegraph-python-client/src/pyhugegraph/example/hugegraph_example.py
 
       - name: Test with pytest
+        env:
+          HUGEGRAPH_REQUIRED: true
+          HUGEGRAPH_URL: http://127.0.0.1:8080
+          HUGEGRAPH_GRAPH: hugegraph
+          HUGEGRAPH_USER: admin
+          HUGEGRAPH_PASSWORD: admin
         run: |
           uv run pytest
         working-directory: hugegraph-python-client

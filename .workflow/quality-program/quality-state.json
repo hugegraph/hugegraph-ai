@@ -1,11 +1,12 @@
 {
-  "current_goal": "G1",
+  "current_goal": "G2",
   "repo_sha_start": "d048bc9fa07042833549dd1def5ff3222c47be70",
   "base_branch": "main",
   "open_pr_snapshot_time": "2026-05-30T17:18:30Z",
   "goals_completed": [
     "P0",
-    "G0"
+    "G0",
+    "G1"
   ],
   "files_touched": [
     ".workflow/quality-program/README.md",
@@ -46,11 +47,22 @@
     "hugegraph-python-client/src/tests/api/test_task.py",
     "hugegraph-python-client/src/tests/api/test_traverser.py",
     "hugegraph-python-client/src/tests/api/test_variable.py",
-    "hugegraph-python-client/src/tests/api/test_version.py"
+    "hugegraph-python-client/src/tests/api/test_version.py",
+    "hugegraph-python-client/src/tests/fixtures/__init__.py",
+    "hugegraph-python-client/src/tests/fixtures/hugegraph_service.py",
+    "hugegraph-python-client/src/tests/conftest.py",
+    "hugegraph-python-client/src/tests/client_utils.py",
+    "hugegraph-llm/src/tests/fixtures/__init__.py",
+    "hugegraph-llm/src/tests/fixtures/hugegraph_service.py",
+    ".github/workflows/hugegraph-python-client.yml",
+    ".github/workflows/hugegraph-llm.yml",
+    "docs/quality/hugegraph-integration.md",
+    ".workflow/quality-program/checkpoints/02-service-fixture.md"
   ],
   "production_changes": [],
   "tests_added_or_changed": [
-    "Added file-level unit/contract/integration/hugegraph markers to selected existing tests for Layer A and Layer B selection."
+    "Added file-level unit/contract/integration/hugegraph markers to selected existing tests for Layer A and Layer B selection.",
+    "Added HugeGraph service fixtures and conftest wiring for client and LLM test suites."
   ],
   "commands_run": [
     "sed -n '1,220p' AGENTS.md",
@@ -77,11 +89,20 @@
     "uv run pytest src/tests -m \"unit or contract\" --cov=hugegraph_llm --cov-report=term --cov-report=json:../.workflow/quality-program/coverage/llm-baseline.json",
     "uv run ruff format --check hugegraph-llm/src/tests hugegraph-python-client/src/tests pyproject.toml",
     "uv run ruff check hugegraph-llm/src/tests hugegraph-python-client/src/tests pyproject.toml",
-    "uv run ruff check hugegraph-python-client/src/tests/api/test_auth.py hugegraph-python-client/src/tests/api/test_graph.py hugegraph-python-client/src/tests/api/test_task.py --fix"
+    "uv run ruff check hugegraph-python-client/src/tests/api/test_auth.py hugegraph-python-client/src/tests/api/test_graph.py hugegraph-python-client/src/tests/api/test_task.py --fix",
+    "uv run pytest hugegraph-python-client/src/tests -m \"unit or contract\" -q",
+    "uv run pytest src/tests -m \"unit or contract\" -q",
+    "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-python-client/src/tests -m \"integration and hugegraph\" --collect-only -q",
+    "HUGEGRAPH_REQUIRED=true uv run pytest src/tests -m \"integration and hugegraph\" --collect-only -q",
+    "uv run ruff format --check hugegraph-python-client/src/tests hugegraph-llm/src/tests",
+    "uv run ruff check hugegraph-python-client/src/tests hugegraph-llm/src/tests",
+    "git diff --check",
+    "uv run python -c \"import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text()) for p in ['.github/workflows/hugegraph-llm.yml','.github/workflows/hugegraph-python-client.yml']]\""
   ],
   "known_failures": [
     "Root-level LLM collection command fails before collection because existing prompt config requires cwd hugegraph-llm.",
-    "Initial coverage command failed before uv sync because pytest-cov was missing from the active environment."
+    "Initial coverage command failed before uv sync because pytest-cov was missing from the active environment.",
+    "LLM integration and hugegraph collection is empty before G3 adds real-boundary tests; pytest returns exit code 5."
   ],
   "deferred_items": [
     "Avoid #350/#277 YAML config migration files unless tests require a narrow compatibility assertion.",
@@ -90,5 +111,5 @@
     "Avoid #240 vector/property embedding abstraction surface.",
     "Quarantine client/test fixes overlapping #323/#329/#342 until exact changed files are inspected."
   ],
-  "next_recommended_action": "Standardize HugeGraph service fixture and CI readiness"
+  "next_recommended_action": "Harden pyhugegraph contract coverage"
 }

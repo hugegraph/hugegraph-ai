@@ -26,7 +26,13 @@ class ClientUtils:
     GRAPHSPACE = None
     TIMEOUT = 10
 
-    def __init__(self):
+    def __init__(self, service=None):
+        if service is not None:
+            self.URL = service.url
+            self.GRAPH = service.graph
+            self.USERNAME = service.user
+            self.PASSWORD = service.password
+            self.GRAPHSPACE = service.graphspace
         self.client = PyHugeClient(
             url=self.URL,
             user=self.USERNAME,

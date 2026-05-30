@@ -423,7 +423,7 @@ git commit -m "test(quality): define test taxonomy and baseline" -m "- add stric
 - Create: `docs/quality/hugegraph-integration.md`
 - Create/Update: `.workflow/quality-program/checkpoints/02-service-fixture.md`
 
-- [ ] **Step G1.1: Add client HugeGraph service helper**
+- [x] **Step G1.1: Add client HugeGraph service helper**
 
 Create `hugegraph-python-client/src/tests/fixtures/hugegraph_service.py`:
 
@@ -488,7 +488,7 @@ def hugegraph_service() -> HugeGraphService:
     return service
 ```
 
-- [ ] **Step G1.2: Wire client conftest to helper**
+- [x] **Step G1.2: Wire client conftest to helper**
 
 Create or update `hugegraph-python-client/src/tests/conftest.py`:
 
@@ -498,7 +498,7 @@ from .fixtures.hugegraph_service import hugegraph_service
 __all__ = ["hugegraph_service"]
 ```
 
-- [ ] **Step G1.3: Adapt client utility to environment contract**
+- [x] **Step G1.3: Adapt client utility to environment contract**
 
 Modify `hugegraph-python-client/src/tests/client_utils.py` so `ClientUtils` accepts optional service config:
 
@@ -529,7 +529,7 @@ class ClientUtils:
 
 Keep the existing initialization methods unchanged.
 
-- [ ] **Step G1.4: Add LLM HugeGraph service wrapper**
+- [x] **Step G1.4: Add LLM HugeGraph service wrapper**
 
 Create `hugegraph-llm/src/tests/fixtures/hugegraph_service.py`:
 
@@ -592,7 +592,7 @@ def hugegraph_service() -> HugeGraphService:
     return service
 ```
 
-- [ ] **Step G1.5: Update LLM CI to HugeGraph 1.7.0 health checks**
+- [x] **Step G1.5: Update LLM CI to HugeGraph 1.7.0 health checks**
 
 Modify `.github/workflows/hugegraph-llm.yml`:
 
@@ -620,7 +620,7 @@ Set integration test env for HugeGraph-selected jobs:
         HUGEGRAPH_PASSWORD: admin
 ```
 
-- [ ] **Step G1.6: Document service usage**
+- [x] **Step G1.6: Document service usage**
 
 Create `docs/quality/hugegraph-integration.md`:
 
@@ -647,7 +647,7 @@ HUGEGRAPH_REQUIRED=true|false
 - Default unit/contract tests must not require Docker.
 ```
 
-- [ ] **Step G1.7: Run harness verification**
+- [x] **Step G1.7: Run harness verification**
 
 Run:
 
@@ -660,7 +660,7 @@ HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests -m "integration an
 
 Expected: unit/contract tests do not require Docker. Integration collection uses known markers.
 
-- [ ] **Step G1.8: Write checkpoint and commit**
+- [x] **Step G1.8: Write checkpoint and commit**
 
 Create `.workflow/quality-program/checkpoints/02-service-fixture.md` with files touched, commands run, and failures/skips.
 

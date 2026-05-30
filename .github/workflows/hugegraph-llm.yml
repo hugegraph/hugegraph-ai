@@ -34,12 +34,16 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
 
-    steps:
-    - name: Prepare HugeGraph Server Environment
-      run: |
-        docker run -d --name=graph -p 8080:8080 -e PASSWORD=admin hugegraph/hugegraph:1.5.0
-        sleep 10
+    services:
+      hugegraph:
+        image: hugegraph/hugegraph:1.7.0
+        env:
+          PASSWORD: admin
+        options: --health-cmd="curl -f http://localhost:8080/versions || exit 1" --health-interval=10s --health-timeout=5s --health-retries=8
+        ports:
+          - 8080:8080
 
+    steps:
     - uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
@@ -77,6 +81,11 @@ jobs:
     - name: Run integration tests
       working-directory: hugegraph-llm
       env:
-        SKIP_EXTERNAL_SERVICES: true
+        HUGEGRAPH_REQUIRED: true
+        HUGEGRAPH_URL: http://127.0.0.1:8080
+        HUGEGRAPH_GRAPH: hugegraph
+        HUGEGRAPH_USER: admin
+        HUGEGRAPH_PASSWORD: admin
+        SKIP_EXTERNAL_SERVICES: false
       run: |
         uv run pytest src/tests/integration/test_graph_rag_pipeline.py src/tests/integration/test_kg_construction.py src/tests/integration/test_rag_pipeline.py -v --tb=short
