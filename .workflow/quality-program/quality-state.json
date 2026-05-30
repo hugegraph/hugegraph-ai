@@ -58,12 +58,23 @@
     ".github/workflows/hugegraph-llm.yml",
     "docs/quality/hugegraph-integration.md",
     ".workflow/quality-program/checkpoints/02-service-fixture.md",
-    ".workflow/quality-program/checkpoints/03-client-contract.md"
+    ".workflow/quality-program/checkpoints/03-client-contract.md",
+    ".workflow/quality-program/reports/production-change-ledger.md",
+    "hugegraph-python-client/src/pyhugegraph/utils/util.py"
   ],
-  "production_changes": [],
+  "production_changes": [
+    {
+      "goal": "G2",
+      "file": "hugegraph-python-client/src/pyhugegraph/utils/util.py",
+      "change": "Preserve backend error envelope details for non-404 HTTP errors and prefer server message fields.",
+      "test": "uv run pytest hugegraph-python-client/src/tests/api/test_response_validation.py -q"
+    }
+  ],
   "tests_added_or_changed": [
     "Added file-level unit/contract/integration/hugegraph markers to selected existing tests for Layer A and Layer B selection.",
-    "Added HugeGraph service fixtures and conftest wiring for client and LLM test suites."
+    "Added HugeGraph service fixtures and conftest wiring for client and LLM test suites.",
+    "Added response validation contract tests for backend and malformed error envelopes.",
+    "Updated client integration harness so hugegraph-marked legacy tests use the service fixture gate before unittest setUpClass."
   ],
   "commands_run": [
     "sed -n '1,220p' AGENTS.md",
@@ -100,13 +111,20 @@
     "git diff --check",
     "uv run python -c \"import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text()) for p in ['.github/workflows/hugegraph-llm.yml','.github/workflows/hugegraph-python-client.yml']]\"",
     "docker ps --format '{{.Names}} {{.Image}} {{.Ports}}'",
-    "uv run python -c \"import requests; print(requests.get('http://127.0.0.1:8080/versions', timeout=5).text[:200])\""
+    "uv run python -c \"import requests; print(requests.get('http://127.0.0.1:8080/versions', timeout=5).text[:200])\"",
+    "uv run pytest hugegraph-python-client/src/tests/api/test_response_validation.py -q",
+    "uv run pytest hugegraph-python-client/src/tests -m \"unit or contract\" -q",
+    "HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-python-client/src/tests -m \"integration and hugegraph\" -v --tb=short --maxfail=1",
+    "uv run ruff format --check hugegraph-python-client/src/tests/conftest.py hugegraph-python-client/src/tests/client_utils.py hugegraph-python-client/src/tests/api/test_response_validation.py hugegraph-python-client/src/pyhugegraph/utils/util.py",
+    "uv run ruff check hugegraph-python-client/src/tests/conftest.py hugegraph-python-client/src/tests/client_utils.py hugegraph-python-client/src/tests/api/test_response_validation.py hugegraph-python-client/src/pyhugegraph/utils/util.py",
+    "uv run pre-commit run trailing-whitespace --files hugegraph-python-client/src/pyhugegraph/utils/util.py",
+    "git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol diff --check"
   ],
   "known_failures": [
     "Root-level LLM collection command fails before collection because existing prompt config requires cwd hugegraph-llm.",
     "Initial coverage command failed before uv sync because pytest-cov was missing from the active environment.",
     "LLM integration and hugegraph collection is empty before G3 adds real-boundary tests; pytest returns exit code 5.",
-    "G2 blocked: Docker daemon is unavailable and no HugeGraph service is reachable at http://127.0.0.1:8080/versions."
+    "G2 service-bound tests blocked: Docker daemon is unavailable and no HugeGraph service is reachable at http://127.0.0.1:8080/versions."
   ],
   "deferred_items": [
     "Avoid #350/#277 YAML config migration files unless tests require a narrow compatibility assertion.",
@@ -115,5 +133,5 @@
     "Avoid #240 vector/property embedding abstraction surface.",
     "Quarantine client/test fixes overlapping #323/#329/#342 until exact changed files are inspected."
   ],
-  "next_recommended_action": "Start Docker/OrbStack and HugeGraph 1.7.0, then resume G2 from Step G2.1"
+  "next_recommended_action": "Start Docker/OrbStack and HugeGraph 1.7.0, then resume G2 from Step G2.2"
 }

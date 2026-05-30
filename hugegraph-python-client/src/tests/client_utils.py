@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import os
+
 from pyhugegraph.client import PyHugeClient
 
 
@@ -33,6 +35,12 @@ class ClientUtils:
             self.USERNAME = service.user
             self.PASSWORD = service.password
             self.GRAPHSPACE = service.graphspace
+        else:
+            self.URL = os.getenv("HUGEGRAPH_URL", self.URL)
+            self.GRAPH = os.getenv("HUGEGRAPH_GRAPH", self.GRAPH)
+            self.USERNAME = os.getenv("HUGEGRAPH_USER", self.USERNAME)
+            self.PASSWORD = os.getenv("HUGEGRAPH_PASSWORD", self.PASSWORD)
+            self.GRAPHSPACE = os.getenv("HUGEGRAPH_GRAPHSPACE") or self.GRAPHSPACE
         self.client = PyHugeClient(
             url=self.URL,
             user=self.USERNAME,

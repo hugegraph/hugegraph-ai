@@ -687,7 +687,7 @@ git commit -m "test(quality): standardize hugegraph integration harness" -m "- a
 - Update: `.workflow/quality-program/reports/production-change-ledger.md`
 - Create/Update: `.workflow/quality-program/checkpoints/03-client-contract.md`
 
-- [ ] **Step G2.1: Convert client integration tests to fixture-driven setup**
+- [x] **Step G2.1: Convert client integration tests to fixture-driven setup**
 
 In tests that instantiate `ClientUtils()`, use the `hugegraph_service` fixture.
 
@@ -767,7 +767,7 @@ def test_gremlin_error_surface_is_explicit(client_utils):
 
 Keep security-operation tests. Do not add connectivity probes that turn failures into skips.
 
-- [ ] **Step G2.5: Add response validation malformed envelope tests**
+- [x] **Step G2.5: Add response validation malformed envelope tests**
 
 Extend `hugegraph-python-client/src/tests/api/test_response_validation.py` with malformed and backend-error bodies:
 
@@ -800,7 +800,7 @@ Add the missing `requests` import if the file does not already have it:
 import requests
 ```
 
-- [ ] **Step G2.6: Run client contract suites**
+- [x] **Step G2.6: Run client contract suites**
 
 Run:
 
@@ -811,7 +811,7 @@ HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-python-client/src/tests -m "inte
 
 Expected: Layer A passes; Layer B either passes against running HugeGraph or fails with a classified client/server/setup issue.
 
-- [ ] **Step G2.7: Apply minimal production fixes only when tests prove a contract gap**
+- [x] **Step G2.7: Apply minimal production fixes only when tests prove a contract gap**
 
 For each production fix:
 

@@ -15,6 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import pytest
+
 from .fixtures.hugegraph_service import hugegraph_service
 
 __all__ = ["hugegraph_service"]
+
+
+@pytest.fixture(scope="class", autouse=True)
+def require_hugegraph_for_marked_tests(request):
+    if request.node.get_closest_marker("hugegraph") is not None:
+        request.getfixturevalue("hugegraph_service")

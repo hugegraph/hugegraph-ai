@@ -54,6 +54,29 @@ class TestResponseValidation(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "Server Exception: bad gremlin"):
             validator(response, "POST", "/gremlin")
 
+    def test_backend_error_envelope_preserves_message(self):
+        response = Mock(spec=requests.Response)
+        response.status_code = 500
+        response.text = '{"exception":"BackendException","message":"quality failure"}'
+        response.content = response.text.encode("utf-8")
+        response.json.return_value = {"exception": "BackendException", "message": "quality failure"}
+        response.request = Mock(body='{"gremlin":"g.V2()"}', url="http://127.0.0.1:8080/gremlin")
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
+        validator = ResponseValidation()
+
+        with pytest.raises(Exception) as exc_info:
+            validator(response, method="POST", path="/gremlin")
+
+        assert "quality failure" in str(exc_info.value)
+
+    def test_malformed_error_body_uses_response_text(self):
+        response = self._mock_error_response(ValueError("not json"), "not json")
+        response.json.side_effect = ValueError("not json")
+        validator = ResponseValidation()
+
+        with self.assertRaisesRegex(Exception, "Server Exception: not json"):
+            validator(response, "POST", "/gremlin")
+
 
 if __name__ == "__main__":
     unittest.main()
