@@ -20,6 +20,7 @@ from unittest.mock import Mock
 
 import pytest
 import requests
+from pyhugegraph.utils.exceptions import NotAuthorizedError
 from pyhugegraph.utils.util import ResponseValidation
 
 pytestmark = pytest.mark.contract
@@ -76,6 +77,20 @@ class TestResponseValidation(unittest.TestCase):
 
         with self.assertRaisesRegex(Exception, "Server Exception: not json"):
             validator(response, "POST", "/gremlin")
+
+    def test_unauthorized_error_preserves_not_authorized_type(self):
+        response = Mock(spec=requests.Response)
+        response.status_code = 401
+        response.text = '{"exception":"NotAuthorizedException","message":"Authentication failed"}'
+        response.content = response.text.encode("utf-8")
+        response.request = Mock(body="Empty body", url="http://127.0.0.1:8080/graphs")
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError("401 Client Error")
+        validator = ResponseValidation()
+
+        with pytest.raises(NotAuthorizedError) as exc_info:
+            validator(response, method="GET", path="/graphs")
+
+        assert "Please check your username and password" in str(exc_info.value)
 
 
 if __name__ == "__main__":

@@ -77,8 +77,9 @@ Final G7 sanity checks:
 | PR68 review | `hugegraph-llm/src/hugegraph_llm/operators/hugegraph_op/commit_to_hugegraph.py` | Extend primary-key endpoint mapping to multi-key vertex labels. | `uv run pytest hugegraph-llm/src/tests/operators/hugegraph_op/test_commit_to_hugegraph_load_into_graph.py -q` |
 | PR68 review | `hugegraph-llm/src/hugegraph_llm/config/models/base_prompt_config.py` | Resolve prompt config YAML from the package project root instead of process cwd. | `uv run pytest hugegraph-llm/src/tests/config/test_config.py -q` |
 | PR68 review | `hugegraph-llm/src/hugegraph_llm/config/models/base_config.py` | Resolve `.env` from the package project root instead of process cwd. | `uv run pytest hugegraph-llm/src/tests/config/test_config.py -q` |
+| PR68 second review | `hugegraph-python-client/src/pyhugegraph/utils/util.py` | Preserve `NotAuthorizedError` for 401 responses in `ResponseValidation`. | `uv run pytest hugegraph-python-client/src/tests/api/test_response_validation.py -q` |
 
-No production code changed in G5-G7. PR68 review fixes added the two production-code rows above.
+No production code changed in G5-G7. PR68 review fixes added the production-code rows above.
 
 ## Failures, Skips, and Known Risks
 
