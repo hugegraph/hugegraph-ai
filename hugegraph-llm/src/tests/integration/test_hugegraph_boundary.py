@@ -120,12 +120,12 @@ def _commit_quality_graph():
     return commit.run(data)
 
 
-def test_schema_manager_reads_real_schema(hugegraph_client):
+def test_schema_manager_reads_real_schema(hugegraph_client, hugegraph_service):
     from hugegraph_llm.operators.hugegraph_op.schema_manager import SchemaManager
 
     _create_quality_schema(hugegraph_client)
 
-    manager = SchemaManager(graph_name=hugegraph_client.cfg.graph_name)
+    manager = SchemaManager(graph_name=hugegraph_service.graph)
     context = manager.run({})
 
     assert "schema" in context
