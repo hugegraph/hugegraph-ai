@@ -149,8 +149,8 @@ class Commit2Graph:
             # TODO: we could try batch add vertices first, setback to single-mode if failed
             explicit_id = vertex.get("id")
             mapping_id = explicit_id
-            if not mapping_id and len(primary_keys) == 1:
-                mapping_id = f"{input_label}:{input_properties[primary_keys[0]]}"
+            if not mapping_id and primary_keys:
+                mapping_id = f"{input_label}:{'!'.join(str(input_properties[pk]) for pk in primary_keys)}"
 
             if vertex_label.get("id_strategy") == "CUSTOMIZE_STRING" and explicit_id:
                 result = self._handle_graph_creation(

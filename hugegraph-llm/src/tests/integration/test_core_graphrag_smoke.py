@@ -63,7 +63,9 @@ def test_graphrag_smoke_uses_production_vector_and_rerank_operators():
     from hugegraph_llm.operators.index_op.build_vector_index import BuildVectorIndex
     from hugegraph_llm.operators.index_op.vector_index_query import VectorIndexQuery
 
-    docs = json.loads(Path("src/tests/data/quality_program/graphrag_documents.json").read_text())
+    InMemoryVectorIndex.stores.clear()
+    data_file = Path(__file__).resolve().parents[1] / "data" / "quality_program" / "graphrag_documents.json"
+    docs = json.loads(data_file.read_text(encoding="utf-8"))
     chunks = [doc["text"] for doc in docs]
     embedding = DeterministicEmbedding()
 

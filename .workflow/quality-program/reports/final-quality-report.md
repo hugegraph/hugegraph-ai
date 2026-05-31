@@ -74,8 +74,11 @@ Final G7 sanity checks:
 | G2 | `hugegraph-python-client/src/pyhugegraph/utils/util.py` | Preserve backend error envelope details for non-404 HTTP errors and prefer server `message` over `exception`. | `uv run pytest hugegraph-python-client/src/tests/api/test_response_validation.py -q` |
 | G3 | `hugegraph-llm/src/hugegraph_llm/operators/hugegraph_op/commit_to_hugegraph.py` | Map primary-key `label:value` edge endpoints to server-created VIDs and raise explicit vertex creation errors. | `uv run pytest hugegraph-llm/src/tests/operators/hugegraph_op/test_commit_to_hugegraph.py::TestCommit2Graph::test_load_into_graph_raises_explicit_error_when_vertex_creation_fails -q`; `HUGEGRAPH_REQUIRED=true uv run pytest hugegraph-llm/src/tests/integration/test_hugegraph_boundary.py -v --tb=short` |
 | G4 | `hugegraph-llm/src/hugegraph_llm/api/rag_api.py` | Map `/config/llm` to `llm_settings.chat_llm_type`. | `uv run pytest hugegraph-llm/src/tests/api -m "unit or contract" -v --tb=short` |
+| PR68 review | `hugegraph-llm/src/hugegraph_llm/operators/hugegraph_op/commit_to_hugegraph.py` | Extend primary-key endpoint mapping to multi-key vertex labels. | `uv run pytest hugegraph-llm/src/tests/operators/hugegraph_op/test_commit_to_hugegraph_load_into_graph.py -q` |
+| PR68 review | `hugegraph-llm/src/hugegraph_llm/config/models/base_prompt_config.py` | Resolve prompt config YAML from the package project root instead of process cwd. | `uv run pytest hugegraph-llm/src/tests/config/test_config.py -q` |
+| PR68 review | `hugegraph-llm/src/hugegraph_llm/config/models/base_config.py` | Resolve `.env` from the package project root instead of process cwd. | `uv run pytest hugegraph-llm/src/tests/config/test_config.py -q` |
 
-No production code changed in G5-G7.
+No production code changed in G5-G7. PR68 review fixes added the two production-code rows above.
 
 ## Failures, Skips, and Known Risks
 

@@ -139,7 +139,7 @@ class TestGremlinSetupBehavior(unittest.TestCase):
 
 
 def test_gremlin_error_surface_is_explicit(client_utils):
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         client_utils.gremlin.exec("g.V2()")
 
     message = str(exc_info.value)

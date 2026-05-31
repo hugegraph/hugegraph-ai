@@ -22,6 +22,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fixtures.fake_llm import FakeLLM
 
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.operators.llm_op.property_graph_extract import (
@@ -30,7 +31,6 @@ from hugegraph_llm.operators.llm_op.property_graph_extract import (
     generate_extract_property_graph_prompt,
     split_text,
 )
-from tests.fixtures.fake_llm import FakeLLM
 
 pytestmark = pytest.mark.contract
 

@@ -23,14 +23,14 @@ import nltk
 
 # Get project root directory
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-os.chdir(project_root)
-# Add to Python path
 sys.path.insert(0, project_root)
 # Add src directory to Python path
 src_path = os.path.join(project_root, "src")
 sys.path.insert(0, src_path)
+tests_path = os.path.join(project_root, "src", "tests")
+sys.path.insert(0, tests_path)
 
-from tests.fixtures.hugegraph_service import hugegraph_service  # noqa: E402
+from fixtures.hugegraph_service import hugegraph_service  # noqa: E402
 
 __all__ = ["hugegraph_service"]
 

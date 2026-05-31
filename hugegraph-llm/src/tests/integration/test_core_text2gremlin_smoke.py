@@ -19,8 +19,7 @@ import json
 from pathlib import Path
 
 import pytest
-
-from tests.fixtures.fake_llm import FakeLLM
+from fixtures.fake_llm import FakeLLM
 
 pytestmark = [pytest.mark.smoke, pytest.mark.integration]
 
@@ -30,7 +29,8 @@ def test_text2gremlin_smoke_normalizes_fake_llm_output():
     from hugegraph_llm.operators.llm_op.gremlin_generate import GremlinGenerateSynthesize
     from hugegraph_llm.state.ai_state import WkFlowInput
 
-    schema = json.loads(Path("src/tests/data/quality_program/text2gremlin_schema.json").read_text())
+    schema_file = Path(__file__).resolve().parents[1] / "data" / "quality_program" / "text2gremlin_schema.json"
+    schema = json.loads(schema_file.read_text(encoding="utf-8"))
     generator = GremlinGenerateSynthesize(
         llm=FakeLLM(
             [

@@ -129,10 +129,14 @@ def configured_hugegraph(hugegraph_service):
 
     client = _make_client(hugegraph_service)
     client.graphs().clear_graph_all_data()
-    yield hugegraph_service
-    client.graphs().clear_graph_all_data()
-    for key, value in original.items():
-        setattr(huge_settings, key, value)
+    try:
+        yield hugegraph_service
+    finally:
+        try:
+            client.graphs().clear_graph_all_data()
+        finally:
+            for key, value in original.items():
+                setattr(huge_settings, key, value)
 
 
 def _create_quality_schema(client):

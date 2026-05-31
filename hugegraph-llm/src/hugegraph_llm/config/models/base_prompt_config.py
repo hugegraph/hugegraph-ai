@@ -16,8 +16,6 @@
 # under the License.
 
 import os
-import sys
-from pathlib import Path
 
 import yaml
 
@@ -26,7 +24,8 @@ from hugegraph_llm.utils.log import log
 
 dir_name = os.path.dirname
 F_NAME = "config_prompt.yaml"
-yaml_file_path = os.path.join(os.getcwd(), "src/hugegraph_llm/resources/demo", F_NAME)
+PROJECT_ROOT = get_project_root()
+yaml_file_path = os.path.join(PROJECT_ROOT, "src/hugegraph_llm/resources/demo", F_NAME)
 
 
 class LiteralStr(str):
@@ -54,18 +53,6 @@ class BasePromptConfig:
     generate_extract_prompt_template: str = ""
 
     def ensure_yaml_file_exists(self):
-        current_dir = Path.cwd().resolve()
-        project_root = get_project_root()
-        if current_dir == project_root:
-            log.info("Current working directory is the project root, proceeding to run the app.")
-        else:
-            error_msg = (
-                f"Current working directory is not the project root. "
-                f"Please run this script from the project root directory: {project_root}\n"
-                f"Current directory: {current_dir}"
-            )
-            log.error(error_msg)
-            sys.exit(1)
         if os.path.exists(yaml_file_path):
             log.info("Loading prompt file '%s' successfully.", F_NAME)
             with open(yaml_file_path, "r", encoding="utf-8") as file:

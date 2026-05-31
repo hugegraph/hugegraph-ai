@@ -25,19 +25,19 @@ import pytest
 from hugegraph_llm.models.embeddings.base import SimilarityMode
 from hugegraph_llm.models.embeddings.ollama import OllamaEmbedding
 
-pytestmark = pytest.mark.contract
-
 
 class TestOllamaEmbedding(unittest.TestCase):
     def setUp(self):
         self.skip_external = os.getenv("SKIP_EXTERNAL_SERVICES", "false").lower() == "true"
 
+    @pytest.mark.external
     @unittest.skipIf(os.getenv("SKIP_EXTERNAL_SERVICES", "false").lower() == "true", "Skipping external service tests")
     def test_get_text_embedding(self):
         ollama_embedding = OllamaEmbedding(model_name="quentinz/bge-large-zh-v1.5")
         embedding = ollama_embedding.get_text_embedding("hello world")
         print(embedding)
 
+    @pytest.mark.external
     @unittest.skipIf(os.getenv("SKIP_EXTERNAL_SERVICES", "false").lower() == "true", "Skipping external service tests")
     def test_get_cosine_similarity(self):
         ollama_embedding = OllamaEmbedding(model_name="quentinz/bge-large-zh-v1.5")
@@ -46,6 +46,7 @@ class TestOllamaEmbedding(unittest.TestCase):
         similarity = OllamaEmbedding.similarity(embedding1, embedding2, SimilarityMode.DEFAULT)
         print(similarity)
 
+    @pytest.mark.contract
     def test_async_get_texts_embeddings_preserves_batch_order(self):
         ollama_embedding = OllamaEmbedding(model="test-model")
         ollama_embedding.async_client = AsyncMock()
@@ -65,6 +66,7 @@ class TestOllamaEmbedding(unittest.TestCase):
 
         asyncio.run(run_async_test())
 
+    @pytest.mark.contract
     def test_async_get_text_embedding_requires_embeddings_key(self):
         ollama_embedding = OllamaEmbedding(model="test-model")
         ollama_embedding.async_client = AsyncMock()
@@ -78,6 +80,7 @@ class TestOllamaEmbedding(unittest.TestCase):
 
         asyncio.run(run_async_test())
 
+    @pytest.mark.contract
     def test_get_texts_embeddings_requires_embeddings_key(self):
         ollama_embedding = OllamaEmbedding(model="test-model")
         ollama_embedding.client = MagicMock()
@@ -86,6 +89,7 @@ class TestOllamaEmbedding(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing 'embeddings'"):
             ollama_embedding.get_texts_embeddings(["a"])
 
+    @pytest.mark.contract
     def test_get_texts_embeddings_requires_embed_method(self):
         ollama_embedding = OllamaEmbedding(model="test-model")
         ollama_embedding.client = object()
@@ -93,6 +97,7 @@ class TestOllamaEmbedding(unittest.TestCase):
         with self.assertRaisesRegex(AttributeError, "required 'embed' method"):
             ollama_embedding.get_texts_embeddings(["a"])
 
+    @pytest.mark.contract
     def test_get_texts_embeddings_requires_non_empty_embeddings(self):
         ollama_embedding = OllamaEmbedding(model="test-model")
         ollama_embedding.client = MagicMock()
@@ -101,6 +106,7 @@ class TestOllamaEmbedding(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "returned no embeddings"):
             ollama_embedding.get_texts_embeddings(["a"])
 
+    @pytest.mark.contract
     def test_async_get_text_embedding_requires_non_empty_embeddings(self):
         ollama_embedding = OllamaEmbedding(model="test-model")
         ollama_embedding.async_client = AsyncMock()
@@ -114,6 +120,7 @@ class TestOllamaEmbedding(unittest.TestCase):
 
         asyncio.run(run_async_test())
 
+    @pytest.mark.contract
     def test_async_get_text_embedding_requires_embed_method(self):
         ollama_embedding = OllamaEmbedding(model="test-model")
         ollama_embedding.async_client = object()

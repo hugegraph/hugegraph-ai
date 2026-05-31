@@ -84,17 +84,22 @@ def configured_hugegraph(hugegraph_service):
 
     client = _make_client(hugegraph_service)
     client.graphs().clear_graph_all_data()
-    yield hugegraph_service
-    client.graphs().clear_graph_all_data()
-    for key, value in original.items():
-        setattr(huge_settings, key, value)
+    try:
+        yield hugegraph_service
+    finally:
+        try:
+            client.graphs().clear_graph_all_data()
+        finally:
+            for key, value in original.items():
+                setattr(huge_settings, key, value)
 
 
 def test_kg_construction_smoke_uses_production_code(configured_hugegraph):
     from hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph import Commit2Graph
     from hugegraph_llm.operators.hugegraph_op.fetch_graph_data import FetchGraphData
 
-    fixture = json.loads(Path("src/tests/data/quality_program/kg_graph_output.json").read_text())
+    fixture_file = Path(__file__).resolve().parents[1] / "data" / "quality_program" / "kg_graph_output.json"
+    fixture = json.loads(fixture_file.read_text(encoding="utf-8"))
     assert fixture["vertices"]
     assert fixture["edges"]
 
