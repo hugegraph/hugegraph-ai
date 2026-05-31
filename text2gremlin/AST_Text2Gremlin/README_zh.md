@@ -4,6 +4,18 @@
 
 基于AST和模版生成大量多样化的 Gremlin 查询及其自然语言描述，并通过 LLM 进行多阶段数据增强与偏好数据合成，用于训练和评估 text2gremlin 模型。
 
+合成后的数据集已发布到 Hugging Face：[Lriver/Text2Gremlin](https://huggingface.co/datasets/Lriver/Text2Gremlin)。如果只需要使用已生成数据，可以直接下载该数据集；如果需要重新生成、定制或审计中间过程，再运行本地流水线。
+
+## 数据集
+
+已生成的 Text2Gremlin 数据集地址：
+
+```text
+https://huggingface.co/datasets/Lriver/Text2Gremlin
+```
+
+本仓库流水线会在本地 `output/` 下生成同类中间产物，包括 AST 泛化语料、多风格 LLM 翻译、场景迁移结果、合并后的 text-to-Gremlin 数据、语法分析报告和 DPO 偏好数据。`output/` 已被 `.gitignore` 忽略，因为这些文件通常较大，且可以重新生成或从 Hugging Face 下载。
+
 ## 快速开始
 
 ### 1. 环境配置
@@ -95,11 +107,14 @@ python analyze_syntax.py
          ×20 场景 → 默认同类型迁移, 可选混合 CRUD, 语法检查
               ↓
 阶段 4: 数据集合并         llm_augment/merge_dataset.py
-         合并翻译+迁移 → 统一 text2gremlin 数据集
+         合并翻译+迁移 → text2gremlin_dataset_*.json，用于训练/评估分析
               ↓
 阶段 5: DPO 偏好数据       llm_augment/generate_dpo_data.py
+         使用 text2gremlin_pairs_*.json + migrated_*.json 作为输入
          A类(多任务组合) + B类(单任务) + C类(长链拆解)
          → ~8900 条偏好数据 (21 个领域)
+              ↓
+公开数据集                  Hugging Face: Lriver/Text2Gremlin
 ```
 
 ---
@@ -139,6 +154,11 @@ python analyze_syntax.py
 │   └── reference/              # 场景迁移用的多领域 schema
 │
 └── output/                     # 输出目录
+    ├── generated_corpus_*.json
+    ├── llm_translated_*.json
+    ├── text2gremlin_pairs_*.json
+    ├── migrated_*.json
+    ├── text2gremlin_dataset_*.json
     └── preference_data/        # DPO 偏好数据
 ```
 
@@ -191,6 +211,8 @@ python -m llm_augment.migrate_scenario --migration-mode mixed_operations
 
 ## 输出格式
 
+已生成的数据可从 [Lriver/Text2Gremlin](https://huggingface.co/datasets/Lriver/Text2Gremlin) 下载。下面的格式说明对应本地流水线生成并最终汇总到公开数据集的中间产物。
+
 ### AST 泛化结果 (`generated_corpus_*.json`)
 ```json
 {
@@ -216,6 +238,22 @@ python -m llm_augment.migrate_scenario --migration-mode mixed_operations
 }
 ```
 
+### Text2Gremlin 数据对 (`text2gremlin_pairs_*.json`)
+由场景迁移阶段根据 `llm_translated_*.json` 生成，每条查询从固定翻译风格中选取一种，作为 movie 领域 DPO 输入。
+
+```json
+{
+  "metadata": {
+    "source_file": "output/llm_translated_20260531_120000.json",
+    "total_pairs": 1564,
+    "style_distribution": { "zh_formal": 392, "en_casual": 391 }
+  },
+  "pairs": [
+    { "text": "查询所有人", "gremlin": "g.V().hasLabel('person')", "style": "zh_formal" }
+  ]
+}
+```
+
 ### 场景迁移结果 (`migrated_*.json`)
 ```json
 {
@@ -230,7 +268,33 @@ python -m llm_augment.migrate_scenario --migration-mode mixed_operations
 }
 ```
 
-### DPO 偏好数据 (`preference_data/dpo_data_merged.json`)
+### 合并后的 Text2Gremlin 数据集 (`text2gremlin_dataset_*.json`)
+由 `merge_dataset.py` 根据最新或指定的 `llm_translated_*.json` 和 `migrated_*.json` 生成，可直接被 `analyze_syntax.py` 分析。
+
+```json
+{
+  "metadata": {
+    "total": 3,
+    "sources": {
+      "llm_translated": { "file": "output/llm_translated_20260531_120000.json", "count": 1 },
+      "migrated": { "file": "output/migrated_20260531_130000.json", "count": 2 }
+    },
+    "crud_distribution": { "read": 2, "create": 1 }
+  },
+  "corpus": [
+    {
+      "query": "g.V().hasLabel('person')",
+      "text": "查询所有人",
+      "domain": "movie",
+      "operation": "read",
+      "language_style": "zh_formal",
+      "source": "llm_translated"
+    }
+  ]
+}
+```
+
+### DPO 偏好数据 (`preference_data/dpo_data_*.json`)
 ```json
 {
   "metadata": {
@@ -278,6 +342,8 @@ python -m llm_augment.migrate_scenario --migration-mode mixed_operations
 ### 场景迁移
 将电影领域数据迁移到 20 个业务场景。默认保持源语句的操作类型，每个目标场景请求生成 3 条样本；如需保留原来的混合 CRUD 生成方式，可使用 `--migration-mode mixed_operations`。每条 Gremlin 经过 ANTLR 语法检查。
 
+该阶段还会从翻译结果中准备 `text2gremlin_pairs_*.json`，供 movie 领域 DPO 数据生成使用。
+
 ### DPO 偏好数据
 三类任务生成 Groovy vs Gremlin 偏好对，覆盖 21 个领域（movie + 20 个迁移领域），合计 8920 条：
 
@@ -299,3 +365,6 @@ python -m llm_augment.migrate_scenario --migration-mode mixed_operations
 - ANTLR 语法检查：纯 Gremlin 代码经过语法验证（Groovy 代码跳过，因变量引用不兼容 ANTLR）
 - 单条重试：失败自动重试（指数退避），不影响其他任务
 - 代码无注释：所有生成的 Groovy/Gremlin 代码禁止包含注释
+
+### 公开数据集
+最终合成数据已上传到 [Hugging Face datasets: Lriver/Text2Gremlin](https://huggingface.co/datasets/Lriver/Text2Gremlin)。下游训练或评估建议优先使用 Hugging Face 数据集；需要复现或调整生成过程时，再使用本仓库流水线。
