@@ -77,6 +77,7 @@ def run_stage(stage: str, extra_args: list[str]) -> int:
     print(f"{'=' * 60}\n")
 
     cmd = [sys.executable, "-m", module, *extra_args]
+    # Keep child stdout/stderr attached so stage logs stream in order.
     result = subprocess.run(cmd, check=False)
     return result.returncode
 
