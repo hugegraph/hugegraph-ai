@@ -27,6 +27,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.envelope import ErrorType
 
 
 # 默认计划有效期（秒）
@@ -61,7 +62,7 @@ def compute_plan_hash(context: PlanContext) -> str:
     payload = asdict(context)
     payload = _canonicalize(payload)
     encoded = json.dumps(payload, sort_keys=True, default=str)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:32]
 
 
 def build_plan_context(
@@ -124,7 +125,11 @@ def verify_plan_hash(
     cfg = MCPConfig.from_env()
 
     if nonce is None:
-        return False, "PLAN_HASH_MISMATCH", {"reason": "Missing nonce in plan context."}
+        return (
+            False,
+            ErrorType.PLAN_HASH_MISMATCH,
+            {"reason": "Missing nonce in plan context."},
+        )
 
     expires_at_seconds = _coerce_expires_at(expires_at)
 
@@ -133,7 +138,7 @@ def verify_plan_hash(
     if expires_at_seconds is None or int(time.time()) > expires_at_seconds:
         return (
             False,
-            "PLAN_EXPIRED",
+            ErrorType.PLAN_EXPIRED,
             {
                 "expires_at": expires_at,
                 "current_time": int(time.time()),
@@ -162,7 +167,7 @@ def verify_plan_hash(
     if submitted_hash != expected_hash:
         return (
             False,
-            "PLAN_HASH_MISMATCH",
+            ErrorType.PLAN_HASH_MISMATCH,
             {
                 "expected_hash": expected_hash,
                 "provided_hash": submitted_hash,
@@ -177,7 +182,7 @@ def compute_payload_digest(payload: Any) -> str:
     """计算 payload 的规范化摘要。"""
     normalized = _canonicalize(payload)
     encoded = json.dumps(normalized, sort_keys=True, default=str)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:32]
 
 
 def _canonicalize(obj: Any) -> Any:

@@ -13,6 +13,7 @@
 
 """Tests for plan_hash module (Milestone 4)."""
 
+from hugegraph_mcp.envelope import ErrorType
 from hugegraph_mcp.plan_hash import (
     PlanContext,
     build_plan_context,
@@ -48,6 +49,7 @@ def test_plan_hash_changes_when_graph_name_changes(monkeypatch):
     )
 
     assert hash_a != hash_b
+    assert len(hash_a) == 32
 
 
 def test_plan_hash_changes_when_graphspace_changes(monkeypatch):
@@ -174,7 +176,7 @@ def test_verify_plan_hash_rejects_mismatched_hash(monkeypatch):
     )
 
     assert valid is False
-    assert error_type == "PLAN_HASH_MISMATCH"
+    assert error_type == ErrorType.PLAN_HASH_MISMATCH
 
 
 def test_verify_plan_hash_rejects_missing_nonce(monkeypatch):
@@ -187,7 +189,7 @@ def test_verify_plan_hash_rejects_missing_nonce(monkeypatch):
     )
 
     assert valid is False
-    assert error_type == "PLAN_HASH_MISMATCH"
+    assert error_type == ErrorType.PLAN_HASH_MISMATCH
 
 
 def test_verify_plan_hash_rejects_missing_expires_at(monkeypatch):
@@ -205,7 +207,7 @@ def test_verify_plan_hash_rejects_missing_expires_at(monkeypatch):
     )
 
     assert valid is False
-    assert error_type == "PLAN_EXPIRED"
+    assert error_type == ErrorType.PLAN_EXPIRED
 
 
 def test_compute_payload_digest_is_stable():
@@ -213,6 +215,7 @@ def test_compute_payload_digest_is_stable():
     d2 = compute_payload_digest({"b": 2, "a": 1})
 
     assert d1 == d2
+    assert len(d1) == 32
 
 
 def test_plan_context_is_frozen():
@@ -245,7 +248,7 @@ def test_verify_plan_hash_rejects_expired_plan(monkeypatch):
     )
 
     assert valid is False
-    assert error_type == "PLAN_EXPIRED"
+    assert error_type == ErrorType.PLAN_EXPIRED
 
 
 def test_verify_plan_hash_rejects_extended_expires_at(monkeypatch):
@@ -263,4 +266,4 @@ def test_verify_plan_hash_rejects_extended_expires_at(monkeypatch):
     )
 
     assert valid is False
-    assert error_type == "PLAN_HASH_MISMATCH"
+    assert error_type == ErrorType.PLAN_HASH_MISMATCH

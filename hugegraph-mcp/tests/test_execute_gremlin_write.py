@@ -29,8 +29,16 @@ def test_execute_gremlin_write_basic(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
     from hugegraph_mcp import gremlin_tools
+    from hugegraph_mcp.guard import Capability
 
     fake_client = FakeGremlinClient(results=[{"id": 1}, {"id": 2}])
+    guarded = []
+
+    def fake_guard_write(capability=Capability.DATA_WRITE, **_kwargs):
+        guarded.append(capability)
+        return None
+
+    monkeypatch.setattr(gremlin_tools, "guard_write", fake_guard_write)
     monkeypatch.setattr(
         gremlin_tools, "_get_write_client", lambda: fake_client, raising=False
     )
@@ -47,6 +55,7 @@ def test_execute_gremlin_write_basic(monkeypatch):
     assert res["data"]["affected"] == 2
     assert isinstance(res["data"]["duration_ms"], (int, float))
     assert res["meta"]["duration_ms"] == res["data"]["duration_ms"]
+    assert guarded == [Capability.DATA_WRITE]
 
 
 def test_execute_gremlin_write_blocked_in_readonly(monkeypatch):

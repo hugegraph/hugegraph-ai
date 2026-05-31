@@ -33,7 +33,7 @@ V1 对用户暴露稳定工具：
 - `design_schema_tool`
 - `apply_schema_tool`
 
-以下工具仍注册在 MCP 中，但属于管理/调试能力，默认受 `HUGEGRAPH_MCP_ADMIN_MODE=false` 阻断：
+以下工具仍注册在 MCP 中，但属于管理/调试能力，默认受 `HUGEGRAPH_MCP_ADMIN_MODE=false` 阻断。具备写入能力的管理工具还要求 `HUGEGRAPH_MCP_READONLY=false`：
 
 - `execute_gremlin_write_tool`
 - `refresh_vid_embeddings_tool`
@@ -88,8 +88,8 @@ V1 高层工具返回统一 envelope：
 | `delete_graph_data_tool` | 受控删除入口；只支持精确删除点或边，不支持条件批量删除和级联删除 |
 | `design_schema_tool` | 根据 schema 操作草案给出设计建议，不修改数据库 |
 | `apply_schema_tool` | V1 只支持 schema `validate` 和 `dry_run`；真实 `apply` 当前禁用 |
-| `execute_gremlin_write_tool` | 直接执行 Gremlin 写语句；默认禁用，仅 `HUGEGRAPH_MCP_ADMIN_MODE=true` 时可用 |
-| `refresh_vid_embeddings_tool` | 刷新 VID embeddings，会改变索引状态；默认禁用，仅 admin mode 下可用 |
+| `execute_gremlin_write_tool` | 直接执行 Gremlin 写语句；默认禁用，仅 `HUGEGRAPH_MCP_ADMIN_MODE=true` 且 `HUGEGRAPH_MCP_READONLY=false` 时可用 |
+| `refresh_vid_embeddings_tool` | 刷新 VID embeddings，会改变索引状态；默认禁用，仅 `HUGEGRAPH_MCP_ADMIN_MODE=true` 且 `HUGEGRAPH_MCP_READONLY=false` 时可用 |
 
 
 
@@ -124,6 +124,8 @@ dry_run=true
 confirm 阶段必须全量重验。dry-run 结果过期、目标图变化、schema 变化、payload 变化或权限变化时，confirm 必须失败并要求重新 dry-run。
 
 ### 导入语义
+
+`import_graph_data_tool(mode="ingest")` 是 MCP V1 对外的结构化导入路径。它使用本地 schema 校验、dry-run/hash/confirm 和 `manage_graph_data()` 的 direct Gremlin 写入；不会调用 HugeGraph-AI `/graph-import` HTTP 路径。legacy/internal 的 AI-backed 函数命名为 `ingest_graph_data_via_ai()`。
 
 `import_graph_data_tool(mode="ingest")` 执行创建时返回三类状态：
 

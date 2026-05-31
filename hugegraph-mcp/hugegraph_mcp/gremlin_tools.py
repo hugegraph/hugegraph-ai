@@ -315,14 +315,18 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
         return _gremlin_error_envelope(result)
 
 
-def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
+def execute_gremlin_write(
+    gremlin_query: str,
+    *,
+    capability: Capability = Capability.DATA_WRITE,
+) -> dict[str, Any]:
     """执行 Gremlin 写查询。
 
     readonly 模式下通过 guard_write 拒绝执行，
     正常模式返回 {success, affected, duration_ms, is_write}。
     """
 
-    violation = guard_write(Capability.DEBUG_WRITE)
+    violation = guard_write(capability)
     if violation is not None:
         return violation
 

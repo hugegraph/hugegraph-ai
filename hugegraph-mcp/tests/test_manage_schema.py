@@ -423,7 +423,7 @@ def test_manage_schema_dry_run(monkeypatch):
 
     assert result["ok"] is True
     assert result["data"]["valid"] is True
-    assert re.fullmatch(r"[0-9a-f]{16}", result["data"]["plan_hash"])
+    assert re.fullmatch(r"[0-9a-f]{32}", result["data"]["plan_hash"])
     assert "mutation_summary" in result["data"]
     assert isinstance(result["data"]["warnings"], list)
 

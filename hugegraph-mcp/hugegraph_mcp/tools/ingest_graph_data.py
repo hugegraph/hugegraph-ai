@@ -11,9 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""图数据导入 — 结构化 graph_data 校验+写入链路。
+"""图数据导入 — 结构化 graph_data 校验和 legacy AI-backed 写入链路。
 
-ingest_graph_data() 提供 dry_run → confirm → plan_hash → execute 安全链。
+Public MCP V1 的 import_graph_data_tool(mode="ingest") 使用
+manage_graph_data() / direct Gremlin 写入链路。这里保留的
+ingest_graph_data() 是兼容 wrapper，真实实现为 ingest_graph_data_via_ai()，
+用于需要调用 HugeGraph-AI /graph-import HTTP 接口的内部/legacy 场景。
+
 validate_graph_payload() 对 vertices/edges 做全面 schema 校验：
 - label 是否存在于 live schema
 - properties 字段是否在对应 label 中定义
@@ -709,7 +713,31 @@ def ingest_graph_data(
     nonce: str | None = None,
     expires_at: float | None = None,
 ) -> dict[str, Any]:
-    """导入图数据 — 安全链入口。
+    """兼容入口：通过 HugeGraph-AI /graph-import 导入图数据。
+
+    Public MCP V1 `import_graph_data_tool(mode="ingest")` 不调用此函数；
+    它使用 manage_graph_data() 的本地校验、dry-run/hash/confirm 和 direct Gremlin 写入。
+    """
+
+    return ingest_graph_data_via_ai(
+        graph_data=graph_data,
+        dry_run=dry_run,
+        confirm=confirm,
+        plan_hash=plan_hash,
+        nonce=nonce,
+        expires_at=expires_at,
+    )
+
+
+def ingest_graph_data_via_ai(
+    graph_data: dict[str, Any],
+    dry_run: bool = True,
+    confirm: bool = False,
+    plan_hash: str | None = None,
+    nonce: str | None = None,
+    expires_at: float | None = None,
+) -> dict[str, Any]:
+    """AI-backed 图数据导入 — legacy/internal 安全链入口。
 
     dry_run=True: schema 校验 + plan_hash 生成，不写入
     dry_run=False + confirm=True + plan_hash 匹配: 执行写入
@@ -805,9 +833,14 @@ def ingest_graph_data(
         expires_at=expires_at,
     )
     if not valid:
+        message = (
+            "Plan has expired. Run dry_run=True again and use the returned plan_hash."
+            if error_type == ErrorType.PLAN_EXPIRED
+            else "Plan hash mismatch: config, schema, or payload has changed since dry_run."
+        )
         return envelope_err(
-            ErrorType.PLAN_HASH_MISMATCH,
-            "Plan hash mismatch: config, schema, or payload has changed since dry_run.",
+            error_type or ErrorType.PLAN_HASH_MISMATCH,
+            message,
             suggestion="Run dry_run=True again and use the returned plan_hash.",
             details=details,
         )

@@ -277,9 +277,14 @@ def manage_graph_data(
         extra_context={"extra_hash_context": extra_hash_context or {}},
     )
     if not valid:
+        message = (
+            "Graph data change plan has expired."
+            if error_type == ErrorType.PLAN_EXPIRED
+            else "Provided plan_hash does not match the current graph data change plan."
+        )
         return envelope_err(
             error_type or ErrorType.PLAN_HASH_MISMATCH,
-            "Provided plan_hash does not match the current graph data change plan.",
+            message,
             suggestion="Run dry_run=True again and use the returned plan_hash.",
             details=details,
         )

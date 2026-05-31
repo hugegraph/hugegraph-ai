@@ -99,7 +99,7 @@ def test_ingest_graph_data_dry_run(monkeypatch):
     result = ingest_graph_data_module.ingest_graph_data(_graph_data())
 
     assert result["ok"] is True
-    assert re.fullmatch(r"[0-9a-f]{16}", result["data"]["plan_hash"])
+    assert re.fullmatch(r"[0-9a-f]{32}", result["data"]["plan_hash"])
     assert result["data"]["mutation_summary"] == {"vertices": 2, "edges": 1}
     assert any("index" in w for w in result["data"]["warnings"])
     assert "duplicate vertex labels detected" not in result["data"]["warnings"]
@@ -494,16 +494,41 @@ def test_ingest_graph_data_missing_confirm(monkeypatch):
 def test_ingest_graph_data_plan_hash_mismatch(monkeypatch):
     _mock_schema(monkeypatch)
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    graph_data = _graph_data()
+    dry_run = ingest_graph_data_module.ingest_graph_data(graph_data)
+    plan_ctx = dry_run["data"]["plan_context"]
 
     result = ingest_graph_data_module.ingest_graph_data(
-        _graph_data(),
+        graph_data,
         dry_run=False,
         confirm=True,
         plan_hash="0000000000000000",
+        nonce=plan_ctx["nonce"],
+        expires_at=plan_ctx["expires_at"],
     )
 
     assert result["ok"] is False
     assert result["error"]["type"] == "PLAN_HASH_MISMATCH"
+
+
+def test_ingest_graph_data_plan_hash_expired(monkeypatch):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    graph_data = _graph_data()
+    dry_run = ingest_graph_data_module.ingest_graph_data(graph_data)
+    plan_ctx = dry_run["data"]["plan_context"]
+
+    result = ingest_graph_data_module.ingest_graph_data(
+        graph_data,
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=plan_ctx["nonce"],
+        expires_at=0,
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "PLAN_EXPIRED"
 
 
 def test_ingest_graph_data_readonly(monkeypatch):

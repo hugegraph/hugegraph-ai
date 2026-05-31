@@ -14,11 +14,13 @@
 """Tests for V1 stable tools and admin gate (Milestone 2)."""
 
 import asyncio
+import logging
 from unittest.mock import Mock
 import warnings
 
 from hugegraph_mcp import server
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
+from hugegraph_mcp.guard import Capability
 
 
 async def _list_mcp_tools():
@@ -66,6 +68,11 @@ def test_public_tool_argument_models_do_not_emit_schema_shadow_warning():
         asyncio.run(_list_tools())
 
     assert not any("shadows an attribute" in str(item.message) for item in captured)
+
+
+def test_server_import_restores_logging_globals():
+    assert logging.handlers.RotatingFileHandler is server._OriginalRotatingFileHandler
+    assert logging.root.manager.disable < logging.CRITICAL
 
 
 def test_generate_gremlin_tool_routes_to_generate_gremlin(monkeypatch):
@@ -257,6 +264,7 @@ def test_admin_gate_blocks_write_tool_by_default(monkeypatch):
     assert result["ok"] is False
     assert result["error"]["type"] == "FEATURE_DISABLED"
     assert "ADMIN_MODE" in result["error"]["message"]
+    assert "HUGEGRAPH_MCP_READONLY=false" in result["error"]["suggestion"]
 
 
 def test_admin_gate_blocks_refresh_embeddings_by_default(monkeypatch):
@@ -271,6 +279,7 @@ def test_admin_gate_blocks_refresh_embeddings_by_default(monkeypatch):
 
 def test_admin_gate_allows_write_tool_when_enabled(monkeypatch):
     monkeypatch.setattr(server, "ADMIN_MODE", True)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     expected = envelope_ok({"data": "ok"})
     mock = Mock(return_value=expected)
     monkeypatch.setattr(server, "execute_gremlin_write", mock)
@@ -278,11 +287,30 @@ def test_admin_gate_allows_write_tool_when_enabled(monkeypatch):
     result = server.execute_gremlin_write_tool(gremlin_query="g.addV('test')")
 
     assert result == expected
-    mock.assert_called_once_with("g.addV('test')")
+    mock.assert_called_once_with("g.addV('test')", capability=Capability.DEBUG_WRITE)
+
+
+def test_admin_gate_blocks_write_tool_when_readonly(monkeypatch):
+    monkeypatch.setattr(server, "ADMIN_MODE", True)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
+    mock = Mock()
+    monkeypatch.setattr(server, "execute_gremlin_write", mock)
+
+    result = server.execute_gremlin_write_tool(gremlin_query="g.addV('test')")
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "READONLY_VIOLATION"
+    assert result["error"]["source"] == "execute_gremlin_write_tool"
+    assert result["error"]["details"]["required_env"] == {
+        "HUGEGRAPH_MCP_ADMIN_MODE": "true",
+        "HUGEGRAPH_MCP_READONLY": "false",
+    }
+    mock.assert_not_called()
 
 
 def test_admin_gate_allows_refresh_embeddings_when_enabled(monkeypatch):
     monkeypatch.setattr(server, "ADMIN_MODE", True)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     expected = envelope_ok({"data": "refreshed"})
     mock = Mock(return_value=expected)
     monkeypatch.setattr(server, "refresh_vid_embeddings", mock)

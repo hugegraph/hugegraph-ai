@@ -24,6 +24,7 @@ from typing import Any
 from hugegraph_mcp import gremlin_tools
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
+from hugegraph_mcp.guard import Capability
 from hugegraph_mcp.tools.graph_data_gremlin import (
     _edge_match_query,
     _source_vertex_match_query,
@@ -133,7 +134,7 @@ def calculate_graph_change_plan_hash(
         # 复用同一个确认 hash。
         payload["extra_hash_context"] = extra_hash_context
     encoded = json.dumps(payload, sort_keys=True, default=str)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:32]
 
 
 # ---- 干跑预览 ----
@@ -326,20 +327,6 @@ def _append_edge_endpoint_counts(
             endpoint=endpoint,
             planned_operations=planned_operations,
         )
-        if planned_count > 0:
-            item[f"{endpoint}_matched_count"] = planned_count
-            if planned_count != 1:
-                errors.append(
-                    _validation_error(
-                        idx,
-                        operation,
-                        f"{op} {endpoint} endpoint matched_count must be 1, got {planned_count}",
-                        "Narrow the endpoint match criteria so exactly one planned vertex is selected.",
-                    )
-                )
-                endpoint_failed = True
-            continue
-
         endpoint_count_result = _read_count(endpoint_query)
         if not endpoint_count_result.get("ok"):
             errors.append(
@@ -352,14 +339,17 @@ def _append_edge_endpoint_counts(
             )
             endpoint_failed = True
             continue
-        endpoint_count = endpoint_count_result["data"]["matched_count"]
-        item[f"{endpoint}_matched_count"] = endpoint_count
-        if endpoint_count != 1:
+        live_count = endpoint_count_result["data"]["matched_count"]
+        total_count = planned_count + live_count
+        item[f"{endpoint}_planned_count"] = planned_count
+        item[f"{endpoint}_live_count"] = live_count
+        item[f"{endpoint}_matched_count"] = total_count
+        if total_count != 1:
             errors.append(
                 _validation_error(
                     idx,
                     operation,
-                    f"{op} {endpoint} endpoint matched_count must be 1, got {endpoint_count}",
+                    f"{op} {endpoint} endpoint matched_count must be 1, got {total_count}",
                     "Narrow the endpoint match criteria so exactly one vertex is selected.",
                 )
             )
@@ -533,7 +523,10 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
                     idx,
                     results,
                 )
-        write_result = gremlin_tools.execute_gremlin_write(_write_query(operation))
+        write_result = gremlin_tools.execute_gremlin_write(
+            _write_query(operation),
+            capability=Capability.DATA_WRITE,
+        )
         if isinstance(write_result, dict) and write_result.get("ok") is False:
             return _execution_failure(write_result, operation, idx, results)
         if isinstance(write_result, dict) and write_result.get("success") is False:

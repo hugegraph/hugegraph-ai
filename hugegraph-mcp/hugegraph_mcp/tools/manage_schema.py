@@ -405,7 +405,7 @@ def calculate_plan_hash(
 ) -> str:
     payload = _current_plan_context(operations, live_schema)
     encoded = json.dumps(payload, sort_keys=True, default=str)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:32]
 
 
 def _risk_warnings(

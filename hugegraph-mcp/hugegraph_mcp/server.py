@@ -21,7 +21,6 @@ import logging
 import logging.handlers
 import os
 import time
-from logging.handlers import RotatingFileHandler
 from typing import Any
 
 # ---- 启动时 patch：阻止 pyhugegraph 模块级日志初始化写入文件 ----
@@ -45,9 +44,7 @@ def _is_logs_dir(name) -> bool:
     return os.path.basename(os.path.normpath(path)).lower() == "logs"
 
 
-os.makedirs = _safe_makedirs
-
-_OriginalRotatingFileHandler = RotatingFileHandler
+_OriginalRotatingFileHandler = logging.handlers.RotatingFileHandler
 
 
 class _NoOpFileHandler(logging.NullHandler):
@@ -73,24 +70,25 @@ def _is_logs_file(filename) -> bool:
 
 logging.handlers.RotatingFileHandler = _patched_rotating_handler
 
-# ---- patch 完成，安全导入依赖 pyhugegraph 的模块 ----
+os.makedirs = _safe_makedirs
 
-from fastmcp import FastMCP
+try:
+    # ---- patch 作用域内，安全导入依赖 pyhugegraph 的模块 ----
+    from fastmcp import FastMCP
 
-from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
-from hugegraph_mcp.config import MCPConfig, TRUE_VALUES
-from hugegraph_mcp.envelope import ErrorType, envelope_err
-from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
-from hugegraph_mcp.tools.inspect_graph import inspect_graph
-from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
-from hugegraph_mcp.tools.manage_graph_data import manage_graph_data
-from hugegraph_mcp.tools.manage_schema import manage_schema
-from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
-
-os.makedirs = _original_makedirs
-
-# 抑制 FastMCP info 日志 — stdout 必须保留为纯 JSON 协议流
-logging.disable(logging.CRITICAL)
+    from hugegraph_mcp.config import MCPConfig, TRUE_VALUES
+    from hugegraph_mcp.envelope import ErrorType, envelope_err
+    from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
+    from hugegraph_mcp.guard import Capability
+    from hugegraph_mcp.tools.extract_graph_data import extract_graph_data
+    from hugegraph_mcp.tools.generate_gremlin import generate_gremlin
+    from hugegraph_mcp.tools.inspect_graph import inspect_graph
+    from hugegraph_mcp.tools.manage_graph_data import manage_graph_data
+    from hugegraph_mcp.tools.manage_schema import manage_schema
+    from hugegraph_mcp.tools.refresh_vid_embeddings import refresh_vid_embeddings
+finally:
+    os.makedirs = _original_makedirs
+    logging.handlers.RotatingFileHandler = _OriginalRotatingFileHandler
 
 READONLY = MCPConfig.from_env().is_readonly()
 ADMIN_MODE = (
@@ -139,17 +137,44 @@ def _call_public_tool(tool_name: str, func, *args, **kwargs) -> dict[str, Any]:
     )
 
 
-def _admin_gate(tool_name: str) -> dict | None:
+def _admin_gate(tool_name: str, *, requires_write: bool = False) -> dict | None:
     """Return FEATURE_DISABLED envelope if admin mode is not enabled, else None."""
-    if ADMIN_MODE:
-        return None
-    return envelope_err(
-        ErrorType.FEATURE_DISABLED,
-        f"{tool_name} is disabled by default in V1. Enable with HUGEGRAPH_MCP_ADMIN_MODE=true.",
-        suggestion="Set HUGEGRAPH_MCP_ADMIN_MODE=true to enable this tool.",
-        source=tool_name,
-        details={"tool": tool_name, "enable_env": "HUGEGRAPH_MCP_ADMIN_MODE"},
-    )
+    if not ADMIN_MODE:
+        enable_env = {"admin_mode": "HUGEGRAPH_MCP_ADMIN_MODE"}
+        suggestion = f"Set HUGEGRAPH_MCP_ADMIN_MODE=true to enable {tool_name}."
+        if requires_write:
+            enable_env["readonly"] = "HUGEGRAPH_MCP_READONLY"
+            suggestion = (
+                f"Set HUGEGRAPH_MCP_ADMIN_MODE=true and HUGEGRAPH_MCP_READONLY=false "
+                f"to enable {tool_name}."
+            )
+        return envelope_err(
+            ErrorType.FEATURE_DISABLED,
+            f"{tool_name} is disabled by default in V1. Enable with HUGEGRAPH_MCP_ADMIN_MODE=true.",
+            suggestion=suggestion,
+            source=tool_name,
+            details={"tool": tool_name, "enable_env": enable_env},
+        )
+
+    if requires_write and MCPConfig.from_env().is_readonly():
+        return envelope_err(
+            ErrorType.READONLY_VIOLATION,
+            f"{tool_name} requires HUGEGRAPH_MCP_READONLY=false.",
+            suggestion=(
+                "Set HUGEGRAPH_MCP_ADMIN_MODE=true and HUGEGRAPH_MCP_READONLY=false "
+                "before retrying this admin write tool."
+            ),
+            source=tool_name,
+            details={
+                "tool": tool_name,
+                "required_env": {
+                    "HUGEGRAPH_MCP_ADMIN_MODE": "true",
+                    "HUGEGRAPH_MCP_READONLY": "false",
+                },
+            },
+            readonly=True,
+        )
+    return None
 
 
 # ========== 工具 1：检视图状态和 schema ==========
@@ -385,8 +410,8 @@ def delete_graph_data_tool(
 
 @mcp.tool()
 def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
-    """手动刷新 VID 嵌入 — V1 默认禁用，需 HUGEGRAPH_MCP_ADMIN_MODE=true。"""
-    blocked = _admin_gate("refresh_vid_embeddings_tool")
+    """手动刷新 VID 嵌入 — 需 admin mode 且 readonly=false。"""
+    blocked = _admin_gate("refresh_vid_embeddings_tool", requires_write=True)
     if blocked:
         return blocked
     return refresh_vid_embeddings(confirm=confirm)
@@ -394,11 +419,11 @@ def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
 
 @mcp.tool()
 def execute_gremlin_write_tool(gremlin_query: str) -> dict:
-    """执行 Gremlin 写查询 — V1 默认禁用，需 HUGEGRAPH_MCP_ADMIN_MODE=true。"""
-    blocked = _admin_gate("execute_gremlin_write_tool")
+    """执行 Gremlin 写查询 — 需 admin mode 且 readonly=false。"""
+    blocked = _admin_gate("execute_gremlin_write_tool", requires_write=True)
     if blocked:
         return blocked
-    return execute_gremlin_write(gremlin_query)
+    return execute_gremlin_write(gremlin_query, capability=Capability.DEBUG_WRITE)
 
 
 def main() -> None:

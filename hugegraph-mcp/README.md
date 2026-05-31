@@ -31,7 +31,7 @@ V1 exposes these stable tools to users:
 - `design_schema_tool`
 - `apply_schema_tool`
 
-These tools are still registered in MCP, but they are admin/debug capabilities and are blocked by default when `HUGEGRAPH_MCP_ADMIN_MODE=false`:
+These tools are still registered in MCP, but they are admin/debug capabilities and are blocked by default when `HUGEGRAPH_MCP_ADMIN_MODE=false`. Write-capable admin tools also require `HUGEGRAPH_MCP_READONLY=false`:
 
 - `execute_gremlin_write_tool`
 - `refresh_vid_embeddings_tool`
@@ -84,8 +84,8 @@ When a call fails, `ok=false` and `error` uses this structure:
 | `delete_graph_data_tool` | Controlled delete entrypoint; supports only exact vertex or edge deletion, not conditional bulk delete or cascade delete |
 | `design_schema_tool` | Provide schema design guidance from proposed schema operations without modifying the database |
 | `apply_schema_tool` | V1 supports only schema `validate` and `dry_run`; real `apply` is currently disabled |
-| `execute_gremlin_write_tool` | Execute direct Gremlin writes; disabled by default and available only when `HUGEGRAPH_MCP_ADMIN_MODE=true` |
-| `refresh_vid_embeddings_tool` | Refresh VID embeddings and mutate index state; disabled by default and available only in admin mode |
+| `execute_gremlin_write_tool` | Execute direct Gremlin writes; disabled by default and available only when `HUGEGRAPH_MCP_ADMIN_MODE=true` and `HUGEGRAPH_MCP_READONLY=false` |
+| `refresh_vid_embeddings_tool` | Refresh VID embeddings and mutate index state; disabled by default and available only when `HUGEGRAPH_MCP_ADMIN_MODE=true` and `HUGEGRAPH_MCP_READONLY=false` |
 
 The old `query_graph_tool`, `manage_schema_tool`, and `manage_graph_data_tool` are no longer exposed as user interfaces. New integrations should use the stable tools listed above.
 
@@ -119,6 +119,8 @@ dry_run=true
 The confirm phase must fully revalidate the plan. If the dry-run result expires, the target graph changes, the schema changes, the payload changes, or permissions change, confirm must fail and require a new dry run.
 
 ### Import Semantics
+
+`import_graph_data_tool(mode="ingest")` is the public MCP V1 structured import path. It uses local schema validation, dry-run/hash/confirm, and direct Gremlin writes through `manage_graph_data()`; it does not call the HugeGraph-AI `/graph-import` HTTP path. The legacy/internal AI-backed function is named `ingest_graph_data_via_ai()`.
 
 When `import_graph_data_tool(mode="ingest")` executes a create operation, it returns one of three states:
 
