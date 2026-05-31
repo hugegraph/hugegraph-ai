@@ -19,7 +19,6 @@ import json
 from pathlib import Path
 
 import pytest
-from pyhugegraph.client import PyHugeClient
 
 pytestmark = [pytest.mark.smoke, pytest.mark.integration, pytest.mark.hugegraph]
 
@@ -55,46 +54,7 @@ QUALITY_COMMIT_SCHEMA = {
 }
 
 
-def _make_client(service):
-    return PyHugeClient(
-        url=service.url,
-        graph=service.graph,
-        user=service.user,
-        pwd=service.password,
-        graphspace=service.graphspace,
-    )
-
-
-@pytest.fixture()
-def configured_hugegraph(hugegraph_service):
-    from hugegraph_llm.config import huge_settings
-
-    original = {
-        "graph_url": huge_settings.graph_url,
-        "graph_name": huge_settings.graph_name,
-        "graph_user": huge_settings.graph_user,
-        "graph_pwd": huge_settings.graph_pwd,
-        "graph_space": huge_settings.graph_space,
-    }
-    huge_settings.graph_url = hugegraph_service.url
-    huge_settings.graph_name = hugegraph_service.graph
-    huge_settings.graph_user = hugegraph_service.user
-    huge_settings.graph_pwd = hugegraph_service.password
-    huge_settings.graph_space = hugegraph_service.graphspace
-
-    client = _make_client(hugegraph_service)
-    client.graphs().clear_graph_all_data()
-    try:
-        yield hugegraph_service
-    finally:
-        try:
-            client.graphs().clear_graph_all_data()
-        finally:
-            for key, value in original.items():
-                setattr(huge_settings, key, value)
-
-
-def test_kg_construction_smoke_uses_production_code(configured_hugegraph):
+def test_kg_construction_smoke_uses_production_code(hugegraph_client):
     from hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph import Commit2Graph
     from hugegraph_llm.operators.hugegraph_op.fetch_graph_data import FetchGraphData
 
@@ -110,7 +70,6 @@ def test_kg_construction_smoke_uses_production_code(configured_hugegraph):
     }
     Commit2Graph().run(data)
 
-    client = _make_client(configured_hugegraph)
-    summary = FetchGraphData(client).run({})
+    summary = FetchGraphData(hugegraph_client).run({})
     assert summary["vertex_num"] >= len(fixture["vertices"])
     assert summary["edge_num"] >= len(fixture["edges"])

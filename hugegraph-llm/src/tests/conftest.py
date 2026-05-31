@@ -20,6 +20,7 @@ import os
 import sys
 
 import nltk
+import pytest
 
 # Get project root directory
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -32,7 +33,44 @@ sys.path.insert(0, tests_path)
 
 from fixtures.hugegraph_service import hugegraph_service  # noqa: E402
 
-__all__ = ["hugegraph_service"]
+__all__ = ["hugegraph_client", "hugegraph_service"]
+
+
+@pytest.fixture()
+def hugegraph_client(hugegraph_service):
+    from pyhugegraph.client import PyHugeClient
+
+    from hugegraph_llm.config import huge_settings
+
+    original = {
+        "graph_url": huge_settings.graph_url,
+        "graph_name": huge_settings.graph_name,
+        "graph_user": huge_settings.graph_user,
+        "graph_pwd": huge_settings.graph_pwd,
+        "graph_space": huge_settings.graph_space,
+    }
+    huge_settings.graph_url = hugegraph_service.url
+    huge_settings.graph_name = hugegraph_service.graph
+    huge_settings.graph_user = hugegraph_service.user
+    huge_settings.graph_pwd = hugegraph_service.password
+    huge_settings.graph_space = hugegraph_service.graphspace
+
+    client = PyHugeClient(
+        url=hugegraph_service.url,
+        graph=hugegraph_service.graph,
+        user=hugegraph_service.user,
+        pwd=hugegraph_service.password,
+        graphspace=hugegraph_service.graphspace,
+    )
+    client.graphs().clear_graph_all_data()
+    try:
+        yield client
+    finally:
+        try:
+            client.graphs().clear_graph_all_data()
+        finally:
+            for key, value in original.items():
+                setattr(huge_settings, key, value)
 
 
 # Download NLTK resources

@@ -18,7 +18,6 @@
 from copy import deepcopy
 
 import pytest
-from pyhugegraph.client import PyHugeClient
 
 pytestmark = [pytest.mark.integration, pytest.mark.hugegraph]
 
@@ -100,45 +99,6 @@ QUALITY_COMMIT_DATA = {
 }
 
 
-def _make_client(service):
-    return PyHugeClient(
-        url=service.url,
-        graph=service.graph,
-        user=service.user,
-        pwd=service.password,
-        graphspace=service.graphspace,
-    )
-
-
-@pytest.fixture()
-def configured_hugegraph(hugegraph_service):
-    from hugegraph_llm.config import huge_settings
-
-    original = {
-        "graph_url": huge_settings.graph_url,
-        "graph_name": huge_settings.graph_name,
-        "graph_user": huge_settings.graph_user,
-        "graph_pwd": huge_settings.graph_pwd,
-        "graph_space": huge_settings.graph_space,
-    }
-    huge_settings.graph_url = hugegraph_service.url
-    huge_settings.graph_name = hugegraph_service.graph
-    huge_settings.graph_user = hugegraph_service.user
-    huge_settings.graph_pwd = hugegraph_service.password
-    huge_settings.graph_space = hugegraph_service.graphspace
-
-    client = _make_client(hugegraph_service)
-    client.graphs().clear_graph_all_data()
-    try:
-        yield hugegraph_service
-    finally:
-        try:
-            client.graphs().clear_graph_all_data()
-        finally:
-            for key, value in original.items():
-                setattr(huge_settings, key, value)
-
-
 def _create_quality_schema(client):
     schema = client.schema()
     schema.propertyKey("name").asText().ifNotExist().create()
@@ -160,13 +120,12 @@ def _commit_quality_graph():
     return commit.run(data)
 
 
-def test_schema_manager_reads_real_schema(configured_hugegraph):
+def test_schema_manager_reads_real_schema(hugegraph_client):
     from hugegraph_llm.operators.hugegraph_op.schema_manager import SchemaManager
 
-    client = _make_client(configured_hugegraph)
-    _create_quality_schema(client)
+    _create_quality_schema(hugegraph_client)
 
-    manager = SchemaManager(graph_name=configured_hugegraph.graph)
+    manager = SchemaManager(graph_name=hugegraph_client.cfg.graph_name)
     context = manager.run({})
 
     assert "schema" in context
@@ -175,16 +134,15 @@ def test_schema_manager_reads_real_schema(configured_hugegraph):
     assert any(label["name"] == "quality_person" for label in context["schema"]["vertexlabels"])
 
 
-def test_commit_to_graph_writes_vertices_and_edges(configured_hugegraph):
+def test_commit_to_graph_writes_vertices_and_edges(hugegraph_client):
     _commit_quality_graph()
 
-    client = _make_client(configured_hugegraph)
-    counts = client.gremlin().exec(
+    counts = hugegraph_client.gremlin().exec(
         """
         g.V().hasLabel('quality_person', 'quality_software').count()
         """
     )["data"][0]
-    edges = client.gremlin().exec(
+    edges = hugegraph_client.gremlin().exec(
         """
         g.E().hasLabel('quality_created').
           project('out', 'in', 'date').
@@ -201,11 +159,11 @@ def test_commit_to_graph_writes_vertices_and_edges(configured_hugegraph):
     assert edges[0]["date"] == "2026-05-31"
 
 
-def test_fetch_graph_data_returns_counts_and_samples(configured_hugegraph):
+def test_fetch_graph_data_returns_counts_and_samples(hugegraph_client):
     from hugegraph_llm.operators.hugegraph_op.fetch_graph_data import FetchGraphData
 
     _commit_quality_graph()
-    result = FetchGraphData(_make_client(configured_hugegraph)).run({})
+    result = FetchGraphData(hugegraph_client).run({})
 
     assert {"vertex_num", "edge_num", "vertices", "edges", "note"}.issubset(result)
     assert result["vertex_num"] == 2
@@ -214,7 +172,7 @@ def test_fetch_graph_data_returns_counts_and_samples(configured_hugegraph):
     assert isinstance(result["edges"], list)
 
 
-def test_gremlin_execute_surfaces_invalid_query(configured_hugegraph):
+def test_gremlin_execute_surfaces_invalid_query(hugegraph_client):
     from hugegraph_llm.nodes.hugegraph_node.gremlin_execute import GremlinExecuteNode
 
     node = GremlinExecuteNode()
