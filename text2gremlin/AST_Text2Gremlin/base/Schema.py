@@ -29,6 +29,9 @@ from typing import Any
 
 import pandas as pd
 
+DEFAULT_SAMPLE_MIN = 2
+DEFAULT_SAMPLE_MAX = 5
+
 
 class Schema:
     def __init__(self, schema_file: str, data_dir: str):
@@ -226,9 +229,9 @@ class Schema:
         if df is None or df.empty:
             return []
 
-        # 如果没有指定数量，随机选择2-5个
+        # 如果没有指定数量，使用默认随机样本范围
         if count is None:
-            count = random.randint(2, 5)
+            count = random.randint(DEFAULT_SAMPLE_MIN, DEFAULT_SAMPLE_MAX)
 
         # 如果实际数据量小于要求的数量，就全部取出
         actual_count = min(count, len(df))

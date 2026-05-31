@@ -26,10 +26,20 @@ sys.path.insert(0, str(PROJECT_DIR))
 from run_llm_pipeline import get_stage_extra_args
 
 
-def test_extra_args_only_apply_to_first_selected_stage():
+def test_unknown_extra_args_only_apply_to_first_selected_stage():
     stages = ["migrate", "merge", "dpo"]
-    extra = ["--migration-mode", "same_operation"]
+    extra = ["--input", "pairs.json"]
 
+    assert get_stage_extra_args("migrate", stages, extra) == extra
+    assert get_stage_extra_args("merge", stages, extra) == []
+    assert get_stage_extra_args("dpo", stages, extra) == []
+
+
+def test_migration_args_are_routed_to_migrate_stage():
+    stages = ["translate", "migrate", "merge", "dpo"]
+    extra = ["--migration-mode", "same_operation", "--same-operation-sample-count=3"]
+
+    assert get_stage_extra_args("translate", stages, extra) == []
     assert get_stage_extra_args("migrate", stages, extra) == extra
     assert get_stage_extra_args("merge", stages, extra) == []
     assert get_stage_extra_args("dpo", stages, extra) == []

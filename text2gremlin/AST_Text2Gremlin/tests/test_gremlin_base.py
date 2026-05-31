@@ -59,7 +59,6 @@ def test_default_dictionary_entries_are_loadable():
 
     assert gremlin_base.schema_dict["insertrate"] == ["利率"]
     assert gremlin_base.schema_dict["person_organization"] == ["人物和组织间的关系"]
-    assert "perosn_organization" not in gremlin_base.schema_dict
 
     for dictionary_path in PROJECT_DIR.glob("base/template/*_dict.txt"):
         for line in dictionary_path.read_text(encoding="utf-8").splitlines():

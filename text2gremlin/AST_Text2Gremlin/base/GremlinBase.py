@@ -27,6 +27,17 @@ import random
 
 from .gremlin.GremlinParser import GremlinParser
 
+TOKEN_TEMPLATE_ALIASES = {
+    "V": "v",
+    "E": "e",
+    "addV": "addv",
+    "addE": "adde",
+    "toList": "tolist",
+    "toSet": "toset",
+    "hasNext": "hasnext",
+    "tryNext": "trynext",
+}
+
 
 class GremlinBase:
     def __init__(self, config):
@@ -96,13 +107,9 @@ class GremlinBase:
         templates_data = {
             # --- 起始步骤 ---
             "v": ["查询图中的所有顶点", "获取所有节点"],
-            "V": ["查询图中的所有顶点", "获取所有节点"],  # 大写版本
             "e": ["查询图中的所有边", "获取所有关系"],
-            "E": ["查询图中的所有边", "获取所有关系"],  # 大写版本
             "addv": ["添加一个标签为 '{}' 的新顶点"],
-            "addV": ["添加一个标签为 '{}' 的新顶点"],  # 大写版本
             "adde": ["添加一条从一个顶点到另一个顶点的 '{}' 边"],
-            "addE": ["添加一条从一个顶点到另一个顶点的 '{}' 边"],  # 大写版本
             # --- 导航步骤 ---
             "out": ["从当前位置出发，沿着 '{}' 方向的出边前进", "找到 '{}' 类型的邻居"],
             "in": ["从当前位置出发，沿着 '{}' 方向的入边前进", "找到拥有 '{}' 类型关系的来源"],
@@ -155,14 +162,10 @@ class GremlinBase:
             "max": ["求最大值"],
             # --- 终端步骤 ---
             "tolist": ["转为列表"],
-            "toList": ["转为列表"],  # 大写版本
             "toset": ["转为集合"],
-            "toSet": ["转为集合"],  # 大写版本
             "next": ["获取下一个"],
             "hasnext": ["判断是否有下一个"],
-            "hasNext": ["判断是否有下一个"],  # 大写版本
             "trynext": ["尝试获取下一个"],
-            "tryNext": ["尝试获取下一个"],  # 大写版本
             # --- 简单步骤 ---
             "fold": ["折叠为列表"],
             "unfold": ["展开列表"],
@@ -254,6 +257,8 @@ class GremlinBase:
         for index, (key, value) in enumerate(templates_data.items()):
             self.token_dict[key] = index
             self.template.append(value)
+        for alias, canonical_key in TOKEN_TEMPLATE_ALIASES.items():
+            self.token_dict[alias] = self.token_dict[canonical_key]
 
     def get_token_desc(self, token_key: str, *args) -> str:
         """
@@ -318,10 +323,10 @@ if __name__ == "__main__":
     # 临时创建config 对象，用于测试
     class MockConfig:
         def get_schema_dict_path(self):
-            return "./template/schema_dict.txt"
+            return ["./template/schema_dict.txt"]
 
         def get_syn_dict_path(self):
-            return "./template/syn_dict.txt"
+            return ["./template/syn_dict.txt"]
 
     config = MockConfig()
     gremlin_base = GremlinBase(config)

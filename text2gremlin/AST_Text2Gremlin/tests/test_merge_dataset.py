@@ -58,4 +58,4 @@ def test_main_exits_nonzero_when_required_inputs_are_missing(tmp_path):
     )
 
     assert result.returncode == 1
-    assert "未找到 llm_translated" in result.stdout
+    assert "未找到 llm_translated" in result.stderr

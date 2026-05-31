@@ -39,13 +39,13 @@ from glob import glob
 
 def find_latest_translated(output_dir: str = "output") -> str | None:
     pattern = os.path.join(output_dir, "llm_translated_*.json")
-    files = sorted(glob(pattern))
+    files = sorted(glob(pattern), key=os.path.getmtime)
     return files[-1] if files else None
 
 
 def find_latest_migrated(output_dir: str = "output") -> str | None:
     pattern = os.path.join(output_dir, "migrated_*.json")
-    files = sorted(glob(pattern))
+    files = sorted(glob(pattern), key=os.path.getmtime)
     return files[-1] if files else None
 
 
@@ -143,10 +143,10 @@ def main():
     migrated_path = args.migrated or find_latest_migrated(args.output_dir)
 
     if not translated_path or not os.path.exists(translated_path):
-        print("❌ 未找到 llm_translated 文件，请用 --translated 指定")
+        print("❌ 未找到 llm_translated 文件，请用 --translated 指定", file=sys.stderr)
         sys.exit(1)
     if not migrated_path or not os.path.exists(migrated_path):
-        print("❌ 未找到 migrated 文件，请用 --migrated 指定")
+        print("❌ 未找到 migrated 文件，请用 --migrated 指定", file=sys.stderr)
         sys.exit(1)
 
     print("=" * 60)

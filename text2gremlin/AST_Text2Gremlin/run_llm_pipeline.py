@@ -62,6 +62,11 @@ STAGE_NAMES = {
     "dpo": "DPO 偏好数据",
 }
 
+STAGE_OPTION_OWNERS = {
+    "--migration-mode": "migrate",
+    "--same-operation-sample-count": "migrate",
+}
+
 
 def run_stage(stage: str, extra_args: list[str]) -> int:
     """运行单个阶段，返回 exit code"""
@@ -72,15 +77,32 @@ def run_stage(stage: str, extra_args: list[str]) -> int:
     print(f"{'=' * 60}\n")
 
     cmd = [sys.executable, "-m", module, *extra_args]
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, check=False)
     return result.returncode
 
 
 def get_stage_extra_args(stage: str, stages_to_run: list[str], extra_args: list[str]) -> list[str]:
-    """Only pass extra CLI args to the first selected stage."""
-    if stage == stages_to_run[0]:
-        return extra_args
-    return []
+    """Route known stage-specific args and keep unknown args on the first stage."""
+    stage_args = {selected_stage: [] for selected_stage in stages_to_run}
+    first_stage_args = stage_args[stages_to_run[0]]
+    index = 0
+    while index < len(extra_args):
+        arg = extra_args[index]
+        option = arg.split("=", 1)[0]
+        owner = STAGE_OPTION_OWNERS.get(option)
+        target = stage_args.get(owner) if owner else first_stage_args
+        if target is None:
+            target = first_stage_args
+        target.append(arg)
+
+        has_inline_value = "=" in arg
+        has_separate_value = index + 1 < len(extra_args) and not extra_args[index + 1].startswith("--")
+        if owner and not has_inline_value and has_separate_value:
+            index += 1
+            target.append(extra_args[index])
+        index += 1
+
+    return stage_args[stage]
 
 
 def main():
@@ -129,7 +151,7 @@ def main():
     print("=" * 60)
     print(f"  执行阶段: {' → '.join(stages_to_run)}")
     if extra:
-        print(f"  额外参数: {extra} (仅传给首个执行阶段: {stages_to_run[0]})")
+        print(f"  额外参数: {extra}")
 
     for stage in stages_to_run:
         rc = run_stage(stage, get_stage_extra_args(stage, stages_to_run, extra))

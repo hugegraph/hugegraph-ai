@@ -768,8 +768,8 @@ async def run_pipeline(
     start_time = time.time()
 
     print(f"  共 {len(tasks)} 个任务")
-    print(f"  并发数: {llm_config['max_concurrency']}")
-    print(f"  每 {save_interval} 条保存一次")
+    print("  已加载 LLM 运行配置（敏感字段不显示）")
+    print("  已启用增量保存")
 
     # 分批处理，每批最多 100 个任务
     batch_size = 100
@@ -1040,10 +1040,8 @@ def main():
     print(f"  Movie 数据: {input_path or '无'}")
     print(f"  迁移数据: {migrated_path or '无'}")
     print(f"  输出文件: {output_path}")
-    print(f"  模型: {llm_config['model']}")
-    print(f"  并发数: {llm_config['max_concurrency']}")
-    print(f"  最大重试: {llm_config['max_retries']}")
-    print(f"  保存间隔: 每 {llm_config['save_interval']} 条")
+    print("  LLM 配置: 已加载（敏感字段不显示）")
+    print("  重试与保存策略: 使用配置文件设置")
     print("\n📊 任务分布:")
     print(f"  类型: {task_type_counts}")
     print(f"  领域: {len(domain_counts)} 个")

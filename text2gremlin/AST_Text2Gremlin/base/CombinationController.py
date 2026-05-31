@@ -24,6 +24,9 @@
 
 import random
 
+CHAIN_THRESHOLD_CATEGORIES = ("short", "medium", "long")
+CHAIN_CATEGORIES = (*CHAIN_THRESHOLD_CATEGORIES, "ultra")
+
 
 class CombinationController:
     """组合爆炸控制器 - 基于配置文件的统一控制策略"""
@@ -58,12 +61,12 @@ class CombinationController:
 
         # 验证关键类别的存在性
         # chain_thresholds 只需要 short, medium, long（ultra 通过 else 分支隐式定义）
-        for category in ("short", "medium", "long"):
+        for category in CHAIN_THRESHOLD_CATEGORIES:
             if category not in self.chain_thresholds:
                 raise ValueError(f"chain_thresholds 缺少 '{category}' 配置")
 
         # property_generalization 需要所有4个类别（包括 ultra）
-        for category in ("short", "medium", "long", "ultra"):
+        for category in CHAIN_CATEGORIES:
             if category not in self.property_gen:
                 raise ValueError(f"property_generalization 缺少 '{category}' 配置")
             # 验证每个类别的必要字段
@@ -83,13 +86,13 @@ class CombinationController:
             'short' | 'medium' | 'long' | 'ultra'
         """
         if step_count <= self.chain_thresholds["short"]:
-            return "short"
+            return CHAIN_CATEGORIES[0]
         elif step_count <= self.chain_thresholds["medium"]:
-            return "medium"
+            return CHAIN_CATEGORIES[1]
         elif step_count <= self.chain_thresholds["long"]:
-            return "long"
+            return CHAIN_CATEGORIES[2]
         else:
-            return "ultra"
+            return CHAIN_CATEGORIES[3]
 
     def should_apply_random_enhancement(self, is_terminal: bool, enhancement_count: int) -> bool:
         """

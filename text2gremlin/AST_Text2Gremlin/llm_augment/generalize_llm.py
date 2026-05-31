@@ -330,8 +330,8 @@ async def translate_all(
     start_time = time.time()
 
     print(f"  共 {len(corpus)} 条，流水线并发")
-    print(f"  并发数: {llm_config['max_concurrency']}")
-    print(f"  每 {save_interval} 条保存一次")
+    print("  已加载 LLM 运行配置（敏感字段不显示）")
+    print("  已启用增量保存")
     print("  每条生成 6 种风格翻译 (4固定 + 2随机)")
 
     # 创建所有任务
@@ -471,11 +471,9 @@ def main():
     print("\n📋 配置:")
     print(f"  输入文件: {input_path}")
     print(f"  输出文件: {output_path}")
-    print(f"  模型: {llm_config['model']}")
-    print(f"  并发数: {llm_config['max_concurrency']}")
+    print("  LLM 配置: 已加载（敏感字段不显示）")
     print("  每条翻译数: 6 (4固定 + 2随机)")
-    print(f"  最大重试: {llm_config['max_retries']}")
-    print(f"  保存间隔: 每 {llm_config['save_interval']} 条")
+    print("  重试与保存策略: 使用配置文件设置")
     print(f"\n  语料条数: {len(corpus)}")
     print(f"  预计生成: {len(corpus) * 6} 条翻译")
     print("-" * 60)

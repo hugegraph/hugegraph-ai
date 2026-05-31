@@ -37,6 +37,8 @@ from .GremlinTransVisitor import GremlinTransVisitor
 from .Schema import Schema
 from .TraversalGenerator import TraversalGenerator
 
+LARGE_GENERATION_THRESHOLD = 5000
+
 
 class SyntaxErrorListener(ErrorListener):
     """私有错误监听器类，捕获语法错误。"""
@@ -178,7 +180,7 @@ def generate_corpus_from_template(
         stats["success"] = True
 
         # 添加生成数量的警告信息
-        if stats["generated_count"] > 5000:
+        if stats["generated_count"] > LARGE_GENERATION_THRESHOLD:
             stats["warning"] = f"由于本条模版的Recipe复杂,生成了大量查询({stats['generated_count']}条)"
         elif new_pairs_count == 0 and stats["generated_count"] > 0:
             stats["warning"] = f"生成了{stats['generated_count']}条查询但全部重复"
@@ -286,7 +288,7 @@ def generate_gremlin_corpus(
                 # 根据情况显示不同的消息
                 if new_pairs_count == 0 and template_stats["generated_count"] > 0:
                     print(f"[{i}/{len(templates)}] ⚠️  生成 {template_stats['generated_count']} 条查询但全部重复")
-                elif template_stats["generated_count"] > 5000:
+                elif template_stats["generated_count"] > LARGE_GENERATION_THRESHOLD:
                     print(
                         f"[{i}/{len(templates)}] ⚡ 大量生成 {new_pairs_count} 条新查询 (总生成{template_stats['generated_count']}条)"
                     )
