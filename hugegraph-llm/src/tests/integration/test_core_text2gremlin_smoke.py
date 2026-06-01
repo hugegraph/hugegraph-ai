@@ -19,7 +19,8 @@ import json
 from pathlib import Path
 
 import pytest
-from fixtures.fake_llm import FakeLLM
+
+from tests.fixtures.fake_llm import FakeLLM
 
 pytestmark = [pytest.mark.smoke, pytest.mark.integration]
 

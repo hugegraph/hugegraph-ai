@@ -29,10 +29,8 @@ sys.path.insert(0, project_root)
 # Add src directory to Python path
 src_path = os.path.join(project_root, "src")
 sys.path.insert(0, src_path)
-tests_path = os.path.join(project_root, "src", "tests")
-sys.path.insert(0, tests_path)
 
-from fixtures.hugegraph_service import hugegraph_service  # noqa: E402
+from tests.fixtures.hugegraph_service import hugegraph_service  # noqa: E402
 
 __all__ = ["hugegraph_client", "hugegraph_service"]
 
