@@ -127,7 +127,7 @@ Deferred items are documented in `.workflow/quality-program/reports/deferred-ref
 - HugeGraph integration jobs use `hugegraph/hugegraph:1.7.0` and selected integration tests fail when the required service is unavailable.
 - Smoke tests are deterministic and exercise production code at KG, GraphRAG, and Text2Gremlin boundaries.
 - Coverage ratchets start from local areas instead of imposing a full-repository threshold.
-- GitHub Actions are kept on readable official major-version tags (`actions/checkout@v6`, `actions/setup-python@v6`, `actions/cache@v5`, `actions/upload-artifact@v7`, `astral-sh/setup-uv@v8`) per maintainer preference; SHA-pinning review feedback is intentionally not adopted.
+- GitHub Actions are kept on readable official version tags (`actions/checkout@v6`, `actions/setup-python@v6`, `actions/cache@v5`, `actions/upload-artifact@v7`, `astral-sh/setup-uv@v8.1.0`) per maintainer preference; SHA-pinning review feedback is intentionally not adopted.
 
 ## Recommended Next Actions
 
