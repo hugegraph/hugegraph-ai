@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Small DeepWiki MCP client for repository-scoped Q&A."""
+
+# ruff: noqa: T201
 
 from __future__ import annotations
 
@@ -12,13 +28,14 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Optional
-
+from typing import Any
 
 DEFAULT_ENDPOINT = "https://mcp.deepwiki.com/mcp"
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 REPOS_PATH = SKILL_DIR / "references" / "repos.json"
+CONTEXT_WINDOW_SIZE = 30
+CONTEXT_STRIDE = 10
 STOPWORDS = {
     "a",
     "an",
@@ -50,8 +67,17 @@ class McpError(RuntimeError):
 
 
 def load_repos() -> dict[str, dict[str, Any]]:
-    with REPOS_PATH.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    try:
+        with REPOS_PATH.open("r", encoding="utf-8") as file:
+            repos = json.load(file)
+    except FileNotFoundError as exc:
+        raise McpError(f"Repository profile file is missing: {REPOS_PATH}") from exc
+    except json.JSONDecodeError as exc:
+        raise McpError(f"Repository profile file is not valid JSON: {REPOS_PATH}") from exc
+
+    if not isinstance(repos, dict):
+        raise McpError(f"Repository profile file must contain a JSON object: {REPOS_PATH}")
+    return repos
 
 
 def resolve_repo(alias_or_name: str) -> str:
@@ -62,10 +88,12 @@ def resolve_repo(alias_or_name: str) -> str:
         raise McpError(f"Unknown repository alias '{alias_or_name}'. Known aliases: {known}.")
     if not profile.get("enabled", False):
         raise McpError(
-            f"Repository alias '{alias_or_name}' is reserved but not enabled yet "
-            f"({profile.get('repoName')})."
+            f"Repository alias '{alias_or_name}' is reserved but not enabled yet ({profile.get('repoName')})."
         )
-    return str(profile["repoName"])
+    repo_name = profile.get("repoName")
+    if not isinstance(repo_name, str) or not repo_name:
+        raise McpError(f"Repository alias '{alias_or_name}' is missing a valid repoName.")
+    return repo_name
 
 
 def cache_root() -> Path:
@@ -103,14 +131,16 @@ def parse_json(data: str) -> dict[str, Any]:
     return parsed
 
 
-def read_sse_response(response: Any, expected_id: Optional[int]) -> dict[str, Any]:
+def read_sse_response(response: Any, expected_id: int | None) -> dict[str, Any]:
     data_lines: list[str] = []
     seen_payloads: list[str] = []
     max_seconds = float(os.environ.get("DEEPWIKI_MCP_STREAM_TIMEOUT", "120"))
     deadline = time.monotonic() + max_seconds
+    timed_out = False
 
     while True:
         if time.monotonic() > deadline:
+            timed_out = True
             break
         raw_line = response.readline()
         if not raw_line:
@@ -141,20 +171,22 @@ def read_sse_response(response: Any, expected_id: Optional[int]) -> dict[str, An
             return parsed
 
     preview = "\n".join(seen_payloads[-3:])
-    raise McpError(
-        f"DeepWiki MCP stream ended without response id {expected_id} "
-        f"within {max_seconds:.0f}s: {preview[:500]}"
-    )
+    if timed_out:
+        raise McpError(
+            f"DeepWiki MCP stream timed out waiting for response id {expected_id} "
+            f"after {max_seconds:.0f}s: {preview[:500]}"
+        )
+    raise McpError(f"DeepWiki MCP stream ended without response id {expected_id}: {preview[:500]}")
 
 
 class McpClient:
     def __init__(self, endpoint: str, protocol_version: str) -> None:
         self.endpoint = endpoint
         self.protocol_version = protocol_version
-        self.session_id: Optional[str] = None
+        self.session_id: str | None = None
         self.next_id = 1
 
-    def request(self, payload: dict[str, Any], expect_response: bool = True) -> Optional[dict[str, Any]]:
+    def request(self, payload: dict[str, Any], expect_response: bool = True) -> dict[str, Any] | None:
         body = json.dumps(payload).encode("utf-8")
         headers = {
             "Accept": "application/json, text/event-stream",
@@ -177,7 +209,7 @@ class McpClient:
                 if "text/event-stream" in content_type:
                     parsed = read_sse_response(response, payload.get("id"))
                 else:
-                    text = response.read().decode("utf-8")
+                    text = response.read().decode("utf-8", errors="replace")
                     if not text.strip():
                         raise McpError("DeepWiki MCP returned an empty response.")
                     parsed = parse_json(text)
@@ -191,7 +223,7 @@ class McpClient:
             raise McpError(f"DeepWiki MCP error: {json.dumps(parsed['error'], ensure_ascii=False)}")
         return parsed
 
-    def rpc(self, method: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    def rpc(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {"jsonrpc": "2.0", "id": self.next_id, "method": method}
         self.next_id += 1
         if params is not None:
@@ -201,7 +233,7 @@ class McpClient:
             raise McpError(f"DeepWiki MCP returned no response for {method}.")
         return result
 
-    def notify(self, method: str, params: Optional[dict[str, Any]] = None) -> None:
+    def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
         payload: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
         if params is not None:
             payload["params"] = params
@@ -276,14 +308,22 @@ def query_terms(query: str) -> list[str]:
     return terms
 
 
-def score_window(text: str, terms: list[str]) -> int:
-    lowered = text.lower()
-    score = 0
+def build_term_patterns(terms: list[str]) -> list[tuple[re.Pattern[str], int]]:
+    patterns: list[tuple[re.Pattern[str], int]] = []
     for term in terms:
         pattern = rf"(?<![a-z0-9_]){re.escape(term)}(?![a-z0-9_])"
-        count = len(re.findall(pattern, lowered))
+        weight = max(1, min(len(term), 12))
+        patterns.append((re.compile(pattern), weight))
+    return patterns
+
+
+def score_window(text: str, patterns: list[tuple[re.Pattern[str], int]]) -> int:
+    lowered = text.lower()
+    score = 0
+    for pattern, weight in patterns:
+        count = len(pattern.findall(lowered))
         if count:
-            score += count * max(1, min(len(term), 12))
+            score += count * weight
     if "relevant source files" in lowered:
         score -= 40
     if lowered.count("src/main/") > 4 or lowered.count(".java") > 6:
@@ -295,18 +335,17 @@ def search_cached_context(contents: str, query: str, limit: int) -> list[tuple[i
     terms = query_terms(query)
     if not terms:
         return []
+    patterns = build_term_patterns(terms)
 
     lines = contents.splitlines()
-    window_size = 30
-    stride = 10
     candidates: list[tuple[int, int, int, str]] = []
 
-    for start in range(0, len(lines), stride):
-        end = min(len(lines), start + window_size)
+    for start in range(0, len(lines), CONTEXT_STRIDE):
+        end = min(len(lines), start + CONTEXT_WINDOW_SIZE)
         window = "\n".join(lines[start:end]).strip()
         if not window:
             continue
-        score = score_window(window, terms)
+        score = score_window(window, patterns)
         if score > 0:
             candidates.append((score, start + 1, end, window))
 
@@ -378,7 +417,9 @@ def build_parser() -> argparse.ArgumentParser:
     context.add_argument("--repo", default="hugegraph-ai", help="Repository alias.")
     context.add_argument("--query", required=True, help="Question or keywords to search in cached wiki contents.")
     context.add_argument("--limit", type=int, default=6, help="Maximum number of snippets to print.")
-    context.add_argument("--refresh", action="store_true", help="Refresh the local DeepWiki contents cache before search.")
+    context.add_argument(
+        "--refresh", action="store_true", help="Refresh the local DeepWiki contents cache before search."
+    )
 
     tools = subparsers.add_parser("tools", help="List MCP tools for troubleshooting.")
     tools.set_defaults(command="tools")
