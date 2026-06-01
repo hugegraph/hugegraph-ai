@@ -67,7 +67,7 @@ cp -R plugins/hugegraph-ai-deepwiki-skill/skills/hugegraph-ai-deepwiki-skill ~/.
 在 HugeGraph AI 仓库根目录的 Claude Code 里粘贴：
 
 ```text
-Install the HugeGraph AI repository assistant from this checkout. Enter `tools/ai/hugegraph-ai-deepwiki-skill`, run `claude plugin marketplace add "$(pwd)"`, then run `claude plugin install hugegraph-ai-deepwiki-skill@hugegraph-ai-deepwiki-skill`. Do not hardcode absolute paths.
+请从当前 checkout 安装 HugeGraph AI 仓库知识助手。进入 `tools/ai/hugegraph-ai-deepwiki-skill`，运行 `claude plugin marketplace add "$(pwd)"`，然后运行 `claude plugin install hugegraph-ai-deepwiki-skill@hugegraph-ai-deepwiki-skill`。不要硬编码绝对路径。
 ```
 
 ## Codex 安装
@@ -102,7 +102,7 @@ cp -R plugins/hugegraph-ai-deepwiki-skill/skills/hugegraph-ai-deepwiki-skill "$C
 在 HugeGraph AI 仓库根目录的 Codex 里粘贴：
 
 ```text
-Install the HugeGraph AI repository assistant from this checkout. Enter `tools/ai/hugegraph-ai-deepwiki-skill`, run `codex plugin marketplace add "$(pwd)"`, then run `codex plugin add hugegraph-ai-deepwiki-skill@hugegraph-ai-deepwiki-skill`. If this Codex build has no plugin add command, copy `plugins/hugegraph-ai-deepwiki-skill/skills/hugegraph-ai-deepwiki-skill` into `${CODEX_HOME:-$HOME/.codex}/skills`. Do not hardcode absolute paths.
+请从当前 checkout 安装 HugeGraph AI 仓库知识助手。进入 `tools/ai/hugegraph-ai-deepwiki-skill`，运行 `codex plugin marketplace add "$(pwd)"`，然后运行 `codex plugin add hugegraph-ai-deepwiki-skill@hugegraph-ai-deepwiki-skill`。如果当前 Codex 构建没有 plugin add 命令，就把 `plugins/hugegraph-ai-deepwiki-skill/skills/hugegraph-ai-deepwiki-skill` 复制到 `${CODEX_HOME:-$HOME/.codex}/skills`。不要硬编码绝对路径。
 ```
 
 ## 使用方式
@@ -110,7 +110,7 @@ Install the HugeGraph AI repository assistant from this checkout. Enter `tools/a
 安装后，可以在提问时显式指定：
 
 ```text
-Use $hugegraph-ai-deepwiki-skill to explain the HugeGraph AI RAG workflow.
+使用 $hugegraph-ai-deepwiki-skill 解释 HugeGraph AI 的 RAG 工作流。
 ```
 
 Apache HugeGraph 图数据库相关问题请安装 `apache/hugegraph` 仓库中的独立 HugeGraph 仓库知识助手。

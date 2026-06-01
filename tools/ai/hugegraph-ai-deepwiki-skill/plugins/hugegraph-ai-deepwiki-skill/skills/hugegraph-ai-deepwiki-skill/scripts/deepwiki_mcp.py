@@ -121,6 +121,10 @@ def load_repos() -> dict[str, dict[str, Any]]:
             repos = json.load(file)
     except FileNotFoundError as exc:
         raise McpError(f"Repository profile file is missing: {REPOS_PATH}") from exc
+    except UnicodeError as exc:
+        raise McpError(f"Repository profile file is not valid UTF-8: {REPOS_PATH}") from exc
+    except OSError as exc:
+        raise McpError(f"Repository profile file could not be read: {REPOS_PATH}") from exc
     except json.JSONDecodeError as exc:
         raise McpError(f"Repository profile file is not valid JSON: {REPOS_PATH}") from exc
 
@@ -371,12 +375,15 @@ def read_wiki_contents(client: McpClient, repo_name: str) -> str:
 
 def ensure_cached_contents(client: McpClient, repo_name: str, refresh: bool = False) -> tuple[str, Path, bool]:
     path = contents_cache_path(repo_name)
-    if path.exists() and not refresh:
-        return path.read_text(encoding="utf-8"), path, False
+    try:
+        if path.exists() and not refresh:
+            return path.read_text(encoding="utf-8"), path, False
 
-    text = read_wiki_contents(client, repo_name)
-    write_text_atomic(path, text)
-    return text, path, True
+        text = read_wiki_contents(client, repo_name)
+        write_text_atomic(path, text)
+        return text, path, True
+    except (OSError, UnicodeError) as exc:
+        raise McpError(f"Failed to access DeepWiki cache file {path.name} for {repo_name}: {exc}") from exc
 
 
 def query_terms(query: str) -> list[str]:
