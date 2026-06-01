@@ -257,7 +257,7 @@ def test_execute_gremlin_read_tool_aligns_error_source(monkeypatch):
 
 
 def test_admin_gate_blocks_write_tool_by_default(monkeypatch):
-    monkeypatch.setattr(server, "ADMIN_MODE", False)
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "false")
 
     result = server.execute_gremlin_write_tool(gremlin_query="g.addV('test')")
 
@@ -268,7 +268,7 @@ def test_admin_gate_blocks_write_tool_by_default(monkeypatch):
 
 
 def test_admin_gate_blocks_refresh_embeddings_by_default(monkeypatch):
-    monkeypatch.setattr(server, "ADMIN_MODE", False)
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "false")
 
     result = server.refresh_vid_embeddings_tool(confirm=True)
 
@@ -278,7 +278,7 @@ def test_admin_gate_blocks_refresh_embeddings_by_default(monkeypatch):
 
 
 def test_admin_gate_allows_write_tool_when_enabled(monkeypatch):
-    monkeypatch.setattr(server, "ADMIN_MODE", True)
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     expected = envelope_ok({"data": "ok"})
     mock = Mock(return_value=expected)
@@ -286,12 +286,14 @@ def test_admin_gate_allows_write_tool_when_enabled(monkeypatch):
 
     result = server.execute_gremlin_write_tool(gremlin_query="g.addV('test')")
 
-    assert result == expected
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
     mock.assert_called_once_with("g.addV('test')", capability=Capability.DEBUG_WRITE)
 
 
 def test_admin_gate_blocks_write_tool_when_readonly(monkeypatch):
-    monkeypatch.setattr(server, "ADMIN_MODE", True)
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
     mock = Mock()
     monkeypatch.setattr(server, "execute_gremlin_write", mock)
@@ -309,7 +311,7 @@ def test_admin_gate_blocks_write_tool_when_readonly(monkeypatch):
 
 
 def test_admin_gate_allows_refresh_embeddings_when_enabled(monkeypatch):
-    monkeypatch.setattr(server, "ADMIN_MODE", True)
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     expected = envelope_ok({"data": "refreshed"})
     mock = Mock(return_value=expected)
@@ -317,5 +319,57 @@ def test_admin_gate_allows_refresh_embeddings_when_enabled(monkeypatch):
 
     result = server.refresh_vid_embeddings_tool(confirm=True)
 
-    assert result == expected
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
     mock.assert_called_once_with(confirm=True)
+
+
+def test_admin_gate_reads_current_env_after_import(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "false")
+    blocked = server.execute_gremlin_write_tool(gremlin_query="g.addV('test')")
+    assert blocked["ok"] is False
+    assert blocked["error"]["type"] == "FEATURE_DISABLED"
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    expected = envelope_ok({"data": "ok"})
+    mock = Mock(return_value=expected)
+    monkeypatch.setattr(server, "execute_gremlin_write", mock)
+
+    result = server.execute_gremlin_write_tool(gremlin_query="g.addV('test')")
+
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is True
+    assert result["data"] == expected["data"]
+    mock.assert_called_once_with("g.addV('test')", capability=Capability.DEBUG_WRITE)
+
+
+def test_execute_gremlin_write_tool_wraps_unexpected_exceptions(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    mock = Mock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(server, "execute_gremlin_write", mock)
+
+    result = server.execute_gremlin_write_tool(gremlin_query="g.addV('test')")
+
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FLOW_EXECUTION_FAILED"
+    assert result["error"]["source"] == "execute_gremlin_write_tool"
+    assert "boom" in result["error"]["message"]
+
+
+def test_refresh_vid_embeddings_tool_wraps_unexpected_exceptions(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    mock = Mock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(server, "refresh_vid_embeddings", mock)
+
+    result = server.refresh_vid_embeddings_tool(confirm=True)
+
+    _assert_v1_envelope_shape(result)
+    assert result["ok"] is False
+    assert result["error"]["type"] == "FLOW_EXECUTION_FAILED"
+    assert result["error"]["source"] == "refresh_vid_embeddings_tool"
+    assert "boom" in result["error"]["message"]

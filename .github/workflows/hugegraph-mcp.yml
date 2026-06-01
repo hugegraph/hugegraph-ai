@@ -85,4 +85,57 @@ jobs:
       - name: Run MCP tests
         working-directory: hugegraph-mcp
         run: |
-          uv run pytest
+          uv run pytest -m "not live and not integration and not llm"
+
+  real-hugegraph-write-path:
+    runs-on: ubuntu-latest
+    services:
+      hugegraph:
+        image: hugegraph/hugegraph:1.7.0
+        env:
+          PASSWORD: admin
+        options: >-
+          --health-cmd="curl -f http://localhost:8080/versions || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+        ports:
+          - 8080:8080
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+          key: ${{ runner.os }}-mcp-real-hugegraph-uv-${{ hashFiles('**/pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mcp-real-hugegraph-uv-
+
+      - name: Install MCP dependencies
+        run: |
+          uv sync --extra mcp --extra dev
+
+      - name: Run real HugeGraph write-path tests
+        working-directory: hugegraph-mcp
+        env:
+          RUN_MCP_REAL_HUGEGRAPH_TESTS: "1"
+          HUGEGRAPH_URL: http://127.0.0.1:8080
+          HUGEGRAPH_GRAPH_PATH: DEFAULT/hugegraph
+          HUGEGRAPH_USER: admin
+          HUGEGRAPH_PASSWORD: admin
+          HUGEGRAPH_MCP_READONLY: "false"
+          HUGEGRAPH_MCP_ALLOW_AI: "false"
+        run: |
+          uv run pytest tests/integration/test_real_write_path.py -m real_hugegraph

@@ -106,6 +106,27 @@ def test_plan_hash_changes_when_payload_changes(monkeypatch):
     assert hash_a != hash_b
 
 
+def test_plan_hash_changes_when_tool_name_changes():
+    context = PlanContext(
+        tool_name="import_graph_data_tool",
+        mode="import",
+        graph_url="http://test:8080",
+        graph_name="testgraph",
+        graphspace="DEFAULT",
+        principal="testuser",
+        readonly=True,
+        payload_digest="abc",
+        schema_hash="schema",
+        nonce="mynonce",
+        expires_at=1000,
+    )
+    other_tool_context = PlanContext(
+        **{**context.__dict__, "tool_name": "delete_graph_data_tool"}
+    )
+
+    assert compute_plan_hash(context) != compute_plan_hash(other_tool_context)
+
+
 def test_plan_hash_changes_when_schema_hash_changes(monkeypatch):
     _, hash_a = build_plan_context(
         tool_name="test", mode="import", payload_digest="abc", schema_hash="schema1"
@@ -116,6 +137,28 @@ def test_plan_hash_changes_when_schema_hash_changes(monkeypatch):
     )
 
     assert hash_a != hash_b
+
+
+def test_plan_hash_changes_when_extra_context_changes():
+    context = PlanContext(
+        tool_name="test",
+        mode="import",
+        graph_url="http://test:8080",
+        graph_name="testgraph",
+        graphspace="DEFAULT",
+        principal="testuser",
+        readonly=True,
+        payload_digest="abc",
+        schema_hash="schema",
+        nonce="mynonce",
+        expires_at=1000,
+        extra_context={"target": "import"},
+    )
+    other_context = PlanContext(
+        **{**context.__dict__, "extra_context": {"target": "delete"}}
+    )
+
+    assert compute_plan_hash(context) != compute_plan_hash(other_context)
 
 
 def test_plan_hash_changes_when_expires_at_changes():
@@ -173,6 +216,52 @@ def test_verify_plan_hash_rejects_mismatched_hash(monkeypatch):
         payload_digest="abc123",
         nonce="mynonce",
         expires_at=context.expires_at,
+    )
+
+    assert valid is False
+    assert error_type == ErrorType.PLAN_HASH_MISMATCH
+
+
+def test_verify_plan_hash_rejects_mismatched_tool_name(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_URL", "http://test:8080")
+    context, plan_hash = build_plan_context(
+        tool_name="import_graph_data_tool",
+        mode="import",
+        payload_digest="abc123",
+        nonce="mynonce",
+    )
+
+    valid, error_type, details = verify_plan_hash(
+        submitted_hash=plan_hash,
+        tool_name="delete_graph_data_tool",
+        mode="import",
+        payload_digest="abc123",
+        nonce="mynonce",
+        expires_at=context.expires_at,
+    )
+
+    assert valid is False
+    assert error_type == ErrorType.PLAN_HASH_MISMATCH
+
+
+def test_verify_plan_hash_rejects_mismatched_extra_context(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_URL", "http://test:8080")
+    context, plan_hash = build_plan_context(
+        tool_name="test",
+        mode="import",
+        payload_digest="abc123",
+        nonce="mynonce",
+        extra_context={"plan_tool_name": "import_graph_data_tool"},
+    )
+
+    valid, error_type, details = verify_plan_hash(
+        submitted_hash=plan_hash,
+        tool_name="test",
+        mode="import",
+        payload_digest="abc123",
+        nonce="mynonce",
+        expires_at=context.expires_at,
+        extra_context={"plan_tool_name": "delete_graph_data_tool"},
     )
 
     assert valid is False

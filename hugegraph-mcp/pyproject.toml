@@ -47,3 +47,11 @@ allow-direct-references = true
 dev = [
     "pytest~=8.0.0",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: requires a real HugeGraph Server",
+    "integration: requires external integration services",
+    "real_hugegraph: requires a real HugeGraph Server",
+    "llm: requires HugeGraph-AI or an external LLM provider",
+]

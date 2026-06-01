@@ -27,6 +27,7 @@ CONFIG_ENV_VARS = (
     "HUGEGRAPH_AI_URL",
     "HUGEGRAPH_AI_GRAPH_URL",
     "HUGEGRAPH_MCP_ALLOW_AI",
+    "HUGEGRAPH_MCP_ADMIN_MODE",
     "HUGEGRAPH_MCP_TIMEOUT_SECONDS",
 )
 
@@ -47,6 +48,7 @@ def test_basic_config_parsing(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_AI_URL", "http://ai.example:18001")
     monkeypatch.setenv("HUGEGRAPH_AI_GRAPH_URL", "http://graph-internal:8080")
     monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "yes")
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
     monkeypatch.setenv("HUGEGRAPH_MCP_TIMEOUT_SECONDS", "45")
 
     cfg = MCPConfig.from_env()
@@ -60,6 +62,7 @@ def test_basic_config_parsing(monkeypatch):
     assert cfg.ai_url == "http://ai.example:18001"
     assert cfg.ai_graph_url == "http://graph-internal:8080"
     assert cfg.allow_ai is True
+    assert cfg.admin_mode is True
     assert cfg.timeout_seconds == 45
 
 
@@ -166,6 +169,15 @@ def test_readonly_and_allow_ai_are_controlled_independently(monkeypatch):
     assert cfg.allow_ai is True
 
 
+def test_admin_mode_reads_current_env(monkeypatch):
+    clear_config_env(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "false")
+    assert MCPConfig.from_env().admin_mode is False
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "true")
+    assert MCPConfig.from_env().admin_mode is True
+
+
 def test_readonly_parsing(monkeypatch):
     true_values = ("true", "1", "yes", "TRUE")
     false_values = ("false", "0", "no", "")
@@ -203,6 +215,7 @@ def test_default_values(monkeypatch):
     assert cfg.ai_url == "http://127.0.0.1:8001"
     assert cfg.ai_graph_url is None
     assert cfg.allow_ai is False
+    assert cfg.admin_mode is False
     assert cfg.timeout_seconds == 30
     assert cfg.warnings == ()
 

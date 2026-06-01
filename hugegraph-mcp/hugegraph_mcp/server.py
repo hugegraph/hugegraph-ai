@@ -76,7 +76,7 @@ try:
     # ---- patch 作用域内，安全导入依赖 pyhugegraph 的模块 ----
     from fastmcp import FastMCP
 
-    from hugegraph_mcp.config import MCPConfig, TRUE_VALUES
+    from hugegraph_mcp.config import MCPConfig
     from hugegraph_mcp.envelope import ErrorType, envelope_err
     from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
     from hugegraph_mcp.guard import Capability
@@ -91,9 +91,6 @@ finally:
     logging.handlers.RotatingFileHandler = _OriginalRotatingFileHandler
 
 READONLY = MCPConfig.from_env().is_readonly()
-ADMIN_MODE = (
-    os.environ.get("HUGEGRAPH_MCP_ADMIN_MODE", "").strip().lower() in TRUE_VALUES
-)
 
 mcp = FastMCP("HugeGraph MCP")
 
@@ -137,9 +134,13 @@ def _call_public_tool(tool_name: str, func, *args, **kwargs) -> dict[str, Any]:
     )
 
 
+def _is_admin_mode_enabled() -> bool:
+    return MCPConfig.from_env().admin_mode
+
+
 def _admin_gate(tool_name: str, *, requires_write: bool = False) -> dict | None:
     """Return FEATURE_DISABLED envelope if admin mode is not enabled, else None."""
-    if not ADMIN_MODE:
+    if not _is_admin_mode_enabled():
         enable_env = {"admin_mode": "HUGEGRAPH_MCP_ADMIN_MODE"}
         suggestion = f"Set HUGEGRAPH_MCP_ADMIN_MODE=true to enable {tool_name}."
         if requires_write:
@@ -414,7 +415,11 @@ def refresh_vid_embeddings_tool(confirm: bool = False) -> dict:
     blocked = _admin_gate("refresh_vid_embeddings_tool", requires_write=True)
     if blocked:
         return blocked
-    return refresh_vid_embeddings(confirm=confirm)
+    return _call_public_tool(
+        "refresh_vid_embeddings_tool",
+        refresh_vid_embeddings,
+        confirm=confirm,
+    )
 
 
 @mcp.tool()
@@ -423,7 +428,12 @@ def execute_gremlin_write_tool(gremlin_query: str) -> dict:
     blocked = _admin_gate("execute_gremlin_write_tool", requires_write=True)
     if blocked:
         return blocked
-    return execute_gremlin_write(gremlin_query, capability=Capability.DEBUG_WRITE)
+    return _call_public_tool(
+        "execute_gremlin_write_tool",
+        execute_gremlin_write,
+        gremlin_query,
+        capability=Capability.DEBUG_WRITE,
+    )
 
 
 def main() -> None:

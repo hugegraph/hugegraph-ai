@@ -33,6 +33,7 @@ CONFIG_ENV_NAMES = (
     "HUGEGRAPH_AI_URL",
     "HUGEGRAPH_AI_GRAPH_URL",
     "HUGEGRAPH_MCP_ALLOW_AI",
+    "HUGEGRAPH_MCP_ADMIN_MODE",
     "HUGEGRAPH_MCP_TIMEOUT_SECONDS",
 )
 _CONFIG_CACHE_KEY: tuple[tuple[str, str | None], ...] | None = None
@@ -52,6 +53,7 @@ class MCPConfig:
     ai_url: str = "http://127.0.0.1:8001"
     ai_graph_url: str | None = None
     allow_ai: bool = False
+    admin_mode: bool = False
     timeout_seconds: int = 30
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
@@ -101,6 +103,7 @@ class MCPConfig:
             ai_url=env.get("HUGEGRAPH_AI_URL", "http://127.0.0.1:8001"),
             ai_graph_url=_optional_non_empty(env.get("HUGEGRAPH_AI_GRAPH_URL")),
             allow_ai=_parse_bool(env.get("HUGEGRAPH_MCP_ALLOW_AI", "")),
+            admin_mode=_parse_bool(env.get("HUGEGRAPH_MCP_ADMIN_MODE", "")),
             timeout_seconds=_parse_int(env.get("HUGEGRAPH_MCP_TIMEOUT_SECONDS"), 30),
             warnings=tuple(warnings),
         )
