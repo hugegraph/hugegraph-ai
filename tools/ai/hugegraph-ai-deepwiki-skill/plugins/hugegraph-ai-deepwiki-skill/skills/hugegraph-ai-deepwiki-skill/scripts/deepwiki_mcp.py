@@ -84,10 +84,6 @@ def stream_timeout_seconds() -> float:
     return max(1.0, env_float("DEEPWIKI_MCP_STREAM_TIMEOUT", 120.0))
 
 
-def read_timeout_seconds() -> float:
-    return max(1.0, min(env_float("DEEPWIKI_MCP_READ_TIMEOUT", 10.0), stream_timeout_seconds()))
-
-
 def load_repos() -> dict[str, dict[str, Any]]:
     try:
         with REPOS_PATH.open("r", encoding="utf-8") as file:
@@ -179,11 +175,9 @@ def read_sse_response(response: Any, expected_id: int | None) -> dict[str, Any]:
             break
         try:
             raw_line = response.readline()
-        except TimeoutError:
-            if time.monotonic() > deadline:
-                timed_out = True
-                break
-            continue
+        except (TimeoutError, socket.timeout):  # noqa: UP041
+            timed_out = True
+            break
         if not raw_line:
             break
 
@@ -240,7 +234,7 @@ class McpClient:
 
         req = urllib.request.Request(self.endpoint, data=body, headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=read_timeout_seconds()) as response:
+            with urllib.request.urlopen(req, timeout=stream_timeout_seconds()) as response:
                 session_id = response.headers.get("Mcp-Session-Id")
                 if session_id:
                     self.session_id = session_id
@@ -257,11 +251,11 @@ class McpClient:
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8", errors="replace")
             raise McpError(f"DeepWiki MCP HTTP {exc.code}: {details}") from exc
-        except TimeoutError as exc:
-            raise McpError(f"DeepWiki MCP request timed out after {read_timeout_seconds():.0f}s.") from exc
+        except (TimeoutError, socket.timeout) as exc:  # noqa: UP041
+            raise McpError(f"DeepWiki MCP request timed out after {stream_timeout_seconds():.0f}s.") from exc
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, (TimeoutError, socket.timeout)):
-                raise McpError(f"DeepWiki MCP request timed out after {read_timeout_seconds():.0f}s.") from exc
+                raise McpError(f"DeepWiki MCP request timed out after {stream_timeout_seconds():.0f}s.") from exc
             raise McpError(f"Could not reach DeepWiki MCP endpoint: {exc.reason}") from exc
 
         if "error" in parsed:
