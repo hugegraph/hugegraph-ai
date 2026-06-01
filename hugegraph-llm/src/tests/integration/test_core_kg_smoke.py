@@ -71,5 +71,38 @@ def test_kg_construction_smoke_uses_production_code(hugegraph_client):
     Commit2Graph().run(data)
 
     summary = FetchGraphData(hugegraph_client).run({})
-    assert summary["vertex_num"] >= len(fixture["vertices"])
-    assert summary["edge_num"] >= len(fixture["edges"])
+    vertices = hugegraph_client.gremlin().exec(
+        """
+        g.V().hasLabel('quality_person', 'quality_software').
+          project('label', 'name', 'age', 'lang').
+          by(label()).
+          by(values('name')).
+          by(coalesce(values('age'), constant(null))).
+          by(coalesce(values('lang'), constant(null)))
+        """
+    )["data"]
+    edges = hugegraph_client.gremlin().exec(
+        """
+        g.E().hasLabel('quality_created').
+          project('label', 'out', 'in', 'date').
+          by(label()).
+          by(outV().values('name')).
+          by(inV().values('name')).
+          by(values('date'))
+        """
+    )["data"]
+
+    assert summary["vertex_num"] == len(fixture["vertices"])
+    assert summary["edge_num"] == len(fixture["edges"])
+    assert sorted(vertices, key=lambda item: item["label"]) == [
+        {"label": "quality_person", "name": "marko", "age": 29, "lang": None},
+        {"label": "quality_software", "name": "lop", "age": None, "lang": "java"},
+    ]
+    assert edges == [
+        {
+            "label": "quality_created",
+            "out": "marko",
+            "in": "lop",
+            "date": "2026-05-31",
+        }
+    ]

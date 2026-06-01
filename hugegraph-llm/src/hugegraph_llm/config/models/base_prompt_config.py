@@ -16,16 +16,26 @@
 # under the License.
 
 import os
+from importlib import resources
+from pathlib import Path
 
 import yaml
 
-from hugegraph_llm.utils.anchor import get_project_root
 from hugegraph_llm.utils.log import log
 
 dir_name = os.path.dirname
 F_NAME = "config_prompt.yaml"
-PROJECT_ROOT = get_project_root()
-yaml_file_path = os.path.join(PROJECT_ROOT, "src/hugegraph_llm/resources/demo", F_NAME)
+
+
+def resolve_prompt_yaml_path() -> str:
+    try:
+        return str(resources.files("hugegraph_llm.resources.demo").joinpath(F_NAME))
+    except (ModuleNotFoundError, TypeError):
+        package_root = Path(__file__).resolve().parents[2]
+        return str(package_root / "resources" / "demo" / F_NAME)
+
+
+yaml_file_path = resolve_prompt_yaml_path()
 
 
 class LiteralStr(str):

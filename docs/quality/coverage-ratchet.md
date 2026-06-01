@@ -33,6 +33,17 @@ Current combined baseline:
 
 The original combined command hits a pytest import-path collision because both workspace packages define a `tests.conftest` module. Use `--import-mode=importlib` for combined workspace baselines until the test package layout is normalized.
 
+## CI Gates
+
+The default unit/contract jobs enforce module-level floors from the initial baseline artifacts:
+
+| Workflow | Scope | Gate |
+|---|---|---:|
+| `.github/workflows/hugegraph-python-client.yml` | `pyhugegraph` unit/contract | `--cov-fail-under=45` |
+| `.github/workflows/hugegraph-llm.yml` | `hugegraph_llm` unit/contract | `--cov-fail-under=34` |
+
+These gates are intentionally baseline-level floors. Raise them only after the corresponding local ratchet areas gain meaningful tests.
+
 ## Local Commands
 
 ```bash

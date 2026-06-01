@@ -22,6 +22,7 @@ from fastapi import APIRouter, FastAPI, status
 from fastapi.testclient import TestClient
 
 from hugegraph_llm.api.rag_api import rag_http_api
+from hugegraph_llm.config import llm_settings
 
 pytestmark = pytest.mark.contract
 
@@ -83,7 +84,10 @@ def test_graph_config_api_passes_graph_field_to_apply_graph_conf():
     )
 
 
-def test_llm_config_api_passes_openai_fields_to_apply_llm_conf():
+def test_llm_config_api_passes_openai_fields_to_apply_llm_conf(monkeypatch):
+    monkeypatch.setattr(llm_settings, "chat_llm_type", "ollama/local")
+    monkeypatch.setattr(llm_settings, "extract_llm_type", "ollama/local")
+    monkeypatch.setattr(llm_settings, "text2gql_llm_type", "ollama/local")
     client, callbacks = _make_test_client()
 
     response = client.post(
@@ -97,6 +101,9 @@ def test_llm_config_api_passes_openai_fields_to_apply_llm_conf():
         },
     )
 
+    assert llm_settings.chat_llm_type == "openai"
+    assert llm_settings.extract_llm_type == "openai"
+    assert llm_settings.text2gql_llm_type == "openai"
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json() == {"message": "Connection successful. Configured finished."}
     callbacks["apply_llm_conf"].assert_called_once_with(

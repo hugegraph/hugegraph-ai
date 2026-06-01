@@ -17,7 +17,9 @@
 
 
 import unittest
+from os import environ
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -44,3 +46,16 @@ class TestConfig(unittest.TestCase):
 
         expected = Path(__file__).resolve().parents[3] / ".env"
         self.assertEqual(Path(base_config.env_path), expected)
+
+    def test_env_path_prefers_explicit_override(self):
+        from hugegraph_llm.config.models import base_config
+
+        custom_env = Path("/tmp/hugegraph-llm-test.env")
+        with patch.dict(environ, {base_config.ENV_PATH_ENV_VAR: str(custom_env)}):
+            self.assertEqual(Path(base_config.resolve_env_path()), custom_env)
+
+    def test_demo_config_block_uses_shared_env_path(self):
+        from hugegraph_llm.config.models import base_config
+        from hugegraph_llm.demo.rag_demo import configs_block
+
+        self.assertEqual(configs_block.env_path, base_config.env_path)

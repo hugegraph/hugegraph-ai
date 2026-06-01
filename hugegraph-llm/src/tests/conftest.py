@@ -18,6 +18,7 @@
 import logging
 import os
 import sys
+from contextlib import suppress
 
 import nltk
 import pytest
@@ -34,6 +35,17 @@ sys.path.insert(0, tests_path)
 from fixtures.hugegraph_service import hugegraph_service  # noqa: E402
 
 __all__ = ["hugegraph_client", "hugegraph_service"]
+
+
+def _clear_quality_schema(client):
+    schema = client.schema()
+    for remove in (
+        lambda: schema.edgeLabel("quality_created").remove(),
+        lambda: schema.vertexLabel("quality_software").remove(),
+        lambda: schema.vertexLabel("quality_person").remove(),
+    ):
+        with suppress(Exception):
+            remove()
 
 
 @pytest.fixture()
@@ -63,11 +75,13 @@ def hugegraph_client(hugegraph_service):
         graphspace=hugegraph_service.graphspace,
     )
     client.graphs().clear_graph_all_data()
+    _clear_quality_schema(client)
     try:
         yield client
     finally:
         try:
             client.graphs().clear_graph_all_data()
+            _clear_quality_schema(client)
         finally:
             for key, value in original.items():
                 setattr(huge_settings, key, value)

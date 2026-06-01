@@ -38,22 +38,22 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      uses: astral-sh/setup-uv@v8
+      with:
+        version: "0.9.22"
 
     - name: Cache dependencies
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cache/uv
@@ -71,10 +71,10 @@ jobs:
       env:
         SKIP_EXTERNAL_SERVICES: true
       run: |
-        uv run pytest hugegraph-llm/src/tests -m "unit or contract" --cov=hugegraph_llm --cov-report=term --cov-report=xml:.workflow/quality-program/coverage/llm-unit-contract.xml -q
+        uv run pytest hugegraph-llm/src/tests -m "unit or contract" --cov=hugegraph_llm --cov-fail-under=34 --cov-report=term --cov-report=xml:.workflow/quality-program/coverage/llm-unit-contract.xml -q
 
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      uses: actions/upload-artifact@v7
       with:
         name: llm-unit-contract-coverage-${{ matrix.python-version }}
         path: .workflow/quality-program/coverage/llm-unit-contract.xml
@@ -97,22 +97,22 @@ jobs:
           - 8080:8080
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      uses: astral-sh/setup-uv@v8
+      with:
+        version: "0.9.22"
 
     - name: Cache dependencies
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cache/uv
@@ -154,22 +154,22 @@ jobs:
           - 8080:8080
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      uses: astral-sh/setup-uv@v8
+      with:
+        version: "0.9.22"
 
     - name: Cache dependencies
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cache/uv
