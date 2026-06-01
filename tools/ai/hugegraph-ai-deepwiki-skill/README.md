@@ -46,10 +46,12 @@ claude plugin marketplace add "$(pwd)"
 claude plugin install hugegraph-ai-deepwiki-skill@hugegraph-ai-deepwiki-skill
 ```
 
-From a Git marketplace after this module is published:
+From a published branch, clone the repository first and install from the local module path:
 
 ```bash
-claude plugin marketplace add <owner>/hugegraph-ai --sparse tools/ai/hugegraph-ai-deepwiki-skill
+git clone -b <branch> https://github.com/<owner>/hugegraph-ai.git
+cd hugegraph-ai/tools/ai/hugegraph-ai-deepwiki-skill
+claude plugin marketplace add "$(pwd)"
 claude plugin install hugegraph-ai-deepwiki-skill@hugegraph-ai-deepwiki-skill
 ```
 
@@ -78,10 +80,12 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add hugegraph-ai-deepwiki-skill@hugegraph-ai-deepwiki-skill
 ```
 
-From a Git marketplace after this module is published:
+From a published branch, clone the repository first and install from the local module path:
 
 ```bash
-codex plugin marketplace add <owner>/hugegraph-ai --ref main --sparse tools/ai/hugegraph-ai-deepwiki-skill
+git clone -b <branch> https://github.com/<owner>/hugegraph-ai.git
+cd hugegraph-ai/tools/ai/hugegraph-ai-deepwiki-skill
+codex plugin marketplace add "$(pwd)"
 codex plugin add hugegraph-ai-deepwiki-skill@hugegraph-ai-deepwiki-skill
 ```
 
