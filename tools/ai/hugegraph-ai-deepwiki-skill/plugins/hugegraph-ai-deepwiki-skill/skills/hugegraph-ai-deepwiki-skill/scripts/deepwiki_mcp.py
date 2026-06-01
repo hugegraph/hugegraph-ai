@@ -391,18 +391,20 @@ def query_terms(query: str) -> list[str]:
     return terms
 
 
-def build_term_patterns(terms: list[str]) -> list[tuple[re.Pattern[str], int]]:
-    patterns: list[tuple[re.Pattern[str], int]] = []
+def build_term_patterns(terms: list[str]) -> list[tuple[str, re.Pattern[str], int]]:
+    patterns: list[tuple[str, re.Pattern[str], int]] = []
     for term in terms:
         pattern = rf"(?<![a-z0-9_]){re.escape(term)}(?![a-z0-9_])"
         weight = max(1, min(len(term), 12))
-        patterns.append((re.compile(pattern), weight))
+        patterns.append((term, re.compile(pattern), weight))
     return patterns
 
 
-def score_window(lowered: str, patterns: list[tuple[re.Pattern[str], int]]) -> int:
+def score_window(lowered: str, patterns: list[tuple[str, re.Pattern[str], int]]) -> int:
     score = 0
-    for pattern, weight in patterns:
+    for term, pattern, weight in patterns:
+        if term not in lowered:
+            continue
         count = len(pattern.findall(lowered))
         if count:
             score += count * weight
