@@ -144,7 +144,7 @@ def get_llm_config(config: dict) -> dict:
 def find_latest_corpus(output_dir: str = "output") -> str | None:
     """找到 output 目录下最新的泛化结果文件"""
     pattern = os.path.join(output_dir, "generated_corpus_*.json")
-    files = sorted(glob(pattern))
+    files = sorted(glob(pattern), key=os.path.getmtime)
     return files[-1] if files else None
 
 

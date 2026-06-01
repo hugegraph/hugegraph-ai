@@ -151,7 +151,7 @@ def filter_generated_samples(samples: list[GeneratedSample], source_operation: s
 def find_latest_translated(output_dir: str = "output") -> str | None:
     """找到 output 目录下最新的 LLM 翻译结果文件"""
     pattern = os.path.join(output_dir, "llm_translated_*.json")
-    files = sorted(glob(pattern))
+    files = sorted(glob(pattern), key=os.path.getmtime)
     return files[-1] if files else None
 
 
@@ -216,7 +216,7 @@ def prepare_pairs(translated_path: str, output_dir: str = "output") -> tuple[str
 
 def find_latest_pairs(output_dir: str = "output") -> str | None:
     pattern = os.path.join(output_dir, "text2gremlin_pairs_*.json")
-    files = sorted(glob(pattern))
+    files = sorted(glob(pattern), key=os.path.getmtime)
     return files[-1] if files else None
 
 

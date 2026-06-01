@@ -107,14 +107,14 @@ def load_pairs(input_path: str) -> list[dict]:
 
 def find_latest_pairs(output_dir: str = "output") -> str | None:
     pattern = os.path.join(output_dir, "text2gremlin_pairs_*.json")
-    files = sorted(glob(pattern))
+    files = sorted(glob(pattern), key=os.path.getmtime)
     return files[-1] if files else None
 
 
 def find_latest_migrated(output_dir: str = "output") -> str | None:
     """查找最新的迁移数据文件"""
     pattern = os.path.join(output_dir, "migrated_*.json")
-    files = sorted(glob(pattern))
+    files = sorted(glob(pattern), key=os.path.getmtime)
     return files[-1] if files else None
 
 
