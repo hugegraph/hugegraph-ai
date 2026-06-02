@@ -26,11 +26,7 @@ from unittest import mock
 
 
 SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "skills"
-    / "hugegraph-ai-deepwiki-skill"
-    / "scripts"
-    / "deepwiki_mcp.py"
+    Path(__file__).resolve().parents[1] / "skills" / "hugegraph-ai-deepwiki-skill" / "scripts" / "deepwiki_mcp.py"
 )
 
 
@@ -61,9 +57,11 @@ class DeepWikiMcpTest(unittest.TestCase):
     def test_cache_write_failure_returns_fetched_contents(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             cache_path = Path(tmp_dir) / "apache__hugegraph-ai" / "wiki-contents.md"
-            with mock.patch.object(mcp, "contents_cache_path", return_value=cache_path), mock.patch.object(
-                mcp, "read_wiki_contents", return_value="fresh wiki"
-            ) as read_wiki, mock.patch.object(mcp, "write_text_atomic", side_effect=OSError("readonly")):
+            with (
+                mock.patch.object(mcp, "contents_cache_path", return_value=cache_path),
+                mock.patch.object(mcp, "read_wiki_contents", return_value="fresh wiki") as read_wiki,
+                mock.patch.object(mcp, "write_text_atomic", side_effect=OSError("readonly")),
+            ):
                 text, path, status = mcp.ensure_cached_contents(object(), "apache/hugegraph-ai")
 
         self.assertEqual("fresh wiki", text)
@@ -76,9 +74,10 @@ class DeepWikiMcpTest(unittest.TestCase):
             cache_path = Path(tmp_dir) / "apache__hugegraph-ai" / "wiki-contents.md"
             cache_path.parent.mkdir(parents=True)
             cache_path.write_bytes(b"\xff\xfe")
-            with mock.patch.object(mcp, "contents_cache_path", return_value=cache_path), mock.patch.object(
-                mcp, "read_wiki_contents", return_value="fresh wiki"
-            ) as read_wiki:
+            with (
+                mock.patch.object(mcp, "contents_cache_path", return_value=cache_path),
+                mock.patch.object(mcp, "read_wiki_contents", return_value="fresh wiki") as read_wiki,
+            ):
                 text, path, status = mcp.ensure_cached_contents(object(), "apache/hugegraph-ai")
 
             self.assertEqual("fresh wiki", text)
