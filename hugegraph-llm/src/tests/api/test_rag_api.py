@@ -22,9 +22,16 @@ from fastapi import APIRouter, FastAPI, status
 from fastapi.testclient import TestClient
 
 from hugegraph_llm.api.rag_api import rag_http_api
-from hugegraph_llm.config import llm_settings
+from hugegraph_llm.config import huge_settings, llm_settings
 
 pytestmark = pytest.mark.contract
+
+# FIXME: add negative-path tests for each /config/* endpoint that assert
+# provider/auth/connection failures surface distinct error details.
+# FIXME: add happy-path HTTP contract tests for /rag and /rag/graph response
+# shaping and output-flag filtering.
+# FIXME: distinguish graph/provider dependency failures from programmer errors
+# instead of asserting one generic unexpected-error response for all failures.
 
 
 def _make_test_client(**overrides):
@@ -166,6 +173,71 @@ def test_rag_api_invalid_request_body_returns_validation_shape():
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert response.json()["detail"][0]["loc"][-1] == "query"
+
+
+def test_rag_client_config_updates_only_explicit_graph_fields(monkeypatch):
+    monkeypatch.setattr(huge_settings, "graph_url", "http://original:8080")
+    monkeypatch.setattr(huge_settings, "graph_name", "original_graph")
+    monkeypatch.setattr(huge_settings, "graph_user", "original_user")
+    monkeypatch.setattr(huge_settings, "graph_pwd", "original_pwd")
+    monkeypatch.setattr(huge_settings, "graph_space", "original_space")
+    client, callbacks = _make_test_client()
+
+    response = client.post(
+        "/rag",
+        json={
+            "query": "find vertices",
+            "client_config": {
+                "url": "http://override:8080",
+            },
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    callbacks["rag_answer_func"].assert_called_once()
+    assert huge_settings.graph_url == "http://override:8080"
+    assert huge_settings.graph_name == "original_graph"
+    assert huge_settings.graph_user == "original_user"
+    assert huge_settings.graph_pwd == "original_pwd"
+    assert huge_settings.graph_space == "original_space"
+
+
+def test_llm_config_rejects_unsupported_provider_without_mutating(monkeypatch):
+    monkeypatch.setattr(llm_settings, "chat_llm_type", "openai")
+    client, callbacks = _make_test_client()
+
+    response = client.post(
+        "/config/llm",
+        json={
+            "llm_type": "unsupported",
+            "api_key": "sk-test",
+            "api_base": "https://api.example.test",
+            "language_model": "gpt-test",
+            "max_tokens": "1024",
+        },
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    callbacks["apply_llm_conf"].assert_not_called()
+    assert llm_settings.chat_llm_type == "openai"
+
+
+def test_rerank_config_rejects_unsupported_provider_without_mutating(monkeypatch):
+    monkeypatch.setattr(llm_settings, "reranker_type", "cohere")
+    client, callbacks = _make_test_client()
+
+    response = client.post(
+        "/config/rerank",
+        json={
+            "reranker_type": "unsupported",
+            "api_key": "rerank-key",
+            "reranker_model": "rerank-test",
+        },
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    callbacks["apply_reranker_conf"].assert_not_called()
+    assert llm_settings.reranker_type == "cohere"
 
 
 def test_text2gremlin_callback_exception_returns_stable_response():

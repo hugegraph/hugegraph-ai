@@ -188,8 +188,8 @@ class TestPropertyGraphExtract(unittest.TestCase):
         # Check that title (non-nullable) was added with NULL value
         self.assertEqual(filtered_items[1]["properties"]["title"], "NULL")
 
-        # Check that year was converted to string
-        self.assertEqual(filtered_items[1]["properties"]["year"], "1994")
+        # Check that schema-typed values are preserved for Commit2Graph
+        self.assertEqual(filtered_items[1]["properties"]["year"], 1994)
 
     def test_extract_property_graph_by_llm(self):
         """Test the extract_property_graph_by_llm method."""

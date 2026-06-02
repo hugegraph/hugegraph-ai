@@ -90,12 +90,18 @@ def rag_http_api(
         }
 
     def set_graph_config(req):
-        if req.client_config:
-            huge_settings.graph_url = req.client_config.url
-            huge_settings.graph_name = req.client_config.graph
-            huge_settings.graph_user = req.client_config.user
-            huge_settings.graph_pwd = req.client_config.pwd
-            huge_settings.graph_space = req.client_config.gs
+        if req.client_config is None:
+            return
+        field_map = {
+            "url": "graph_url",
+            "graph": "graph_name",
+            "user": "graph_user",
+            "pwd": "graph_pwd",
+            "gs": "graph_space",
+        }
+        for request_field, settings_field in field_map.items():
+            if request_field in req.client_config.model_fields_set:
+                setattr(huge_settings, settings_field, getattr(req.client_config, request_field))
 
     @router.post("/rag/graph", status_code=status.HTTP_200_OK)
     def graph_rag_recall_api(req: GraphRAGRequest):
@@ -165,7 +171,7 @@ def rag_http_api(
         llm_settings.extract_llm_type = req.llm_type
         llm_settings.text2gql_llm_type = req.llm_type
 
-        if req.llm_type == "openai":
+        if req.llm_type in ("openai", "litellm"):
             res = apply_llm_conf(
                 req.api_key,
                 req.api_base,
@@ -181,7 +187,7 @@ def rag_http_api(
     def embedding_config_api(req: LLMConfigRequest):
         llm_settings.embedding_type = req.llm_type
 
-        if req.llm_type == "openai":
+        if req.llm_type in ("openai", "litellm"):
             res = apply_embedding_conf(req.api_key, req.api_base, req.language_model, origin_call="http")
         else:
             res = apply_embedding_conf(req.host, req.port, req.language_model, origin_call="http")

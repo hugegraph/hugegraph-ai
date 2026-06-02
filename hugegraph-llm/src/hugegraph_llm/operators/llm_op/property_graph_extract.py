@@ -73,9 +73,6 @@ def filter_item(schema, items) -> List[Dict[str, Any]]:
             for key in non_nullable_keys:
                 if key not in item["properties"]:
                     item["properties"][key] = "NULL"
-        for key, value in item["properties"].items():
-            if not isinstance(value, str):
-                item["properties"][key] = str(value)
         filtered_items.append(item)
 
     return filtered_items

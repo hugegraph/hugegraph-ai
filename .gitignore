@@ -4,6 +4,9 @@
 *.pkl
 out/production/
 
+# Local PR review scratch artifacts
+.workflow/pr*-review/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

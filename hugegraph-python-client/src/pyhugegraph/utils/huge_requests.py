@@ -26,7 +26,7 @@ from urllib3.util.retry import Retry
 from pyhugegraph.utils.constants import Constants
 from pyhugegraph.utils.huge_config import HGraphConfig
 from pyhugegraph.utils.log import log
-from pyhugegraph.utils.util import ResponseValidation
+from pyhugegraph.utils.util import ResponseValidation, redact_sensitive_data
 
 
 class HGraphSession:
@@ -150,6 +150,6 @@ class HGraphSession:
             **kwargs,
         )
         log.debug(  # pylint: disable=logging-fstring-interpolation
-            f"Request: {method} {url} validator={validator} kwargs={kwargs} {response}"
+            f"Request: {method} {url} validator={validator} kwargs={redact_sensitive_data(kwargs)} {response}"
         )
         return validator(response, method=method, path=path)

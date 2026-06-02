@@ -20,7 +20,7 @@ from unittest.mock import Mock
 
 import pytest
 import requests
-from pyhugegraph.utils.exceptions import NotAuthorizedError
+from pyhugegraph.utils.exceptions import NotAuthorizedError, ResponseParseError, ServerError
 from pyhugegraph.utils.util import ResponseValidation
 
 pytestmark = pytest.mark.contract
@@ -91,6 +91,33 @@ class TestResponseValidation(unittest.TestCase):
             validator(response, method="GET", path="/graphs")
 
         assert "Please check your username and password" in str(exc_info.value)
+
+    def test_malformed_success_json_raises_parse_error(self):
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.text = "not json"
+        response.content = b"not json"
+        response.json.side_effect = ValueError("not json")
+        response.raise_for_status.return_value = None
+        validator = ResponseValidation()
+
+        with pytest.raises(ResponseParseError, match="Failed to parse json response"):
+            validator(response, "GET", "/graphs/hugegraph")
+
+    def test_error_log_redacts_sensitive_request_body(self):
+        response = self._mock_error_response(
+            {"message": "bad request"},
+            '{"message":"bad request"}',
+        )
+        response.request.body = '{"user_name":"marko","user_password":"super-secret"}'
+        validator = ResponseValidation()
+
+        with pytest.raises(ServerError), unittest.mock.patch("pyhugegraph.utils.util.log.error") as log_error:
+            validator(response, "POST", "/auth/users")
+
+        logged_args = str(log_error.call_args)
+        assert "super-secret" not in logged_args
+        assert "***REDACTED***" in logged_args
 
 
 if __name__ == "__main__":
