@@ -17,13 +17,11 @@ from __future__ import annotations
 
 import importlib.util
 import os
-import socket
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
-
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1] / "skills" / "hugegraph-ai-deepwiki-skill" / "scripts" / "deepwiki_mcp.py"
@@ -45,14 +43,16 @@ mcp = load_mcp_module()
 
 class TimeoutResponse:
     def readline(self):
-        raise socket.timeout()
+        raise TimeoutError()
 
 
 class DeepWikiMcpTest(unittest.TestCase):
     def test_read_sse_response_reports_socket_timeout(self):
-        with mock.patch.dict(os.environ, {"DEEPWIKI_MCP_STREAM_TIMEOUT": "1"}):
-            with self.assertRaisesRegex(mcp.McpError, "timed out waiting for response id 7"):
-                mcp.read_sse_response(TimeoutResponse(), 7)
+        with (
+            mock.patch.dict(os.environ, {"DEEPWIKI_MCP_STREAM_TIMEOUT": "1"}),
+            self.assertRaisesRegex(mcp.McpError, "timed out waiting for response id 7"),
+        ):
+            mcp.read_sse_response(TimeoutResponse(), 7)
 
     def test_cache_write_failure_returns_fetched_contents(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
