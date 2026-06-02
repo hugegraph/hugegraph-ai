@@ -13,6 +13,7 @@ Answer questions about the Apache HugeGraph AI source repository. Use the offici
 - DeepWiki page: `https://deepwiki.com/apache/hugegraph-ai`
 - MCP endpoint: `https://mcp.deepwiki.com/mcp`
 - Default repository: `apache/hugegraph-ai`
+- Runtime requirements: Python 3.9+ and network access to the MCP endpoint.
 
 ## Default Workflow
 

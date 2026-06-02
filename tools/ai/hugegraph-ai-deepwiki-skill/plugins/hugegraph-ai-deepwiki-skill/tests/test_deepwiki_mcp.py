@@ -46,6 +46,16 @@ class TimeoutResponse:
         raise TimeoutError()
 
 
+class PartialTimeoutResponse:
+    def __init__(self):
+        self.lines = [b'data: {"jsonrpc":"2.0","id":7,\n']
+
+    def readline(self):
+        if self.lines:
+            return self.lines.pop(0)
+        raise TimeoutError()
+
+
 class DeepWikiMcpTest(unittest.TestCase):
     def test_read_sse_response_reports_socket_timeout(self):
         with (
@@ -53,6 +63,13 @@ class DeepWikiMcpTest(unittest.TestCase):
             self.assertRaisesRegex(mcp.McpError, "timed out waiting for response id 7"),
         ):
             mcp.read_sse_response(TimeoutResponse(), 7)
+
+    def test_read_sse_response_reports_partial_event_timeout(self):
+        with (
+            mock.patch.dict(os.environ, {"DEEPWIKI_MCP_STREAM_TIMEOUT": "1"}),
+            self.assertRaisesRegex(mcp.McpError, "timed out waiting for response id 7"),
+        ):
+            mcp.read_sse_response(PartialTimeoutResponse(), 7)
 
     def test_cache_write_failure_returns_fetched_contents(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
