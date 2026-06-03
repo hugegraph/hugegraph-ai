@@ -167,3 +167,11 @@ def test_gremlin_exec_preserves_auth_exception_type():
 
     with pytest.raises(NotAuthorizedError, match="bad credentials"):
         gremlin.exec("g.V()")
+
+
+def test_gremlin_exec_does_not_silently_drop_empty_payload(monkeypatch):
+    gremlin = GremlinManager(_FailingGremlinSession())
+    monkeypatch.setattr(gremlin, "_invoke_request", mock.Mock(return_value={}))
+
+    with pytest.raises(KeyError):
+        gremlin.exec("g.V()")

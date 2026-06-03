@@ -49,7 +49,6 @@ def _resolve_log_path(log_file: str | None) -> str:
     return os.path.join(LOG_DIR, log_file)
 
 
-# FIXME: line 31: E0702: Raising dict while only classes or instances are allowed (raising-bad-type)
 def admin_http_api(router: APIRouter, log_stream):
     @router.post("/logs", status_code=status.HTTP_200_OK)
     async def log_stream_api(req: LogStreamRequest):
@@ -59,9 +58,9 @@ def admin_http_api(router: APIRouter, log_stream):
                 detail="Admin token is not configured securely.",
             )
         if admin_settings.admin_token != req.admin_token:
-            raise generate_response(  # pylint: disable=raising-bad-type
+            return generate_response(
                 RAGResponse(
-                    status_code=status.HTTP_403_FORBIDDEN,  # pylint: disable=E0702
+                    status_code=status.HTTP_403_FORBIDDEN,
                     message="Invalid admin_token",
                 )
             )

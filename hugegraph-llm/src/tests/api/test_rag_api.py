@@ -181,7 +181,17 @@ def test_rag_client_config_updates_only_explicit_graph_fields(monkeypatch):
     monkeypatch.setattr(huge_settings, "graph_user", "original_user")
     monkeypatch.setattr(huge_settings, "graph_pwd", "original_pwd")
     monkeypatch.setattr(huge_settings, "graph_space", "original_space")
-    client, callbacks = _make_test_client()
+    observed_settings = {}
+
+    def rag_answer_func(**_kwargs):
+        observed_settings["graph_url"] = huge_settings.graph_url
+        observed_settings["graph_name"] = huge_settings.graph_name
+        observed_settings["graph_user"] = huge_settings.graph_user
+        observed_settings["graph_pwd"] = huge_settings.graph_pwd
+        observed_settings["graph_space"] = huge_settings.graph_space
+        return ("raw", "vector", "graph", "graph_vector")
+
+    client, callbacks = _make_test_client(rag_answer_func=Mock(side_effect=rag_answer_func))
 
     response = client.post(
         "/rag",
@@ -195,7 +205,14 @@ def test_rag_client_config_updates_only_explicit_graph_fields(monkeypatch):
 
     assert response.status_code == status.HTTP_200_OK
     callbacks["rag_answer_func"].assert_called_once()
-    assert huge_settings.graph_url == "http://override:8080"
+    assert observed_settings == {
+        "graph_url": "http://override:8080",
+        "graph_name": "original_graph",
+        "graph_user": "original_user",
+        "graph_pwd": "original_pwd",
+        "graph_space": "original_space",
+    }
+    assert huge_settings.graph_url == "http://original:8080"
     assert huge_settings.graph_name == "original_graph"
     assert huge_settings.graph_user == "original_user"
     assert huge_settings.graph_pwd == "original_pwd"

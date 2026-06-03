@@ -2,7 +2,7 @@
 
 ## Repository State
 
-- CWD: `/Users/imbajin/github/graph/ai`
+- CWD: repository root
 - Branch: `goal-test`
 - Start SHA: `d16db33c5509647afccae588c46c0b0767adbb76`
 - Existing unrelated untracked path observed before edits: `.workflow/pr68-review/`

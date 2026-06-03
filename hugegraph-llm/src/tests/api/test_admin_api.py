@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import os
 from unittest.mock import Mock
 
 import pytest
@@ -108,4 +109,4 @@ def test_logs_streams_valid_log_file_under_logs_dir(monkeypatch):
     )
 
     assert response.status_code == status.HTTP_200_OK
-    log_stream.assert_called_once_with("logs/llm-server.log")
+    log_stream.assert_called_once_with(os.path.join("logs", "llm-server.log"))

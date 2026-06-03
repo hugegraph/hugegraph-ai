@@ -44,7 +44,8 @@ class GremlinManager(HugeParamsBase):
                 "g": f"__g_{self._sess.cfg.graph_name}",
             }
 
-        if response := self._invoke_request(data=gremlin_data.to_json()):
+        response = self._invoke_request(data=gremlin_data.to_json())
+        if response is not None:
             return ResponseData(response).result
         log.error("Gremlin can't get results: %s", str(response))
         return None

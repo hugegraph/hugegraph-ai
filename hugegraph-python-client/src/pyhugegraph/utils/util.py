@@ -41,11 +41,26 @@ SENSITIVE_KEY_PARTS = (
     "secret",
     "token",
 )
+ESCAPE_MARKERS = ("\\u", "\\U", "\\x", "\\n", "\\r", "\\t")
+RESPONSE_CONTENT_TYPES = {"raw", "json", "text"}
 
 
 def _is_sensitive_key(key) -> bool:
     key_lower = str(key).lower()
     return any(part in key_lower for part in SENSITIVE_KEY_PARTS)
+
+
+def _may_contain_sensitive_key(value: str) -> bool:
+    value_lower = value.lower()
+    return any(part in value_lower for part in SENSITIVE_KEY_PARTS)
+
+
+def _decode_escaped_text(value):
+    if not isinstance(value, str) or "\\" not in value:
+        return value
+    if not any(marker in value for marker in ESCAPE_MARKERS):
+        return value
+    return value.encode("utf-8", errors="replace").decode("unicode_escape", errors="replace")
 
 
 def redact_sensitive_data(value):
@@ -61,6 +76,8 @@ def redact_sensitive_data(value):
     if isinstance(value, bytes):
         value = value.decode("utf-8", errors="replace")
     if isinstance(value, str):
+        if not _may_contain_sensitive_key(value):
+            return value
         try:
             parsed = json.loads(value)
         except json.JSONDecodeError:
@@ -129,6 +146,9 @@ class ResponseValidation:
         :param path: URL path of the request
         :return: Parsed response content or empty dict if none applicable
         """
+        if self._content_type not in RESPONSE_CONTENT_TYPES:
+            raise ValueError(f"Unknown content type: {self._content_type}")
+
         result = {}
 
         try:
@@ -142,8 +162,6 @@ class ResponseValidation:
                     result = response.json()
                 elif self._content_type == "text":
                     result = response.text
-                else:
-                    raise ValueError(f"Unknown content type: {self._content_type}")
 
         except requests.exceptions.HTTPError as e:
             if not self._strict and response.status_code == 404:
@@ -170,21 +188,18 @@ class ResponseValidation:
                     details = response.text or "unknown error"
 
                 req_body = redact_sensitive_data(response.request.body) if response.request.body else "Empty body"
-                if isinstance(req_body, str):
-                    req_body = req_body.encode("utf-8").decode("unicode_escape")
+                req_body = _decode_escaped_text(req_body)
                 log.error(
                     "%s: %s\n[Body]: %s\n[Server Exception]: %s",
                     method,
-                    str(e).encode("utf-8").decode("unicode_escape"),
+                    _decode_escaped_text(str(e)),
                     req_body,
                     details,
                 )
 
                 if response.status_code == 404:
                     raise NotFoundError(response.content) from e
-                if response.status_code >= 400:
-                    raise ServerError(f"Server Exception: {details}") from e
-                raise e
+                raise ServerError(f"Server Exception: {details}") from e
 
         except Exception as e:
             log.error("Unhandled exception occurred: %s", traceback.format_exc())

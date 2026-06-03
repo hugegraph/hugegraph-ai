@@ -20,8 +20,8 @@ from unittest.mock import Mock
 
 import pytest
 import requests
-from pyhugegraph.utils.exceptions import NotAuthorizedError, ResponseParseError, ServerError
-from pyhugegraph.utils.util import ResponseValidation
+from pyhugegraph.utils.exceptions import NotAuthorizedError, NotFoundError, ResponseParseError, ServerError
+from pyhugegraph.utils.util import ResponseValidation, redact_sensitive_data
 
 pytestmark = pytest.mark.contract
 
@@ -104,6 +104,37 @@ class TestResponseValidation(unittest.TestCase):
         with pytest.raises(ResponseParseError, match="Failed to parse json response"):
             validator(response, "GET", "/graphs/hugegraph")
 
+    def test_unknown_content_type_raises_value_error_without_wrapping(self):
+        response = Mock(spec=requests.Response)
+        validator = ResponseValidation(content_type="xml")
+
+        with pytest.raises(ValueError, match="Unknown content type: xml"):
+            validator(response, "GET", "/graphs/hugegraph")
+
+    def test_strict_404_preserves_not_found_type(self):
+        response = self._mock_error_response(
+            {"message": "missing vertex"},
+            '{"message":"missing vertex"}',
+        )
+        response.status_code = 404
+        validator = ResponseValidation()
+
+        with pytest.raises(NotFoundError):
+            validator(response, "GET", "/graphs/hugegraph")
+
+    def test_error_log_preserves_plain_utf8_request_body(self):
+        response = self._mock_error_response(
+            {"message": "bad request"},
+            '{"message":"bad request"}',
+        )
+        response.request.body = "中文 payload"
+        validator = ResponseValidation()
+
+        with pytest.raises(ServerError), unittest.mock.patch("pyhugegraph.utils.util.log.error") as log_error:
+            validator(response, "POST", "/gremlin")
+
+        assert "中文 payload" in str(log_error.call_args)
+
     def test_error_log_redacts_sensitive_request_body(self):
         response = self._mock_error_response(
             {"message": "bad request"},
@@ -118,6 +149,11 @@ class TestResponseValidation(unittest.TestCase):
         logged_args = str(log_error.call_args)
         assert "super-secret" not in logged_args
         assert "***REDACTED***" in logged_args
+
+    def test_redact_sensitive_data_returns_non_sensitive_string_unchanged(self):
+        plain_body = "large non-sensitive payload with unicode 中文"
+
+        assert redact_sensitive_data(plain_body) == plain_body
 
 
 if __name__ == "__main__":
