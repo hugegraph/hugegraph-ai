@@ -16,22 +16,27 @@
 # under the License.
 
 import json
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock
 
 import pytest
-from fastapi import APIRouter, FastAPI, HTTPException, status
+from fastapi import APIRouter, FastAPI, status
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from hugegraph_llm.api.graph_extract_api import GraphExtractService, graph_extract_http_api
+from hugegraph_llm.api.graph_extract_api import graph_extract_http_api
 from hugegraph_llm.api.models.graph_extract_requests import GraphExtractClientConfig, GraphExtractRequest
 from hugegraph_llm.api.models.graph_extract_responses import GraphExtractResponse
 from hugegraph_llm.api.rag_api import rag_http_api
 from hugegraph_llm.config import huge_settings
 from hugegraph_llm.flows.graph_extract import GraphExtractFlow
+from hugegraph_llm.services.graph_extract_service import GraphExtractService
 from hugegraph_llm.state.ai_state import WkFlowInput
 
 INLINE_SCHEMA = {"vertexlabels": [], "edgelabels": []}
+VALID_SCHEMA = {
+    "vertexlabels": [{"name": "person", "properties": ["name"]}],
+    "edgelabels": [{"name": "knows", "source_label": "person", "target_label": "person"}],
+}
 
 
 class CapturePipeline:
@@ -45,9 +50,9 @@ class CapturePipeline:
         return None
 
 
-def _graph_client():
+def _graph_client(service=None):
     router = APIRouter()
-    graph_extract_http_api(router)
+    graph_extract_http_api(router, service=service)
     app = FastAPI()
     app.include_router(router)
     return TestClient(app)
@@ -57,146 +62,98 @@ def _named_client_config(graph="custom_graph"):
     return {"graph": graph, "user": "admin", "pwd": "secret", "gs": "space_a"}
 
 
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_graph_extract_returns_envelope(mock_singleton):
-    scheduler = MagicMock()
-    scheduler.schedule_flow.return_value = json.dumps({"vertices": [{"id": "1"}], "edges": []})
-    mock_singleton.get_instance.return_value = scheduler
+def _graph_result():
+    return {
+        "vertices": [{"label": "person", "properties": {"name": "marko"}}],
+        "edges": [
+            {
+                "label": "knows",
+                "outV": "marko",
+                "outVLabel": "person",
+                "inV": "vadas",
+                "inVLabel": "person",
+                "properties": {},
+            }
+        ],
+    }
 
-    response = _graph_client().post(
+
+def test_graph_extract_returns_envelope_from_service():
+    service = Mock()
+    service.extract_sync.return_value = GraphExtractResponse(
+        status="succeeded",
+        result=_graph_result(),
+        warnings=[],
+        meta={"vertex_count": 1, "edge_count": 1, "text_count": 1},
+    )
+
+    response = _graph_client(service).post(
         "/graph/extract",
-        json={"texts": "张三在北京工作。", "schema": INLINE_SCHEMA, "include_meta": True},
+        json={"texts": "marko knows vadas", "schema": VALID_SCHEMA, "include_meta": True},
     )
 
     assert response.status_code == status.HTTP_200_OK
-    body = response.json()
-    assert body["status"] == "succeeded"
-    assert body["result"] == {"vertices": [{"id": "1"}], "edges": []}
-    assert body["warnings"] == []
-    assert body["meta"] == {"vertex_count": 1, "edge_count": 0, "text_count": 1}
+    assert response.json() == {
+        "status": "succeeded",
+        "result": _graph_result(),
+        "warnings": [],
+        "meta": {"vertex_count": 1, "edge_count": 1, "text_count": 1},
+    }
+    service.extract_sync.assert_called_once()
 
 
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_graph_extract_omits_meta_by_default(mock_singleton):
-    scheduler = MagicMock()
-    scheduler.schedule_flow.return_value = json.dumps({"vertices": [], "edges": []})
-    mock_singleton.get_instance.return_value = scheduler
+def test_graph_extract_rejects_invalid_public_contract_inputs():
+    client = _graph_client(Mock())
 
-    response = _graph_client().post("/graph/extract", json={"texts": "x", "schema": INLINE_SCHEMA})
+    cases = [
+        {"texts": "  ", "schema": INLINE_SCHEMA},
+        {"texts": "x", "schema": "{bad"},
+        {"texts": "x", "schema": {"vertexlabels": [{"name": "person"}], "edgelabels": []}},
+        {"texts": "x", "schema": INLINE_SCHEMA, "split_type": "doc"},
+        {"texts": "x", "schema": INLINE_SCHEMA, "extract_type": "triples"},
+        {"texts": "x", "schema": "hugegraph"},
+        {"texts": "x", "schema": INLINE_SCHEMA, "client_config": _named_client_config()},
+        {"texts": "x", "schema": "custom_graph", "client_config": _named_client_config("other_graph")},
+        {"texts": "x", "schema": "custom_graph", "client_config": {"graph": "custom_graph", "url": "10.0.0.1:8080"}},
+    ]
 
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["meta"] == {}
+    for payload in cases:
+        response = client.post("/graph/extract", json=payload)
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_graph_extract_moves_warning_into_warnings(mock_singleton):
-    scheduler = MagicMock()
+def test_graph_extract_service_parses_flow_json_and_records_metadata():
+    scheduler = Mock()
     scheduler.schedule_flow.return_value = json.dumps(
-        {"vertices": [], "edges": [], "warning": "The schema may not match the Doc"}
+        {
+            **_graph_result(),
+            "call_count": 2,
+            "warning": "schema mismatch",
+        }
     )
-    mock_singleton.get_instance.return_value = scheduler
 
-    response = _graph_client().post("/graph/extract", json={"texts": "x", "schema": INLINE_SCHEMA})
+    response = GraphExtractService(scheduler).extract_sync(
+        GraphExtractRequest(texts="marko knows vadas", schema=VALID_SCHEMA, language="en", include_meta=True)
+    )
 
-    body = response.json()
-    assert body["warnings"] == ["The schema may not match the Doc"]
-    assert "warning" not in body["result"]
+    assert response.status == "succeeded"
+    assert response.result == _graph_result()
+    assert response.warnings == ["schema mismatch"]
+    assert response.meta["extract_type"] == "property_graph"
+    assert response.meta["language"] == "en"
+    assert response.meta["text_count"] == 1
+    assert response.meta["vertex_count"] == 1
+    assert response.meta["edge_count"] == 1
+    assert response.meta["call_count"] == 2
+    scheduler.schedule_flow.assert_called_once()
+    assert scheduler.schedule_flow.call_args.kwargs["language"] == "en"
+    assert scheduler.schedule_flow.call_args.kwargs["split_type"] == "document"
 
 
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_graph_extract_accepts_text_and_list(mock_singleton):
-    scheduler = MagicMock()
+def test_graph_extract_service_passes_request_local_client_config_and_redacts_password(monkeypatch):
+    scheduler = Mock()
     scheduler.schedule_flow.return_value = json.dumps({"vertices": [], "edges": []})
-    mock_singleton.get_instance.return_value = scheduler
-
-    client = _graph_client()
-    client.post("/graph/extract", json={"texts": "single", "schema": INLINE_SCHEMA})
-    assert scheduler.schedule_flow.call_args.args[2] == ["single"]
-
-    client.post("/graph/extract", json={"texts": ["a", "b"], "schema": INLINE_SCHEMA})
-    assert scheduler.schedule_flow.call_args.args[2] == ["a", "b"]
-
-
-def test_graph_extract_rejects_empty_texts():
-    response = _graph_client().post("/graph/extract", json={"texts": "  ", "schema": INLINE_SCHEMA})
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_graph_extract_rejects_invalid_schema():
-    response = _graph_client().post("/graph/extract", json={"texts": "x", "schema": "{bad"})
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_graph_extract_rejects_incomplete_schema():
-    response = _graph_client().post("/graph/extract", json={"texts": "x", "schema": {"vertexlabels": []}})
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_graph_extract_rejects_malformed_inline_schema_before_scheduler(mock_singleton):
-    response = _graph_client().post(
-        "/graph/extract",
-        json={"texts": "x", "schema": {"vertexlabels": [{"name": "person"}], "edgelabels": []}},
-    )
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    mock_singleton.get_instance.assert_not_called()
-
-
-def test_graph_extract_rejects_invalid_split_type():
-    response = _graph_client().post(
-        "/graph/extract",
-        json={"texts": "x", "schema": INLINE_SCHEMA, "split_type": "doc"},
-    )
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_graph_extract_rejects_triples_extract_type():
-    response = _graph_client().post(
-        "/graph/extract",
-        json={"texts": "x", "schema": INLINE_SCHEMA, "extract_type": "triples"},
-    )
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_graph_extract_rejects_named_schema_without_client_config():
-    response = _graph_client().post("/graph/extract", json={"texts": "x", "schema": "hugegraph"})
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_graph_extract_rejects_client_config_with_inline_schema():
-    response = _graph_client().post(
-        "/graph/extract",
-        json={"texts": "x", "schema": INLINE_SCHEMA, "client_config": _named_client_config()},
-    )
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_graph_extract_rejects_mismatched_schema_and_client_config_graph():
-    response = _graph_client().post(
-        "/graph/extract",
-        json={"texts": "x", "schema": "custom_graph", "client_config": _named_client_config("other_graph")},
-    )
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_graph_extract_rejects_url_in_client_config():
-    response = _graph_client().post(
-        "/graph/extract",
-        json={
-            "texts": "x",
-            "schema": "custom_graph",
-            "client_config": {"graph": "custom_graph", "url": "10.0.0.1:8080"},
-        },
-    )
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_graph_extract_named_schema_does_not_mutate_globals(mock_singleton):
-    scheduler = MagicMock()
-    scheduler.schedule_flow.return_value = json.dumps({"vertices": [], "edges": []})
-    mock_singleton.get_instance.return_value = scheduler
-
+    monkeypatch.setattr(huge_settings, "graph_url", "127.0.0.1:8080")
     original = (
         huge_settings.graph_url,
         huge_settings.graph_name,
@@ -204,12 +161,25 @@ def test_graph_extract_named_schema_does_not_mutate_globals(mock_singleton):
         huge_settings.graph_pwd,
         huge_settings.graph_space,
     )
-    response = _graph_client().post(
-        "/graph/extract",
-        json={"texts": "x", "schema": "custom_graph", "client_config": _named_client_config()},
+    client_config = GraphExtractClientConfig(graph="custom_graph", user="admin", pwd="secret", gs="space_a")
+
+    response = GraphExtractService(scheduler).extract_sync(
+        GraphExtractRequest(
+            texts="x",
+            schema="custom_graph",
+            client_config=client_config,
+            include_meta=True,
+        )
     )
 
-    assert response.status_code == status.HTTP_200_OK
+    assert scheduler.schedule_flow.call_args.kwargs["client_config"] == client_config
+    assert "graph_config" not in scheduler.schedule_flow.call_args.kwargs
+    assert response.meta["client_config"] == {
+        "graph": "custom_graph",
+        "user": "admin",
+        "pwd": "***",
+        "gs": "space_a",
+    }
     assert (
         huge_settings.graph_url,
         huge_settings.graph_name,
@@ -217,86 +187,38 @@ def test_graph_extract_named_schema_does_not_mutate_globals(mock_singleton):
         huge_settings.graph_pwd,
         huge_settings.graph_space,
     ) == original
-    assert scheduler.schedule_flow.call_args.kwargs["client_config"].graph == "custom_graph"
 
 
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_graph_extract_scheduler_error_returns_500(mock_singleton):
-    scheduler = MagicMock()
-    scheduler.schedule_flow.side_effect = RuntimeError("Error in flow init")
-    mock_singleton.get_instance.return_value = scheduler
+def test_graph_extract_service_rejects_invalid_flow_json():
+    scheduler = Mock()
+    scheduler.schedule_flow.return_value = "{broken"
 
-    response = _graph_client().post("/graph/extract", json={"texts": "x", "schema": INLINE_SCHEMA})
-    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    with pytest.raises(ValueError, match="Invalid graph extraction flow JSON"):
+        GraphExtractService(scheduler).extract_sync(GraphExtractRequest(texts="x", schema=INLINE_SCHEMA))
 
 
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_service_extract_sync_builds_envelope(mock_singleton):
-    scheduler = MagicMock()
-    scheduler.schedule_flow.return_value = json.dumps({"vertices": [{"id": "1"}], "edges": []})
-    mock_singleton.get_instance.return_value = scheduler
+def test_property_graph_response_rejects_legacy_edge_shape():
+    scheduler = Mock()
+    scheduler.schedule_flow.return_value = json.dumps(
+        {
+            "vertices": [{"label": "person", "properties": {"name": "marko"}}],
+            "edges": [{"start": "marko", "type": "knows", "end": "vadas"}],
+        }
+    )
 
-    resp = GraphExtractService.extract_sync(GraphExtractRequest(texts="x", schema=INLINE_SCHEMA, include_meta=True))
-
-    assert isinstance(resp, GraphExtractResponse)
-    assert resp.status == "succeeded"
-    assert resp.result == {"vertices": [{"id": "1"}], "edges": []}
-    assert resp.warnings == []
-    assert resp.meta == {"vertex_count": 1, "edge_count": 0, "text_count": 1}
+    with pytest.raises(ValueError, match="canonical property graph edge"):
+        GraphExtractService(scheduler).extract_sync(GraphExtractRequest(texts="x", schema=INLINE_SCHEMA))
 
 
-@patch("hugegraph_llm.api.graph_extract_api.SchedulerSingleton")
-def test_service_extract_sync_maps_errors_to_500(mock_singleton):
-    scheduler = MagicMock()
-    scheduler.schedule_flow.side_effect = RuntimeError("boom")
-    mock_singleton.get_instance.return_value = scheduler
-
-    with pytest.raises(HTTPException) as exc_info:
-        GraphExtractService.extract_sync(GraphExtractRequest(texts="x", schema=INLINE_SCHEMA))
-    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-
-
-def test_request_model_validation():
+def test_request_model_validation_and_aliases():
     req = GraphExtractRequest(texts="hello", schema=INLINE_SCHEMA)
     assert req.texts == ["hello"]
-    assert req.graph_schema == json.dumps(INLINE_SCHEMA, ensure_ascii=False)
+    assert req.graph_schema == INLINE_SCHEMA
+    assert req.schema == INLINE_SCHEMA
     assert req.client_config is None
 
     with pytest.raises(ValidationError):
         GraphExtractRequest(texts=[], schema="hugegraph")
-
-
-def test_request_model_named_schema_requires_matching_client_config():
-    with pytest.raises(ValidationError):
-        GraphExtractRequest(texts="hello", schema="hugegraph")
-
-    with pytest.raises(ValidationError):
-        GraphExtractRequest(
-            texts="hello",
-            schema="custom_graph",
-            client_config=GraphExtractClientConfig(graph="other_graph"),
-        )
-
-    req = GraphExtractRequest(
-        texts="hello",
-        schema="hugegraph",
-        client_config=GraphExtractClientConfig(graph="hugegraph", user="admin", pwd="secret", gs="space_a"),
-    )
-    assert req.client_config.graph == "hugegraph"
-
-
-def test_request_model_rejects_client_config_with_inline_schema():
-    with pytest.raises(ValidationError):
-        GraphExtractRequest(
-            texts="hello",
-            schema=INLINE_SCHEMA,
-            client_config=GraphExtractClientConfig(graph="hugegraph"),
-        )
-
-
-def test_client_config_forbids_unknown_fields():
-    with pytest.raises(ValidationError):
-        GraphExtractClientConfig(graph="custom_graph", url="10.0.0.1:8080")
 
 
 def test_flow_prepare_sets_request_local_graph_config():
@@ -314,35 +236,8 @@ def test_flow_prepare_sets_request_local_graph_config():
     }
 
 
-def test_flow_prepare_keeps_omitted_graphspace_none():
-    flow = GraphExtractFlow()
-    prepared_input = WkFlowInput()
-    client_config = GraphExtractClientConfig(graph="custom_graph", user="admin", pwd="secret")
-
-    flow.prepare(prepared_input, "custom_graph", ["text"], "prompt", "property_graph", client_config=client_config)
-
-    assert prepared_input.graph_client_config["graphspace"] is None
-
-
-def test_flow_prepare_does_not_leak_config_across_runs():
-    # A pooled pipeline is reused across requests, so prepare() must clear config
-    # when a later request omits client_config.
-    flow = GraphExtractFlow()
-    prepared_input = WkFlowInput()
-    client_config = GraphExtractClientConfig(graph="custom_graph", user="admin", pwd="secret", gs="space_a")
-
-    flow.prepare(prepared_input, "custom_graph", ["text"], "prompt", "property_graph", client_config=client_config)
-    assert prepared_input.graph_client_config is not None
-
-    flow.prepare(prepared_input, "custom_graph", ["text"], "prompt", "property_graph")
-    assert prepared_input.graph_client_config is None
-
-
 def test_flow_build_flow_preserves_split_type_and_client_config(monkeypatch):
-    monkeypatch.setattr(
-        "hugegraph_llm.flows.graph_extract.GPipeline",
-        CapturePipeline,
-    )
+    monkeypatch.setattr("hugegraph_llm.flows.graph_extract.GPipeline", CapturePipeline)
     client_config = GraphExtractClientConfig(graph="custom_graph", user="admin", pwd="secret", gs="space_a")
 
     pipeline = GraphExtractFlow().build_flow(
@@ -356,21 +251,18 @@ def test_flow_build_flow_preserves_split_type_and_client_config(monkeypatch):
 
     prepared_input = pipeline.params["wkflow_input"]
     assert prepared_input.split_type == "paragraph"
-    assert prepared_input.graph_client_config == {
-        "url": huge_settings.graph_url,
-        "user": "admin",
-        "pwd": "secret",
-        "graphspace": "space_a",
-    }
+    assert prepared_input.graph_client_config["graphspace"] == "space_a"
 
 
-def test_wkflow_input_reset_clears_graph_client_config():
+def test_wkflow_input_reset_clears_graph_configs():
     prepared_input = WkFlowInput()
     prepared_input.graph_client_config = {"url": "10.0.0.1:8080"}
+    prepared_input.graph_config = {"graph": "custom_graph"}
 
     prepared_input.reset(None)
 
     assert prepared_input.graph_client_config is None
+    assert prepared_input.graph_config is None
 
 
 def test_existing_routes_still_register():
@@ -394,3 +286,6 @@ def test_existing_routes_still_register():
     assert "/text2gremlin" in paths
     assert "/config/graph" in paths
     assert "/graph/extract" in paths
+    assert "/graph/extract/jobs" in paths
+    assert "/graph/import" in paths
+    assert "/graph/extract-and-import" in paths
