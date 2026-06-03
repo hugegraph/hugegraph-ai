@@ -6,6 +6,7 @@ out/production/
 
 # Local PR review scratch artifacts
 .workflow/pr*-review/
+.workflow/code-scan/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

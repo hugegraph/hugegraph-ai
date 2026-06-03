@@ -4,7 +4,7 @@
 
 **Goal:** Scan all code in `hugegraph-llm` and `hugegraph-python-client` for logic, design, maintainability, performance, and test-effectiveness problems, then produce a prioritized P0-P5 report.
 
-**Architecture:** Maintain a restartable `.workflow/code-scan/` ledger, dispatch independent reviewer lanes, synthesize overlapping findings, add `FIXME:` comments only for ineffective core test coverage, and commit coherent scan slices.
+**Architecture:** Maintain a restartable local `.workflow/code-scan/` scratch ledger while scanning, dispatch independent reviewer lanes, synthesize overlapping findings, add `FIXME:` comments only for ineffective core test coverage, and keep only durable docs/source fixes in the final PR.
 
 **Tech Stack:** Python, uv workspace, pytest, ruff, pyhugegraph, hugegraph-llm, FastAPI, vector stores, LLM provider wrappers.
 
@@ -26,11 +26,16 @@ Reference only for style and boundary management:
 
 ## File Structure
 
-Create or modify only these scan artifacts unless a style-only or FIXME-only edit is required:
+Tracked scan artifacts:
 
 ```text
 docs/specs/2026-05-31-hugegraph-ai-code-scan-design.md
 docs/plans/2026-05-31-hugegraph-ai-code-scan.md
+```
+
+Local scratch artifacts used during execution; do not keep these in the final PR:
+
+```text
 .workflow/code-scan/
   README.md
   code-scan-state.json
@@ -106,7 +111,7 @@ Create `.workflow/code-scan/` artifacts and initialize state with current branch
 Commands:
 
 ```bash
-git add docs/specs/2026-05-31-hugegraph-ai-code-scan-design.md docs/plans/2026-05-31-hugegraph-ai-code-scan.md .workflow/code-scan
+git add docs/specs/2026-05-31-hugegraph-ai-code-scan-design.md docs/plans/2026-05-31-hugegraph-ai-code-scan.md
 git commit -m "docs(code-scan): add core module audit plan" -m "- define scoped P0-P5 code logic scan design
 - initialize restartable code-scan ledger
 - capture lane-based execution checkpoints"

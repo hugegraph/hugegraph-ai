@@ -23,7 +23,7 @@ The scan uses high parallelism because the two modules have separable risk surfa
 2. Style-only, typo-only, stale-comment-only, and formatting-local fixes may be edited in place if they cannot change runtime behavior.
 3. If a core function lacks effective tests, or tests mock away the behavior under review, add a nearby `FIXME:` comment in the relevant test or production-adjacent test location.
 4. Do not expand scope into `hugegraph-ml`, `vermeer-python-client`, generated artifacts, caches, logs, build outputs, or unrelated workflows.
-5. Do not mix scan findings with the existing quality-program implementation ledger. This scan owns `.workflow/code-scan/`.
+5. Do not mix scan findings with the existing quality-program implementation ledger. Use `.workflow/code-scan/` only as local scratch during execution; keep durable review artifacts under `docs/`.
 6. Every issue must have enough evidence for a maintainer to reproduce the reasoning without trusting the reviewer.
 7. Commit after a completed setup slice and after each coherent large scan slice.
 
@@ -94,11 +94,13 @@ demo visual redesign, dependency upgrade campaigns, broad formatting rewrites
 | L6 | Test effectiveness and fake/mock quality | both `src/tests/` trees | P4 ledger plus `FIXME:` edits |
 | L7 | Cross-module compatibility synthesis | LLM callers plus client response contracts | deduplicated final priorities |
 
+Execution notes, checkpoints, and intermediate ledgers may be written under `.workflow/code-scan/` while scanning, but they are intentionally local scratch artifacts and should not be retained in the final PR.
+
 The main thread coordinates scope, writes the documents, maintains the ledger, performs synthesis, and verifies every edit or commit.
 
 ## Issue Record Schema
 
-Each issue in `.workflow/code-scan/reports/issues.md` must use this shape:
+Each issue in the local scratch ledger must use this shape:
 
 ```markdown
 ### CS-000: Short title
