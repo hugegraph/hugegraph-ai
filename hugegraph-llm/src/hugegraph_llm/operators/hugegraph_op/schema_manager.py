@@ -23,20 +23,27 @@ from hugegraph_llm.config import huge_settings
 
 
 class SchemaManager:
-    def __init__(self, graph_name: str, *, connection: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        graph_name: str,
+        *,
+        connection: Optional[Dict[str, Any]] = None,
+        graph_config: Optional[Dict[str, Any]] = None,
+    ):
         self.graph_name = graph_name
-        # Apply a request-scoped connection as a complete unit (omitted fields stay as
-        # given) so it cannot fall back to global huge_settings per-field.
         if connection is not None:
+            # Request-scoped graph extraction uses a complete connection unit so
+            # omitted fields do not fall back to global settings per field.
             url = connection.get("url")
             user = connection.get("user")
             pwd = connection.get("pwd")
             graphspace = connection.get("graphspace")
         else:
-            url = huge_settings.graph_url
-            user = huge_settings.graph_user
-            pwd = huge_settings.graph_pwd
-            graphspace = huge_settings.graph_space
+            graph_config = graph_config or {}
+            url = graph_config.get("url") or huge_settings.graph_url
+            user = graph_config.get("user") or huge_settings.graph_user
+            pwd = graph_config.get("pwd") or huge_settings.graph_pwd
+            graphspace = graph_config.get("gs") or huge_settings.graph_space
         self.client = PyHugeClient(
             url=url,
             graph=self.graph_name,

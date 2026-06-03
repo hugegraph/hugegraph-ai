@@ -29,6 +29,7 @@ class WkFlowInput(GParam):
     # Request-scoped HugeGraph connection; None falls back to global huge_settings.
     graph_client_config: Optional[Dict[str, Any]] = None
     data_json: Optional[Dict[str, Any]] = None
+    graph_config: Optional[Dict[str, Any]] = None
     extract_type: Optional[str] = None
     query_examples: Optional[Any] = None
     few_shot_schema: Optional[Any] = None
@@ -90,6 +91,7 @@ class WkFlowInput(GParam):
         self.schema = None
         self.graph_client_config = None
         self.data_json = None
+        self.graph_config = None
         self.extract_type = None
         self.query_examples = None
         self.few_shot_schema = None

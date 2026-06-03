@@ -38,13 +38,14 @@ def run_gremlin_query(query, fmt=True):
     return json.dumps(res, indent=4, ensure_ascii=False) if fmt else res
 
 
-def get_hg_client():
+def get_hg_client(graph_config=None):
+    graph_config = graph_config or {}
     return PyHugeClient(
-        url=huge_settings.graph_url,
-        graph=huge_settings.graph_name,
-        user=huge_settings.graph_user,
-        pwd=huge_settings.graph_pwd,
-        graphspace=huge_settings.graph_space,
+        url=graph_config.get("url") or huge_settings.graph_url,
+        graph=graph_config.get("graph") or huge_settings.graph_name,
+        user=graph_config.get("user") or huge_settings.graph_user,
+        pwd=graph_config.get("pwd") or huge_settings.graph_pwd,
+        graphspace=graph_config.get("gs") or huge_settings.graph_space,
     )
 
 

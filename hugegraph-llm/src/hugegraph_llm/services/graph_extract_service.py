@@ -1,0 +1,313 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+import json
+import time
+from typing import Any, Dict, List, Optional
+
+from hugegraph_llm.api.models.graph_extract_requests import (
+    GraphExtractAndImportRequest,
+    GraphExtractRequest,
+    GraphImportRequest,
+    SchemaInput,
+    _validate_schema_value,
+)
+from hugegraph_llm.api.models.graph_extract_responses import (
+    GraphExtractResponse,
+    GraphImportResponse,
+)
+from hugegraph_llm.config import prompt
+from hugegraph_llm.flows import FlowName
+from hugegraph_llm.flows.scheduler import SchedulerSingleton
+from hugegraph_llm.utils.log import log
+
+SENSITIVE_CLIENT_CONFIG_KEYS = {"pwd", "password", "token", "api_key", "secret"}
+
+
+def normalize_schema(schema: SchemaInput) -> str:
+    schema = _validate_schema_value(schema)
+    if isinstance(schema, dict):
+        return json.dumps(schema, ensure_ascii=False)
+
+    schema_text = str(schema).strip()
+    if schema_text.startswith("{"):
+        parsed_schema = json.loads(schema_text)
+        return json.dumps(parsed_schema, ensure_ascii=False)
+    return schema_text
+
+
+def _redact_client_config(client_config) -> Dict[str, Any]:
+    if client_config is None:
+        return {}
+    config = client_config if isinstance(client_config, dict) else client_config.model_dump(exclude_none=True)
+    return {key: ("***" if key in SENSITIVE_CLIENT_CONFIG_KEYS and value else value) for key, value in config.items()}
+
+
+def _schema_graph_name(schema: str) -> Optional[str]:
+    schema_text = str(schema).strip()
+    return None if schema_text.startswith("{") else schema_text
+
+
+def apply_client_config(
+    client_config,
+    schema: Optional[str] = None,
+    align_graph_with_schema: bool = False,
+) -> Optional[Dict[str, Any]]:
+    config = {} if client_config is None else client_config.model_dump(exclude_none=True)
+    schema_graph = _schema_graph_name(schema) if schema else None
+    if schema_graph:
+        target_graph = config.get("graph")
+        if target_graph and target_graph != schema_graph:
+            raise ValueError("schema graph name must match client_config.graph")
+        if align_graph_with_schema:
+            config["graph"] = schema_graph
+    return config or None
+
+
+def _parse_flow_json(raw_result: Any, error_message: str) -> Dict[str, Any]:
+    if isinstance(raw_result, dict):
+        return raw_result
+    if not isinstance(raw_result, str):
+        raise ValueError(error_message)
+    try:
+        parsed = json.loads(raw_result)
+    except json.JSONDecodeError as exc:
+        raise ValueError(error_message) from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(error_message)
+    return parsed
+
+
+def _pop_warnings(result: Dict[str, Any]) -> List[str]:
+    warnings = []
+    warning = result.pop("warning", None)
+    if warning:
+        warnings.append(str(warning))
+    extra_warnings = result.pop("warnings", None)
+    if isinstance(extra_warnings, list):
+        warnings.extend(str(item) for item in extra_warnings)
+    elif extra_warnings:
+        warnings.append(str(extra_warnings))
+    return warnings
+
+
+def _count_items(result: Dict[str, Any], key: str) -> int:
+    value = result.get(key)
+    return len(value) if isinstance(value, list) else 0
+
+
+def _validate_property_graph_result(result: Dict[str, Any]) -> None:
+    vertices = result.get("vertices", [])
+    edges = result.get("edges", [])
+    if not isinstance(vertices, list) or not isinstance(edges, list):
+        raise ValueError("property graph result must contain list vertices and edges")
+    for vertex in vertices:
+        if not isinstance(vertex, dict) or "label" not in vertex or "properties" not in vertex:
+            raise ValueError("canonical property graph vertex must include label and properties")
+    required_edge_keys = {"label", "outV", "outVLabel", "inV", "inVLabel", "properties"}
+    for edge in edges:
+        if not isinstance(edge, dict) or not required_edge_keys.issubset(edge):
+            raise ValueError(
+                "canonical property graph edge must include label, outV, outVLabel, inV, inVLabel, and properties"
+            )
+
+
+def _build_import_status(import_result: Dict[str, Any]) -> str:
+    skipped = (
+        import_result.get("vertices_skipped", 0)
+        + import_result.get("edges_skipped", 0)
+        + import_result.get("triples_skipped", 0)
+    )
+    created = (
+        import_result.get("vertices_created", 0)
+        + import_result.get("edges_created", 0)
+        + import_result.get("triples_created", 0)
+    )
+    attempted = (
+        import_result.get("vertices_attempted", 0)
+        + import_result.get("edges_attempted", 0)
+        + import_result.get("triples_attempted", 0)
+    )
+    if skipped and created:
+        return "partial"
+    if skipped and attempted and not created:
+        return "failed"
+    return "succeeded"
+
+
+class GraphExtractService:
+    def __init__(self, scheduler=None):
+        self._scheduler = scheduler
+
+    @property
+    def scheduler(self):
+        return self._scheduler or SchedulerSingleton.get_instance()
+
+    def extract_sync(self, request: GraphExtractRequest) -> GraphExtractResponse:
+        started = time.perf_counter()
+        schema = normalize_schema(request.schema)
+        client_config_meta = _redact_client_config(apply_client_config(request.client_config, schema=schema))
+        example_prompt = request.example_prompt or prompt.extract_graph_prompt
+        try:
+            raw_result = self.scheduler.schedule_flow(
+                FlowName.GRAPH_EXTRACT,
+                schema,
+                request.texts,
+                example_prompt,
+                request.extract_type,
+                language=request.language,
+                split_type=request.split_type,
+                client_config=request.client_config,
+            )
+        except Exception:
+            log.exception("Graph extraction failed during scheduler execution")
+            raise
+
+        parsed_result = _parse_flow_json(raw_result, "Invalid graph extraction flow JSON")
+        warnings = _pop_warnings(parsed_result)
+        result = self._build_result(parsed_result, request.extract_type)
+        if not request.options.include_warnings:
+            warnings = []
+        meta = (
+            self._build_extract_meta(request, parsed_result, result, started, client_config_meta)
+            if request.options.include_meta
+            else {}
+        )
+        return GraphExtractResponse(status="succeeded", result=result, warnings=warnings, meta=meta)
+
+    def _build_result(self, parsed_result: Dict[str, Any], extract_type: str) -> Dict[str, Any]:
+        if extract_type == "triples":
+            triples = parsed_result.get("triples")
+            if not triples:
+                triples = self._legacy_edges_to_triples(parsed_result.get("edges", []))
+            return {"triples": triples}
+        result = {
+            "vertices": parsed_result.get("vertices", []),
+            "edges": parsed_result.get("edges", []),
+        }
+        _validate_property_graph_result(result)
+        return result
+
+    def _legacy_edges_to_triples(self, edges: Any) -> List[Dict[str, Any]]:
+        if not isinstance(edges, list):
+            return []
+        triples = []
+        for edge in edges:
+            if not isinstance(edge, dict):
+                continue
+            start = edge.get("start", edge.get("outV"))
+            end = edge.get("end", edge.get("inV"))
+            edge_type = edge.get("type", edge.get("label"))
+            if start is not None and end is not None and edge_type is not None:
+                triples.append({"start": start, "type": edge_type, "end": end})
+        return triples
+
+    def _build_extract_meta(
+        self,
+        request: GraphExtractRequest,
+        parsed_result: Dict[str, Any],
+        result: Dict[str, Any],
+        started: float,
+        client_config_meta: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        meta = {
+            "extract_type": request.extract_type,
+            "language": request.language,
+            "split_type": request.split_type,
+            "text_count": len(request.texts),
+            "vertex_count": _count_items(result, "vertices"),
+            "edge_count": _count_items(result, "edges"),
+            "triple_count": _count_items(result, "triples"),
+            "call_count": parsed_result.get("call_count"),
+            "duration_ms": int((time.perf_counter() - started) * 1000),
+        }
+        if client_config_meta:
+            meta["client_config"] = client_config_meta
+        return meta
+
+
+class GraphImportService:
+    def __init__(self, scheduler=None):
+        self._scheduler = scheduler
+
+    @property
+    def scheduler(self):
+        return self._scheduler or SchedulerSingleton.get_instance()
+
+    def import_graph(self, request: GraphImportRequest) -> GraphImportResponse:
+        started = time.perf_counter()
+        schema = normalize_schema(request.schema)
+        graph_config = apply_client_config(request.client_config, schema=schema, align_graph_with_schema=True)
+        client_config_meta = _redact_client_config(graph_config)
+        try:
+            raw_result = self.scheduler.schedule_flow(
+                FlowName.IMPORT_GRAPH_DATA,
+                request.data,
+                schema,
+                graph_config=graph_config,
+            )
+        except Exception:
+            log.exception("Graph import failed during scheduler execution")
+            raise
+
+        parsed_result = _parse_flow_json(raw_result, "Invalid graph import flow JSON")
+        warnings = _pop_warnings(parsed_result)
+        import_result = parsed_result.get("import_result")
+        if isinstance(import_result, dict):
+            warnings.extend(str(item) for item in import_result.get("errors", []))
+            status = _build_import_status(import_result)
+            vertex_count = int(import_result.get("vertices_created", 0))
+            edge_count = int(import_result.get("edges_created", 0))
+            triple_count = int(import_result.get("triples_created", 0))
+        else:
+            status = "succeeded"
+            vertex_count = _count_items(request.data, "vertices")
+            edge_count = _count_items(request.data, "edges")
+            triple_count = _count_items(request.data, "triples")
+        updated_embeddings = False
+        if request.options.update_vid_embeddings:
+            self.scheduler.schedule_flow(FlowName.UPDATE_VID_EMBEDDINGS, graph_config=graph_config)
+            updated_embeddings = True
+
+        meta = {"duration_ms": int((time.perf_counter() - started) * 1000)}
+        if isinstance(import_result, dict):
+            meta["import_result"] = import_result
+        if client_config_meta:
+            meta["client_config"] = client_config_meta
+        return GraphImportResponse(
+            status=status,
+            vertex_count=vertex_count,
+            edge_count=edge_count,
+            triple_count=triple_count,
+            updated_embeddings=updated_embeddings,
+            warnings=warnings,
+            meta=meta,
+        )
+
+    def import_extracted_graph(
+        self,
+        request: GraphExtractAndImportRequest,
+        extract_response: GraphExtractResponse,
+    ) -> GraphImportResponse:
+        import_request = GraphImportRequest(
+            schema=request.schema,
+            data=extract_response.result,
+            write_to_graph=True,
+            client_config=request.client_config,
+            options=request.import_options,
+        )
+        return self.import_graph(import_request)

@@ -178,6 +178,7 @@ def create_app():
         apply_reranker_config,
         gremlin_generate_selective,
     )
+    graph_extract_http_api(api_auth)
     admin_http_api(api_auth, log_stream)
     graph_extract_http_api(api_auth)
 

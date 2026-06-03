@@ -16,96 +16,104 @@
 # under the License.
 
 import json
+from copy import deepcopy
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from hugegraph_llm.operators.common_op.check_schema import CheckSchema
+
+SchemaInput = Union[str, Dict[str, Any]]
+
+
+def _validate_schema_value(schema: SchemaInput) -> SchemaInput:
+    if isinstance(schema, dict):
+        if not schema:
+            raise ValueError("schema must not be an empty object")
+        CheckSchema(deepcopy(schema)).run()
+        return schema
+
+    schema_text = str(schema).strip()
+    if not schema_text:
+        raise ValueError("schema must not be empty")
+    if schema_text.startswith("{"):
+        try:
+            parsed_schema = json.loads(schema_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"schema must be valid JSON: {exc.msg}") from exc
+        if not isinstance(parsed_schema, dict) or not parsed_schema:
+            raise ValueError("schema JSON must be a non-empty object")
+        CheckSchema(deepcopy(parsed_schema)).run()
+    return schema_text
+
+
+class GraphExtractOptions(BaseModel):
+    include_meta: bool = Field(default=False, description="Whether to include response metadata.")
+    include_warnings: bool = Field(default=True, description="Whether to include extraction warnings.")
+
+
+class GraphImportOptions(BaseModel):
+    update_vid_embeddings: bool = Field(default=False, description="Whether to rebuild vid embeddings after import.")
 
 
 class GraphExtractClientConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    graph: Optional[str] = None
-    user: Optional[str] = None
-    pwd: Optional[str] = None
-    gs: Optional[str] = None
+    graph: Optional[str] = Field(default=None, description="HugeGraph graph name.")
+    user: Optional[str] = Field(default=None, description="HugeGraph user.")
+    pwd: Optional[str] = Field(default=None, description="HugeGraph password.")
+    gs: Optional[str] = Field(default=None, description="HugeGraph graphspace.")
+
+    @field_validator("graph", "user", "pwd", "gs", mode="before")
+    @classmethod
+    def blank_strings_to_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class GraphExtractRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    texts: Union[str, List[str]] = Field(..., description="Text or list of texts to extract a graph from.")
-    graph_schema: Union[str, Dict[str, Any]] = Field(
-        ...,
-        alias="schema",
-        description="Graph schema as a JSON string/object, or an existing graph name.",
-    )
-    example_prompt: Optional[str] = Query(None, description="Optional graph extraction prompt header.")
-    extract_type: Literal["property_graph"] = Query("property_graph", description="Extraction type.")
-    language: Literal["zh", "en"] = Query("zh", description="Language for chunk splitting.")
-    split_type: Literal["document", "paragraph", "sentence"] = Query("document", description="Chunk split granularity.")
-    include_meta: bool = Query(False, description="Include vertex/edge/text counts in the response.")
-    client_config: Optional[GraphExtractClientConfig] = Field(None, description="Request-scoped HugeGraph connection.")
+    texts: Union[str, List[str]] = Field(..., description="Text or list of texts to extract from.")
+    schema_data: SchemaInput = Field(..., alias="schema", description="Graph schema JSON object/string, or graph name.")
+    example_prompt: Optional[str] = Field(default=None, description="Extraction prompt header or examples.")
+    extract_type: Literal["property_graph"] = Field(default="property_graph")
+    language: Literal["zh", "en"] = Field(default="zh")
+    split_type: Literal["document", "paragraph", "sentence"] = Field(default="document")
+    include_meta: bool = Field(default=False, description="Whether to include response metadata.")
+    include_warnings: bool = Field(default=True, description="Whether to include extraction warnings.")
+    client_config: Optional[GraphExtractClientConfig] = Field(default=None)
 
     @field_validator("texts")
     @classmethod
-    def normalize_texts(cls, v):
-        items = [v] if isinstance(v, str) else list(v)
-        items = [t for t in items if t and t.strip()]
+    def normalize_texts(cls, value):
+        items = [value] if isinstance(value, str) else list(value)
+        items = [text for text in items if isinstance(text, str) and text.strip()]
         if not items:
-            raise ValueError("texts must not be empty.")
+            raise ValueError("texts must contain at least one non-empty string")
         return items
 
-    @field_validator("graph_schema")
+    @property
+    def schema(self) -> SchemaInput:
+        return self.schema_data
+
+    @property
+    def graph_schema(self) -> SchemaInput:
+        return self.schema_data
+
+    @property
+    def options(self) -> GraphExtractOptions:
+        return GraphExtractOptions(include_meta=self.include_meta, include_warnings=self.include_warnings)
+
+    @field_validator("schema_data")
     @classmethod
-    def normalize_schema(cls, v):
-        def validate_schema_obj(schema_obj: Any) -> None:
-            if not isinstance(schema_obj, dict):
-                raise ValueError("schema JSON must be an object.")
-            if "vertexlabels" not in schema_obj or "edgelabels" not in schema_obj:
-                raise ValueError("schema must contain 'vertexlabels' and 'edgelabels'.")
-            if not isinstance(schema_obj["vertexlabels"], list) or not isinstance(schema_obj["edgelabels"], list):
-                raise ValueError("'vertexlabels' and 'edgelabels' must be lists.")
-
-            for vlabel in schema_obj["vertexlabels"]:
-                if not isinstance(vlabel, dict):
-                    raise ValueError("Each item in 'vertexlabels' must be an object.")
-                if not isinstance(vlabel.get("name"), str) or not vlabel["name"].strip():
-                    raise ValueError("Each vertex label must have a non-empty string 'name'.")
-                props = vlabel.get("properties")
-                if not isinstance(props, list) or len(props) == 0:
-                    raise ValueError("Each vertex label must have a non-empty 'properties' list.")
-
-            for elabel in schema_obj["edgelabels"]:
-                if not isinstance(elabel, dict):
-                    raise ValueError("Each item in 'edgelabels' must be an object.")
-                for key in ("name", "source_label", "target_label"):
-                    if not isinstance(elabel.get(key), str) or not elabel[key].strip():
-                        raise ValueError(f"Each edge label must have a non-empty string '{key}'.")
-                if "properties" in elabel and not isinstance(elabel["properties"], list):
-                    raise ValueError("'properties' in edge labels must be a list when provided.")
-
-            if "propertykeys" in schema_obj and not isinstance(schema_obj["propertykeys"], list):
-                raise ValueError("'propertykeys' must be a list when provided.")
-
-        if isinstance(v, dict):
-            validate_schema_obj(v)
-            return json.dumps(v, ensure_ascii=False)
-        v = v.strip()
-        if not v:
-            raise ValueError("schema must not be empty.")
-        if v.startswith("{"):
-            try:
-                schema_obj = json.loads(v)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON schema: {e}") from e
-            validate_schema_obj(schema_obj)
-            return v
-        return v
+    def validate_schema(cls, schema: SchemaInput) -> SchemaInput:
+        return _validate_schema_value(schema)
 
     @model_validator(mode="after")
     def validate_schema_and_client_config(self):
-        schema = self.graph_schema
+        schema = self.schema_data
         is_named_schema = isinstance(schema, str) and not schema.strip().startswith("{")
         if not is_named_schema:
             if self.client_config is not None:
@@ -125,3 +133,39 @@ class GraphExtractRequest(BaseModel):
                 f"(got schema='{schema}', client_config.graph='{self.client_config.graph}')."
             )
         return self
+
+
+class GraphImportRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    schema_data: SchemaInput = Field(..., alias="schema", description="Graph schema JSON object/string, or graph name.")
+    data: Dict[str, Any] = Field(..., description="Property graph data with vertices and edges.")
+    write_to_graph: bool = Field(default=False, description="Required confirmation for graph writes.")
+    client_config: Optional[GraphExtractClientConfig] = Field(default=None)
+    options: GraphImportOptions = Field(default_factory=GraphImportOptions)
+
+    @property
+    def schema(self) -> SchemaInput:
+        return self.schema_data
+
+    @field_validator("schema_data")
+    @classmethod
+    def validate_schema(cls, schema: SchemaInput) -> SchemaInput:
+        return _validate_schema_value(schema)
+
+    @field_validator("data")
+    @classmethod
+    def validate_data(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        vertices = data.get("vertices") or []
+        edges = data.get("edges") or []
+        triples = data.get("triples") or []
+        if triples and not vertices and not edges:
+            raise ValueError("triples-only import is not supported; submit property graph vertices or edges")
+        if not vertices and not edges and not triples:
+            raise ValueError("data must contain at least one vertex, edge, or triple")
+        return data
+
+
+class GraphExtractAndImportRequest(GraphExtractRequest):
+    write_to_graph: bool = Field(default=False, description="Required confirmation for graph writes.")
+    import_options: GraphImportOptions = Field(default_factory=GraphImportOptions)

@@ -27,31 +27,51 @@ from hugegraph_llm.utils.log import log
 
 
 class Commit2Graph:
-    def __init__(self):
+    def __init__(self, graph_config=None):
+        graph_config = graph_config or {}
         self.client = PyHugeClient(
-            url=huge_settings.graph_url,
-            graph=huge_settings.graph_name,
-            user=huge_settings.graph_user,
-            pwd=huge_settings.graph_pwd,
-            graphspace=huge_settings.graph_space,
+            url=graph_config.get("url") or huge_settings.graph_url,
+            graph=graph_config.get("graph") or huge_settings.graph_name,
+            user=graph_config.get("user") or huge_settings.graph_user,
+            pwd=graph_config.get("pwd") or huge_settings.graph_pwd,
+            graphspace=graph_config.get("gs") or huge_settings.graph_space,
         )
         self.schema = self.client.schema()
 
+    def _empty_import_result(self, vertices=None, edges=None, triples=None) -> Dict[str, Any]:
+        return {
+            "vertices_attempted": len(vertices or []),
+            "vertices_created": 0,
+            "vertices_skipped": 0,
+            "edges_attempted": len(edges or []),
+            "edges_created": 0,
+            "edges_skipped": 0,
+            "triples_attempted": len(triples or []),
+            "triples_created": 0,
+            "triples_skipped": 0,
+            "errors": [],
+        }
+
     def run(self, data: dict) -> Dict[str, Any]:
         schema = data.get("schema")
-        vertices = data.get("vertices", [])
-        edges = data.get("edges", [])
-        if not vertices and not edges:
+        vertices = data.get("vertices", []) or []
+        edges = data.get("edges", []) or []
+        triples = data.get("triples", []) or []
+        if not vertices and not edges and not triples:
             log.critical("(Loading) Both vertices and edges are empty. Please check the input data again.")
             raise ValueError("Both vertices and edges input are empty.")
 
         if not schema:
             # TODO: ensure the function works correctly (update the logic later)
-            self.schema_free_mode(data.get("triples", []))
+            import_result = self.schema_free_mode(triples)
             log.warning("Using schema_free mode, could try schema_define mode for better effect!")
         else:
+            if not vertices and not edges:
+                log.critical("(Loading) Both vertices and edges are empty. Please check the input data again.")
+                raise ValueError("Both vertices and edges input are empty.")
             self.init_schema_if_need(schema)
-            self.load_into_graph(vertices, edges, schema)
+            import_result = self.load_into_graph(vertices, edges, schema)
+        data["import_result"] = import_result or self._empty_import_result(vertices, edges, triples)
         return data
 
     def _set_default_property(self, key, input_properties, property_label_map):
@@ -78,6 +98,7 @@ class Commit2Graph:
 
     def load_into_graph(self, vertices, edges, schema):  # pylint: disable=too-many-statements
         # pylint: disable=R0912 (too-many-branches)
+        import_result = self._empty_import_result(vertices, edges)
         vertex_label_map = {v_label["name"]: v_label for v_label in schema["vertexlabels"]}
         edge_label_map = {e_label["name"]: e_label for e_label in schema["edgelabels"]}
         property_label_map = {p_label["name"]: p_label for p_label in schema["propertykeys"]}
@@ -91,6 +112,8 @@ class Commit2Graph:
                     "(Input) VertexLabel %s not found in schema, skip & need check it!",
                     input_label,
                 )
+                import_result["vertices_skipped"] += 1
+                import_result["errors"].append(f"VertexLabel {input_label} not found in schema")
                 continue
 
             input_properties = vertex["properties"]
@@ -110,6 +133,7 @@ class Commit2Graph:
                             vertex,
                         )
                         has_problem = True
+                        import_result["errors"].append(f"Primary-key '{pk}' missing in vertex {vertex}")
                         break
                     # TODO: transform to Enum first (better in earlier step)
                     data_type = property_label_map[pk]["data_type"]
@@ -124,6 +148,7 @@ class Commit2Graph:
                         vertex,
                     )
             if has_problem:
+                import_result["vertices_skipped"] += 1
                 continue
 
             # 3. Ensure all non-nullable props are set
@@ -142,8 +167,10 @@ class Commit2Graph:
                         key,
                     )
                     has_problem = True
+                    import_result["errors"].append(f"Property type/format '{key}' is not correct")
                     break
             if has_problem:
+                import_result["vertices_skipped"] += 1
                 continue
 
             # TODO: we could try batch add vertices first, setback to single-mode if failed
@@ -162,8 +189,9 @@ class Commit2Graph:
             else:
                 result = self._handle_graph_creation(self.client.graph().addVertex, input_label, input_properties)
             if result is None:
-                raise ValueError(f"Failed to create vertex '{input_label}' with properties {input_properties}")
+                raise ValueError(f"Failed to create vertex {vertex}")
             vid = result.id
+            import_result["vertices_created"] += 1
             vertex["id"] = vid
             if mapping_id:
                 vid_mapping[mapping_id] = vid
@@ -179,10 +207,18 @@ class Commit2Graph:
                     "(Input) EdgeLabel %s not found in schema, skip & need check it!",
                     label,
                 )
+                import_result["edges_skipped"] += 1
+                import_result["errors"].append(f"EdgeLabel {label} not found in schema")
                 continue
 
             # TODO: we could try batch add edges first, setback to single-mode if failed
-            self._handle_graph_creation(self.client.graph().addEdge, label, start, end, properties)
+            result = self._handle_graph_creation(self.client.graph().addEdge, label, start, end, properties)
+            if result is None:
+                import_result["edges_skipped"] += 1
+                import_result["errors"].append(f"Failed to create edge {edge}")
+                continue
+            import_result["edges_created"] += 1
+        return import_result
 
     def init_schema_if_need(self, schema: dict):
         properties = schema["propertykeys"]
@@ -211,6 +247,7 @@ class Commit2Graph:
             ).properties(*properties).nullableKeys(*properties).ifNotExist().create()
 
     def schema_free_mode(self, data):
+        import_result = self._empty_import_result(triples=data)
         self.schema.propertyKey("name").asText().ifNotExist().create()
         self.schema.vertexLabel("vertex").useCustomizeStringId().properties("name").ifNotExist().create()
         self.schema.edgeLabel("edge").sourceLabel("vertex").targetLabel("vertex").properties(
@@ -222,9 +259,21 @@ class Commit2Graph:
 
         for item in data:
             s, p, o = (element.strip() for element in item)
-            s_id = self.client.graph().addVertex("vertex", {"name": s}, id=s).id
-            t_id = self.client.graph().addVertex("vertex", {"name": o}, id=o).id
-            self.client.graph().addEdge("edge", s_id, t_id, {"name": p})
+            s_vertex = self._handle_graph_creation(self.client.graph().addVertex, "vertex", {"name": s}, id=s)
+            t_vertex = self._handle_graph_creation(self.client.graph().addVertex, "vertex", {"name": o}, id=o)
+            if s_vertex is None or t_vertex is None:
+                import_result["triples_skipped"] += 1
+                import_result["errors"].append(f"Failed to create schema-free vertices for triple {item}")
+                continue
+            edge = self._handle_graph_creation(
+                self.client.graph().addEdge, "edge", s_vertex.id, t_vertex.id, {"name": p}
+            )
+            if edge is None:
+                import_result["triples_skipped"] += 1
+                import_result["errors"].append(f"Failed to create schema-free edge for triple {item}")
+                continue
+            import_result["triples_created"] += 1
+        return import_result
 
     def _create_property(self, prop: dict):
         name = prop["name"]
