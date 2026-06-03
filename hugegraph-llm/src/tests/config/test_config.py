@@ -27,6 +27,9 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
+# FIXME: add config tests proving .env sync preserves typed numeric/boolean
+# fields and that imports do not create or mutate files implicitly.
+
 
 class TestConfig(unittest.TestCase):
     def test_config(self):

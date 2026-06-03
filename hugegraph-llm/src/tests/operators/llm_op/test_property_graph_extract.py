@@ -174,22 +174,31 @@ class TestPropertyGraphExtract(unittest.TestCase):
                 "label": "movie",
                 "properties": {
                     # Missing 'title' which is non-nullable
-                    "year": 1994  # Non-string value
+                    "year": 1994,  # Non-string value
+                    "ignored": "not in schema",
+                },
+            },
+            {
+                "type": "edge",
+                "label": "acted_in",
+                "properties": {
+                    "role": "Forrest Gump",
+                    "ignored": "not in schema",
                 },
             },
         ]
 
         filtered_items = filter_item(self.schema, items)
 
-        # Check that non-nullable keys are added with NULL value
-        # Note: 'age' is nullable, so it won't be added automatically
+        # Missing properties stay absent so Commit2Graph can apply schema-typed defaults.
         self.assertNotIn("age", filtered_items[0]["properties"])
+        self.assertNotIn("title", filtered_items[1]["properties"])
 
-        # Check that title (non-nullable) was added with NULL value
-        self.assertEqual(filtered_items[1]["properties"]["title"], "NULL")
-
-        # Check that year was converted to string
-        self.assertEqual(filtered_items[1]["properties"]["year"], "1994")
+        # Check that schema-typed values are preserved for Commit2Graph
+        self.assertEqual(filtered_items[1]["properties"]["year"], 1994)
+        self.assertNotIn("ignored", filtered_items[1]["properties"])
+        self.assertEqual(filtered_items[2]["properties"]["role"], "Forrest Gump")
+        self.assertNotIn("ignored", filtered_items[2]["properties"])
 
     def test_extract_property_graph_by_llm(self):
         """Test the extract_property_graph_by_llm method."""

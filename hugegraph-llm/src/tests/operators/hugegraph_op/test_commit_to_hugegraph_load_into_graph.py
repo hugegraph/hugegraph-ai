@@ -26,6 +26,9 @@ from hugegraph_llm.operators.llm_op.property_graph_extract import PropertyGraphE
 
 pytestmark = [pytest.mark.unit]
 
+# FIXME: cover failure branches where vertex type errors stop edge writes and
+# surface an explicit import failure.
+
 
 class TestCommit2GraphLoadIntoGraph(unittest.TestCase):
     def setUp(self):
@@ -322,6 +325,67 @@ class TestCommit2GraphLoadIntoGraph(unittest.TestCase):
             "2:Forrest Gump",
             {"role": "Forrest Gump"},
         )
+
+    @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")
+    def test_property_graph_extract_run_preserves_typed_values_for_commit(self, mock_handle_graph_creation):
+        """Test extracted typed properties survive the full extraction-to-commit path."""
+        mock_handle_graph_creation.side_effect = [
+            MagicMock(id="1:Tom Hanks"),
+            MagicMock(id="2:Forrest Gump"),
+            MagicMock(id="edge_id"),
+        ]
+        llm = MagicMock()
+        llm.generate.return_value = """{
+            "vertices": [
+            {
+                "label": "person",
+                "properties": {
+                    "name": "Tom Hanks",
+                    "age": 67
+                }
+            },
+            {
+                "label": "movie",
+                "properties": {
+                    "title": "Forrest Gump",
+                    "year": 1994
+                }
+            }
+            ],
+            "edges": [
+            {
+                "label": "acted_in",
+                "properties": {
+                    "role": "Forrest Gump"
+                },
+                "source": {
+                    "label": "person",
+                    "properties": {
+                        "name": "Tom Hanks"
+                    }
+                },
+                "target": {
+                    "label": "movie",
+                    "properties": {
+                        "title": "Forrest Gump"
+                    }
+                }
+            }
+            ]
+        }"""
+        context = PropertyGraphExtract(llm=llm, example_prompt=None).run(
+            {
+                "schema": self.schema,
+                "chunks": ["Tom Hanks acted in Forrest Gump."],
+            }
+        )
+
+        self.assertIsInstance(context["vertices"][0]["properties"]["age"], int)
+        self.assertIsInstance(context["vertices"][1]["properties"]["year"], int)
+
+        self.commit2graph.load_into_graph(context["vertices"], context["edges"], self.schema)
+
+        self.assertEqual(mock_handle_graph_creation.call_count, 3)
 
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")
     def test_load_into_graph_raises_explicit_error_when_vertex_creation_fails(self, mock_handle_graph_creation):

@@ -27,6 +27,11 @@ from hugegraph_llm.operators.llm_op.property_graph_extract import PropertyGraphE
 
 pytestmark = pytest.mark.contract
 
+# FIXME: add contract coverage for runtime-loaded config_prompt.yaml, not only
+# PromptConfig class constants and prompt_examples.json fixtures.
+# FIXME: verify omitted API prompt fields resolve the current PromptConfig
+# object instead of import-time default prompt strings.
+
 
 def _json_objects_after_marker(prompt, marker):
     start = prompt.index(marker) + len(marker)
