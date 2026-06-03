@@ -68,6 +68,8 @@ def rag_http_api(
 ):
     @contextmanager
     def request_graph_config(req):
+        # TODO: pass graph config through request-scoped flow/operator context
+        # instead of temporarily mutating process-global huge_settings.
         original_values = _snapshot_settings(huge_settings, _GRAPH_CONFIG_FIELD_MAP.values())
         try:
             client_config = getattr(req, "client_config", None)
