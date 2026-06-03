@@ -173,5 +173,5 @@ def test_gremlin_exec_does_not_silently_drop_empty_payload(monkeypatch):
     gremlin = GremlinManager(_FailingGremlinSession())
     monkeypatch.setattr(gremlin, "_invoke_request", mock.Mock(return_value={}))
 
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="Invalid Gremlin response payload"):
         gremlin.exec("g.V()")
