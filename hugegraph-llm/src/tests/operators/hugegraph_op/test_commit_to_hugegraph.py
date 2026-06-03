@@ -26,6 +26,9 @@ from hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph import Commit2Grap
 
 pytestmark = [pytest.mark.unit]
 
+# FIXME: add a contract test that exercises real load_into_graph failure
+# branches instead of only asserting patched helper call counts.
+
 
 class TestCommit2Graph(unittest.TestCase):
     def setUp(self):

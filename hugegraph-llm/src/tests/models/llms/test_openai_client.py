@@ -25,6 +25,9 @@ from hugegraph_llm.models.llms.openai import OpenAIClient
 
 pytestmark = pytest.mark.contract
 
+# FIXME: replace tests that accept provider errors as model text with sync,
+# async, and streaming failure-propagation contract tests.
+
 
 class TestOpenAIClient(unittest.TestCase):
     def setUp(self):

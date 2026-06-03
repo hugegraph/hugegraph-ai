@@ -24,6 +24,9 @@ from ..client_utils import ClientUtils
 
 pytestmark = [pytest.mark.integration, pytest.mark.hugegraph]
 
+# FIXME: isolate graph state per test case; current fixed primary-key fixtures
+# and class-level cleanup make exact-count assertions order-dependent.
+
 
 class TestGraphManager(unittest.TestCase):
     client = None
@@ -74,6 +77,8 @@ class TestGraphManager(unittest.TestCase):
     def test_get_vertex_by_page(self):
         self.graph.addVertex("person", {"name": "Alice", "age": 20})
         self.graph.addVertex("person", {"name": "Bob", "age": 23})
+        # FIXME: destructure (items, next_page) and assert vertex contents;
+        # len(tuple) only proves the method returned two values.
         vertices = self.graph.getVertexByPage("person", 1)
         self.assertEqual(len(vertices), 2)
 
