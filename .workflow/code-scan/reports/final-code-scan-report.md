@@ -7,7 +7,7 @@ Scope: `hugegraph-llm`, `hugegraph-python-client`
 
 The scan completed all planned lanes. The highest-risk result is one P0 security issue in the `hugegraph-llm` admin log API. The broader pattern is that core boundary failures are often hidden: client transport errors are retyped, provider failures are returned as normal text, graph/vector dependency failures can be converted to empty results, and several integration tests use local stand-ins rather than production flows.
 
-No behavior-changing source fixes were made. Only scan documents and `FIXME:` comments were added.
+During the scan phase, no behavior-changing source fixes were made. Only scan documents and `FIXME:` comments were added. Follow-up fixes are listed later in this report.
 
 ## Scope Covered
 

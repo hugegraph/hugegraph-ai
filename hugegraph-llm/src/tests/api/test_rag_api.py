@@ -144,6 +144,49 @@ def test_embedding_config_api_passes_openai_fields_to_apply_embedding_conf():
     )
 
 
+def test_llm_config_api_rolls_back_provider_type_on_apply_failure(monkeypatch):
+    monkeypatch.setattr(llm_settings, "chat_llm_type", "ollama/local")
+    monkeypatch.setattr(llm_settings, "extract_llm_type", "ollama/local")
+    monkeypatch.setattr(llm_settings, "text2gql_llm_type", "ollama/local")
+    client, callbacks = _make_test_client(apply_llm_conf=Mock(return_value=status.HTTP_500_INTERNAL_SERVER_ERROR))
+
+    response = client.post(
+        "/config/llm",
+        json={
+            "llm_type": "openai",
+            "api_key": "sk-test",
+            "api_base": "https://api.example.test",
+            "language_model": "gpt-test",
+            "max_tokens": "1024",
+        },
+    )
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert llm_settings.chat_llm_type == "ollama/local"
+    assert llm_settings.extract_llm_type == "ollama/local"
+    assert llm_settings.text2gql_llm_type == "ollama/local"
+    callbacks["apply_llm_conf"].assert_called_once()
+
+
+def test_embedding_config_api_rolls_back_provider_type_on_apply_failure(monkeypatch):
+    monkeypatch.setattr(llm_settings, "embedding_type", "ollama/local")
+    client, callbacks = _make_test_client(apply_embedding_conf=Mock(return_value=status.HTTP_500_INTERNAL_SERVER_ERROR))
+
+    response = client.post(
+        "/config/embedding",
+        json={
+            "llm_type": "openai",
+            "api_key": "sk-embedding",
+            "api_base": "https://embedding.example.test",
+            "language_model": "embedding-test",
+        },
+    )
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert llm_settings.embedding_type == "ollama/local"
+    callbacks["apply_embedding_conf"].assert_called_once()
+
+
 def test_rerank_config_api_passes_cohere_fields_to_apply_reranker_conf():
     client, callbacks = _make_test_client()
 
@@ -255,6 +298,25 @@ def test_rerank_config_rejects_unsupported_provider_without_mutating(monkeypatch
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     callbacks["apply_reranker_conf"].assert_not_called()
     assert llm_settings.reranker_type == "cohere"
+
+
+def test_rerank_config_rolls_back_provider_type_on_apply_failure(monkeypatch):
+    monkeypatch.setattr(llm_settings, "reranker_type", "siliconflow")
+    client, callbacks = _make_test_client(apply_reranker_conf=Mock(return_value=status.HTTP_500_INTERNAL_SERVER_ERROR))
+
+    response = client.post(
+        "/config/rerank",
+        json={
+            "reranker_type": "cohere",
+            "api_key": "cohere-key",
+            "reranker_model": "rerank-test",
+            "cohere_base_url": "https://cohere.example.test",
+        },
+    )
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert llm_settings.reranker_type == "siliconflow"
+    callbacks["apply_reranker_conf"].assert_called_once()
 
 
 def test_text2gremlin_callback_exception_returns_stable_response():

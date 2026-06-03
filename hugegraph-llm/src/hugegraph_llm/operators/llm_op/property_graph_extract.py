@@ -67,12 +67,11 @@ def filter_item(schema, items) -> List[Dict[str, Any]]:
         item_type = item["type"]
         if item_type == "vertex":
             label = item["label"]
-            non_nullable_keys = set(properties_map[item_type][label]["properties"]).difference(
-                set(properties_map[item_type][label]["nullable_keys"])
-            )
-            for key in non_nullable_keys:
-                if key not in item["properties"]:
-                    item["properties"][key] = "NULL"
+            item["properties"] = {
+                key: value
+                for key, value in item["properties"].items()
+                if key in properties_map[item_type][label]["properties"]
+            }
         filtered_items.append(item)
 
     return filtered_items

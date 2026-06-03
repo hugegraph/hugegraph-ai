@@ -17,7 +17,6 @@
 
 import json
 from contextlib import contextmanager
-from threading import RLock
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -42,7 +41,18 @@ _GRAPH_CONFIG_FIELD_MAP = {
     "pwd": "graph_pwd",
     "gs": "graph_space",
 }
-_GRAPH_CONFIG_LOCK = RLock()
+_LLM_TYPE_FIELDS = ("chat_llm_type", "extract_llm_type", "text2gql_llm_type")
+_EMBEDDING_TYPE_FIELDS = ("embedding_type",)
+_RERANKER_TYPE_FIELDS = ("reranker_type",)
+
+
+def _snapshot_settings(settings, fields):
+    return {field: getattr(settings, field) for field in fields}
+
+
+def _restore_settings(settings, values):
+    for field, value in values.items():
+        setattr(settings, field, value)
 
 
 # pylint: disable=too-many-statements
@@ -58,21 +68,16 @@ def rag_http_api(
 ):
     @contextmanager
     def request_graph_config(req):
-        with _GRAPH_CONFIG_LOCK:
-            original_values = {
-                settings_field: getattr(huge_settings, settings_field)
-                for settings_field in _GRAPH_CONFIG_FIELD_MAP.values()
-            }
-            try:
-                client_config = getattr(req, "client_config", None)
-                if client_config is not None:
-                    for request_field, settings_field in _GRAPH_CONFIG_FIELD_MAP.items():
-                        if request_field in client_config.model_fields_set:
-                            setattr(huge_settings, settings_field, getattr(client_config, request_field))
-                yield
-            finally:
-                for settings_field, original_value in original_values.items():
-                    setattr(huge_settings, settings_field, original_value)
+        original_values = _snapshot_settings(huge_settings, _GRAPH_CONFIG_FIELD_MAP.values())
+        try:
+            client_config = getattr(req, "client_config", None)
+            if client_config is not None:
+                for request_field, settings_field in _GRAPH_CONFIG_FIELD_MAP.items():
+                    if request_field in client_config.model_fields_set:
+                        setattr(huge_settings, settings_field, getattr(client_config, request_field))
+            yield
+        finally:
+            _restore_settings(huge_settings, original_values)
 
     @router.post("/rag", status_code=status.HTTP_200_OK)
     def rag_answer_api(req: RAGRequest):
@@ -182,43 +187,58 @@ def rag_http_api(
     # TODO: restructure the implement of llm to three types, like "/config/chat_llm"
     @router.post("/config/llm", status_code=status.HTTP_201_CREATED)
     def llm_config_api(req: LLMConfigRequest):
-        llm_settings.chat_llm_type = req.llm_type
-        llm_settings.extract_llm_type = req.llm_type
-        llm_settings.text2gql_llm_type = req.llm_type
+        original_values = _snapshot_settings(llm_settings, _LLM_TYPE_FIELDS)
+        try:
+            llm_settings.chat_llm_type = req.llm_type
+            llm_settings.extract_llm_type = req.llm_type
+            llm_settings.text2gql_llm_type = req.llm_type
 
-        if req.llm_type in ("openai", "litellm"):
-            res = apply_llm_conf(
-                req.api_key,
-                req.api_base,
-                req.language_model,
-                req.max_tokens,
-                origin_call="http",
-            )
-        else:
-            res = apply_llm_conf(req.host, req.port, req.language_model, None, origin_call="http")
-        return generate_response(RAGResponse(status_code=res, message="Missing Value"))
+            if req.llm_type in ("openai", "litellm"):
+                res = apply_llm_conf(
+                    req.api_key,
+                    req.api_base,
+                    req.language_model,
+                    req.max_tokens,
+                    origin_call="http",
+                )
+            else:
+                res = apply_llm_conf(req.host, req.port, req.language_model, None, origin_call="http")
+            return generate_response(RAGResponse(status_code=res, message="Missing Value"))
+        except Exception:
+            _restore_settings(llm_settings, original_values)
+            raise
 
     @router.post("/config/embedding", status_code=status.HTTP_201_CREATED)
     def embedding_config_api(req: LLMConfigRequest):
-        llm_settings.embedding_type = req.llm_type
+        original_values = _snapshot_settings(llm_settings, _EMBEDDING_TYPE_FIELDS)
+        try:
+            llm_settings.embedding_type = req.llm_type
 
-        if req.llm_type in ("openai", "litellm"):
-            res = apply_embedding_conf(req.api_key, req.api_base, req.language_model, origin_call="http")
-        else:
-            res = apply_embedding_conf(req.host, req.port, req.language_model, origin_call="http")
-        return generate_response(RAGResponse(status_code=res, message="Missing Value"))
+            if req.llm_type in ("openai", "litellm"):
+                res = apply_embedding_conf(req.api_key, req.api_base, req.language_model, origin_call="http")
+            else:
+                res = apply_embedding_conf(req.host, req.port, req.language_model, origin_call="http")
+            return generate_response(RAGResponse(status_code=res, message="Missing Value"))
+        except Exception:
+            _restore_settings(llm_settings, original_values)
+            raise
 
     @router.post("/config/rerank", status_code=status.HTTP_201_CREATED)
     def rerank_config_api(req: RerankerConfigRequest):
-        llm_settings.reranker_type = req.reranker_type
+        original_values = _snapshot_settings(llm_settings, _RERANKER_TYPE_FIELDS)
+        try:
+            llm_settings.reranker_type = req.reranker_type
 
-        if req.reranker_type == "cohere":
-            res = apply_reranker_conf(req.api_key, req.reranker_model, req.cohere_base_url, origin_call="http")
-        elif req.reranker_type == "siliconflow":
-            res = apply_reranker_conf(req.api_key, req.reranker_model, None, origin_call="http")
-        else:
-            res = status.HTTP_501_NOT_IMPLEMENTED
-        return generate_response(RAGResponse(status_code=res, message="Missing Value"))
+            if req.reranker_type == "cohere":
+                res = apply_reranker_conf(req.api_key, req.reranker_model, req.cohere_base_url, origin_call="http")
+            elif req.reranker_type == "siliconflow":
+                res = apply_reranker_conf(req.api_key, req.reranker_model, None, origin_call="http")
+            else:
+                res = status.HTTP_501_NOT_IMPLEMENTED
+            return generate_response(RAGResponse(status_code=res, message="Missing Value"))
+        except Exception:
+            _restore_settings(llm_settings, original_values)
+            raise
 
     @router.post("/text2gremlin", status_code=status.HTTP_200_OK)
     def text2gremlin_api(req: GremlinGenerateRequest):
