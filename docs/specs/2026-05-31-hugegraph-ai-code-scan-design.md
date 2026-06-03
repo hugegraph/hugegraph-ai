@@ -23,7 +23,7 @@ The scan uses high parallelism because the two modules have separable risk surfa
 2. Style-only, typo-only, stale-comment-only, and formatting-local fixes may be edited in place if they cannot change runtime behavior.
 3. If a core function lacks effective tests, or tests mock away the behavior under review, add a nearby `FIXME:` comment in the relevant test or production-adjacent test location.
 4. Do not expand scope into `hugegraph-ml`, `vermeer-python-client`, generated artifacts, caches, logs, build outputs, or unrelated workflows.
-5. Do not mix scan findings with the existing quality-program implementation ledger. Use `.workflow/code-scan/` only as local scratch during execution; keep durable review artifacts under `docs/`.
+5. Do not mix scan findings with the existing quality-program implementation ledger. Use `.workflow/code-scan/` only as optional local scratch during execution; keep durable review artifacts under `docs/`.
 6. Every issue must have enough evidence for a maintainer to reproduce the reasoning without trusting the reviewer.
 7. Commit after a completed setup slice and after each coherent large scan slice.
 
@@ -94,9 +94,9 @@ demo visual redesign, dependency upgrade campaigns, broad formatting rewrites
 | L6 | Test effectiveness and fake/mock quality | both `src/tests/` trees | P4 ledger plus `FIXME:` edits |
 | L7 | Cross-module compatibility synthesis | LLM callers plus client response contracts | deduplicated final priorities |
 
-Execution notes, checkpoints, and intermediate ledgers may be written under `.workflow/code-scan/` while scanning, but they are intentionally local scratch artifacts and should not be retained in the final PR.
+Execution notes, checkpoints, and intermediate ledgers may be written under `.workflow/code-scan/` while scanning, but they are intentionally optional local scratch artifacts and should not be retained in the final PR.
 
-The main thread coordinates scope, writes the documents, maintains the ledger, performs synthesis, and verifies every edit or commit.
+The coordinator owns scope, durable documents, final synthesis, and verification for every edit or commit.
 
 ## Issue Record Schema
 
@@ -133,9 +133,9 @@ Bad:
 # FIXME: add more tests
 ```
 
-## Checkpoint Ledger
+## Optional Local Checkpoint Ledger
 
-The scan writes these restartable artifacts:
+The scan may write these restartable scratch artifacts:
 
 ```text
 .workflow/code-scan/
@@ -157,11 +157,13 @@ The scan writes these restartable artifacts:
     final-code-scan-report.md
 ```
 
+These files are execution-local and should be ignored or removed from version control before the final PR.
+
 ## Definition of Done
 
-1. Every TODO in `docs/plans/2026-05-31-hugegraph-ai-code-scan.md` is checked.
-2. All seven scan lanes have checkpoint notes.
-3. `reports/issues.md` contains prioritized P0-P5 findings with evidence and deduplication.
+1. Every relevant checklist item in `docs/plans/2026-05-31-hugegraph-ai-code-scan.md` is checked for the scan run.
+2. All seven scan lanes have checkpoint notes in local scratch, a PR summary, or a durable follow-up document.
+3. The issue ledger contains prioritized P0-P5 findings with evidence and deduplication.
 4. Required `FIXME:` comments for ineffective/missing core tests are present.
 5. Style-only fixes, if any, are verified with formatting/lint checks or narrower syntax checks.
-6. The final report summarizes the issue distribution, highest-risk fixes to schedule next, and verification commands run.
+6. The final report or PR summary covers issue distribution, highest-risk fixes to schedule next, and verification commands run.

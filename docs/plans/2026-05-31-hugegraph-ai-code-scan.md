@@ -1,10 +1,10 @@
 # HugeGraph AI Code Logic Scan Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: use parallel reviewer lanes for independent scan areas. Steps use checkbox (`- [ ]`) syntax for tracking. Behavior-changing edits are forbidden during this plan; record those as findings instead.
+> **For reviewers:** split independent scan areas into parallel review lanes when possible. Steps use checkbox (`- [ ]`) syntax for tracking. Behavior-changing edits are forbidden during this plan; record those as findings instead.
 
 **Goal:** Scan all code in `hugegraph-llm` and `hugegraph-python-client` for logic, design, maintainability, performance, and test-effectiveness problems, then produce a prioritized P0-P5 report.
 
-**Architecture:** Maintain a restartable local `.workflow/code-scan/` scratch ledger while scanning, dispatch independent reviewer lanes, synthesize overlapping findings, add `FIXME:` comments only for ineffective core test coverage, and keep only durable docs/source fixes in the final PR.
+**Architecture:** Use an optional restartable local `.workflow/code-scan/` scratch ledger while scanning, dispatch independent reviewer lanes, synthesize overlapping findings, add `FIXME:` comments only for ineffective core test coverage, and keep only durable docs/source fixes in the final PR.
 
 **Tech Stack:** Python, uv workspace, pytest, ruff, pyhugegraph, hugegraph-llm, FastAPI, vector stores, LLM provider wrappers.
 
@@ -33,7 +33,7 @@ docs/specs/2026-05-31-hugegraph-ai-code-scan-design.md
 docs/plans/2026-05-31-hugegraph-ai-code-scan.md
 ```
 
-Local scratch artifacts used during execution; do not keep these in the final PR:
+Optional local scratch artifacts used during execution; do not keep these in the final PR:
 
 ```text
 .workflow/code-scan/
@@ -62,24 +62,24 @@ Allowed source/test edits:
 
 ## Global Execution Rules
 
-- [x] Do not edit behavior-changing production logic.
-- [x] Record every logic/design/performance issue in `.workflow/code-scan/reports/issues.md`.
-- [x] Update `.workflow/code-scan/code-scan-state.json` after each coherent scan slice.
-- [x] Update the matching checkpoint after each lane.
-- [x] Add `FIXME:` comments for missing/ineffective core tests where required by the spec.
-- [x] Commit after setup and after each coherent large sub-slice.
+- [ ] Do not edit behavior-changing production logic.
+- [ ] Record every logic/design/performance issue in the local scratch ledger or a durable follow-up document.
+- [ ] Update local scratch state after each coherent scan slice if a scratch ledger is used.
+- [ ] Update the matching checkpoint after each lane if a scratch ledger is used.
+- [ ] Add `FIXME:` comments for missing/ineffective core tests where required by the spec.
+- [ ] Commit after setup and after each coherent large sub-slice.
 
 ## T0: Setup and Scan Ledger
 
 **Files:**
-- Create: `.workflow/code-scan/README.md`
-- Create: `.workflow/code-scan/code-scan-state.json`
-- Create: `.workflow/code-scan/checkpoints/00-setup.md`
-- Create: `.workflow/code-scan/reports/issues.md`
-- Create: `.workflow/code-scan/reports/module-map.md`
-- Create: `.workflow/code-scan/reports/test-quality-ledger.md`
+- Optional local scratch: `.workflow/code-scan/README.md`
+- Optional local scratch: `.workflow/code-scan/code-scan-state.json`
+- Optional local scratch: `.workflow/code-scan/checkpoints/00-setup.md`
+- Optional local scratch: `.workflow/code-scan/reports/issues.md`
+- Optional local scratch: `.workflow/code-scan/reports/module-map.md`
+- Optional local scratch: `.workflow/code-scan/reports/test-quality-ledger.md`
 
-- [x] **Step T0.1: Read mandatory guidance**
+- [ ] **Step T0.1: Read mandatory guidance**
 
 Commands:
 
@@ -89,9 +89,9 @@ sed -n '1,240p' hugegraph-llm/AGENTS.md
 sed -n '1,260p' rules/README.md
 ```
 
-Result: root and module rules confirm the scan must stay scoped to `hugegraph-llm` and `hugegraph-python-client`, avoid lower-frequency modules, and preserve client/LLM contract boundaries.
+Expected result: root and module rules confirm the scan must stay scoped to `hugegraph-llm` and `hugegraph-python-client`, avoid lower-frequency modules, and preserve client/LLM contract boundaries.
 
-- [x] **Step T0.2: Read prior quality-program documents**
+- [ ] **Step T0.2: Read prior quality-program documents**
 
 Commands:
 
@@ -100,35 +100,33 @@ sed -n '1,260p' docs/specs/2026-05-31-hugegraph-ai-quality-program-design.md
 sed -n '1,320p' docs/plans/2026-05-31-hugegraph-ai-quality-program.md
 ```
 
-Result: reused document style, restartable ledger structure, strict boundary wording, and checkpoint discipline without adopting the test-refactor implementation details.
+Expected result: reuse document style, restartable ledger structure, strict boundary wording, and checkpoint discipline without adopting the test-refactor implementation details.
 
-- [x] **Step T0.3: Create code-scan ledger**
+- [ ] **Step T0.3: Create code-scan ledger**
 
-Create `.workflow/code-scan/` artifacts and initialize state with current branch, SHA, scan lanes, and empty issue counters.
+If a scratch ledger is useful, create `.workflow/code-scan/` artifacts and initialize state with current branch, SHA, scan lanes, and empty issue counters.
 
-- [x] **Step T0.4: Commit setup slice**
+- [ ] **Step T0.4: Commit setup slice**
 
 Commands:
 
 ```bash
 git add docs/specs/2026-05-31-hugegraph-ai-code-scan-design.md docs/plans/2026-05-31-hugegraph-ai-code-scan.md
 git commit -m "docs(code-scan): add core module audit plan" -m "- define scoped P0-P5 code logic scan design
-- initialize restartable code-scan ledger
-- capture lane-based execution checkpoints"
+- document optional local scratch boundaries
+- capture lane-based execution checklist"
 ```
-
-Result: committed as `860b2a49 docs(code-scan): add core module audit plan`.
 
 ## T1: Parallel Client Scan
 
 **Files:**
-- Update: `.workflow/code-scan/checkpoints/01-client-transport.md`
-- Update: `.workflow/code-scan/checkpoints/02-client-api-structure.md`
-- Update: `.workflow/code-scan/reports/issues.md`
-- Update: `.workflow/code-scan/reports/module-map.md`
+- Optional local update: `.workflow/code-scan/checkpoints/01-client-transport.md`
+- Optional local update: `.workflow/code-scan/checkpoints/02-client-api-structure.md`
+- Optional local update: `.workflow/code-scan/reports/issues.md`
+- Optional local update: `.workflow/code-scan/reports/module-map.md`
 - Possible FIXME comments: `hugegraph-python-client/src/tests/**/*.py`
 
-- [x] **Step T1.1: Scan transport/auth/routing**
+- [ ] **Step T1.1: Scan transport/auth/routing**
 
 Review:
 
@@ -141,7 +139,7 @@ hugegraph-python-client/src/pyhugegraph/api/common.py
 
 Focus: request construction, auth/session boundaries, URL routing, error propagation, timeout/retry behavior, exception semantics, and test coverage effectiveness.
 
-- [x] **Step T1.2: Scan graph/schema/gremlin APIs and structures**
+- [ ] **Step T1.2: Scan graph/schema/gremlin APIs and structures**
 
 Review:
 
@@ -153,23 +151,21 @@ hugegraph-python-client/src/tests/api/
 
 Focus: API route correctness, response envelope parsing, schema/graph/gremlin semantics, mutation safety, data model drift, and weak test assertions.
 
-- [x] **Step T1.3: Synthesize client findings**
+- [ ] **Step T1.3: Synthesize client findings**
 
 Deduplicate client issues, assign P0-P5, update both client checkpoints, and commit the client scan slice.
-
-Result: client findings were synthesized into `CS-002` through `CS-009`, `CS-018`, `CS-019`, and `CS-027`, with test-quality gaps recorded in `CS-034` through `CS-036`.
 
 ## T2: Parallel hugegraph-llm Scan
 
 **Files:**
-- Update: `.workflow/code-scan/checkpoints/03-llm-api-config.md`
-- Update: `.workflow/code-scan/checkpoints/04-llm-flow-operator.md`
-- Update: `.workflow/code-scan/checkpoints/05-llm-index-model.md`
-- Update: `.workflow/code-scan/reports/issues.md`
-- Update: `.workflow/code-scan/reports/module-map.md`
+- Optional local update: `.workflow/code-scan/checkpoints/03-llm-api-config.md`
+- Optional local update: `.workflow/code-scan/checkpoints/04-llm-flow-operator.md`
+- Optional local update: `.workflow/code-scan/checkpoints/05-llm-index-model.md`
+- Optional local update: `.workflow/code-scan/reports/issues.md`
+- Optional local update: `.workflow/code-scan/reports/module-map.md`
 - Possible FIXME comments: `hugegraph-llm/src/tests/**/*.py`
 
-- [x] **Step T2.1: Scan API/models/config/prompt layer**
+- [ ] **Step T2.1: Scan API/models/config/prompt layer**
 
 Review:
 
@@ -183,7 +179,7 @@ hugegraph-llm/src/tests/config/
 
 Focus: public request/response contracts, config precedence, prompt contract stability, error mapping, and test truthfulness.
 
-- [x] **Step T2.2: Scan flows/nodes/operators**
+- [ ] **Step T2.2: Scan flows/nodes/operators**
 
 Review:
 
@@ -198,7 +194,7 @@ hugegraph-llm/src/tests/integration/
 
 Focus: GraphRAG/KG/Text2Gremlin boundaries, mutable state, error propagation, external service handling, duplicated logic, and pipeline tests that mock away behavior.
 
-- [x] **Step T2.3: Scan indices/models/utils/performance**
+- [ ] **Step T2.3: Scan indices/models/utils/performance**
 
 Review:
 
@@ -212,32 +208,30 @@ hugegraph-llm/src/tests/models/
 
 Focus: provider wrapper semantics, vector store failure behavior, embedding/reranker assumptions, unbounded memory/network loops, and fallback correctness.
 
-- [x] **Step T2.4: Synthesize hugegraph-llm findings**
+- [ ] **Step T2.4: Synthesize hugegraph-llm findings**
 
 Deduplicate LLM issues, assign P0-P5, update all LLM checkpoints, and commit the LLM scan slice.
-
-Result: LLM findings were synthesized into `CS-001`, `CS-010` through `CS-017`, `CS-020` through `CS-026`, `CS-028`, `CS-029`, and `CS-030` through `CS-033`/`CS-037`.
 
 ## T3: Cross-module Contract and Test-quality Synthesis
 
 **Files:**
-- Update: `.workflow/code-scan/checkpoints/06-test-quality.md`
-- Update: `.workflow/code-scan/checkpoints/07-synthesis.md`
-- Update: `.workflow/code-scan/reports/issues.md`
-- Update: `.workflow/code-scan/reports/test-quality-ledger.md`
-- Update: `.workflow/code-scan/reports/final-code-scan-report.md`
+- Optional local update: `.workflow/code-scan/checkpoints/06-test-quality.md`
+- Optional local update: `.workflow/code-scan/checkpoints/07-synthesis.md`
+- Optional local update: `.workflow/code-scan/reports/issues.md`
+- Optional local update: `.workflow/code-scan/reports/test-quality-ledger.md`
+- Optional local update: `.workflow/code-scan/reports/final-code-scan-report.md`
 
-- [x] **Step T3.1: Cross-check pyhugegraph callers from hugegraph-llm**
+- [ ] **Step T3.1: Cross-check pyhugegraph callers from hugegraph-llm**
 
 Search and inspect all `pyhugegraph` imports/usages in `hugegraph-llm`, then verify caller assumptions against client response/data structures.
 
-- [x] **Step T3.2: Review all FIXME candidates**
+- [ ] **Step T3.2: Review all FIXME candidates**
 
 Confirm each required `FIXME:` is present, specific, and tied to core behavior. Remove or rewrite vague comments.
 
-- [x] **Step T3.3: Produce final report**
+- [ ] **Step T3.3: Produce final report**
 
-Write `.workflow/code-scan/reports/final-code-scan-report.md` with:
+Write a final report in the PR summary, a durable follow-up document, or the local scratch ledger with:
 
 ```text
 Summary
@@ -251,7 +245,7 @@ Verification Commands
 Recommended Next Fix Plan
 ```
 
-- [x] **Step T3.4: Verify and final commit**
+- [ ] **Step T3.4: Verify and final commit**
 
 Run the narrowest available verification for touched files. At minimum:
 
@@ -262,4 +256,4 @@ git status --short
 
 If Python files were edited for `FIXME:` or style-only changes, also run targeted ruff checks for those files.
 
-Commit final scan artifacts and any allowed non-behavioral edits.
+Commit durable scan artifacts and any allowed non-behavioral edits. Do not commit local scratch outputs.
