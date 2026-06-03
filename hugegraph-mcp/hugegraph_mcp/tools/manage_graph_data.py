@@ -21,6 +21,7 @@ validation, Gremlin generation, and execution helpers live in focused modules.
 from typing import Any
 
 from hugegraph_mcp import gremlin_tools, schema_tools
+from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.plan_hash import (
@@ -245,9 +246,27 @@ def manage_graph_data(
     target_bound_hash = compute_plan_hash(plan_context)
     dry_run_result["plan_hash"] = target_bound_hash
     dry_run_result["plan_context"] = _plan_context_payload(plan_context)
+    dry_run_result["confirmable"] = True
 
     if dry_run:
-        return envelope_ok(dry_run_result, warnings=dry_run_result.get("warnings", []))
+        warnings = list(dry_run_result.get("warnings", []))
+        next_actions: list[str] = []
+        if MCPConfig.from_env().is_readonly():
+            dry_run_result["confirmable"] = False
+            dry_run_result["readonly_preview_only"] = True
+            warnings.append(
+                "This dry-run was generated while HUGEGRAPH_MCP_READONLY=true. "
+                "Its plan_hash is preview-only; set HUGEGRAPH_MCP_READONLY=false "
+                "and rerun dry_run before confirming writes."
+            )
+            next_actions.append(
+                "Set HUGEGRAPH_MCP_READONLY=false and rerun dry_run before confirm."
+            )
+        return envelope_ok(
+            dry_run_result,
+            warnings=warnings,
+            next_actions=next_actions,
+        )
 
     # readonly 需要在执行期再检查，不能只依赖 server 注册时隐藏写工具；
     # 长运行进程和测试中都可能动态切换配置或直接调用内部函数。
@@ -289,7 +308,7 @@ def manage_graph_data(
             details=details,
         )
 
-    execute_result = execute_graph_change_plan(plan)
+    execute_result = execute_graph_change_plan(plan, live_schema=live_schema)
     if isinstance(execute_result, dict) and execute_result.get("ok") is False:
         return envelope_err(
             execute_result["error"]["type"],

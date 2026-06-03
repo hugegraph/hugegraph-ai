@@ -27,6 +27,7 @@ from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability
 from hugegraph_mcp.tools.graph_data_gremlin import (
     _edge_match_query,
+    _g,
     _source_vertex_match_query,
     _target_vertex_match_query,
     _vertex_match_query,
@@ -40,7 +41,11 @@ from hugegraph_mcp.tools.graph_data_validate import (
     validate_graph_change_plan,
 )
 from hugegraph_mcp.tools.live_schema import fetch_live_schema_or_none
-from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
+from hugegraph_mcp.tools.schema_utils import (
+    normalized_schema_summary,
+    primary_key_names,
+    schema_payload,
+)
 
 
 # ---- Gremlin 执行辅助 ----
@@ -179,6 +184,18 @@ def dry_run_graph_change_plan(
             if endpoint_failed:
                 continue
             item["matched_count"] = None
+            continue
+
+        if op == "create_vertex":
+            _append_create_vertex_identity_counts(
+                idx=idx,
+                operation=operation,
+                item=item,
+                errors=errors,
+                live_schema=live_schema,
+            )
+            item["matched_count"] = None
+            preview.append(item)
             continue
 
         if op not in WRITE_OPS:
@@ -403,7 +420,10 @@ def _planned_vertex_matches(operation: dict[str, Any], match: dict[str, Any]) ->
 # ---- 执行 — 写入前再次校验 matched_count ----
 
 
-def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
+def execute_graph_change_plan(
+    change_plan: Any,
+    live_schema: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """执行变更计划 — 写入前对每个操作再次校验 matched_count。
 
     防止 dry_run 和 execute 之间状态变化导致的误操作。
@@ -412,6 +432,15 @@ def execute_graph_change_plan(change_plan: Any) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     for idx, operation in enumerate(operations):
         op = str(operation.get("op") or operation.get("type"))
+        if op == "create_vertex":
+            conflict = _create_vertex_identity_conflict(
+                operation=operation,
+                operation_index=idx,
+                live_schema=live_schema,
+            )
+            if conflict is not None:
+                return _execution_failure(conflict, operation, idx, results)
+
         if op == "create_edge":
             for endpoint, endpoint_query in (
                 ("source", _source_vertex_match_query(operation)),
@@ -615,6 +644,111 @@ def _write_affected_count(write_result: Any) -> int | None:
         except (TypeError, ValueError):
             return None
     return None
+
+
+def _append_create_vertex_identity_counts(
+    *,
+    idx: int,
+    operation: dict[str, Any],
+    item: dict[str, Any],
+    errors: list[ValidationError],
+    live_schema: dict[str, Any] | None,
+) -> None:
+    for identity_type, query in _create_vertex_identity_queries(
+        operation,
+        live_schema,
+    ):
+        count_result = _read_count(query)
+        if not count_result.get("ok"):
+            errors.append(
+                _validation_error(
+                    idx,
+                    operation,
+                    f"create_vertex {identity_type} identity count query failed",
+                    "Verify HugeGraph Server is available and retry the dry run.",
+                )
+            )
+            continue
+        live_count = count_result["data"]["matched_count"]
+        item[f"{identity_type}_live_count"] = live_count
+        if live_count > 0:
+            errors.append(
+                _validation_error(
+                    idx,
+                    operation,
+                    f"create_vertex {identity_type} identity already exists in live graph",
+                    "Use a new vertex identity or remove the existing vertex before importing.",
+                    ErrorType.INVALID_GRAPH_DATA.value,
+                )
+            )
+
+
+def _create_vertex_identity_conflict(
+    *,
+    operation: dict[str, Any],
+    operation_index: int,
+    live_schema: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    for identity_type, query in _create_vertex_identity_queries(
+        operation,
+        live_schema,
+    ):
+        count_result = _read_count(query)
+        if not count_result.get("ok"):
+            return count_result
+        live_count = count_result["data"]["matched_count"]
+        if live_count > 0:
+            return envelope_err(
+                ErrorType.INVALID_GRAPH_DATA,
+                f"create_vertex {identity_type} identity already exists before execution.",
+                details={
+                    "operation_index": operation_index,
+                    "identity_type": identity_type,
+                    "matched_count": live_count,
+                },
+            )
+    return None
+
+
+def _create_vertex_identity_queries(
+    operation: dict[str, Any],
+    live_schema: dict[str, Any] | None,
+) -> list[tuple[str, str]]:
+    label = operation.get("label")
+    if not isinstance(label, str) or not label:
+        return []
+
+    queries: list[tuple[str, str]] = []
+    explicit_id = operation.get("id")
+    if explicit_id not in (None, ""):
+        queries.append(("id", f"g.V().hasLabel({_g(label)}).hasId({_g(explicit_id)})"))
+
+    primary_keys = _create_vertex_primary_keys(label, live_schema)
+    properties = operation.get("properties")
+    if primary_keys and isinstance(properties, dict):
+        if all(
+            pk in properties and properties.get(pk) not in (None, "")
+            for pk in primary_keys
+        ):
+            query = f"g.V().hasLabel({_g(label)})" + "".join(
+                f".has({_g(pk)},{_g(properties[pk])})" for pk in primary_keys
+            )
+            queries.append(("primary_key", query))
+
+    return queries
+
+
+def _create_vertex_primary_keys(
+    label: str,
+    live_schema: dict[str, Any] | None,
+) -> list[str]:
+    raw_schema = schema_payload(live_schema) or {}
+    for vertex_label in raw_schema.get("vertexlabels", []):
+        if not isinstance(vertex_label, dict):
+            continue
+        if vertex_label.get("name") == label:
+            return primary_key_names(vertex_label)
+    return []
 
 
 def _execution_failure(

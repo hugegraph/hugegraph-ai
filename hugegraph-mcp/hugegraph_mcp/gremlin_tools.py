@@ -51,13 +51,14 @@ class GremlinExecutor:
 
 _GREMLIN_ERROR_TYPE_MAP = {
     "connection_error": ErrorType.CONNECTION_FAILED,
+    "timeout_error": ErrorType.TIMEOUT,
     "authentication_error": ErrorType.AUTHENTICATION_FAILED,
     "authorization_error": ErrorType.AUTHORIZATION_FAILED,
     "no_index_error": ErrorType.NO_INDEX,
     "query_syntax_error": ErrorType.QUERY_SYNTAX_ERROR,
     "server_error": ErrorType.SERVER_ERROR,
     "http_error": ErrorType.SERVER_ERROR,
-    "not_found_error": ErrorType.SERVER_ERROR,
+    "not_found_error": ErrorType.NOT_FOUND,
     "unknown_error": ErrorType.SERVER_ERROR,
 }
 
@@ -81,9 +82,24 @@ def _gremlin_error_envelope(result: dict[str, Any]) -> dict[str, Any]:
         error_type,
         result.get("message", "Gremlin query failed"),
         suggestion=suggestion,
+        retryable=_gremlin_error_retryable(result),
         details=result,
         duration_ms=result.get("duration_ms"),
     )
+
+
+def _gremlin_error_retryable(result: dict[str, Any]) -> bool:
+    error_type = result.get("error_type")
+    if error_type in {"connection_error", "timeout_error"}:
+        return True
+    if error_type not in {"server_error", "http_error"}:
+        return False
+
+    try:
+        status_code = int(result.get("status_code"))
+    except (TypeError, ValueError):
+        return error_type == "server_error"
+    return status_code in {500, 502, 503, 504}
 
 
 def _gremlin_result_count(data: Any) -> int:
@@ -164,6 +180,25 @@ def _execute_gremlin_with_error_handling(
                 "Check if HugeGraph server is running",
                 "Verify the HUGEGRAPH_URL environment variable",
                 "Check network connectivity to the server",
+            ],
+            "duration_ms": (time.perf_counter() - start) * 1000.0,
+            "operation_type": operation_type,
+        }
+
+    except requests.exceptions.Timeout:
+        address = (
+            actual_client._url
+            if actual_client is not None and hasattr(actual_client, "_url")
+            else "unknown address"
+        )
+        return {
+            "success": False,
+            "error_type": "timeout_error",
+            "message": f"HugeGraph request timed out at {address}",
+            "suggestions": [
+                "Retry the request after checking HugeGraph server health",
+                "Verify the query is bounded and can complete within the client timeout",
+                "Check network latency to the server",
             ],
             "duration_ms": (time.perf_counter() - start) * 1000.0,
             "operation_type": operation_type,

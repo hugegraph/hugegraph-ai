@@ -70,6 +70,10 @@ _READ_METHODS = {
     "oute",
     "ine",
     "bothe",
+    "outv",
+    "inv",
+    "bothv",
+    "otherv",
     "path",
     "order",
     "group",
@@ -99,6 +103,7 @@ _READ_METHODS = {
     "explain",
     "profile",
 }
+_ANONYMOUS_READ_METHODS = {"outv", "inv", "bothv", "otherv"}
 
 
 # ========== 分类器实现 ==========
@@ -188,6 +193,13 @@ def _has_bare_identifier_arguments(query_without_strings: str) -> bool:
         " ",
         query_without_strings,
     )
+    for method in _ANONYMOUS_READ_METHODS:
+        cleaned = re.sub(
+            rf"\b{method}\s*\(",
+            "(",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
     cleaned = re.sub(r"^\s*[gG]\b", " ", cleaned)
     for token_match in re.finditer(r"\b[A-Za-z_][A-Za-z0-9_]*\b", cleaned):
         token = token_match.group(0).lower()

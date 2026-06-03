@@ -35,6 +35,7 @@ def test_connection_error_handling():
         assert "Cannot connect to HugeGraph server" in result["error"]["message"]
         assert "Check if HugeGraph server is running" in result["error"]["suggestion"]
         assert result["error"]["details"]["error_type"] == "connection_error"
+        assert result["error"]["retryable"] is True
 
 
 def test_read_client_initialization_connection_error_is_enveloped():
@@ -50,6 +51,7 @@ def test_read_client_initialization_connection_error_is_enveloped():
         assert result["error"]["type"] == "CONNECTION_FAILED"
         assert "Cannot connect to HugeGraph server" in result["error"]["message"]
         assert result["error"]["details"]["error_type"] == "connection_error"
+        assert result["error"]["retryable"] is True
 
 
 def test_write_client_initialization_connection_error_is_enveloped(monkeypatch):
@@ -67,6 +69,7 @@ def test_write_client_initialization_connection_error_is_enveloped(monkeypatch):
         assert result["error"]["type"] == "CONNECTION_FAILED"
         assert "Cannot connect to HugeGraph server" in result["error"]["message"]
         assert result["error"]["details"]["error_type"] == "connection_error"
+        assert result["error"]["retryable"] is True
 
 
 def test_http_500_error_handling(monkeypatch):
@@ -93,6 +96,68 @@ def test_http_500_error_handling(monkeypatch):
         assert result["error"]["details"]["error_type"] == "server_error"
         assert result["error"]["details"]["status_code"] == 500
         assert "Check the Gremlin query syntax" in result["error"]["suggestion"]
+        assert result["error"]["retryable"] is True
+
+
+def test_http_503_error_is_retryable():
+    """Temporary 5xx HTTP failures should be retryable."""
+    with patch("hugegraph_mcp.gremlin_tools._get_read_client") as mock_client:
+        mock_client_instance = Mock()
+
+        mock_response = Mock()
+        mock_response.status_code = 503
+        error = requests.exceptions.HTTPError(
+            "Service Unavailable", response=mock_response
+        )
+        mock_client_instance.exec.side_effect = error
+        mock_client.return_value = mock_client_instance
+
+        result = execute_gremlin_read("g.V().limit(10)")
+
+        assert result["ok"] is False
+        assert result["error"]["type"] == "SERVER_ERROR"
+        assert result["error"]["details"]["error_type"] == "http_error"
+        assert result["error"]["details"]["status_code"] == 503
+        assert result["error"]["retryable"] is True
+
+
+def test_http_404_error_handling():
+    """Test handling of HTTP 404 graph or endpoint errors."""
+    with patch("hugegraph_mcp.gremlin_tools._get_read_client") as mock_client:
+        mock_client_instance = Mock()
+
+        mock_response = Mock()
+        mock_response.status_code = 404
+        error = requests.exceptions.HTTPError("Not Found", response=mock_response)
+        mock_client_instance.exec.side_effect = error
+        mock_client.return_value = mock_client_instance
+
+        result = execute_gremlin_read("g.V().limit(10)")
+
+        assert result["ok"] is False
+        assert result["error"]["type"] == "NOT_FOUND"
+        assert "Graph or endpoint not found" in result["error"]["message"]
+        assert result["error"]["details"]["error_type"] == "not_found_error"
+        assert result["error"]["details"]["status_code"] == 404
+        assert result["error"]["retryable"] is False
+
+
+def test_timeout_error_handling():
+    """Test handling of request timeouts."""
+    with patch("hugegraph_mcp.gremlin_tools._get_read_client") as mock_client:
+        mock_client_instance = Mock()
+        mock_client_instance.exec.side_effect = requests.exceptions.Timeout(
+            "Read timed out"
+        )
+        mock_client.return_value = mock_client_instance
+
+        result = execute_gremlin_read("g.V().count()")
+
+        assert result["ok"] is False
+        assert result["error"]["type"] == "TIMEOUT"
+        assert "timed out" in result["error"]["message"]
+        assert result["error"]["details"]["error_type"] == "timeout_error"
+        assert result["error"]["retryable"] is True
 
 
 def test_authentication_error_handling():
@@ -148,6 +213,7 @@ def test_syntax_error_handling():
         assert result["error"]["type"] == "QUERY_SYNTAX_ERROR"
         assert "syntax error" in result["error"]["message"]
         assert result["error"]["details"]["error_type"] == "query_syntax_error"
+        assert result["error"]["retryable"] is False
 
 
 def test_unknown_error_handling():
@@ -181,6 +247,7 @@ def test_no_index_exception_is_classified_as_no_index():
         assert result["error"]["type"] == "NO_INDEX"
         assert result["error"]["details"]["error_type"] == "no_index_error"
         assert "Create an index" in result["error"]["suggestion"]
+        assert result["error"]["retryable"] is False
 
 
 def test_successful_execution_preserves_format():

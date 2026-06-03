@@ -109,3 +109,13 @@ def test_allowed_literal_tokens_remain_safe():
     ]:
         decision = check_gremlin_read(query)
         assert decision.allowed is True, f"Expected allowed: {query}"
+
+
+def test_edge_endpoint_where_traversal_is_safe():
+    decision = check_gremlin_read(
+        "g.V().hasLabel('person').has('name','Alice')"
+        ".outE('knows').where(inV().hasLabel('person').has('name','Bob')).count()"
+    )
+
+    assert decision.allowed is True
+    assert decision.classification == "safe"

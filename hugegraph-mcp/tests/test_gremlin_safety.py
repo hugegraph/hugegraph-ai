@@ -23,6 +23,7 @@ def test_safe_read_queries():
         "g.V().out().path()",
         "g.V().has('name', 'alice').valueMap()",
         "g.E().range(0, 5).elementMap()",
+        "g.V().hasLabel('person').has('name','Alice').outE('knows').where(inV().hasLabel('person').has('name','Bob')).count()",
     ]
 
     for query in queries:

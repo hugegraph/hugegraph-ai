@@ -197,6 +197,176 @@ def test_create_edge_rejects_non_unique_property_match(hugegraph_client):
     )
 
 
+def test_create_vertex_existing_id_rejected_in_dry_run_without_writes(
+    hugegraph_client,
+):
+    names = _schema_names("id_conflict")
+    _ensure_custom_id_schema(hugegraph_client, names)
+    _exec(
+        hugegraph_client,
+        f"g.addV({_g(names.vertex_label)}).property(T.id,'conflict')"
+        f".property({_g(names.name_key)},'Existing')",
+    )
+    graph_data = {
+        "vertices": [
+            {
+                "id": "alice",
+                "label": names.vertex_label,
+                "properties": {names.name_key: "Alice"},
+            },
+            {
+                "id": "conflict",
+                "label": names.vertex_label,
+                "properties": {names.name_key: "Duplicate"},
+            },
+        ],
+        "edges": [],
+    }
+
+    dry_run = server.import_graph_data_tool(mode="ingest", graph_data=graph_data)
+
+    assert dry_run["ok"] is False
+    assert dry_run["error"]["type"] == "INVALID_GRAPH_DATA"
+    assert any(
+        "create_vertex id identity already exists" in error["reason"]
+        for error in dry_run["error"]["details"]["errors"]
+    )
+    assert (
+        _count(
+            hugegraph_client,
+            f"g.V().hasLabel({_g(names.vertex_label)}).hasId('alice')",
+        )
+        == 0
+    )
+    assert (
+        _count(
+            hugegraph_client,
+            f"g.V().hasLabel({_g(names.vertex_label)}).hasId('conflict')",
+        )
+        == 1
+    )
+
+
+def test_create_vertex_existing_primary_key_rejected_in_dry_run_without_writes(
+    hugegraph_client,
+):
+    names = _schema_names("pk_conflict")
+    _ensure_primary_key_schema(hugegraph_client, names)
+    _exec(
+        hugegraph_client,
+        f"g.addV({_g(names.vertex_label)}).property({_g(names.name_key)},'Conflict')",
+    )
+    graph_data = {
+        "vertices": [
+            {
+                "label": names.vertex_label,
+                "properties": {names.name_key: "Alice"},
+            },
+            {
+                "label": names.vertex_label,
+                "properties": {names.name_key: "Conflict"},
+            },
+        ],
+        "edges": [],
+    }
+
+    dry_run = server.import_graph_data_tool(mode="ingest", graph_data=graph_data)
+
+    assert dry_run["ok"] is False
+    assert dry_run["error"]["type"] == "INVALID_GRAPH_DATA"
+    assert any(
+        "create_vertex primary_key identity already exists" in error["reason"]
+        for error in dry_run["error"]["details"]["errors"]
+    )
+    assert (
+        _count(
+            hugegraph_client,
+            f"g.V().hasLabel({_g(names.vertex_label)})"
+            f".has({_g(names.name_key)},'Alice')",
+        )
+        == 0
+    )
+    assert (
+        _count(
+            hugegraph_client,
+            f"g.V().hasLabel({_g(names.vertex_label)})"
+            f".has({_g(names.name_key)},'Conflict')",
+        )
+        == 1
+    )
+
+
+def test_public_delete_edge_and_vertices_real_graph_state_matches(
+    hugegraph_client,
+):
+    names = _schema_names("delete")
+    _ensure_primary_key_schema(hugegraph_client, names)
+    graph_data = {
+        "vertices": [
+            {
+                "label": names.vertex_label,
+                "properties": {names.name_key: "Alice"},
+            },
+            {
+                "label": names.vertex_label,
+                "properties": {names.name_key: "Bob"},
+            },
+        ],
+        "edges": [
+            {
+                "label": names.edge_label,
+                "source_label": names.vertex_label,
+                "source": {names.name_key: "Alice"},
+                "target_label": names.vertex_label,
+                "target": {names.name_key: "Bob"},
+            }
+        ],
+    }
+
+    result = _import_graph_data(graph_data)
+
+    assert result["ok"] is True
+    assert _count(hugegraph_client, f"g.V().hasLabel({_g(names.vertex_label)})") == 2
+    assert _count(hugegraph_client, f"g.E().hasLabel({_g(names.edge_label)})") == 1
+
+    edge_delete_plan = {
+        "operations": [
+            {
+                "op": "delete_edge",
+                "label": names.edge_label,
+                "source_label": names.vertex_label,
+                "source_match": {names.name_key: "Alice"},
+                "target_label": names.vertex_label,
+                "target_match": {names.name_key: "Bob"},
+            }
+        ]
+    }
+    result = _delete_graph_data(edge_delete_plan)
+
+    assert result["ok"] is True
+    assert _count(hugegraph_client, f"g.E().hasLabel({_g(names.edge_label)})") == 0
+    assert _count(hugegraph_client, f"g.V().hasLabel({_g(names.vertex_label)})") == 2
+
+    vertex_delete_plan = {
+        "operations": [
+            {
+                "op": "delete_vertex",
+                "label": names.vertex_label,
+                "match": {names.name_key: "Alice"},
+            },
+            {
+                "op": "delete_vertex",
+                "label": names.vertex_label,
+                "match": {names.name_key: "Bob"},
+            },
+        ]
+    }
+    result = _delete_graph_data(vertex_delete_plan)
+
+    assert result["ok"] is True
+    assert _count(hugegraph_client, f"g.V().hasLabel({_g(names.vertex_label)})") == 0
+
+
 def test_partial_write_returns_error_envelope_and_real_graph_state_matches(
     hugegraph_client,
 ):
@@ -329,6 +499,20 @@ def _import_graph_data(graph_data: dict) -> dict:
     )
 
 
+def _delete_graph_data(change_plan: dict) -> dict:
+    dry_run = server.delete_graph_data_tool(change_plan=change_plan)
+    assert dry_run["ok"] is True
+    plan_context = dry_run["data"]["plan_context"]
+    return server.delete_graph_data_tool(
+        change_plan=change_plan,
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=plan_context["nonce"],
+        expires_at=plan_context["expires_at"],
+    )
+
+
 class _Names:
     def __init__(self, prefix: str) -> None:
         suffix = uuid4().hex[:8]
@@ -363,6 +547,17 @@ def _ensure_custom_id_schema(
         index.unique().ifNotExist().create()
     else:
         index.secondary().ifNotExist().create()
+
+
+def _ensure_primary_key_schema(client, names: _Names) -> None:
+    schema = client.schema()
+    schema.propertyKey(names.name_key).asText().ifNotExist().create()
+    schema.vertexLabel(names.vertex_label).properties(names.name_key).primaryKeys(
+        names.name_key
+    ).ifNotExist().create()
+    schema.edgeLabel(names.edge_label).sourceLabel(names.vertex_label).targetLabel(
+        names.vertex_label
+    ).ifNotExist().create()
 
 
 def _exec(client, query: str):

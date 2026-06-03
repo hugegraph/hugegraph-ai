@@ -704,6 +704,77 @@ def test_create_vertex_query_preserves_explicit_id():
     assert query == "g.addV('person').property(T.id,'1:Alice').property('name','Alice')"
 
 
+def test_dry_run_create_vertex_rejects_existing_explicit_id(monkeypatch):
+    read = []
+
+    def fake_read(query):
+        read.append(query)
+        return {"data": [1], "total": 1, "duration_ms": 1, "is_read": True}
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        fake_read,
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(
+        {
+            "operations": [
+                {
+                    "op": "create_vertex",
+                    "label": "person",
+                    "id": "1:Alice",
+                    "properties": {"age": 31},
+                }
+            ]
+        },
+        _live_schema(),
+    )
+
+    assert result["valid"] is False
+    assert result["preview"][0]["id_live_count"] == 1
+    assert any(
+        "create_vertex id identity already exists" in error["reason"]
+        for error in result["errors"]
+    )
+    assert read == ["g.V().hasLabel('person').hasId('1:Alice').count()"]
+
+
+def test_dry_run_create_vertex_rejects_existing_primary_key(monkeypatch):
+    read = []
+
+    def fake_read(query):
+        read.append(query)
+        return {"data": [1], "total": 1, "duration_ms": 1, "is_read": True}
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        fake_read,
+    )
+
+    result = manage_graph_data_module.dry_run_graph_change_plan(
+        {
+            "operations": [
+                {
+                    "op": "create_vertex",
+                    "label": "person",
+                    "properties": {"name": "Alice"},
+                }
+            ]
+        },
+        _live_schema(),
+    )
+
+    assert result["valid"] is False
+    assert result["preview"][0]["primary_key_live_count"] == 1
+    assert any(
+        "create_vertex primary_key identity already exists" in error["reason"]
+        for error in result["errors"]
+    )
+    assert read == ["g.V().hasLabel('person').has('name','Alice').count()"]
+
+
 def test_create_edge_query_matches_endpoints_by_id():
     query = manage_graph_data_module._create_edge_query(
         {
@@ -810,7 +881,14 @@ def test_dry_run_create_edge_accepts_same_batch_vertex_id_with_live_lookup(
     assert result["preview"][2]["target_matched_count"] == 1
     assert result["preview"][2]["target_planned_count"] == 1
     assert result["preview"][2]["target_live_count"] == 0
-    assert len(read) == 2
+    assert read == [
+        "g.V().hasLabel('person').hasId('1:Alice').count()",
+        "g.V().hasLabel('person').has('name','Alice').count()",
+        "g.V().hasLabel('person').hasId('1:Bob').count()",
+        "g.V().hasLabel('person').has('name','Bob').count()",
+        "g.V().hasLabel('person').hasId('1:Alice').count()",
+        "g.V().hasLabel('person').hasId('1:Bob').count()",
+    ]
 
 
 def test_dry_run_create_edge_normalizes_same_batch_numeric_ids(monkeypatch):
@@ -849,13 +927,13 @@ def test_dry_run_create_edge_normalizes_same_batch_numeric_ids(monkeypatch):
     assert result["valid"] is True
     assert result["preview"][2]["source_matched_count"] == 1
     assert result["preview"][2]["target_matched_count"] == 1
-    assert len(read) == 2
+    assert len(read) == 6
 
 
 def test_dry_run_create_edge_rejects_same_batch_endpoint_with_live_duplicate(
     monkeypatch,
 ):
-    counts = iter([1, 0])
+    counts = iter([1, 0, 1, 0])
     read = []
 
     def fake_read(query):
@@ -900,11 +978,68 @@ def test_dry_run_create_edge_rejects_same_batch_endpoint_with_live_duplicate(
     assert preview["source_live_count"] == 1
     assert preview["source_matched_count"] == 2
     assert preview["target_matched_count"] == 1
-    assert (
-        "create_edge source endpoint matched_count must be 1, got 2"
-        in result["errors"][0]["reason"]
+    assert any(
+        "create_vertex primary_key identity already exists" in error["reason"]
+        for error in result["errors"]
     )
-    assert len(read) == 2
+    assert any(
+        "create_edge source endpoint matched_count must be 1, got 2" in error["reason"]
+        for error in result["errors"]
+    )
+    assert len(read) == 4
+
+
+def test_execute_create_vertex_rechecks_identity_before_write(monkeypatch):
+    counts = iter([0, 1])
+    writes = []
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
+    )
+
+    def fake_write(query, **_kwargs):
+        writes.append(query)
+        return {"success": True, "affected": 1, "duration_ms": 1, "is_write": True}
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_write",
+        fake_write,
+    )
+
+    result = manage_graph_data_module.execute_graph_change_plan(
+        {
+            "operations": [
+                {
+                    "op": "create_vertex",
+                    "label": "person",
+                    "properties": {"name": "Alice"},
+                },
+                {
+                    "op": "create_vertex",
+                    "label": "person",
+                    "properties": {"name": "Bob"},
+                },
+            ]
+        },
+        live_schema=_live_schema(),
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "partial"
+    assert writes == ["g.addV('person').property('name','Alice')"]
+    assert result["failed_items"][0]["operation_index"] == 1
+    assert result["failed_items"][0]["error"]["type"] == "INVALID_GRAPH_DATA"
+    assert (
+        result["failed_items"][0]["error"]["details"]["identity_type"] == "primary_key"
+    )
 
 
 def test_execute_create_edge_rejects_zero_affected(monkeypatch):
@@ -1073,6 +1208,7 @@ def test_manage_graph_data_plan_hash_expired(monkeypatch):
 
 def test_manage_graph_data_dry_run_returns_plan_hash(monkeypatch):
     _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     counts = iter([1, 0])
 
     monkeypatch.setattr(
@@ -1093,6 +1229,51 @@ def test_manage_graph_data_dry_run_returns_plan_hash(monkeypatch):
 
     assert result["ok"] is True
     assert re.fullmatch(r"[0-9a-f]{32}", result["data"]["plan_hash"])
+    assert result["data"]["confirmable"] is True
+
+
+def test_manage_graph_data_readonly_dry_run_warns_plan_must_be_regenerated(
+    monkeypatch,
+):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
+    counts = iter([1, 0, 1, 0])
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
+    )
+
+    dry_run = manage_graph_data_module.manage_graph_data(
+        mode="delete",
+        change_plan=_delete_vertex_plan(),
+    )
+
+    assert dry_run["ok"] is True
+    assert dry_run["data"]["confirmable"] is False
+    assert dry_run["data"]["readonly_preview_only"] is True
+    assert any("preview-only" in warning for warning in dry_run["warnings"])
+    assert any("rerun dry_run" in action for action in dry_run["next_actions"])
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    result = manage_graph_data_module.manage_graph_data(
+        mode="delete",
+        change_plan=_delete_vertex_plan(),
+        dry_run=False,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=dry_run["data"]["plan_context"]["nonce"],
+        expires_at=dry_run["data"]["plan_context"]["expires_at"],
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "PLAN_HASH_MISMATCH"
 
 
 def test_manage_graph_data_plan_hash_schema_field_order_same_hash():
@@ -1214,6 +1395,18 @@ def test_manage_graph_data_partial_write_returns_error_envelope(monkeypatch):
         "edges": [],
     }
     writes = []
+    counts = iter([0, 0, 0, 0, 0, 0])
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        lambda _query: {
+            "data": [next(counts)],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        },
+    )
 
     def fake_write(query, **_kwargs):
         writes.append(query)
