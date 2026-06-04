@@ -20,7 +20,7 @@ https://mcp.deepwiki.com/mcp
 
 ## 前置要求
 
-- Python 3.9 或更高版本，用于运行随附的 MCP 客户端脚本。
+- Python 3.10 或更高版本，用于运行随附的 MCP 客户端脚本。
 - 当前环境需要能访问 `https://mcp.deepwiki.com/mcp`。
 
 ## 目录结构

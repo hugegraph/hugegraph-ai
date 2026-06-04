@@ -20,7 +20,7 @@ https://mcp.deepwiki.com/mcp
 
 ## Requirements
 
-- Python 3.9 or later for the bundled MCP client script.
+- Python 3.10 or later for the bundled MCP client script.
 - Network access to `https://mcp.deepwiki.com/mcp`.
 
 ## Layout
