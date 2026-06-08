@@ -21,6 +21,52 @@ from hugegraph_llm.models.llms.ollama import OllamaClient
 from hugegraph_llm.models.llms.openai import OpenAIClient
 
 
+def _use_chat_fallback(llm_configs: LLMConfig, provider: str, extract_api_key, chat_api_key) -> bool:
+    return llm_configs.chat_llm_type == provider and not extract_api_key and bool(chat_api_key)
+
+
+def _openai_extract_config(llm_configs: LLMConfig):
+    if _use_chat_fallback(
+        llm_configs,
+        "openai",
+        llm_configs.openai_extract_api_key,
+        llm_configs.openai_chat_api_key,
+    ):
+        return {
+            "api_key": llm_configs.openai_chat_api_key,
+            "api_base": llm_configs.openai_chat_api_base,
+            "model_name": llm_configs.openai_chat_language_model,
+            "max_tokens": llm_configs.openai_chat_tokens,
+        }
+    return {
+        "api_key": llm_configs.openai_extract_api_key,
+        "api_base": llm_configs.openai_extract_api_base,
+        "model_name": llm_configs.openai_extract_language_model,
+        "max_tokens": llm_configs.openai_extract_tokens,
+    }
+
+
+def _litellm_extract_config(llm_configs: LLMConfig):
+    if _use_chat_fallback(
+        llm_configs,
+        "litellm",
+        llm_configs.litellm_extract_api_key,
+        llm_configs.litellm_chat_api_key,
+    ):
+        return {
+            "api_key": llm_configs.litellm_chat_api_key,
+            "api_base": llm_configs.litellm_chat_api_base,
+            "model_name": llm_configs.litellm_chat_language_model,
+            "max_tokens": llm_configs.litellm_chat_tokens,
+        }
+    return {
+        "api_key": llm_configs.litellm_extract_api_key,
+        "api_base": llm_configs.litellm_extract_api_base,
+        "model_name": llm_configs.litellm_extract_language_model,
+        "max_tokens": llm_configs.litellm_extract_tokens,
+    }
+
+
 def get_chat_llm(llm_configs: LLMConfig):
     if llm_configs.chat_llm_type == "openai":
         return OpenAIClient(
@@ -47,12 +93,7 @@ def get_chat_llm(llm_configs: LLMConfig):
 
 def get_extract_llm(llm_configs: LLMConfig):
     if llm_configs.extract_llm_type == "openai":
-        return OpenAIClient(
-            api_key=llm_configs.openai_extract_api_key,
-            api_base=llm_configs.openai_extract_api_base,
-            model_name=llm_configs.openai_extract_language_model,
-            max_tokens=llm_configs.openai_extract_tokens,
-        )
+        return OpenAIClient(**_openai_extract_config(llm_configs))
     if llm_configs.extract_llm_type == "ollama/local":
         return OllamaClient(
             model=llm_configs.ollama_extract_language_model,
@@ -60,12 +101,7 @@ def get_extract_llm(llm_configs: LLMConfig):
             port=llm_configs.ollama_extract_port,
         )
     if llm_configs.extract_llm_type == "litellm":
-        return LiteLLMClient(
-            api_key=llm_configs.litellm_extract_api_key,
-            api_base=llm_configs.litellm_extract_api_base,
-            model_name=llm_configs.litellm_extract_language_model,
-            max_tokens=llm_configs.litellm_extract_tokens,
-        )
+        return LiteLLMClient(**_litellm_extract_config(llm_configs))
     raise Exception("extract llm type is not supported !")
 
 
@@ -124,12 +160,7 @@ class LLMs:
 
     def get_extract_llm(self):
         if self.extract_llm_type == "openai":
-            return OpenAIClient(
-                api_key=llm_settings.openai_extract_api_key,
-                api_base=llm_settings.openai_extract_api_base,
-                model_name=llm_settings.openai_extract_language_model,
-                max_tokens=llm_settings.openai_extract_tokens,
-            )
+            return OpenAIClient(**_openai_extract_config(llm_settings))
         if self.extract_llm_type == "ollama/local":
             return OllamaClient(
                 model=llm_settings.ollama_extract_language_model,
@@ -137,12 +168,7 @@ class LLMs:
                 port=llm_settings.ollama_extract_port,
             )
         if self.extract_llm_type == "litellm":
-            return LiteLLMClient(
-                api_key=llm_settings.litellm_extract_api_key,
-                api_base=llm_settings.litellm_extract_api_base,
-                model_name=llm_settings.litellm_extract_language_model,
-                max_tokens=llm_settings.litellm_extract_tokens,
-            )
+            return LiteLLMClient(**_litellm_extract_config(llm_settings))
         raise Exception("extract llm type is not supported !")
 
     def get_text2gql_llm(self):
