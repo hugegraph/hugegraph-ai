@@ -27,7 +27,7 @@ from hugegraph_llm.api.graph_extract_api import graph_extract_http_api
 from hugegraph_llm.api.models.graph_extract_requests import GraphExtractClientConfig, GraphExtractRequest
 from hugegraph_llm.api.models.graph_extract_responses import GraphExtractResponse
 from hugegraph_llm.api.rag_api import rag_http_api
-from hugegraph_llm.config import huge_settings
+from hugegraph_llm.config import huge_settings, llm_settings
 from hugegraph_llm.flows.graph_extract import GraphExtractFlow
 from hugegraph_llm.services.graph_extract_service import GraphExtractService
 from hugegraph_llm.state.ai_state import WkFlowInput
@@ -102,6 +102,54 @@ def test_graph_extract_returns_envelope_from_service():
     service.extract_sync.assert_called_once()
 
 
+def test_graph_extract_accepts_content_text_wire_shape():
+    service = Mock()
+    service.extract_sync.return_value = GraphExtractResponse(
+        status="succeeded",
+        result=_graph_result(),
+        warnings=[],
+        meta={},
+    )
+
+    response = _graph_client(service).post(
+        "/graph/extract",
+        json={"content_type": "text", "content": "marko knows vadas", "schema": VALID_SCHEMA},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    request = service.extract_sync.call_args.args[0]
+    assert request.content_type == "text"
+    assert request.content == "marko knows vadas"
+    assert request.texts == ["marko knows vadas"]
+
+
+def test_graph_extract_accepts_content_chunks_wire_shape():
+    service = Mock()
+    service.extract_sync.return_value = GraphExtractResponse(
+        status="succeeded",
+        result=_graph_result(),
+        warnings=[],
+        meta={},
+    )
+
+    response = _graph_client(service).post(
+        "/graph/extract",
+        json={
+            "content_type": "chunks",
+            "content": ["marko knows vadas", "vadas knows josh"],
+            "schema": VALID_SCHEMA,
+            "max_parallel_chunks": 2,
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    request = service.extract_sync.call_args.args[0]
+    assert request.content_type == "chunks"
+    assert request.content == ["marko knows vadas", "vadas knows josh"]
+    assert request.texts == ["marko knows vadas", "vadas knows josh"]
+    assert request.max_parallel_chunks == 2
+
+
 def test_graph_extract_rejects_invalid_public_contract_inputs():
     client = _graph_client(Mock())
 
@@ -111,6 +159,11 @@ def test_graph_extract_rejects_invalid_public_contract_inputs():
         {"texts": "x", "schema": {"vertexlabels": [{"name": "person"}], "edgelabels": []}},
         {"texts": "x", "schema": INLINE_SCHEMA, "split_type": "doc"},
         {"texts": "x", "schema": INLINE_SCHEMA, "extract_type": "triples"},
+        {"content_type": "text", "content": ["chunk"], "schema": INLINE_SCHEMA},
+        {"content_type": "chunks", "content": "not-a-list", "schema": INLINE_SCHEMA},
+        {"content_type": "chunks", "content": [], "schema": INLINE_SCHEMA},
+        {"content_type": "chunks", "content": ["x"], "schema": INLINE_SCHEMA, "split_type": "paragraph"},
+        {"texts": "x", "content": "y", "schema": INLINE_SCHEMA},
         {"texts": "x", "schema": "hugegraph"},
         {"texts": "x", "schema": INLINE_SCHEMA, "client_config": _named_client_config()},
         {"texts": "x", "schema": "custom_graph", "client_config": _named_client_config("other_graph")},
@@ -122,18 +175,47 @@ def test_graph_extract_rejects_invalid_public_contract_inputs():
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
+def test_graph_extract_request_validates_content_shape_and_parallel_limit(monkeypatch):
+    monkeypatch.setattr(llm_settings, "graph_extract_max_parallel_chunks", 2)
+    monkeypatch.setattr(llm_settings, "graph_extract_max_parallel_chunks_limit", 3)
+
+    text_request = GraphExtractRequest(content_type="text", content="hello", schema=INLINE_SCHEMA)
+    assert text_request.texts == ["hello"]
+    assert text_request.max_parallel_chunks == 2
+
+    chunk_request = GraphExtractRequest(
+        content_type="chunks",
+        content=["chunk one", "chunk two"],
+        schema=INLINE_SCHEMA,
+        max_parallel_chunks=3,
+    )
+    assert chunk_request.texts == ["chunk one", "chunk two"]
+    assert chunk_request.max_parallel_chunks == 3
+
+    with pytest.raises(ValidationError):
+        GraphExtractRequest(content_type="chunks", content=["chunk"], schema=INLINE_SCHEMA, max_parallel_chunks=4)
+
+
 def test_graph_extract_service_parses_flow_json_and_records_metadata():
     scheduler = Mock()
     scheduler.schedule_flow.return_value = json.dumps(
         {
             **_graph_result(),
             "call_count": 2,
+            "chunk_count": 2,
             "warning": "schema mismatch",
         }
     )
 
     response = GraphExtractService(scheduler).extract_sync(
-        GraphExtractRequest(texts="marko knows vadas", schema=VALID_SCHEMA, language="en", include_meta=True)
+        GraphExtractRequest(
+            content_type="text",
+            content="marko knows vadas",
+            schema=VALID_SCHEMA,
+            language="en",
+            include_meta=True,
+            max_parallel_chunks=2,
+        )
     )
 
     assert response.status == "succeeded"
@@ -142,12 +224,17 @@ def test_graph_extract_service_parses_flow_json_and_records_metadata():
     assert response.meta["extract_type"] == "property_graph"
     assert response.meta["language"] == "en"
     assert response.meta["text_count"] == 1
+    assert response.meta["content_type"] == "text"
+    assert response.meta["chunk_count"] == 2
+    assert response.meta["max_parallel_chunks"] == 2
     assert response.meta["vertex_count"] == 1
     assert response.meta["edge_count"] == 1
     assert response.meta["call_count"] == 2
     scheduler.schedule_flow.assert_called_once()
     assert scheduler.schedule_flow.call_args.kwargs["language"] == "en"
     assert scheduler.schedule_flow.call_args.kwargs["split_type"] == "document"
+    assert scheduler.schedule_flow.call_args.kwargs["content_type"] == "text"
+    assert scheduler.schedule_flow.call_args.kwargs["max_parallel_chunks"] == 2
 
 
 def test_graph_extract_service_passes_request_local_client_config_and_redacts_password(monkeypatch):
@@ -236,6 +323,25 @@ def test_flow_prepare_sets_request_local_graph_config():
     }
 
 
+def test_flow_prepare_preserves_content_type_and_parallel_chunks():
+    flow = GraphExtractFlow()
+    prepared_input = WkFlowInput()
+
+    flow.prepare(
+        prepared_input,
+        "custom_graph",
+        ["chunk one", "chunk two"],
+        "prompt",
+        "property_graph",
+        content_type="chunks",
+        max_parallel_chunks=3,
+    )
+
+    assert prepared_input.texts == ["chunk one", "chunk two"]
+    assert prepared_input.content_type == "chunks"
+    assert prepared_input.max_parallel_chunks == 3
+
+
 def test_flow_build_flow_preserves_split_type_and_client_config(monkeypatch):
     monkeypatch.setattr("hugegraph_llm.flows.graph_extract.GPipeline", CapturePipeline)
     client_config = GraphExtractClientConfig(graph="custom_graph", user="admin", pwd="secret", gs="space_a")
@@ -246,11 +352,13 @@ def test_flow_build_flow_preserves_split_type_and_client_config(monkeypatch):
         "prompt",
         "property_graph",
         split_type="paragraph",
+        max_parallel_chunks=3,
         client_config=client_config,
     )
 
     prepared_input = pipeline.params["wkflow_input"]
     assert prepared_input.split_type == "paragraph"
+    assert prepared_input.max_parallel_chunks == 3
     assert prepared_input.graph_client_config["graphspace"] == "space_a"
 
 

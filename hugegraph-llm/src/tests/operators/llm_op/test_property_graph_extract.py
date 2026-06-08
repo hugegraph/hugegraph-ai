@@ -18,6 +18,7 @@
 # pylint: disable=protected-access
 
 import json
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -1080,6 +1081,58 @@ Hope this helps."""
 
         # Check edge properties
         self.assertEqual(result["edges"][0]["properties"]["role"], "Forrest Gump")
+
+    def test_run_with_parallel_chunks_preserves_input_order(self):
+        """Test parallel chunk extraction keeps deterministic aggregation order."""
+        extractor = PropertyGraphExtract(llm=self.mock_llm)
+
+        def fake_extract(_schema, chunk):
+            if chunk == "slow chunk":
+                time.sleep(0.02)
+            name = "Alice" if chunk == "slow chunk" else "Bob"
+            return json.dumps(
+                {
+                    "vertices": [
+                        {
+                            "type": "vertex",
+                            "label": "person",
+                            "properties": {"name": name},
+                        }
+                    ],
+                    "edges": [],
+                }
+            )
+
+        extractor.extract_property_graph_by_llm = MagicMock(side_effect=fake_extract)
+        context = {
+            "schema": self.schema,
+            "chunks": ["slow chunk", "fast chunk"],
+            "max_parallel_chunks": 8,
+        }
+
+        result = extractor.run(context)
+
+        self.assertEqual([vertex["properties"]["name"] for vertex in result["vertices"]], ["Alice", "Bob"])
+        self.assertEqual(result["call_count"], 2)
+        self.assertEqual(result["max_parallel_chunks"], 2)
+        self.assertEqual(extractor.extract_property_graph_by_llm.call_count, 2)
+
+    @patch("hugegraph_llm.operators.llm_op.property_graph_extract.ThreadPoolExecutor")
+    def test_run_with_single_parallel_chunk_uses_serial_path(self, mock_executor):
+        """Test max_parallel_chunks=1 keeps the existing serial extraction path."""
+        extractor = PropertyGraphExtract(llm=self.mock_llm)
+        extractor.extract_property_graph_by_llm = MagicMock(side_effect=self.llm_responses)
+        context = {
+            "schema": self.schema,
+            "chunks": self.chunks,
+            "max_parallel_chunks": 1,
+        }
+
+        result = extractor.run(context)
+
+        mock_executor.assert_not_called()
+        self.assertEqual(extractor.extract_property_graph_by_llm.call_count, 2)
+        self.assertEqual(result["call_count"], 2)
 
     def test_run_with_existing_vertices_and_edges(self):
         """Test the run method with existing vertices and edges."""
