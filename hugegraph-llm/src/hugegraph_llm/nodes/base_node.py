@@ -75,11 +75,10 @@ class BaseNode(GNode):
 
         try:
             res = self.operator_schedule(data_json)
-        except (ValueError, TypeError, KeyError, NotImplementedError) as exc:
+        except Exception as exc:
             err_msg = _format_node_err(self, exc)
             log.error(err_msg)
             return CStatus(-1, err_msg)
-        # For unexpected exceptions, re-raise to let them propagate or be caught elsewhere
 
         self.context.lock()
         try:
