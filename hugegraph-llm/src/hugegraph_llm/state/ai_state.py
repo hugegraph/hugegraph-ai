@@ -22,6 +22,8 @@ from hugegraph_llm.utils.log import log
 
 class WkFlowInput(GParam):
     texts: Optional[Union[str, List[str]]] = None  # texts input used by ChunkSplit Node
+    content_type: Optional[str] = None
+    max_parallel_chunks: Optional[int] = None
     language: Optional[str] = None  # language configuration used by ChunkSplit Node
     split_type: Optional[str] = None  # split type used by ChunkSplit Node
     example_prompt: Optional[str] = None  # need by graph information extract
@@ -85,6 +87,8 @@ class WkFlowInput(GParam):
 
     def reset(self, _: CStatus) -> None:
         self.texts = None
+        self.content_type = None
+        self.max_parallel_chunks = None
         self.language = None
         self.split_type = None
         self.example_prompt = None

@@ -19,6 +19,7 @@
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List
 
 from hugegraph_llm.config import prompt
@@ -78,9 +79,15 @@ def filter_item(schema, items) -> List[Dict[str, Any]]:
 
 
 class PropertyGraphExtract:
-    def __init__(self, llm: BaseLLM, example_prompt: str = prompt.extract_graph_prompt) -> None:
+    def __init__(
+        self,
+        llm: BaseLLM,
+        example_prompt: str = prompt.extract_graph_prompt,
+        max_parallel_chunks: int = 1,
+    ) -> None:
         self.llm = llm
         self.example_prompt = example_prompt
+        self.max_parallel_chunks = max(1, max_parallel_chunks)
         self.NECESSARY_ITEM_KEYS = {"label", "type", "properties"}  # pylint: disable=invalid-name
 
     def run(self, context: Dict[str, Any]) -> Dict[str, List[Any]]:
@@ -91,8 +98,18 @@ class PropertyGraphExtract:
         if "edges" not in context:
             context["edges"] = []
         items = []
-        for chunk in chunks:
-            proceeded_chunk = self.extract_property_graph_by_llm(schema, chunk)
+        max_parallel_chunks = max(1, int(context.get("max_parallel_chunks") or self.max_parallel_chunks))
+        chunk_count = len(chunks)
+        worker_count = min(max_parallel_chunks, chunk_count)
+        context["max_parallel_chunks"] = worker_count
+        if worker_count <= 1:
+            proceeded_chunks = [self.extract_property_graph_by_llm(schema, chunk) for chunk in chunks]
+        else:
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                proceeded_chunks = list(
+                    executor.map(lambda chunk: self.extract_property_graph_by_llm(schema, chunk), chunks)
+                )
+        for chunk, proceeded_chunk in zip(chunks, proceeded_chunks):
             log.debug(
                 "[LLM] %s input: %s \n output:%s",
                 self.__class__.__name__,

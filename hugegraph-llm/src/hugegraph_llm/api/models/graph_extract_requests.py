@@ -21,9 +21,11 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from hugegraph_llm.config import llm_settings
 from hugegraph_llm.operators.common_op.check_schema import CheckSchema
 
 SchemaInput = Union[str, Dict[str, Any]]
+ContentInput = Union[str, List[str]]
 
 
 def _validate_schema_value(schema: SchemaInput) -> SchemaInput:
@@ -75,24 +77,58 @@ class GraphExtractClientConfig(BaseModel):
 class GraphExtractRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    texts: Union[str, List[str]] = Field(..., description="Text or list of texts to extract from.")
+    content_type: Literal["text", "chunks"] = Field(
+        default="text", description="Whether content is raw text or chunks."
+    )
+    content: Optional[ContentInput] = Field(default=None, description="Raw document text or pre-split chunks.")
+    texts: Optional[ContentInput] = Field(default=None, description="Deprecated alias for content_type=text content.")
     schema_data: SchemaInput = Field(..., alias="schema", description="Graph schema JSON object/string, or graph name.")
     example_prompt: Optional[str] = Field(default=None, description="Extraction prompt header or examples.")
     extract_type: Literal["property_graph"] = Field(default="property_graph")
     language: Literal["zh", "en"] = Field(default="zh")
     split_type: Literal["document", "paragraph", "sentence"] = Field(default="document")
+    max_parallel_chunks: Optional[int] = Field(default=None, description="Maximum chunk-level LLM calls per request.")
     include_meta: bool = Field(default=False, description="Whether to include response metadata.")
     include_warnings: bool = Field(default=True, description="Whether to include extraction warnings.")
     client_config: Optional[GraphExtractClientConfig] = Field(default=None)
 
-    @field_validator("texts")
-    @classmethod
-    def normalize_texts(cls, value):
-        items = [value] if isinstance(value, str) else list(value)
-        items = [text for text in items if isinstance(text, str) and text.strip()]
+    @staticmethod
+    def _normalize_text_content(value: ContentInput) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("content must be a non-empty string when content_type is text")
+        return value.strip()
+
+    @staticmethod
+    def _normalize_legacy_texts(value: ContentInput) -> str:
+        if isinstance(value, str):
+            return GraphExtractRequest._normalize_text_content(value)
+        items = [text for text in value if isinstance(text, str) and text.strip()]
+        if len(items) != 1:
+            raise ValueError("texts alias must contain exactly one non-empty string")
+        return items[0].strip()
+
+    @staticmethod
+    def _normalize_chunks(value: ContentInput) -> List[str]:
+        if not isinstance(value, list):
+            raise ValueError("content must be a non-empty list of strings when content_type is chunks")
+        items = []
+        for chunk in value:
+            if not isinstance(chunk, str) or not chunk.strip():
+                raise ValueError("chunks content must contain only non-empty strings")
+            items.append(chunk.strip())
         if not items:
-            raise ValueError("texts must contain at least one non-empty string")
+            raise ValueError("chunks content must contain at least one non-empty string")
         return items
+
+    @staticmethod
+    def _validate_parallel_chunks(value: Optional[int]) -> int:
+        requested = llm_settings.graph_extract_max_parallel_chunks if value is None else value
+        limit = llm_settings.graph_extract_max_parallel_chunks_limit
+        if requested < 1:
+            raise ValueError("max_parallel_chunks must be greater than or equal to 1")
+        if requested > limit:
+            raise ValueError(f"max_parallel_chunks must be less than or equal to {limit}")
+        return requested
 
     @property
     def schema(self) -> SchemaInput:
@@ -113,6 +149,30 @@ class GraphExtractRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_schema_and_client_config(self):
+        if self.content is not None and self.texts is not None:
+            raise ValueError("content and deprecated texts alias cannot be provided together")
+
+        if self.content is None:
+            if self.texts is None:
+                raise ValueError("content is required")
+            if self.content_type != "text":
+                raise ValueError("texts alias can only be used with content_type='text'")
+            text = self._normalize_legacy_texts(self.texts)
+            self.content = text
+            self.texts = [text]
+        elif self.content_type == "text":
+            text = self._normalize_text_content(self.content)
+            self.content = text
+            self.texts = [text]
+        else:
+            if self.split_type != "document":
+                raise ValueError("split_type must be 'document' when content_type is chunks")
+            chunks = self._normalize_chunks(self.content)
+            self.content = chunks
+            self.texts = chunks
+
+        self.max_parallel_chunks = self._validate_parallel_chunks(self.max_parallel_chunks)
+
         schema = self.schema_data
         is_named_schema = isinstance(schema, str) and not schema.strip().startswith("{")
         if not is_named_schema:

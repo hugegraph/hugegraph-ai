@@ -172,6 +172,8 @@ class GraphExtractService:
                 language=request.language,
                 split_type=request.split_type,
                 client_config=request.client_config,
+                content_type=request.content_type,
+                max_parallel_chunks=request.max_parallel_chunks,
             )
         except Exception:
             log.exception("Graph extraction failed during scheduler execution")
@@ -224,11 +226,25 @@ class GraphExtractService:
         started: float,
         client_config_meta: Dict[str, Any],
     ) -> Dict[str, Any]:
+        chunk_count = parsed_result.get("chunk_count")
+        if chunk_count is None:
+            chunk_count = len(request.texts) if request.content_type == "chunks" else parsed_result.get("call_count")
+        max_parallel_chunks = parsed_result.get("max_parallel_chunks")
+        if max_parallel_chunks is None:
+            max_parallel_chunks = (
+                min(request.max_parallel_chunks, chunk_count)
+                if isinstance(chunk_count, int) and chunk_count >= 0
+                else request.max_parallel_chunks
+            )
+
         meta = {
             "extract_type": request.extract_type,
+            "content_type": request.content_type,
             "language": request.language,
             "split_type": request.split_type,
-            "text_count": len(request.texts),
+            "text_count": 1 if request.content_type == "text" else 0,
+            "chunk_count": chunk_count,
+            "max_parallel_chunks": max_parallel_chunks,
             "vertex_count": _count_items(result, "vertices"),
             "edge_count": _count_items(result, "edges"),
             "triple_count": _count_items(result, "triples"),
