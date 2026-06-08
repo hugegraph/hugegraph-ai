@@ -62,7 +62,7 @@ def filter_item(schema, items) -> List[Dict[str, Any]]:
             "properties": vertex["properties"],
         }
     for edge in schema["edgelabels"]:
-        properties_map["edge"][edge["name"]] = {"properties": edge["properties"]}
+        properties_map["edge"][edge["name"]] = {"properties": edge.get("properties", [])}
     log.info("properties_map: %s", properties_map)
     for item in items:
         item_type = item["type"]
@@ -116,7 +116,7 @@ class PropertyGraphExtract:
                 chunk,
                 proceeded_chunk,
             )
-            items.extend(self._extract_and_filter_label(schema, proceeded_chunk))
+            items.extend(self._extract_and_filter_label(schema, proceeded_chunk, raise_on_invalid=True))
         items = filter_item(schema, items)
         for item in items:
             if item["type"] == "vertex":
@@ -221,7 +221,7 @@ class PropertyGraphExtract:
             normalized_edges.append(edge)
         return normalized_edges
 
-    def _extract_and_filter_label(self, schema, text) -> List[Dict[str, Any]]:
+    def _extract_and_filter_label(self, schema, text, raise_on_invalid: bool = False) -> List[Dict[str, Any]]:
         # Strip markdown code blocks (e.g. ```json ... ```)
         text = re.sub(r"```\w*\n?", "", text)
         text = re.sub(r"```", "", text)
@@ -231,6 +231,8 @@ class PropertyGraphExtract:
         json_match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
         if not json_match:
             log.critical("Invalid property graph! No JSON found, please check the output format example in prompt.")
+            if raise_on_invalid:
+                raise ValueError("Invalid property graph JSON: no JSON object or array found")
             return []
         json_str = json_match.group(1).strip()
 
@@ -245,6 +247,8 @@ class PropertyGraphExtract:
             # Expect property_graph to be a dict with keys "vertices" and "edges"
             if not (isinstance(property_graph, dict) and "vertices" in property_graph and "edges" in property_graph):
                 log.critical("Invalid property graph format; expecting 'vertices' and 'edges'.")
+                if raise_on_invalid:
+                    raise ValueError("Invalid property graph JSON: expecting 'vertices' and 'edges'")
                 return items
 
             # Create sets for valid vertex and edge labels based on the schema
@@ -285,4 +289,6 @@ class PropertyGraphExtract:
             items = vertices + edges
         except json.JSONDecodeError:
             log.critical("Invalid property graph JSON! Please check the extracted JSON data carefully")
+            if raise_on_invalid:
+                raise ValueError("Invalid property graph JSON: failed to parse extracted JSON") from None
         return items

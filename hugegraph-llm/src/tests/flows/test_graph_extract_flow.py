@@ -147,6 +147,7 @@ def test_workflow_state_setup_clears_graph_extract_result_fields():
     state.triples = [("old", "rel", "value")]
     state.chunks = ["old chunk"]
     state.call_count = 10
+    state.max_parallel_chunks = 2
 
     status = state.setup()
 
@@ -156,3 +157,4 @@ def test_workflow_state_setup_clears_graph_extract_result_fields():
     assert state.triples is None
     assert state.chunks is None
     assert state.call_count is None
+    assert state.max_parallel_chunks is None

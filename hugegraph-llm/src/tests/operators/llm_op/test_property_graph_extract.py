@@ -201,6 +201,20 @@ class TestPropertyGraphExtract(unittest.TestCase):
         self.assertEqual(filtered_items[2]["properties"]["role"], "Forrest Gump")
         self.assertNotIn("ignored", filtered_items[2]["properties"])
 
+    def test_filter_item_accepts_parent_edge_label_without_properties(self):
+        """Test parent edge labels without properties do not break filtering."""
+        schema = {
+            "vertexlabels": self.schema["vertexlabels"],
+            "edgelabels": [
+                {"name": "BELONGS_TO", "edgelabel_type": "PARENT"},
+                *self.schema["edgelabels"],
+            ],
+        }
+
+        filtered_items = filter_item(schema, [])
+
+        self.assertEqual(filtered_items, [])
+
     def test_extract_property_graph_by_llm(self):
         """Test the extract_property_graph_by_llm method."""
         extractor = PropertyGraphExtract(llm=self.mock_llm)
@@ -1133,6 +1147,18 @@ Hope this helps."""
         mock_executor.assert_not_called()
         self.assertEqual(extractor.extract_property_graph_by_llm.call_count, 2)
         self.assertEqual(result["call_count"], 2)
+
+    def test_run_raises_when_chunk_output_is_malformed_json(self):
+        """Test flow execution fails instead of silently dropping malformed chunk output."""
+        extractor = PropertyGraphExtract(llm=self.mock_llm)
+        extractor.extract_property_graph_by_llm = MagicMock(return_value='{"vertices": [')
+        context = {
+            "schema": self.schema,
+            "chunks": ["malformed output chunk"],
+        }
+
+        with self.assertRaisesRegex(ValueError, "Invalid property graph JSON"):
+            extractor.run(context)
 
     def test_run_with_existing_vertices_and_edges(self):
         """Test the run method with existing vertices and edges."""

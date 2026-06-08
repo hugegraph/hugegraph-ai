@@ -151,6 +151,7 @@ class WkFlowState(GParam):
     vertices: Optional[List[Any]] = None
     triples: Optional[List[Any]] = None
     call_count: Optional[int] = None
+    max_parallel_chunks: Optional[int] = None
 
     keywords: Optional[List[str]] = None
     vector_result: Optional[Any] = None
@@ -209,6 +210,7 @@ class WkFlowState(GParam):
         self.vertices = None
         self.triples = None
         self.call_count = None
+        self.max_parallel_chunks = None
 
         self.keywords = None
         self.vector_result = None
