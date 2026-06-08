@@ -1148,6 +1148,24 @@ Hope this helps."""
         self.assertEqual(extractor.extract_property_graph_by_llm.call_count, 2)
         self.assertEqual(result["call_count"], 2)
 
+    @patch("hugegraph_llm.operators.llm_op.property_graph_extract.ThreadPoolExecutor")
+    def test_run_with_one_chunk_reduces_parallelism_to_direct_extract(self, mock_executor):
+        """Test one pre-split chunk is extracted directly even when parallelism is higher."""
+        extractor = PropertyGraphExtract(llm=self.mock_llm)
+        extractor.extract_property_graph_by_llm = MagicMock(return_value=self.llm_responses[0])
+        context = {
+            "schema": self.schema,
+            "chunks": [self.chunks[0]],
+            "max_parallel_chunks": 4,
+        }
+
+        result = extractor.run(context)
+
+        mock_executor.assert_not_called()
+        self.assertEqual(extractor.extract_property_graph_by_llm.call_count, 1)
+        self.assertEqual(result["call_count"], 1)
+        self.assertEqual(result["max_parallel_chunks"], 1)
+
     def test_run_raises_when_chunk_output_is_malformed_json(self):
         """Test flow execution fails instead of silently dropping malformed chunk output."""
         extractor = PropertyGraphExtract(llm=self.mock_llm)

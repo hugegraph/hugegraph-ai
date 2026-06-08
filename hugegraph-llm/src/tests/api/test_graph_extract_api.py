@@ -16,6 +16,8 @@
 # under the License.
 
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from unittest.mock import Mock
 
 import pytest
@@ -48,6 +50,37 @@ class CapturePipeline:
 
     def registerGElement(self, *args):
         return None
+
+
+class EchoGraphExtractService:
+    def __init__(self):
+        self.requests = []
+        self._lock = Lock()
+
+    def extract_sync(self, req):
+        with self._lock:
+            self.requests.append(
+                {
+                    "content_type": req.content_type,
+                    "texts": list(req.texts),
+                    "max_parallel_chunks": req.max_parallel_chunks,
+                    "client_config": req.client_config.model_dump() if req.client_config else None,
+                }
+            )
+        chunk_count = len(req.texts)
+        return GraphExtractResponse(
+            status="succeeded",
+            result={"vertices": [], "edges": []},
+            warnings=[],
+            meta={
+                "content_type": req.content_type,
+                "chunk_count": chunk_count,
+                "max_parallel_chunks": min(req.max_parallel_chunks, chunk_count),
+                "call_count": chunk_count,
+                "texts": list(req.texts),
+                "client_config": req.client_config.model_dump() if req.client_config else None,
+            },
+        )
 
 
 def _graph_client(service=None):
@@ -150,6 +183,54 @@ def test_graph_extract_accepts_content_chunks_wire_shape():
     assert request.max_parallel_chunks == 2
 
 
+def test_graph_extract_api_concurrent_requests_keep_request_state_isolated():
+    service = EchoGraphExtractService()
+
+    payloads = [
+        {
+            "content_type": "text",
+            "content": "doc A paragraph one.\n\ndoc A paragraph two.",
+            "schema": VALID_SCHEMA,
+            "split_type": "paragraph",
+            "max_parallel_chunks": 2,
+        },
+        {
+            "content_type": "chunks",
+            "content": ["doc B chunk one", "doc B chunk two"],
+            "schema": VALID_SCHEMA,
+            "max_parallel_chunks": 2,
+        },
+        {
+            "texts": "legacy text alias",
+            "schema": "legacy_graph",
+            "client_config": _named_client_config("legacy_graph"),
+        },
+        {
+            "content_type": "chunks",
+            "content": ["single direct chunk"],
+            "schema": VALID_SCHEMA,
+            "max_parallel_chunks": 4,
+        },
+    ]
+
+    def post_payload(payload):
+        return _graph_client(service).post("/graph/extract", json=payload).json()
+
+    with ThreadPoolExecutor(max_workers=len(payloads)) as executor:
+        responses = list(executor.map(post_payload, payloads))
+
+    assert [response["status"] for response in responses] == ["succeeded"] * len(payloads)
+    assert responses[0]["meta"]["content_type"] == "text"
+    assert responses[0]["meta"]["texts"] == ["doc A paragraph one.\n\ndoc A paragraph two."]
+    assert responses[1]["meta"]["content_type"] == "chunks"
+    assert responses[1]["meta"]["texts"] == ["doc B chunk one", "doc B chunk two"]
+    assert responses[2]["meta"]["content_type"] == "text"
+    assert responses[2]["meta"]["client_config"]["graph"] == "legacy_graph"
+    assert responses[3]["meta"]["chunk_count"] == 1
+    assert responses[3]["meta"]["max_parallel_chunks"] == 1
+    assert len(service.requests) == len(payloads)
+
+
 def test_graph_extract_rejects_invalid_public_contract_inputs():
     client = _graph_client(Mock())
 
@@ -173,6 +254,53 @@ def test_graph_extract_rejects_invalid_public_contract_inputs():
     for payload in cases:
         response = client.post("/graph/extract", json=payload)
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+def test_graph_extract_validation_error_reports_invalid_field_detail():
+    response = _graph_client(Mock()).post(
+        "/graph/extract",
+        json={"content_type": "chunks", "content": ["chunk"], "schema": INLINE_SCHEMA, "split_type": "paragraph"},
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    error_detail = str(response.json()["detail"])
+    assert "split_type" in error_detail
+    assert "document" in error_detail
+    assert "content_type is chunks" in error_detail
+
+
+def test_graph_extract_api_returns_structured_error_for_invalid_flow_output():
+    service = Mock()
+    service.extract_sync.side_effect = ValueError("Invalid property graph JSON: failed to parse extracted JSON")
+
+    response = _graph_client(service).post(
+        "/graph/extract",
+        json={"content_type": "text", "content": "bad llm output", "schema": VALID_SCHEMA},
+    )
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == {
+        "code": "GRAPH_EXTRACT_INVALID_FLOW_OUTPUT",
+        "message": "Invalid property graph JSON: failed to parse extracted JSON",
+        "phase": "extract",
+    }
+
+
+def test_graph_extract_api_returns_structured_error_for_runtime_failure():
+    service = Mock()
+    service.extract_sync.side_effect = RuntimeError("llm provider timeout")
+
+    response = _graph_client(service).post(
+        "/graph/extract",
+        json={"content_type": "text", "content": "provider failure", "schema": VALID_SCHEMA},
+    )
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == {
+        "code": "GRAPH_EXTRACT_FAILED",
+        "message": "llm provider timeout",
+        "phase": "extract",
+    }
 
 
 def test_graph_extract_request_validates_content_shape_and_parallel_limit(monkeypatch):
