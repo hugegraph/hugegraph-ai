@@ -16,7 +16,7 @@
 from pycgraph import CStatus
 
 from hugegraph_llm.config import llm_settings
-from hugegraph_llm.models.llms.init_llm import get_chat_llm
+from hugegraph_llm.models.llms.init_llm import get_extract_llm
 from hugegraph_llm.nodes.base_node import BaseNode
 from hugegraph_llm.operators.llm_op.info_extract import InfoExtract
 from hugegraph_llm.operators.llm_op.property_graph_extract import PropertyGraphExtract
@@ -32,7 +32,7 @@ class ExtractNode(BaseNode):
     extract_type: str = None
 
     def node_init(self):
-        llm = get_chat_llm(llm_settings)
+        llm = get_extract_llm(llm_settings)
         if self.wk_input.example_prompt is None:
             return CStatus(-1, "Error occurs when prepare for workflow input")
         example_prompt = self.wk_input.example_prompt
