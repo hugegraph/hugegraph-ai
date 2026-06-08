@@ -17,6 +17,7 @@ import json
 
 from pycgraph import GPipeline
 
+from hugegraph_llm.config import huge_settings
 from hugegraph_llm.flows.common import BaseFlow
 from hugegraph_llm.nodes.document_node.chunk_split import ChunkSplitNode
 from hugegraph_llm.nodes.hugegraph_node.schema import SchemaNode
@@ -55,6 +56,17 @@ class GraphExtractFlow(BaseFlow):
         prepared_input.example_prompt = example_prompt
         prepared_input.schema = schema
         prepared_input.extract_type = extract_type
+        client_config = kwargs.get("client_config")
+        if client_config:
+            # URL stays server-controlled; only identity/graphspace are request-scoped.
+            prepared_input.graph_client_config = {
+                "url": huge_settings.graph_url,
+                "user": client_config.user,
+                "pwd": client_config.pwd,
+                "graphspace": client_config.gs,
+            }
+        else:
+            prepared_input.graph_client_config = None
 
     def build_flow(
         self,
@@ -77,6 +89,7 @@ class GraphExtractFlow(BaseFlow):
             extract_type,
             split_type,
             language,
+            **kwargs,
         )
 
         pipeline.createGParam(prepared_input, "wkflow_input")
