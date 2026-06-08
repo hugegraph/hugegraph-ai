@@ -32,7 +32,7 @@ class GraphConfigRequest(BaseModel):
     graph: str = Query("hugegraph", description="hugegraph client name.")
     user: str = Query("", description="hugegraph client user.")
     pwd: str = Query("", description="hugegraph client pwd.")
-    gs: str = None
+    gs: Optional[str] = None
 
 
 class RAGRequest(BaseModel):
