@@ -388,8 +388,8 @@ class TestCommit2GraphLoadIntoGraph(unittest.TestCase):
         self.assertEqual(mock_handle_graph_creation.call_count, 3)
 
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")
-    def test_load_into_graph_raises_explicit_error_when_vertex_creation_fails(self, mock_handle_graph_creation):
-        """Test failed vertex creation is reported before edge creation."""
+    def test_load_into_graph_reports_vertex_creation_failure_and_continues(self, mock_handle_graph_creation):
+        """Test failed vertex creation is counted in the import result."""
         mock_handle_graph_creation.return_value = None
 
         vertices = [{"label": "person", "properties": {"name": "Tom Hanks", "age": 67}}]
@@ -402,10 +402,17 @@ class TestCommit2GraphLoadIntoGraph(unittest.TestCase):
             }
         ]
 
-        with self.assertRaisesRegex(ValueError, "Failed to create vertex"):
-            self.commit2graph.load_into_graph(vertices, edges, self.schema)
+        result = self.commit2graph.load_into_graph(vertices, edges, self.schema)
 
-        mock_handle_graph_creation.assert_called_once()
+        self.assertEqual(result["vertices_attempted"], 1)
+        self.assertEqual(result["vertices_created"], 0)
+        self.assertEqual(result["vertices_skipped"], 1)
+        self.assertEqual(result["edges_attempted"], 1)
+        self.assertEqual(result["edges_created"], 0)
+        self.assertEqual(result["edges_skipped"], 1)
+        self.assertIn("Failed to create vertex", result["errors"][0])
+        self.assertIn("Failed to create edge", result["errors"][1])
+        self.assertEqual(mock_handle_graph_creation.call_count, 2)
 
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")
     def test_load_into_graph_with_data_type_validation_failure(self, mock_handle_graph_creation):

@@ -22,11 +22,11 @@ from fastapi import APIRouter, FastAPI, status
 from fastapi.testclient import TestClient
 
 from hugegraph_llm.api.graph_extract_api import graph_extract_http_api
-from hugegraph_llm.api.models.graph_extract_requests import GraphImportRequest
+from hugegraph_llm.api.models.graph_extract_requests import GraphExtractAndImportRequest, GraphImportRequest
 from hugegraph_llm.api.models.graph_extract_responses import GraphExtractResponse, GraphImportResponse
 from hugegraph_llm.config import huge_settings
 from hugegraph_llm.flows import FlowName
-from hugegraph_llm.services.graph_extract_service import GraphImportService
+from hugegraph_llm.services.graph_extract_service import GraphExtractService, GraphImportService, apply_client_config
 
 
 def _payload_data():
@@ -163,6 +163,75 @@ def test_confirmed_extract_and_import_runs_extraction_before_import():
     import_service.import_graph.assert_called_once()
 
 
+def test_extract_and_import_allows_inline_schema_with_request_graph_config():
+    request = GraphExtractAndImportRequest(
+        **_extract_payload(
+            client_config={
+                "graph": "target_graph",
+                "user": "admin",
+                "pwd": "secret",
+                "gs": "space_a",
+            }
+        )
+    )
+
+    assert request.client_config.graph == "target_graph"
+
+
+def test_extract_and_import_passes_inline_schema_request_graph_config_to_import():
+    extract_service = Mock()
+    extract_service.extract_sync.return_value = GraphExtractResponse(
+        status="succeeded",
+        result=_payload_data(),
+        warnings=[],
+        meta={},
+    )
+    import_service = Mock()
+    import_service.import_graph.return_value = _import_response()
+    client = _client(extract_service=extract_service, import_service=import_service)
+
+    response = client.post(
+        "/graph/extract-and-import",
+        json=_extract_payload(
+            client_config={
+                "graph": "target_graph",
+                "user": "admin",
+                "pwd": "secret",
+                "gs": "space_a",
+            }
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    import_request = import_service.import_graph.call_args.args[0]
+    assert import_request.client_config.graph == "target_graph"
+    assert import_request.client_config.user == "admin"
+    assert import_request.client_config.pwd == "secret"
+    assert import_request.client_config.gs == "space_a"
+
+
+def test_extract_and_import_inline_schema_keeps_client_config_out_of_extract_flow(monkeypatch):
+    scheduler = Mock()
+    scheduler.schedule_flow.return_value = '{"vertices":[],"edges":[]}'
+    monkeypatch.setattr(
+        "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
+        lambda: scheduler,
+    )
+    request = GraphExtractAndImportRequest(
+        **_extract_payload(
+            client_config={
+                "graph": "target_graph",
+                "user": "admin",
+                "pwd": "secret",
+            }
+        )
+    )
+
+    GraphExtractService().extract_sync(request)
+
+    assert scheduler.schedule_flow.call_args.kwargs["client_config"] is None
+
+
 def test_extract_and_import_rejects_triples_extraction_at_request_boundary():
     extract_service = Mock()
     import_service = Mock()
@@ -218,11 +287,11 @@ def test_graph_import_service_uses_request_graph_config_without_mutating_global_
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
         lambda: scheduler,
     )
-    huge_settings.graph_url = "127.0.0.1:8080"
-    huge_settings.graph_name = "before-graph"
-    huge_settings.graph_user = "before-user"
-    huge_settings.graph_pwd = "before-pwd"
-    huge_settings.graph_space = "before-space"
+    monkeypatch.setattr(huge_settings, "graph_url", "127.0.0.1:8080")
+    monkeypatch.setattr(huge_settings, "graph_name", "before-graph")
+    monkeypatch.setattr(huge_settings, "graph_user", "before-user")
+    monkeypatch.setattr(huge_settings, "graph_pwd", "before-pwd")
+    monkeypatch.setattr(huge_settings, "graph_space", "before-space")
 
     response = GraphImportService().import_graph(
         GraphImportRequest(
@@ -273,6 +342,15 @@ def test_graph_import_service_aligns_graph_name_schema_with_write_target(monkeyp
         "graph": "tenant_graph",
         "user": "admin",
     }
+
+
+def test_apply_client_config_accepts_dict_without_mutating_input():
+    config = {"graph": "tenant_graph", "user": "admin", "pwd": None}
+
+    result = apply_client_config(config, schema="tenant_graph", align_graph_with_schema=True)
+
+    assert result == {"graph": "tenant_graph", "user": "admin"}
+    assert config == {"graph": "tenant_graph", "user": "admin", "pwd": None}
 
 
 def test_graph_import_service_rejects_schema_graph_and_target_graph_mismatch(monkeypatch):
@@ -342,6 +420,26 @@ def test_graph_import_response_counts_actual_import_result_not_request_size(monk
     assert response.edge_count == 1
     assert response.meta["import_result"]["vertices_skipped"] == 1
     assert response.warnings == ["missing primary key"]
+
+
+def test_graph_import_response_marks_all_skipped_result_as_failed(monkeypatch):
+    scheduler = Mock()
+    scheduler.schedule_flow.return_value = (
+        '{"import_result":{"vertices_attempted":0,"vertices_created":0,"vertices_skipped":1,'
+        '"edges_attempted":0,"edges_created":0,"edges_skipped":0,'
+        '"triples_attempted":0,"triples_created":0,"triples_skipped":0,'
+        '"errors":["vertex creation failed before attempt count"]}}'
+    )
+    monkeypatch.setattr(
+        "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
+        lambda: scheduler,
+    )
+
+    response = GraphImportService().import_graph(GraphImportRequest(**_import_payload()))
+
+    assert response.status == "failed"
+    assert response.vertex_count == 0
+    assert response.warnings == ["vertex creation failed before attempt count"]
 
 
 def test_extract_endpoint_never_invokes_import_service():

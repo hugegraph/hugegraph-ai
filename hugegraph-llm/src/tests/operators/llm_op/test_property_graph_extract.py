@@ -1169,14 +1169,31 @@ Hope this helps."""
     def test_run_raises_when_chunk_output_is_malformed_json(self):
         """Test flow execution fails instead of silently dropping malformed chunk output."""
         extractor = PropertyGraphExtract(llm=self.mock_llm)
-        extractor.extract_property_graph_by_llm = MagicMock(return_value='{"vertices": [')
+        extractor.extract_property_graph_by_llm = MagicMock(return_value='{"vertices": [], "edges": [}')
         context = {
             "schema": self.schema,
             "chunks": ["malformed output chunk"],
         }
 
-        with self.assertRaisesRegex(ValueError, "Invalid property graph JSON"):
+        with self.assertRaisesRegex(ValueError, "Invalid property graph JSON") as error:
             extractor.run(context)
+
+        self.assertIsInstance(error.exception.__cause__, json.JSONDecodeError)
+
+    def test_run_falls_back_to_default_parallelism_for_invalid_context_value(self):
+        """Test invalid operator-level parallelism input does not fail before extraction."""
+        extractor = PropertyGraphExtract(llm=self.mock_llm, max_parallel_chunks=2)
+        extractor.extract_property_graph_by_llm = MagicMock(return_value=self.llm_responses[0])
+        context = {
+            "schema": self.schema,
+            "chunks": [self.chunks[0]],
+            "max_parallel_chunks": "not-an-int",
+        }
+
+        result = extractor.run(context)
+
+        self.assertEqual(result["call_count"], 1)
+        self.assertEqual(result["max_parallel_chunks"], 1)
 
     def test_run_with_existing_vertices_and_edges(self):
         """Test the run method with existing vertices and edges."""

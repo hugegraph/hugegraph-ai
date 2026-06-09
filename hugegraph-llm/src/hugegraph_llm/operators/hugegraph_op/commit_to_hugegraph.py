@@ -189,7 +189,9 @@ class Commit2Graph:
             else:
                 result = self._handle_graph_creation(self.client.graph().addVertex, input_label, input_properties)
             if result is None:
-                raise ValueError(f"Failed to create vertex {vertex}")
+                import_result["vertices_skipped"] += 1
+                import_result["errors"].append(f"Failed to create vertex {vertex}")
+                continue
             vid = result.id
             import_result["vertices_created"] += 1
             vertex["id"] = vid

@@ -31,7 +31,7 @@ from hugegraph_llm.api.models.graph_extract_responses import GraphExtractRespons
 from hugegraph_llm.api.rag_api import rag_http_api
 from hugegraph_llm.config import huge_settings, llm_settings
 from hugegraph_llm.flows.graph_extract import GraphExtractFlow
-from hugegraph_llm.services.graph_extract_service import GraphExtractService
+from hugegraph_llm.services.graph_extract_service import GraphExtractService, normalize_schema
 from hugegraph_llm.state.ai_state import WkFlowInput
 
 INLINE_SCHEMA = {"vertexlabels": [], "edgelabels": []}
@@ -263,7 +263,10 @@ def test_graph_extract_validation_error_reports_invalid_field_detail():
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    error_detail = str(response.json()["detail"])
+    detail = response.json()["detail"]
+    assert detail["code"] == "GRAPH_EXTRACT_VALIDATION_ERROR"
+    assert detail["phase"] == "request"
+    error_detail = detail["message"]
     assert "split_type" in error_detail
     assert "document" in error_detail
     assert "content_type is chunks" in error_detail
@@ -412,6 +415,11 @@ def test_graph_extract_service_rejects_invalid_flow_json():
         GraphExtractService(scheduler).extract_sync(GraphExtractRequest(texts="x", schema=INLINE_SCHEMA))
 
 
+def test_normalize_schema_rejects_malformed_json_schema():
+    with pytest.raises(ValueError, match="schema must be valid JSON"):
+        normalize_schema("{bad")
+
+
 def test_property_graph_response_rejects_legacy_edge_shape():
     scheduler = Mock()
     scheduler.schedule_flow.return_value = json.dumps(
@@ -470,6 +478,22 @@ def test_flow_prepare_preserves_content_type_and_parallel_chunks():
     assert prepared_input.max_parallel_chunks == 3
 
 
+def test_graph_extract_meta_handles_invalid_chunk_texts_defensively():
+    request = GraphExtractRequest(content_type="chunks", content=["chunk"], schema=INLINE_SCHEMA, include_meta=True)
+    request.texts = None
+
+    meta = GraphExtractService()._build_extract_meta(
+        request,
+        {"call_count": 1},
+        {"vertices": [], "edges": []},
+        0,
+        {},
+    )
+
+    assert meta["chunk_count"] == 1
+    assert meta["max_parallel_chunks"] == 1
+
+
 def test_flow_build_flow_preserves_split_type_and_client_config(monkeypatch):
     monkeypatch.setattr("hugegraph_llm.flows.graph_extract.GPipeline", CapturePipeline)
     client_config = GraphExtractClientConfig(graph="custom_graph", user="admin", pwd="secret", gs="space_a")
@@ -525,3 +549,29 @@ def test_existing_routes_still_register():
     assert "/graph/extract/jobs" in paths
     assert "/graph/import" in paths
     assert "/graph/extract-and-import" in paths
+
+
+def test_rag_demo_registers_graph_extract_routes_once(monkeypatch):
+    from hugegraph_llm.demo.rag_demo import app as rag_demo_app
+
+    monkeypatch.setattr(rag_demo_app.prompt, "update_yaml_file", lambda: None)
+    monkeypatch.setattr(rag_demo_app, "init_rag_ui", lambda: object())
+    monkeypatch.setattr(rag_demo_app.gr, "mount_gradio_app", lambda app, *args, **kwargs: app)
+
+    app = rag_demo_app.create_app()
+
+    graph_route_methods = [
+        (route.path, method)
+        for route in app.routes
+        if route.path.startswith("/graph/")
+        for method in route.methods
+        if method in {"GET", "POST", "DELETE"}
+    ]
+    assert len(graph_route_methods) == len(set(graph_route_methods))
+    assert ("/graph/extract", "POST") in graph_route_methods
+    assert ("/graph/extract/jobs", "POST") in graph_route_methods
+    assert ("/graph/extract/jobs/{job_id}", "GET") in graph_route_methods
+    assert ("/graph/extract/jobs/{job_id}", "DELETE") in graph_route_methods
+    assert ("/graph/extract/jobs/{job_id}/result", "GET") in graph_route_methods
+    assert ("/graph/import", "POST") in graph_route_methods
+    assert ("/graph/extract-and-import", "POST") in graph_route_methods

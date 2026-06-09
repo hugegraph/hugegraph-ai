@@ -173,6 +173,9 @@ class GraphExtractRequest(BaseModel):
 
         self.max_parallel_chunks = self._validate_parallel_chunks(self.max_parallel_chunks)
 
+        return self._validate_schema_client_config()
+
+    def _validate_schema_client_config(self):
         schema = self.schema_data
         is_named_schema = isinstance(schema, str) and not schema.strip().startswith("{")
         if not is_named_schema:
@@ -229,3 +232,20 @@ class GraphImportRequest(BaseModel):
 class GraphExtractAndImportRequest(GraphExtractRequest):
     write_to_graph: bool = Field(default=False, description="Required confirmation for graph writes.")
     import_options: GraphImportOptions = Field(default_factory=GraphImportOptions)
+
+    def _validate_schema_client_config(self):
+        schema = self.schema_data
+        is_named_schema = isinstance(schema, str) and not schema.strip().startswith("{")
+        if not is_named_schema:
+            return self
+        if self.client_config is None:
+            raise ValueError(
+                "client_config is required when 'schema' refers to an existing graph name; "
+                "provide inline schema JSON instead to extract without a HugeGraph connection."
+            )
+        if self.client_config.graph != schema:
+            raise ValueError(
+                "When 'schema' is a graph name, client_config.graph must match it "
+                f"(got schema='{schema}', client_config.graph='{self.client_config.graph}')."
+            )
+        return self

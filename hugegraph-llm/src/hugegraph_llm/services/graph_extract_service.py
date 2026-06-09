@@ -45,7 +45,10 @@ def normalize_schema(schema: SchemaInput) -> str:
 
     schema_text = str(schema).strip()
     if schema_text.startswith("{"):
-        parsed_schema = json.loads(schema_text)
+        try:
+            parsed_schema = json.loads(schema_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"schema must be valid JSON: {exc.msg}") from exc
         return json.dumps(parsed_schema, ensure_ascii=False)
     return schema_text
 
@@ -67,7 +70,12 @@ def apply_client_config(
     schema: Optional[str] = None,
     align_graph_with_schema: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    config = {} if client_config is None else client_config.model_dump(exclude_none=True)
+    if client_config is None:
+        config = {}
+    elif isinstance(client_config, dict):
+        config = {key: value for key, value in client_config.items() if value is not None}
+    else:
+        config = client_config.model_dump(exclude_none=True)
     schema_graph = _schema_graph_name(schema) if schema else None
     if schema_graph:
         target_graph = config.get("graph")
@@ -137,14 +145,9 @@ def _build_import_status(import_result: Dict[str, Any]) -> str:
         + import_result.get("edges_created", 0)
         + import_result.get("triples_created", 0)
     )
-    attempted = (
-        import_result.get("vertices_attempted", 0)
-        + import_result.get("edges_attempted", 0)
-        + import_result.get("triples_attempted", 0)
-    )
     if skipped and created:
         return "partial"
-    if skipped and attempted and not created:
+    if skipped and not created:
         return "failed"
     return "succeeded"
 
@@ -160,7 +163,8 @@ class GraphExtractService:
     def extract_sync(self, request: GraphExtractRequest) -> GraphExtractResponse:
         started = time.perf_counter()
         schema = normalize_schema(request.schema)
-        client_config_meta = _redact_client_config(apply_client_config(request.client_config, schema=schema))
+        extract_client_config = request.client_config if _schema_graph_name(schema) else None
+        client_config_meta = _redact_client_config(apply_client_config(extract_client_config, schema=schema))
         example_prompt = request.example_prompt or prompt.extract_graph_prompt
         try:
             raw_result = self.scheduler.schedule_flow(
@@ -171,7 +175,7 @@ class GraphExtractService:
                 request.extract_type,
                 language=request.language,
                 split_type=request.split_type,
-                client_config=request.client_config,
+                client_config=extract_client_config,
                 content_type=request.content_type,
                 max_parallel_chunks=request.max_parallel_chunks,
             )
@@ -228,7 +232,11 @@ class GraphExtractService:
     ) -> Dict[str, Any]:
         chunk_count = parsed_result.get("chunk_count")
         if chunk_count is None:
-            chunk_count = len(request.texts) if request.content_type == "chunks" else parsed_result.get("call_count")
+            chunk_count = (
+                len(request.texts)
+                if request.content_type == "chunks" and isinstance(request.texts, (list, tuple))
+                else parsed_result.get("call_count")
+            )
         max_parallel_chunks = parsed_result.get("max_parallel_chunks")
         if max_parallel_chunks is None:
             max_parallel_chunks = (

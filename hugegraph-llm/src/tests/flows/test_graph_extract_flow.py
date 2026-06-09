@@ -15,8 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import os
-from pathlib import Path
+from hugegraph_llm.flows.graph_extract import GraphExtractFlow
+from hugegraph_llm.nodes.document_node.chunk_split import ChunkSplitNode
+from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
 
 SCHEMA = '{"vertices": [], "edges": []}'
 TEXTS = ["Alice knows Bob."]
@@ -24,22 +25,7 @@ EXAMPLE_PROMPT = ""
 EXTRACT_TYPE = "property_graph"
 
 
-def load_flow_types():
-    original_cwd = Path.cwd()
-    os.chdir(Path(__file__).resolve().parents[3])
-
-    try:
-        from hugegraph_llm.flows.graph_extract import GraphExtractFlow
-        from hugegraph_llm.nodes.document_node.chunk_split import ChunkSplitNode
-        from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
-    finally:
-        os.chdir(original_cwd)
-
-    return ChunkSplitNode, GraphExtractFlow, WkFlowInput, WkFlowState
-
-
 def test_prepare_writes_requested_split_type():
-    _, GraphExtractFlow, WkFlowInput, _ = load_flow_types()
     flow = GraphExtractFlow()
     prepared_input = WkFlowInput()
 
@@ -56,7 +42,6 @@ def test_prepare_writes_requested_split_type():
 
 
 def test_prepare_writes_content_type_and_parallel_chunks():
-    _, GraphExtractFlow, WkFlowInput, _ = load_flow_types()
     flow = GraphExtractFlow()
     prepared_input = WkFlowInput()
 
@@ -76,7 +61,6 @@ def test_prepare_writes_content_type_and_parallel_chunks():
 
 
 def test_prepare_rejects_chunks_with_non_document_split_type():
-    _, GraphExtractFlow, WkFlowInput, _ = load_flow_types()
     flow = GraphExtractFlow()
 
     try:
@@ -96,7 +80,6 @@ def test_prepare_rejects_chunks_with_non_document_split_type():
 
 
 def test_chunk_split_node_uses_pre_split_chunks_without_splitting():
-    ChunkSplitNode, _, WkFlowInput, WkFlowState = load_flow_types()
     node = ChunkSplitNode()
     node.wk_input = WkFlowInput()
     node.wk_input.texts = ["chunk-a\n\nchunk-b", "chunk-c"]
@@ -114,7 +97,6 @@ def test_chunk_split_node_uses_pre_split_chunks_without_splitting():
 
 
 def test_build_flow_writes_requested_split_type_to_workflow_input():
-    _, GraphExtractFlow, _, _ = load_flow_types()
     flow = GraphExtractFlow()
 
     pipeline = flow.build_flow(
@@ -130,7 +112,6 @@ def test_build_flow_writes_requested_split_type_to_workflow_input():
 
 
 def test_build_flow_defaults_to_document_split_type_for_existing_callers():
-    _, GraphExtractFlow, _, _ = load_flow_types()
     flow = GraphExtractFlow()
 
     pipeline = flow.build_flow(SCHEMA, TEXTS, EXAMPLE_PROMPT, EXTRACT_TYPE)
@@ -140,7 +121,6 @@ def test_build_flow_defaults_to_document_split_type_for_existing_callers():
 
 
 def test_workflow_state_setup_clears_graph_extract_result_fields():
-    _, _, _, WkFlowState = load_flow_types()
     state = WkFlowState()
     state.vertices = [{"id": "old"}]
     state.edges = [{"id": "old-edge"}]

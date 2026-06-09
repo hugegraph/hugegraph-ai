@@ -98,7 +98,10 @@ class PropertyGraphExtract:
         if "edges" not in context:
             context["edges"] = []
         items = []
-        max_parallel_chunks = max(1, int(context.get("max_parallel_chunks") or self.max_parallel_chunks))
+        try:
+            max_parallel_chunks = max(1, int(context.get("max_parallel_chunks") or self.max_parallel_chunks))
+        except (TypeError, ValueError):
+            max_parallel_chunks = max(1, self.max_parallel_chunks)
         chunk_count = len(chunks)
         worker_count = min(max_parallel_chunks, chunk_count)
         context["max_parallel_chunks"] = worker_count
@@ -287,8 +290,8 @@ class PropertyGraphExtract:
             edge_items = process_items(property_graph["edges"], edge_label_set, "edge")
             edges = self._normalize_edges(edge_items, edge_label_map, vertex_label_map, vertex_id_map)
             items = vertices + edges
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
             log.critical("Invalid property graph JSON! Please check the extracted JSON data carefully")
             if raise_on_invalid:
-                raise ValueError("Invalid property graph JSON: failed to parse extracted JSON") from None
+                raise ValueError("Invalid property graph JSON: failed to parse extracted JSON") from exc
         return items

@@ -17,7 +17,10 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 
 from hugegraph_llm.api.models.graph_extract_requests import (
     GraphExtractAndImportRequest,
@@ -62,6 +65,28 @@ def _job_status_response(job: GraphExtractJob) -> GraphExtractJobStatusResponse:
     )
 
 
+class GraphExtractAPIRoute(APIRoute):
+    def get_route_handler(self):
+        original_route_handler = super().get_route_handler()
+
+        async def custom_route_handler(request: Request):
+            try:
+                return await original_route_handler(request)
+            except RequestValidationError as exc:
+                return JSONResponse(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    content={
+                        "detail": _error(
+                            "GRAPH_EXTRACT_VALIDATION_ERROR",
+                            str(exc),
+                            "request",
+                        )
+                    },
+                )
+
+        return custom_route_handler
+
+
 def graph_extract_http_api(
     router: APIRouter,
     service=None,
@@ -72,6 +97,8 @@ def graph_extract_http_api(
     extract_service = service or GraphExtractService()
     graph_import_service = import_service or GraphImportService()
     jobs = job_store or InMemoryGraphExtractJobStore()
+    original_route_class = router.route_class
+    router.route_class = GraphExtractAPIRoute
 
     @router.post("/graph/extract", status_code=status.HTTP_200_OK, response_model=GraphExtractResponse)
     def graph_extract_api(req: GraphExtractRequest) -> GraphExtractResponse:
@@ -253,3 +280,5 @@ def graph_extract_http_api(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=_error("GRAPH_EXTRACT_IMPORT_FAILED", str(exc), "import"),
             ) from exc
+
+    router.route_class = original_route_class
