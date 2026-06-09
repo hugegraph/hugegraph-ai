@@ -103,6 +103,10 @@ class PropertyGraphExtract:
         except (TypeError, ValueError):
             max_parallel_chunks = max(1, self.max_parallel_chunks)
         chunk_count = len(chunks)
+        if chunk_count == 0:
+            context["max_parallel_chunks"] = 1
+            context["call_count"] = context.get("call_count", 0)
+            return context
         worker_count = min(max_parallel_chunks, chunk_count)
         context["max_parallel_chunks"] = worker_count
         if worker_count <= 1:

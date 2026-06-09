@@ -31,7 +31,11 @@ from hugegraph_llm.api.models.graph_extract_responses import GraphExtractRespons
 from hugegraph_llm.api.rag_api import rag_http_api
 from hugegraph_llm.config import huge_settings, llm_settings
 from hugegraph_llm.flows.graph_extract import GraphExtractFlow
-from hugegraph_llm.services.graph_extract_service import GraphExtractService, normalize_schema
+from hugegraph_llm.services.graph_extract_service import (
+    FlowOutputValidationError,
+    GraphExtractService,
+    normalize_schema,
+)
 from hugegraph_llm.state.ai_state import WkFlowInput
 
 INLINE_SCHEMA = {"vertexlabels": [], "edgelabels": []}
@@ -270,11 +274,32 @@ def test_graph_extract_validation_error_reports_invalid_field_detail():
     assert "split_type" in error_detail
     assert "document" in error_detail
     assert "content_type is chunks" in error_detail
+    assert "input_value" not in error_detail
+    assert "input" not in error_detail
+
+
+def test_graph_extract_validation_error_does_not_echo_sensitive_input():
+    response = _graph_client(Mock()).post(
+        "/graph/extract",
+        json={
+            "content_type": "text",
+            "content": "hello",
+            "schema": "custom_graph",
+            "client_config": {"graph": "custom_graph", "pwd": "top-secret", "url": "10.0.0.1:8080"},
+        },
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    detail_text = json.dumps(response.json(), ensure_ascii=False)
+    assert "top-secret" not in detail_text
+    assert "10.0.0.1:8080" not in detail_text
 
 
 def test_graph_extract_api_returns_structured_error_for_invalid_flow_output():
     service = Mock()
-    service.extract_sync.side_effect = ValueError("Invalid property graph JSON: failed to parse extracted JSON")
+    service.extract_sync.side_effect = FlowOutputValidationError(
+        "Invalid property graph JSON: failed to parse extracted JSON"
+    )
 
     response = _graph_client(service).post(
         "/graph/extract",
@@ -286,6 +311,23 @@ def test_graph_extract_api_returns_structured_error_for_invalid_flow_output():
         "code": "GRAPH_EXTRACT_INVALID_FLOW_OUTPUT",
         "message": "Invalid property graph JSON: failed to parse extracted JSON",
         "phase": "extract",
+    }
+
+
+def test_graph_extract_api_maps_client_value_error_to_bad_request():
+    service = Mock()
+    service.extract_sync.side_effect = ValueError("schema graph name must match client_config.graph")
+
+    response = _graph_client(service).post(
+        "/graph/extract",
+        json={"content_type": "text", "content": "bad input", "schema": VALID_SCHEMA},
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["detail"] == {
+        "code": "GRAPH_EXTRACT_INVALID_INPUT",
+        "message": "schema graph name must match client_config.graph",
+        "phase": "request",
     }
 
 
@@ -459,6 +501,13 @@ def test_flow_prepare_sets_request_local_graph_config():
     }
 
 
+def test_flow_prepare_rejects_invalid_max_parallel_chunks():
+    flow = GraphExtractFlow()
+
+    with pytest.raises(ValueError, match="max_parallel_chunks"):
+        flow.prepare(WkFlowInput(), INLINE_SCHEMA, ["text"], "prompt", "property_graph", max_parallel_chunks=0)
+
+
 def test_flow_prepare_preserves_content_type_and_parallel_chunks():
     flow = GraphExtractFlow()
     prepared_input = WkFlowInput()
@@ -542,6 +591,11 @@ def test_existing_routes_still_register():
     app.include_router(router)
 
     paths = set(app.openapi()["paths"])
+    response_models = {
+        route.path: route.response_model
+        for route in app.routes
+        if hasattr(route, "path") and hasattr(route, "response_model")
+    }
     assert "/rag" in paths
     assert "/text2gremlin" in paths
     assert "/config/graph" in paths
@@ -549,6 +603,8 @@ def test_existing_routes_still_register():
     assert "/graph/extract/jobs" in paths
     assert "/graph/import" in paths
     assert "/graph/extract-and-import" in paths
+    assert response_models["/graph/import"].__name__ == "GraphImportResponse"
+    assert response_models["/graph/extract-and-import"].__name__ == "GraphExtractAndImportResponse"
 
 
 def test_rag_demo_registers_graph_extract_routes_once(monkeypatch):
@@ -563,7 +619,7 @@ def test_rag_demo_registers_graph_extract_routes_once(monkeypatch):
     graph_route_methods = [
         (route.path, method)
         for route in app.routes
-        if route.path.startswith("/graph/")
+        if hasattr(route, "path") and route.path.startswith("/graph/")
         for method in route.methods
         if method in {"GET", "POST", "DELETE"}
     ]

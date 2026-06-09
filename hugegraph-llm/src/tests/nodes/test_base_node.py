@@ -34,3 +34,4 @@ def test_base_node_converts_unexpected_operator_exception_to_error_status():
     assert status.isErr()
     assert "llm provider timeout" in status.getInfo()
     assert "RuntimeFailingNode" in status.getInfo()
+    assert "Traceback" not in status.getInfo()

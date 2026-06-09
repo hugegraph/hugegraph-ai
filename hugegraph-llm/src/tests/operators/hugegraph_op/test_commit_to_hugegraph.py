@@ -148,16 +148,33 @@ class TestCommit2Graph(unittest.TestCase):
         mock_schema_free_mode.return_value = None
 
         # Create input data
-        data = {"vertices": self.vertices, "edges": self.edges, "triples": []}
+        data = {"triples": [["Tom Hanks", "acted_in", "Forrest Gump"]]}
 
         # Run the method
         result = self.commit2graph.run(data)
 
         # Verify that schema_free_mode was called
-        mock_schema_free_mode.assert_called_once_with([])
+        mock_schema_free_mode.assert_called_once_with([["Tom Hanks", "acted_in", "Forrest Gump"]])
 
         # Verify the results
         self.assertEqual(result, data)
+
+    def test_run_without_schema_rejects_property_graph_input(self):
+        """Test schema-free mode rejects vertices/edges to avoid silent data loss."""
+        with self.assertRaisesRegex(ValueError, "Schema-free mode only supports triples"):
+            self.commit2graph.run({"vertices": self.vertices, "edges": self.edges, "triples": []})
+
+    def test_run_with_schema_rejects_triples_input(self):
+        """Test schema mode rejects triples to avoid silently dropping them."""
+        with self.assertRaisesRegex(ValueError, "Triples input is not supported"):
+            self.commit2graph.run(
+                {
+                    "schema": self.schema,
+                    "vertices": self.vertices,
+                    "edges": self.edges,
+                    "triples": [["Tom Hanks", "acted_in", "Forrest Gump"]],
+                }
+            )
 
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._check_property_data_type")
     def test_set_default_property(self, mock_check_property_data_type):

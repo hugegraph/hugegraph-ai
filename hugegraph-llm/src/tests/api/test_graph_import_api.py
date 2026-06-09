@@ -265,6 +265,30 @@ def test_graph_import_service_uses_import_flow_and_updates_embeddings_only_when_
     assert scheduler.schedule_flow.call_args_list[1].kwargs["graph_config"] is None
 
 
+def test_graph_import_service_keeps_import_result_when_embedding_update_fails(monkeypatch):
+    scheduler = Mock()
+    scheduler.schedule_flow.side_effect = [
+        '{"vertices":[{"label":"person"}],"edges":[{"label":"knows"}]}',
+        RuntimeError("embed failed"),
+    ]
+    monkeypatch.setattr(
+        "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
+        lambda: scheduler,
+    )
+
+    response = GraphImportService().import_graph(
+        GraphImportRequest(**_import_payload(options={"update_vid_embeddings": True}))
+    )
+
+    assert response.status == "partial"
+    assert response.vertex_count == 1
+    assert response.edge_count == 1
+    assert response.updated_embeddings is False
+    assert response.warnings == ["update_vid_embeddings failed: embed failed"]
+    assert scheduler.schedule_flow.call_args_list[0].args[0] == FlowName.IMPORT_GRAPH_DATA
+    assert scheduler.schedule_flow.call_args_list[1].args[0] == FlowName.UPDATE_VID_EMBEDDINGS
+
+
 def test_graph_import_service_does_not_update_embeddings_by_default(monkeypatch):
     scheduler = Mock()
     scheduler.schedule_flow.return_value = '{"vertices":[{"label":"person"}],"edges":[{"label":"knows"}]}'

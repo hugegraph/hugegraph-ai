@@ -137,23 +137,16 @@ class InMemoryGraphExtractJobStore:
 
     def expire_jobs(self) -> None:
         with self._lock:
-            now = self._now()
-            for job in self._jobs.values():
-                expired_by_result_ttl = job.expires_at is not None and job.expires_at <= now
-                expired_by_pending_ttl = (
-                    job.status == GraphExtractJobStatus.PENDING
-                    and self.result_ttl_seconds == 0
-                    and job.created_at <= now
-                )
-                if job.status != GraphExtractJobStatus.EXPIRED and (expired_by_result_ttl or expired_by_pending_ttl):
-                    job.status = GraphExtractJobStatus.EXPIRED
-                    job.updated_at = now
+            self._expire_jobs_locked()
 
     def cleanup(self) -> None:
-        self.expire_jobs()
-        expired_job_ids = [job_id for job_id, job in self._jobs.items() if job.status == GraphExtractJobStatus.EXPIRED]
-        for job_id in expired_job_ids:
-            del self._jobs[job_id]
+        with self._lock:
+            self._expire_jobs_locked()
+            expired_job_ids = [
+                job_id for job_id, job in self._jobs.items() if job.status == GraphExtractJobStatus.EXPIRED
+            ]
+            for job_id in expired_job_ids:
+                del self._jobs[job_id]
 
     def submit_job(self, job_id: str, service) -> Optional[GraphExtractJob]:
         with self._lock:
@@ -163,11 +156,24 @@ class InMemoryGraphExtractJobStore:
             if job.status != GraphExtractJobStatus.PENDING:
                 return job
             self._start_workers_locked()
-        try:
-            self._queue.put_nowait((job_id, service))
-        except queue.Full as exc:
-            raise ValueError("graph extraction job queue is full") from exc
-        return job
+            try:
+                self._queue.put_nowait((job_id, service))
+            except queue.Full as exc:
+                self._jobs.pop(job_id, None)
+                raise ValueError("graph extraction job queue is full") from exc
+            return job
+
+    def _expire_jobs_locked(self) -> None:
+        now = self._now()
+        for job in self._jobs.values():
+            expired_by_result_ttl = job.expires_at is not None and job.expires_at <= now
+            expired_by_pending_ttl = (
+                job.status == GraphExtractJobStatus.PENDING and self.result_ttl_seconds == 0 and job.created_at <= now
+            )
+            if job.status != GraphExtractJobStatus.EXPIRED and (expired_by_result_ttl or expired_by_pending_ttl):
+                job.status = GraphExtractJobStatus.EXPIRED
+                job.result = None
+                job.updated_at = now
 
     def _start_workers_locked(self) -> None:
         if self._workers_started:

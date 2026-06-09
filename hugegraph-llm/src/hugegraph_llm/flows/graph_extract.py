@@ -56,6 +56,8 @@ class GraphExtractFlow(BaseFlow):
         if content_type == "chunks" and split_type != SPLIT_TYPE_DOCUMENT:
             raise ValueError("split_type must be document when content_type is chunks")
         prepared_input.content_type = content_type
+        if not isinstance(max_parallel_chunks, int) or max_parallel_chunks < 1:
+            raise ValueError("max_parallel_chunks must be a positive integer")
         prepared_input.max_parallel_chunks = max_parallel_chunks
         prepared_input.language = language
         if split_type not in VALID_SPLIT_TYPES:

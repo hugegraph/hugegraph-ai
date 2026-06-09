@@ -17,6 +17,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from queue import Full
 from unittest.mock import Mock
 
 from fastapi import APIRouter, FastAPI, status
@@ -156,6 +157,19 @@ def test_unknown_and_expired_jobs_return_explicit_semantics():
     assert expired_result.json()["detail"]["code"] == "GRAPH_EXTRACT_JOB_EXPIRED"
 
 
+def test_expiring_job_clears_result_payload():
+    store = InMemoryGraphExtractJobStore(result_ttl_seconds=0)
+    job = store.create(_payload())
+    store.mark_running(job.job_id)
+    store.mark_succeeded(job.job_id, _success_response())
+
+    store.expire_jobs()
+
+    expired_job = store.get(job.job_id)
+    assert expired_job.status == GraphExtractJobStatus.EXPIRED
+    assert expired_job.result is None
+
+
 def test_expired_jobs_do_not_count_against_capacity_after_cleanup():
     store = InMemoryGraphExtractJobStore(max_jobs=1, result_ttl_seconds=0)
 
@@ -166,6 +180,23 @@ def test_expired_jobs_do_not_count_against_capacity_after_cleanup():
     assert first_job.status == GraphExtractJobStatus.EXPIRED
     assert second_job.job_id != first_job.job_id
     assert len(store.list_jobs()) == 1
+
+
+def test_queue_full_rolls_back_pending_job(monkeypatch):
+    store = InMemoryGraphExtractJobStore(max_jobs=1)
+    job = store.create(_payload())
+    monkeypatch.setattr(store._queue, "put_nowait", Mock(side_effect=Full))
+
+    try:
+        store.submit_job(job.job_id, Mock())
+    except ValueError as exc:
+        assert "queue is full" in str(exc)
+    else:
+        raise AssertionError("queue.Full should fail job submission")
+
+    assert store.get(job.job_id) is None
+    replacement = store.create(_payload())
+    assert replacement.job_id != job.job_id
 
 
 def test_running_job_cancellation_does_not_claim_task_was_stopped():

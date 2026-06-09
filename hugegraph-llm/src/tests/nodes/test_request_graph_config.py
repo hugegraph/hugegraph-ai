@@ -15,11 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from hugegraph_llm.config import huge_settings
 from hugegraph_llm.nodes.hugegraph_node.commit_to_hugegraph import Commit2GraphNode
 from hugegraph_llm.nodes.hugegraph_node.fetch_graph_data import FetchGraphDataNode
 from hugegraph_llm.nodes.hugegraph_node.schema import SchemaNode
 from hugegraph_llm.nodes.index_node.build_semantic_index import BuildSemanticIndexNode
+from hugegraph_llm.operators.hugegraph_op.schema_manager import SchemaManager
 from hugegraph_llm.state.ai_state import WkFlowInput, WkFlowState
+from hugegraph_llm.utils.hugegraph_utils import get_hg_client
 
 GRAPH_CONFIG = {
     "url": "127.0.0.1:8080",
@@ -124,4 +127,57 @@ def test_build_semantic_index_node_uses_request_graph_config(monkeypatch):
         "embedding": "embedding",
         "vector_index": "vector-index",
         "graph_config": GRAPH_CONFIG,
+    }
+
+
+def test_schema_manager_connection_falls_back_for_missing_optional_fields(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(huge_settings, "graph_url", "127.0.0.1:8080")
+    monkeypatch.setattr(huge_settings, "graph_user", "admin")
+    monkeypatch.setattr(huge_settings, "graph_pwd", "global-secret")
+    monkeypatch.setattr(huge_settings, "graph_space", "global-space")
+
+    class FakeHugeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def schema(self):
+            return "schema-client"
+
+    monkeypatch.setattr("hugegraph_llm.operators.hugegraph_op.schema_manager.PyHugeClient", FakeHugeClient)
+
+    manager = SchemaManager("custom_graph", connection={"url": "10.0.0.1:8080", "user": None})
+
+    assert manager.schema == "schema-client"
+    assert captured == {
+        "url": "10.0.0.1:8080",
+        "graph": "custom_graph",
+        "user": "admin",
+        "pwd": "global-secret",
+        "graphspace": "global-space",
+    }
+
+
+def test_get_hg_client_preserves_explicit_empty_graphspace(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(huge_settings, "graph_url", "127.0.0.1:8080")
+    monkeypatch.setattr(huge_settings, "graph_name", "global-graph")
+    monkeypatch.setattr(huge_settings, "graph_user", "admin")
+    monkeypatch.setattr(huge_settings, "graph_pwd", "secret")
+    monkeypatch.setattr(huge_settings, "graph_space", "global-space")
+
+    class FakeHugeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("hugegraph_llm.utils.hugegraph_utils.PyHugeClient", FakeHugeClient)
+
+    get_hg_client({"graph": "custom_graph", "gs": ""})
+
+    assert captured == {
+        "url": "127.0.0.1:8080",
+        "graph": "custom_graph",
+        "user": "admin",
+        "pwd": "secret",
+        "graphspace": "",
     }

@@ -29,12 +29,17 @@ from hugegraph_llm.utils.log import log
 class Commit2Graph:
     def __init__(self, graph_config=None):
         graph_config = graph_config or {}
+
+        def pick(key, default):
+            value = graph_config[key] if key in graph_config else default
+            return default if value is None else value
+
         self.client = PyHugeClient(
-            url=graph_config.get("url") or huge_settings.graph_url,
-            graph=graph_config.get("graph") or huge_settings.graph_name,
-            user=graph_config.get("user") or huge_settings.graph_user,
-            pwd=graph_config.get("pwd") or huge_settings.graph_pwd,
-            graphspace=graph_config.get("gs") or huge_settings.graph_space,
+            url=pick("url", huge_settings.graph_url),
+            graph=pick("graph", huge_settings.graph_name),
+            user=pick("user", huge_settings.graph_user),
+            pwd=pick("pwd", huge_settings.graph_pwd),
+            graphspace=pick("gs", huge_settings.graph_space),
         )
         self.schema = self.client.schema()
 
@@ -58,17 +63,24 @@ class Commit2Graph:
         edges = data.get("edges", []) or []
         triples = data.get("triples", []) or []
         if not vertices and not edges and not triples:
-            log.critical("(Loading) Both vertices and edges are empty. Please check the input data again.")
-            raise ValueError("Both vertices and edges input are empty.")
+            log.critical("(Loading) vertices, edges, and triples are empty. Please check the input data again.")
+            raise ValueError("vertices, edges, and triples input are empty.")
 
         if not schema:
-            # TODO: ensure the function works correctly (update the logic later)
+            if vertices or edges:
+                raise ValueError("Schema-free mode only supports triples input; vertices and edges require schema.")
+            if not triples:
+                raise ValueError("Schema-free mode requires non-empty triples input.")
             import_result = self.schema_free_mode(triples)
             log.warning("Using schema_free mode, could try schema_define mode for better effect!")
         else:
+            if triples:
+                raise ValueError("Triples input is not supported when schema is provided; use vertices and edges.")
             if not vertices and not edges:
-                log.critical("(Loading) Both vertices and edges are empty. Please check the input data again.")
-                raise ValueError("Both vertices and edges input are empty.")
+                log.critical(
+                    "(Loading) property-graph vertices and edges are empty. Please check the input data again."
+                )
+                raise ValueError("property-graph vertices and edges are required when schema is provided.")
             self.init_schema_if_need(schema)
             import_result = self.load_into_graph(vertices, edges, schema)
         data["import_result"] = import_result or self._empty_import_result(vertices, edges, triples)

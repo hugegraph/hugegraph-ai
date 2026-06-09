@@ -1166,6 +1166,24 @@ Hope this helps."""
         self.assertEqual(result["call_count"], 1)
         self.assertEqual(result["max_parallel_chunks"], 1)
 
+    @patch("hugegraph_llm.operators.llm_op.property_graph_extract.ThreadPoolExecutor")
+    def test_run_with_empty_chunks_keeps_parallelism_metadata_positive(self, mock_executor):
+        """Test empty chunks do not record max_parallel_chunks as zero."""
+        extractor = PropertyGraphExtract(llm=self.mock_llm)
+        extractor.extract_property_graph_by_llm = MagicMock()
+        context = {
+            "schema": self.schema,
+            "chunks": [],
+            "max_parallel_chunks": 4,
+        }
+
+        result = extractor.run(context)
+
+        mock_executor.assert_not_called()
+        extractor.extract_property_graph_by_llm.assert_not_called()
+        self.assertEqual(result["call_count"], 0)
+        self.assertEqual(result["max_parallel_chunks"], 1)
+
     def test_run_raises_when_chunk_output_is_malformed_json(self):
         """Test flow execution fails instead of silently dropping malformed chunk output."""
         extractor = PropertyGraphExtract(llm=self.mock_llm)

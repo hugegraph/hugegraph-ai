@@ -31,19 +31,23 @@ class SchemaManager:
         graph_config: Optional[Dict[str, Any]] = None,
     ):
         self.graph_name = graph_name
+
+        def pick(config, key, default):
+            value = config[key] if key in config else default
+            return default if value is None else value
+
         if connection is not None:
-            # Request-scoped graph extraction uses a complete connection unit so
-            # omitted fields do not fall back to global settings per field.
-            url = connection.get("url")
-            user = connection.get("user")
-            pwd = connection.get("pwd")
-            graphspace = connection.get("graphspace")
+            connection = connection or {}
+            url = pick(connection, "url", huge_settings.graph_url)
+            user = pick(connection, "user", huge_settings.graph_user)
+            pwd = pick(connection, "pwd", huge_settings.graph_pwd)
+            graphspace = pick(connection, "graphspace", huge_settings.graph_space)
         else:
             graph_config = graph_config or {}
-            url = graph_config.get("url") or huge_settings.graph_url
-            user = graph_config.get("user") or huge_settings.graph_user
-            pwd = graph_config.get("pwd") or huge_settings.graph_pwd
-            graphspace = graph_config.get("gs") or huge_settings.graph_space
+            url = pick(graph_config, "url", huge_settings.graph_url)
+            user = pick(graph_config, "user", huge_settings.graph_user)
+            pwd = pick(graph_config, "pwd", huge_settings.graph_pwd)
+            graphspace = pick(graph_config, "gs", huge_settings.graph_space)
         self.client = PyHugeClient(
             url=url,
             graph=self.graph_name,

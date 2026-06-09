@@ -38,6 +38,10 @@ from hugegraph_llm.utils.log import log
 SENSITIVE_CLIENT_CONFIG_KEYS = {"pwd", "password", "token", "api_key", "secret"}
 
 
+class FlowOutputValidationError(ValueError):
+    """Raised when a workflow returns malformed output."""
+
+
 def normalize_schema(schema: SchemaInput) -> str:
     schema = _validate_schema_value(schema)
     if isinstance(schema, dict):
@@ -90,13 +94,13 @@ def _parse_flow_json(raw_result: Any, error_message: str) -> Dict[str, Any]:
     if isinstance(raw_result, dict):
         return raw_result
     if not isinstance(raw_result, str):
-        raise ValueError(error_message)
+        raise FlowOutputValidationError(error_message)
     try:
         parsed = json.loads(raw_result)
     except json.JSONDecodeError as exc:
-        raise ValueError(error_message) from exc
+        raise FlowOutputValidationError(error_message) from exc
     if not isinstance(parsed, dict):
-        raise ValueError(error_message)
+        raise FlowOutputValidationError(error_message)
     return parsed
 
 
@@ -122,14 +126,14 @@ def _validate_property_graph_result(result: Dict[str, Any]) -> None:
     vertices = result.get("vertices", [])
     edges = result.get("edges", [])
     if not isinstance(vertices, list) or not isinstance(edges, list):
-        raise ValueError("property graph result must contain list vertices and edges")
+        raise FlowOutputValidationError("property graph result must contain list vertices and edges")
     for vertex in vertices:
         if not isinstance(vertex, dict) or "label" not in vertex or "properties" not in vertex:
-            raise ValueError("canonical property graph vertex must include label and properties")
+            raise FlowOutputValidationError("canonical property graph vertex must include label and properties")
     required_edge_keys = {"label", "outV", "outVLabel", "inV", "inVLabel", "properties"}
     for edge in edges:
         if not isinstance(edge, dict) or not required_edge_keys.issubset(edge):
-            raise ValueError(
+            raise FlowOutputValidationError(
                 "canonical property graph edge must include label, outV, outVLabel, inV, inVLabel, and properties"
             )
 
@@ -304,8 +308,14 @@ class GraphImportService:
             triple_count = _count_items(request.data, "triples")
         updated_embeddings = False
         if request.options.update_vid_embeddings:
-            self.scheduler.schedule_flow(FlowName.UPDATE_VID_EMBEDDINGS, graph_config=graph_config)
-            updated_embeddings = True
+            try:
+                self.scheduler.schedule_flow(FlowName.UPDATE_VID_EMBEDDINGS, graph_config=graph_config)
+                updated_embeddings = True
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                log.warning("VID embedding update failed after graph import: %s", exc, exc_info=True)
+                warnings.append(f"update_vid_embeddings failed: {exc}")
+                if status == "succeeded":
+                    status = "partial"
 
         meta = {"duration_ms": int((time.perf_counter() - started) * 1000)}
         if isinstance(import_result, dict):
