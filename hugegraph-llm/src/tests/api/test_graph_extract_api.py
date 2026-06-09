@@ -187,6 +187,27 @@ def test_graph_extract_accepts_content_chunks_wire_shape():
     assert request.max_parallel_chunks == 2
 
 
+def test_graph_extract_accepts_legacy_texts_list_as_chunks():
+    service = Mock()
+    service.extract_sync.return_value = GraphExtractResponse(
+        status="succeeded",
+        result=_graph_result(),
+        warnings=[],
+        meta={},
+    )
+
+    response = _graph_client(service).post(
+        "/graph/extract",
+        json={"texts": ["marko knows vadas", "vadas knows josh"], "schema": VALID_SCHEMA},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    request = service.extract_sync.call_args.args[0]
+    assert request.content_type == "chunks"
+    assert request.content == ["marko knows vadas", "vadas knows josh"]
+    assert request.texts == ["marko knows vadas", "vadas knows josh"]
+
+
 def test_graph_extract_api_concurrent_requests_keep_request_state_isolated():
     service = EchoGraphExtractService()
 
@@ -481,6 +502,10 @@ def test_request_model_validation_and_aliases():
     assert req.graph_schema == INLINE_SCHEMA
     assert req.schema == INLINE_SCHEMA
     assert req.client_config is None
+
+    legacy_chunks = GraphExtractRequest(texts=["hello", "world"], schema=INLINE_SCHEMA)
+    assert legacy_chunks.content_type == "chunks"
+    assert legacy_chunks.texts == ["hello", "world"]
 
     with pytest.raises(ValidationError):
         GraphExtractRequest(texts=[], schema="hugegraph")

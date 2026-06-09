@@ -145,6 +145,12 @@ def graph_extract_http_api(
     def create_graph_extract_job(
         req: GraphExtractRequest,
     ) -> GraphExtractJobCreateResponse:
+        """Create a process-local graph extraction job.
+
+        Jobs are stored in memory and are not shared across API worker processes.
+        Job status/results are lost on service restart, and cancellation only applies before
+        a queued job starts running; it cannot interrupt an active LLM call.
+        """
         try:
             job = jobs.create(req)
         except ValueError as exc:

@@ -26,6 +26,8 @@ from hugegraph_llm.operators.common_op.check_schema import CheckSchema
 
 SchemaInput = Union[str, Dict[str, Any]]
 ContentInput = Union[str, List[str]]
+REQUIRED_VERTEX_KEYS = {"label", "properties"}
+REQUIRED_EDGE_KEYS = {"label", "outV", "outVLabel", "inV", "inVLabel", "properties"}
 
 
 def _validate_schema_value(schema: SchemaInput) -> SchemaInput:
@@ -81,7 +83,7 @@ class GraphExtractRequest(BaseModel):
         default="text", description="Whether content is raw text or chunks."
     )
     content: Optional[ContentInput] = Field(default=None, description="Raw document text or pre-split chunks.")
-    texts: Optional[ContentInput] = Field(default=None, description="Deprecated alias for content_type=text content.")
+    texts: Optional[ContentInput] = Field(default=None, description="Deprecated alias for text or chunk content.")
     schema_data: SchemaInput = Field(..., alias="schema", description="Graph schema JSON object/string, or graph name.")
     example_prompt: Optional[str] = Field(default=None, description="Extraction prompt header or examples.")
     extract_type: Literal["property_graph"] = Field(default="property_graph")
@@ -99,13 +101,10 @@ class GraphExtractRequest(BaseModel):
         return value.strip()
 
     @staticmethod
-    def _normalize_legacy_texts(value: ContentInput) -> str:
+    def _normalize_legacy_texts(value: ContentInput) -> tuple[Literal["text", "chunks"], ContentInput]:
         if isinstance(value, str):
-            return GraphExtractRequest._normalize_text_content(value)
-        items = [text for text in value if isinstance(text, str) and text.strip()]
-        if len(items) != 1:
-            raise ValueError("texts alias must contain exactly one non-empty string")
-        return items[0].strip()
+            return "text", GraphExtractRequest._normalize_text_content(value)
+        return "chunks", GraphExtractRequest._normalize_chunks(value)
 
     @staticmethod
     def _normalize_chunks(value: ContentInput) -> List[str]:
@@ -155,11 +154,14 @@ class GraphExtractRequest(BaseModel):
         if self.content is None:
             if self.texts is None:
                 raise ValueError("content is required")
-            if self.content_type != "text":
-                raise ValueError("texts alias can only be used with content_type='text'")
-            text = self._normalize_legacy_texts(self.texts)
-            self.content = text
-            self.texts = [text]
+            if "content_type" in self.model_fields_set:
+                raise ValueError("deprecated texts alias cannot be combined with content_type; use content instead")
+            legacy_content_type, legacy_content = self._normalize_legacy_texts(self.texts)
+            if legacy_content_type == "chunks" and self.split_type != "document":
+                raise ValueError("split_type must be 'document' when deprecated texts alias contains chunks")
+            self.content_type = legacy_content_type
+            self.content = legacy_content
+            self.texts = [legacy_content] if legacy_content_type == "text" else legacy_content
         elif self.content_type == "text":
             text = self._normalize_text_content(self.content)
             self.content = text
@@ -219,14 +221,51 @@ class GraphImportRequest(BaseModel):
     @field_validator("data")
     @classmethod
     def validate_data(cls, data: Dict[str, Any]) -> Dict[str, Any]:
-        vertices = data.get("vertices") or []
-        edges = data.get("edges") or []
-        triples = data.get("triples") or []
-        if triples and not vertices and not edges:
-            raise ValueError("triples-only import is not supported; submit property graph vertices or edges")
+        vertices = cls._optional_list(data, "vertices")
+        edges = cls._optional_list(data, "edges")
+        triples = cls._optional_list(data, "triples")
+        if triples:
+            raise ValueError("triples import is not supported; submit property graph vertices or edges")
         if not vertices and not edges and not triples:
             raise ValueError("data must contain at least one vertex, edge, or triple")
+        for index, vertex in enumerate(vertices):
+            if not isinstance(vertex, dict) or not REQUIRED_VERTEX_KEYS.issubset(vertex):
+                raise ValueError(f"vertices[{index}] must include label and properties")
+            if not isinstance(vertex["label"], str) or not vertex["label"].strip():
+                raise ValueError(f"vertices[{index}].label must be a non-empty string")
+            if not isinstance(vertex["properties"], dict):
+                raise ValueError(f"vertices[{index}].properties must be an object")
+        for index, edge in enumerate(edges):
+            if not isinstance(edge, dict) or not REQUIRED_EDGE_KEYS.issubset(edge):
+                raise ValueError(f"edges[{index}] must include label, outV, outVLabel, inV, inVLabel, and properties")
+            for key in ("label", "outV", "outVLabel", "inV", "inVLabel"):
+                if not isinstance(edge[key], str) or not edge[key].strip():
+                    raise ValueError(f"edges[{index}].{key} must be a non-empty string")
+            if not isinstance(edge["properties"], dict):
+                raise ValueError(f"edges[{index}].properties must be an object")
         return data
+
+    @staticmethod
+    def _optional_list(data: Dict[str, Any], key: str) -> List[Any]:
+        if key not in data or data[key] is None:
+            return []
+        if not isinstance(data[key], list):
+            raise ValueError(f"data.{key} must be a list")
+        return data[key]
+
+    @model_validator(mode="after")
+    def validate_write_target(self):
+        schema = self.schema_data
+        is_named_schema = isinstance(schema, str) and not schema.strip().startswith("{")
+        if (
+            self.write_to_graph
+            and not is_named_schema
+            and (self.client_config is None or self.client_config.graph is None)
+        ):
+            raise ValueError("client_config.graph is required when writing inline schema data to HugeGraph")
+        if is_named_schema and self.client_config is not None and self.client_config.graph not in {None, schema}:
+            raise ValueError("schema graph name must match client_config.graph")
+        return self
 
 
 class GraphExtractAndImportRequest(GraphExtractRequest):
@@ -237,6 +276,8 @@ class GraphExtractAndImportRequest(GraphExtractRequest):
         schema = self.schema_data
         is_named_schema = isinstance(schema, str) and not schema.strip().startswith("{")
         if not is_named_schema:
+            if self.write_to_graph and (self.client_config is None or self.client_config.graph is None):
+                raise ValueError("client_config.graph is required when writing inline schema data to HugeGraph")
             return self
         if self.client_config is None:
             raise ValueError(

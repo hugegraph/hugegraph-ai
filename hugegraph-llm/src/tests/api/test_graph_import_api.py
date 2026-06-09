@@ -45,6 +45,10 @@ def _payload_data():
     }
 
 
+def _target_client_config(graph="target_graph"):
+    return {"graph": graph, "user": "admin", "pwd": "secret", "gs": "space_a"}
+
+
 def _import_payload(**overrides):
     payload = {
         "schema": {
@@ -53,6 +57,7 @@ def _import_payload(**overrides):
         },
         "data": _payload_data(),
         "write_to_graph": True,
+        "client_config": _target_client_config(),
     }
     payload.update(overrides)
     return payload
@@ -121,7 +126,7 @@ def test_graph_import_request_rejects_empty_graph_data():
 
 
 def test_graph_import_request_rejects_triples_only_graph_data():
-    with pytest.raises(ValueError, match="triples-only"):
+    with pytest.raises(ValueError, match="triples import is not supported"):
         GraphImportRequest(
             schema={
                 "vertexlabels": [{"name": "person", "properties": ["name"]}],
@@ -130,6 +135,40 @@ def test_graph_import_request_rejects_triples_only_graph_data():
             data={"triples": [{"start": "marko", "type": "knows", "end": "vadas"}]},
             write_to_graph=True,
         )
+
+
+def test_graph_import_request_rejects_malformed_property_graph_data():
+    invalid_payloads = [
+        {"vertices": "not-a-list"},
+        {"vertices": [{"properties": {"name": "marko"}}]},
+        {"vertices": [{"label": "person", "properties": "not-an-object"}]},
+        {"edges": "not-a-list"},
+        {"edges": [{"label": "knows", "outV": "marko", "inV": "vadas", "properties": {}}]},
+        {
+            "edges": [
+                {
+                    "label": "knows",
+                    "outV": "marko",
+                    "outVLabel": "person",
+                    "inV": "vadas",
+                    "inVLabel": "person",
+                    "properties": "not-an-object",
+                }
+            ]
+        },
+    ]
+
+    for data in invalid_payloads:
+        with pytest.raises(ValueError):
+            GraphImportRequest(**_import_payload(data=data))
+
+
+def test_graph_import_request_requires_explicit_target_graph_for_inline_schema_write():
+    with pytest.raises(ValueError, match="client_config.graph"):
+        GraphImportRequest(**_import_payload(client_config=None))
+
+    with pytest.raises(ValueError, match="client_config.graph"):
+        GraphExtractAndImportRequest(**_extract_payload(write_to_graph=True))
 
 
 def test_extract_and_import_requires_write_confirmation_before_writing():
@@ -155,7 +194,7 @@ def test_confirmed_extract_and_import_runs_extraction_before_import():
     import_service.import_graph.return_value = _import_response()
     client = _client(extract_service=extract_service, import_service=import_service)
 
-    response = client.post("/graph/extract-and-import", json=_extract_payload())
+    response = client.post("/graph/extract-and-import", json=_extract_payload(client_config=_target_client_config()))
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["import_result"]["status"] == "succeeded"
@@ -164,16 +203,7 @@ def test_confirmed_extract_and_import_runs_extraction_before_import():
 
 
 def test_extract_and_import_allows_inline_schema_with_request_graph_config():
-    request = GraphExtractAndImportRequest(
-        **_extract_payload(
-            client_config={
-                "graph": "target_graph",
-                "user": "admin",
-                "pwd": "secret",
-                "gs": "space_a",
-            }
-        )
-    )
+    request = GraphExtractAndImportRequest(**_extract_payload(client_config=_target_client_config()))
 
     assert request.client_config.graph == "target_graph"
 
@@ -192,14 +222,7 @@ def test_extract_and_import_passes_inline_schema_request_graph_config_to_import(
 
     response = client.post(
         "/graph/extract-and-import",
-        json=_extract_payload(
-            client_config={
-                "graph": "target_graph",
-                "user": "admin",
-                "pwd": "secret",
-                "gs": "space_a",
-            }
-        ),
+        json=_extract_payload(client_config=_target_client_config()),
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -217,15 +240,7 @@ def test_extract_and_import_inline_schema_keeps_client_config_out_of_extract_flo
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
         lambda: scheduler,
     )
-    request = GraphExtractAndImportRequest(
-        **_extract_payload(
-            client_config={
-                "graph": "target_graph",
-                "user": "admin",
-                "pwd": "secret",
-            }
-        )
-    )
+    request = GraphExtractAndImportRequest(**_extract_payload(client_config=_target_client_config()))
 
     GraphExtractService().extract_sync(request)
 
@@ -239,7 +254,7 @@ def test_extract_and_import_rejects_triples_extraction_at_request_boundary():
 
     response = client.post(
         "/graph/extract-and-import",
-        json=_extract_payload(extract_type="triples"),
+        json=_extract_payload(extract_type="triples", client_config=_target_client_config()),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -262,7 +277,7 @@ def test_graph_import_service_uses_import_flow_and_updates_embeddings_only_when_
     assert response.updated_embeddings is True
     assert scheduler.schedule_flow.call_args_list[0].args[0] == FlowName.IMPORT_GRAPH_DATA
     assert scheduler.schedule_flow.call_args_list[1].args[0] == FlowName.UPDATE_VID_EMBEDDINGS
-    assert scheduler.schedule_flow.call_args_list[1].kwargs["graph_config"] is None
+    assert scheduler.schedule_flow.call_args_list[1].kwargs["graph_config"]["graph"] == "target_graph"
 
 
 def test_graph_import_service_keeps_import_result_when_embedding_update_fails(monkeypatch):
@@ -385,13 +400,11 @@ def test_graph_import_service_rejects_schema_graph_and_target_graph_mismatch(mon
     )
 
     with pytest.raises(ValueError, match="schema graph name"):
-        GraphImportService().import_graph(
-            GraphImportRequest(
-                schema="schema_graph",
-                data=_payload_data(),
-                write_to_graph=True,
-                client_config={"graph": "target_graph"},
-            )
+        GraphImportRequest(
+            schema="schema_graph",
+            data=_payload_data(),
+            write_to_graph=True,
+            client_config={"graph": "target_graph"},
         )
 
     scheduler.schedule_flow.assert_not_called()
