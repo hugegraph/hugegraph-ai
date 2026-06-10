@@ -227,7 +227,7 @@ class GraphImportRequest(BaseModel):
         if triples:
             raise ValueError("triples import is not supported; submit property graph vertices or edges")
         if not vertices and not edges and not triples:
-            raise ValueError("data must contain at least one vertex, edge, or triple")
+            raise ValueError("data must contain at least one vertex or edge")
         for index, vertex in enumerate(vertices):
             if not isinstance(vertex, dict) or not REQUIRED_VERTEX_KEYS.issubset(vertex):
                 raise ValueError(f"vertices[{index}] must include label and properties")

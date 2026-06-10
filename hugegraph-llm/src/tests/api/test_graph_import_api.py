@@ -121,7 +121,7 @@ def test_post_graph_import_requires_write_confirmation_before_writing():
 
 
 def test_graph_import_request_rejects_empty_graph_data():
-    with pytest.raises(ValueError, match="data"):
+    with pytest.raises(ValueError, match="vertex or edge"):
         GraphImportRequest(schema={"vertices": [{"label": "person"}]}, data={"vertices": [], "edges": []})
 
 
