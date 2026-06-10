@@ -280,6 +280,17 @@ def test_graph_import_service_uses_import_flow_and_updates_embeddings_only_when_
     assert scheduler.schedule_flow.call_args_list[1].kwargs["graph_config"]["graph"] == "target_graph"
 
 
+def test_graph_import_service_requires_write_confirmation():
+    scheduler = Mock()
+
+    with pytest.raises(ValueError, match="write_to_graph must be True"):
+        GraphImportService(scheduler=scheduler).import_graph(
+            GraphImportRequest(**_import_payload(write_to_graph=False, client_config=None))
+        )
+
+    scheduler.schedule_flow.assert_not_called()
+
+
 def test_graph_import_service_keeps_import_result_when_embedding_update_fails(monkeypatch):
     scheduler = Mock()
     scheduler.schedule_flow.side_effect = [

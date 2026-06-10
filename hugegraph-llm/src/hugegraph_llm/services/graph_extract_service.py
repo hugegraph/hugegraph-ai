@@ -277,6 +277,9 @@ class GraphImportService:
         return self._scheduler or SchedulerSingleton.get_instance()
 
     def import_graph(self, request: GraphImportRequest) -> GraphImportResponse:
+        if not request.write_to_graph:
+            raise ValueError("write_to_graph must be True to confirm graph import")
+
         started = time.perf_counter()
         schema = normalize_schema(request.schema)
         graph_config = apply_client_config(request.client_config, schema=schema, align_graph_with_schema=True)
