@@ -44,7 +44,116 @@ from hugegraph_llm.utils.vector_index_utils import (
 )
 
 
-def store_prompt(doc, schema, example_prompt, graph_extract_split_type="document"):
+def _dump_json_examples(value):
+    return json.dumps(value, indent=2, ensure_ascii=False)
+
+
+def _normalize_schema_generator_query_examples(examples):
+    examples = (examples or "").strip()
+    if not examples:
+        return ""
+
+    try:
+        parsed_examples = json.loads(examples)
+    except json.JSONDecodeError as exc:
+        raise gr.Error(
+            f"Query examples must be valid JSON: {exc.msg} at line {exc.lineno}, column {exc.colno}"
+        ) from exc
+
+    if not isinstance(parsed_examples, list):
+        raise gr.Error("Query examples must be a JSON list.")
+
+    normalized_examples = []
+    for index, item in enumerate(parsed_examples):
+        if isinstance(item, str):
+            description = item.strip()
+            if not description:
+                raise gr.Error(f"Query examples[{index}] must be a non-empty string.")
+            normalized_examples.append(
+                {
+                    "description": description,
+                    "gremlin": "",
+                }
+            )
+            continue
+
+        if isinstance(item, dict):
+            description = item.get("description")
+            gremlin = item.get("gremlin")
+            if not isinstance(description, str) or not description.strip():
+                raise gr.Error("Each query example object must contain a non-empty `description` string.")
+            if not isinstance(gremlin, str):
+                raise gr.Error("Each query example object must contain a `gremlin` string.")
+            normalized_examples.append(
+                {
+                    "description": description.strip(),
+                    "gremlin": gremlin.strip(),
+                }
+            )
+            continue
+
+        raise gr.Error("Query examples must contain strings or objects with `description` and `gremlin` fields.")
+
+    return _dump_json_examples(normalized_examples)
+
+
+def _validate_schema_generator_few_shot_examples(examples):
+    examples = (examples or "").strip()
+    if not examples:
+        return ""
+
+    try:
+        parsed_examples = json.loads(examples)
+    except json.JSONDecodeError as exc:
+        raise gr.Error(
+            f"Few-shot schema examples must be valid JSON: {exc.msg} at line {exc.lineno}, column {exc.colno}"
+        ) from exc
+
+    if not isinstance(parsed_examples, dict):
+        raise gr.Error("Few-shot schema examples must be a JSON object.")
+
+    return _dump_json_examples(parsed_examples)
+
+
+def _load_persisted_json_examples(examples, label):
+    examples = (examples or "").strip()
+    if not examples:
+        return ""
+    try:
+        json.loads(examples)
+    except json.JSONDecodeError as exc:
+        log.warning("Ignoring invalid persisted %s: %s", label, exc)
+        return ""
+    return examples
+
+
+def _persist_schema_generator_examples(query_examples, few_shot_examples):
+    validated_query_examples = _normalize_schema_generator_query_examples(query_examples)
+    validated_few_shot_examples = _validate_schema_generator_few_shot_examples(few_shot_examples)
+
+    changed = False
+    if getattr(prompt, "schema_generator_query_examples", "") != validated_query_examples:
+        prompt.schema_generator_query_examples = validated_query_examples
+        changed = True
+
+    if getattr(prompt, "schema_generator_few_shot_examples", "") != validated_few_shot_examples:
+        prompt.schema_generator_few_shot_examples = validated_few_shot_examples
+        changed = True
+
+    if changed:
+        prompt.update_yaml_file()
+
+    effective_query_examples = validated_query_examples or load_query_examples()
+    effective_few_shot_examples = validated_few_shot_examples or load_schema_fewshot_examples()
+    return effective_query_examples, effective_few_shot_examples
+
+
+def store_prompt(
+    doc,
+    schema,
+    example_prompt,
+    graph_extract_split_type="document",
+):
     if (
         prompt.doc_input_text != doc
         or prompt.graph_schema != schema
@@ -89,6 +198,13 @@ def load_example_names():
 
 def load_query_examples():
     """Load query examples from JSON file based on the prompt language setting"""
+    persisted_examples = _load_persisted_json_examples(
+        getattr(prompt, "schema_generator_query_examples", ""),
+        "schema generator query examples",
+    )
+    if persisted_examples:
+        return _normalize_schema_generator_query_examples(persisted_examples)
+
     try:
         language = getattr(
             prompt,
@@ -102,24 +218,31 @@ def load_query_examples():
 
         with open(examples_path, "r", encoding="utf-8") as f:
             examples = json.load(f)
-        return json.dumps(examples, indent=2, ensure_ascii=False)
+        return _normalize_schema_generator_query_examples(json.dumps(examples, ensure_ascii=False))
     except (FileNotFoundError, json.JSONDecodeError):
         try:
             examples_path = os.path.join(resource_path, "prompt_examples", "query_examples.json")
             with open(examples_path, "r", encoding="utf-8") as f:
                 examples = json.load(f)
-            return json.dumps(examples, indent=2, ensure_ascii=False)
+            return _normalize_schema_generator_query_examples(json.dumps(examples, ensure_ascii=False))
         except (FileNotFoundError, json.JSONDecodeError):
             return "[]"
 
 
 def load_schema_fewshot_examples():
     """Load few-shot examples from a JSON file"""
+    persisted_examples = _load_persisted_json_examples(
+        getattr(prompt, "schema_generator_few_shot_examples", ""),
+        "schema generator few-shot examples",
+    )
+    if persisted_examples:
+        return _validate_schema_generator_few_shot_examples(persisted_examples)
+
     try:
         examples_path = os.path.join(resource_path, "prompt_examples", "schema_examples.json")
         with open(examples_path, "r", encoding="utf-8") as f:
             examples = json.load(f)
-        return json.dumps(examples, indent=2, ensure_ascii=False)
+        return _validate_schema_generator_few_shot_examples(json.dumps(examples, ensure_ascii=False))
     except (FileNotFoundError, json.JSONDecodeError):
         return "[]"
 
@@ -205,6 +328,7 @@ def _create_prompt_helper_block(demo, input_text, info_extract_template):
 
 
 def _build_schema_and_provide_feedback(input_text, query_example, few_shot):
+    query_example, few_shot = _persist_schema_generator_examples(query_example, few_shot)
     gr.Info("Generating schema, please wait...")
     # Call the original build_schema function
     generated_schema = build_schema(input_text, query_example, few_shot)
@@ -311,31 +435,66 @@ def create_vector_graph_block():
 
         vector_index_btn0.click(get_vector_index_info, outputs=out).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
         vector_index_btn1.click(clean_vector_index).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
         vector_import_bt.click(build_vector_index, inputs=[input_file, input_text], outputs=out).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
         graph_index_btn0.click(get_graph_index_info, outputs=out).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
         graph_index_btn1.click(clean_all_graph_index).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
         graph_data_btn0.click(clean_all_graph_data).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
         graph_index_rebuild_bt.click(update_vid_embedding, outputs=out).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
 
         # origin_out = gr.Textbox(visible=False)
@@ -351,14 +510,24 @@ def create_vector_graph_block():
             outputs=[out],
         ).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
 
         graph_loading_bt.click(import_graph_data, inputs=[out, input_schema], outputs=[out]).then(
             update_vid_embedding
         ).then(
             store_prompt,
-            inputs=[input_text, input_schema, info_extract_template, graph_split_type],
+            inputs=[
+                input_text,
+                input_schema,
+                info_extract_template,
+                graph_split_type,
+            ],
         )
 
         # TODO: we should store the examples after the user changed them.
@@ -373,7 +542,7 @@ def create_vector_graph_block():
                 input_schema,
                 info_extract_template,
                 graph_split_type,
-            ],  # TODO: Store the updated examples
+            ],  # Persist the updated schema-generator examples
         )
 
         def on_tab_select(input_f, input_t, evt: gr.SelectData):
