@@ -58,8 +58,6 @@ def schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any] | None:
     if "schema" in live_schema:
         raw = live_schema.get("schema")
     else:
-        if not live_schema:
-            return None
         raw = live_schema
     return raw if isinstance(raw, dict) else None
 
