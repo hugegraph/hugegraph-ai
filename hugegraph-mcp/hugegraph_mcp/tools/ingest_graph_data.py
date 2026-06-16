@@ -683,7 +683,9 @@ def validate_graph_payload(
                         e.get("target"),
                     )
                 )
-        if len(edge_pairs) > len(set(json.dumps(p, sort_keys=True) for p in edge_pairs)):
+        if len(edge_pairs) > len(
+            set(json.dumps(p, sort_keys=True) for p in edge_pairs)
+        ):
             warnings.append("potential duplicate edges detected")
 
     if indexed_labels["VERTEX"] or indexed_labels["EDGE"]:
