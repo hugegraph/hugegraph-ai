@@ -118,5 +118,6 @@ def test_readonly_mode_default(monkeypatch):
     import hugegraph_mcp.server
 
     importlib.reload(hugegraph_mcp.server)
+    assert hugegraph_mcp.server.READONLY is True
     tools = get_registered_tools()
     assert len(tools) == 10

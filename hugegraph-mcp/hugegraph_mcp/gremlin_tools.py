@@ -142,6 +142,19 @@ def _no_index_error_result(
     }
 
 
+def _get_client_address(client) -> str:
+    """Extract server address from a pyhugegraph client for error messages.
+
+    pyhugegraph does not expose a public URL getter; we read the private
+    ``_url`` attribute with a ``hasattr`` guard as a last resort.  This is
+    safe for error-reporting purposes only and should not be relied on for
+    logic.
+    """
+    if client is not None and hasattr(client, "_url"):
+        return str(client._url)
+    return "unknown address"
+
+
 def _execute_gremlin_with_error_handling(
     client, gremlin_query: str, operation_type: str = "read"
 ) -> dict[str, Any]:
@@ -167,11 +180,7 @@ def _execute_gremlin_with_error_handling(
         }
 
     except requests.exceptions.ConnectionError:
-        address = (
-            actual_client._url
-            if actual_client is not None and hasattr(actual_client, "_url")
-            else "unknown address"
-        )
+        address = _get_client_address(actual_client)
         return {
             "success": False,
             "error_type": "connection_error",
@@ -186,11 +195,7 @@ def _execute_gremlin_with_error_handling(
         }
 
     except requests.exceptions.Timeout:
-        address = (
-            actual_client._url
-            if actual_client is not None and hasattr(actual_client, "_url")
-            else "unknown address"
-        )
+        address = _get_client_address(actual_client)
         return {
             "success": False,
             "error_type": "timeout_error",

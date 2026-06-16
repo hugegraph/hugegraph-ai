@@ -13,10 +13,21 @@
 
 """图数据导入 — 结构化 graph_data 校验和 legacy AI-backed 写入链路。
 
-Public MCP V1 的 import_graph_data_tool(mode="ingest") 使用
-manage_graph_data() / direct Gremlin 写入链路。这里保留的
-ingest_graph_data() 是兼容 wrapper，真实实现为 ingest_graph_data_via_ai()，
-用于需要调用 HugeGraph-AI /graph-import HTTP 接口的内部/legacy 场景。
+=== MCP V1 导入路径说明 ===
+
+当前存在两条导入路径：
+
+1. **Public V1 路径（推荐）**
+   import_graph_data_tool(mode="ingest") 路由到 manage_graph_data()
+   → graph_data_to_change_plan() → 本地 Gremlin 写入。
+   此路径在 server.py:_import_graph_data() 中分发，不依赖
+   HugeGraph-AI 服务。
+
+2. **Legacy AI-backed 路径（兼容保留）**
+   ingest_graph_data() 真实实现为 ingest_graph_data_via_ai()，
+   通过 HugeGraph-AI /graph-import HTTP 接口写入。
+   仅供需要 AI 辅助属性映射的内部/legacy 场景使用，
+   不做为 MCP V1 公共工具的默认导入链路。
 
 validate_graph_payload() 对 vertices/edges 做全面 schema 校验：
 - label 是否存在于 live schema
@@ -644,6 +655,14 @@ def validate_graph_payload(
                         f"edge {idx} {endpoint_name} endpoint missing primary key for label '{endpoint_label}': {missing_pk}"
                     )
                     continue
+                if not identities:
+                    # 无 missing_pk 但也无 identities —— 退化状态，显式报错
+                    # 而非静默通过（例如 endpoint_value 为空对象 {}）。
+                    errors.append(
+                        f"edge {idx} {endpoint_name} endpoint has no resolvable identity "
+                        f"for label '{endpoint_label}': {_format_endpoint_value(endpoint_value)}"
+                    )
+                    continue
                 if identities and not any(
                     identity in vertex_identity_index for identity in identities
                 ):
@@ -664,7 +683,7 @@ def validate_graph_payload(
                         e.get("target"),
                     )
                 )
-        if len(edge_pairs) > len(set(str(p) for p in edge_pairs)):
+        if len(edge_pairs) > len(set(json.dumps(p, sort_keys=True) for p in edge_pairs)):
             warnings.append("potential duplicate edges detected")
 
     if indexed_labels["VERTEX"] or indexed_labels["EDGE"]:

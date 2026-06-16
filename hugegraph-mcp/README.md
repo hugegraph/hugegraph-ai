@@ -4,6 +4,8 @@
 
 HugeGraph MCP is a Model Context Protocol server for HugeGraph. V1 is designed as a safe, controlled, thin adapter layer: it exposes a small set of stable tools and centralizes configuration, permission checks, read-only Gremlin validation, the dry-run/confirm write safety chain, and the unified response envelope.
 
+**Requires HugeGraph Server >= 1.7.0** (MCP defaults to `graphspace=DEFAULT` and relies on graphspace-scoped API routes that are not available in older versions).
+
 ## Developer Notes
 
 ### Design Boundary

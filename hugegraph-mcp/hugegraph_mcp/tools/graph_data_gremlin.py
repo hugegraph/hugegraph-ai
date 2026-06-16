@@ -27,7 +27,14 @@ def _g(value: Any) -> str:
     if isinstance(value, str):
         escaped = _escape_groovy_single_quoted(value)
         return f"'{escaped}'"
-    return json.dumps(value, sort_keys=True)
+    if isinstance(value, dict):
+        # Groovy/Gremlin map literal uses [...] not {...}
+        items = ", ".join(f"{_g(k)}: {_g(v)}" for k, v in sorted(value.items()))
+        return f"[{items}]"
+    if isinstance(value, (list, tuple)):
+        items = ", ".join(_g(v) for v in value)
+        return f"[{items}]"
+    return json.dumps(value)
 
 
 def _escape_groovy_single_quoted(value: str) -> str:

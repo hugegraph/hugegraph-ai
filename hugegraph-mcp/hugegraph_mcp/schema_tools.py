@@ -99,6 +99,15 @@ def design_schema(
     HugeGraph 使用 schema-based 图模型，数据写入前必须先定义 PropertyKeys、
     VertexLabels、EdgeLabels、IndexLabels。本函数提供分步引导框架。
 
+    Args:
+        thought: reserved for future use (no-op, accepted for Sequential Thinking
+            protocol compatibility)
+        thought_number: current thought step number
+        total_thoughts: estimated total thought steps
+        next_thought_needed: whether the caller expects another step
+        is_revision: reserved for future use (no-op)
+        revision_of: reserved for future use (no-op)
+
     【最佳实践】
     1. 先定义 PropertyKeys — 所有属性必须在 VertexLabel/EdgeLabel 中预定义
     2. 选择合适的 DataType (TEXT/INT/DATE/DOUBLE) 和 Cardinality (SINGLE/SET/LIST)

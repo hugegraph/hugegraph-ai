@@ -4,6 +4,8 @@
 
 HugeGraph MCP 是 HugeGraph 的 Model Context Protocol Server。V1 的定位是安全、可控的薄适配层：对外暴露少量稳定工具，内部统一处理配置、权限、只读 Gremlin 校验、dry-run/confirm 写入安全链和统一响应格式。
 
+**要求 HugeGraph Server >= 1.7.0**（MCP 默认使用 `graphspace=DEFAULT` 并依赖 graphspace 路由 API，旧版本不支持）。
+
 ## 开发者说明
 
 ### 设计边界

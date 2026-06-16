@@ -497,6 +497,12 @@ def manage_schema(
     - design: 获取分步 schema 设计引导
     - validate: 基于 live schema 校验操作合法性
     - dry_run: 校验 + 生成 plan_hash + 风险警告
+
+    Args:
+        mode: 操作模式 ("design" / "validate" / "dry_run")
+        operations: schema 操作列表
+        confirm: reserved for future use (no-op)
+        plan_hash: reserved for future use (no-op)
     """
     operations = operations or []
 
