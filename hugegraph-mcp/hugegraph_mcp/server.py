@@ -201,6 +201,7 @@ def inspect_graph_tool(include_raw_schema: bool = False) -> dict:
 def generate_gremlin_tool(
     query: str,
     execute: bool = False,
+    output_types: list[str] | None = None,
 ) -> dict:
     """V1 稳定工具：自然语言 → Gremlin 生成。
 
@@ -212,6 +213,7 @@ def generate_gremlin_tool(
         generate_gremlin,
         query=query,
         execute=execute,
+        output_types=output_types,
     )
 
 

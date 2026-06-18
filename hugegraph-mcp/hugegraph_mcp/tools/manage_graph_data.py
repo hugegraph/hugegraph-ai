@@ -156,16 +156,19 @@ def manage_graph_data(
     if mode == "import":
         if graph_data is None:
             return envelope_err(
-                "VALIDATION_ERROR",
+                ErrorType.VALIDATION_ERROR,
                 "graph_data is required for mode='import'",
             )
-        # import 模式以用户友好的 graph_data 为输入，但后续安全链统一处理
-        # change_plan；这样 import/delete 能共享 dry-run、hash 和执行逻辑。
-        plan = graph_data_to_change_plan(graph_data)
+        if not isinstance(graph_data, dict):
+            return envelope_err(
+                ErrorType.VALIDATION_ERROR,
+                "graph_data must be an object for mode='import'.",
+                details={"received_type": type(graph_data).__name__},
+            )
     elif mode == "delete":
         if change_plan is None:
             return envelope_err(
-                "VALIDATION_ERROR",
+                ErrorType.VALIDATION_ERROR,
                 f"change_plan is required for mode='{mode}'",
             )
         plan = (
@@ -175,19 +178,9 @@ def manage_graph_data(
         )
     else:
         return envelope_err(
-            "VALIDATION_ERROR",
+            ErrorType.VALIDATION_ERROR,
             f"Unknown mode: {mode!r}. Use 'import' or 'delete'.",
             details={"mode": mode},
-        )
-
-    # mode 和 op 的关系是第一道边界：import 只能 create，delete
-    # 只能执行对应操作，避免用户把高风险操作塞进低风险入口。
-    mode_validation = _validate_mode_operations(mode, plan)
-    if not mode_validation["valid"]:
-        return envelope_err(
-            ErrorType.INVALID_GRAPH_DATA,
-            "Graph change plan contains operations outside the selected mode.",
-            details={"errors": mode_validation["errors"]},
         )
 
     # 写入前必须读取 live schema。这里不允许在 schema 缺失时降级执行，
@@ -214,6 +207,19 @@ def manage_graph_data(
                 "Graph data does not match live schema.",
                 details={"errors": payload_validation["errors"]},
             )
+        # public import 的 scalar source/target 需要结合 live schema 才能区分
+        # 单主键值与显式 id；outV/inV 则始终保持 id 语义。
+        plan = graph_data_to_change_plan(graph_data, live_schema=live_schema)
+
+    # mode 和 op 的关系是第一道边界：import 只能 create，delete
+    # 只能执行对应操作，避免用户把高风险操作塞进低风险入口。
+    mode_validation = _validate_mode_operations(mode, plan)
+    if not mode_validation["valid"]:
+        return envelope_err(
+            ErrorType.INVALID_GRAPH_DATA,
+            "Graph change plan contains operations outside the selected mode.",
+            details={"errors": mode_validation["errors"]},
+        )
 
     dry_run_result = dry_run_graph_change_plan(
         plan, live_schema, extra_hash_context=extra_hash_context

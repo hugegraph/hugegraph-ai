@@ -146,6 +146,16 @@ def test_import_graph_data_tool_validates_ingest_graph_data():
     assert "graph_data is required" in result["error"]["message"]
 
 
+def test_import_graph_data_tool_rejects_non_object_graph_data():
+    result = server.import_graph_data_tool(mode="ingest", graph_data=[])
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "VALIDATION_ERROR"
+    assert result["error"]["source"] == "import_graph_data_tool"
+    assert result["error"]["details"] == {"received_type": "list"}
+    assert "graph_data must be an object" in result["error"]["message"]
+
+
 def test_import_graph_data_tool_rejects_unknown_mode():
     result = server.import_graph_data_tool(mode="unknown")
 

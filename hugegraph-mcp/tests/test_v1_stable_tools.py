@@ -80,12 +80,20 @@ def test_generate_gremlin_tool_routes_to_generate_gremlin(monkeypatch):
     mock = Mock(return_value=expected)
     monkeypatch.setattr(server, "generate_gremlin", mock)
 
-    result = server.generate_gremlin_tool(query="count vertices", execute=True)
+    result = server.generate_gremlin_tool(
+        query="count vertices",
+        execute=True,
+        output_types=["vertex"],
+    )
 
     _assert_v1_envelope_shape(result)
     assert result["ok"] is True
     assert result["data"] == expected["data"]
-    mock.assert_called_once_with(query="count vertices", execute=True)
+    mock.assert_called_once_with(
+        query="count vertices",
+        execute=True,
+        output_types=["vertex"],
+    )
 
 
 def test_execute_gremlin_read_tool_routes_to_execute_gremlin_read(monkeypatch):

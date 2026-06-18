@@ -663,9 +663,18 @@ def validate_graph_payload(
                         f"for label '{endpoint_label}': {_format_endpoint_value(endpoint_value)}"
                     )
                     continue
-                if identities and not any(
-                    identity in vertex_identity_index for identity in identities
-                ):
+                matched_vertex_indices = {
+                    vertex_identity_index[identity]
+                    for identity in identities
+                    if identity in vertex_identity_index
+                }
+                if len(matched_vertex_indices) > 1:
+                    errors.append(
+                        f"edge {idx} {endpoint_name} scalar endpoint is ambiguous for "
+                        f"label '{endpoint_label}': {_format_endpoint_value(endpoint_value)} "
+                        "matches different vertices by id and primary key"
+                    )
+                elif not matched_vertex_indices:
                     errors.append(
                         f"edge {idx} {endpoint_name} endpoint not found for label '{endpoint_label}': {_format_endpoint_value(endpoint_value)}"
                     )

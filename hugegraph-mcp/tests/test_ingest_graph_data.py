@@ -374,6 +374,37 @@ def test_ingest_graph_data_rejects_edge_endpoint_missing_primary_key(monkeypatch
     )
 
 
+def test_validate_graph_payload_rejects_ambiguous_scalar_endpoint():
+    result = ingest_graph_data_module.validate_graph_payload(
+        {
+            "vertices": [
+                {
+                    "id": "Alice",
+                    "label": "person",
+                    "properties": {"name": "Other Alice"},
+                },
+                {"label": "person", "properties": {"name": "Alice"}},
+                {"label": "person", "properties": {"name": "Bob"}},
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "source": "Alice",
+                    "target_label": "person",
+                    "target": "Bob",
+                }
+            ],
+        },
+        live_schema=_live_schema(),
+    )
+
+    assert result["valid"] is False
+    assert any(
+        "source scalar endpoint is ambiguous" in error for error in result["errors"]
+    )
+
+
 def test_ingest_graph_data_valid_payload_with_primary_key_endpoints(monkeypatch):
     _mock_schema(monkeypatch)
 
