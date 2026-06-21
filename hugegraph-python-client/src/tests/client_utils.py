@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import os
+
 from pyhugegraph.client import PyHugeClient
 
 
@@ -26,7 +28,19 @@ class ClientUtils:
     GRAPHSPACE = None
     TIMEOUT = 10
 
-    def __init__(self):
+    def __init__(self, service=None):
+        if service is not None:
+            self.URL = service.url
+            self.GRAPH = service.graph
+            self.USERNAME = service.user
+            self.PASSWORD = service.password
+            self.GRAPHSPACE = service.graphspace
+        else:
+            self.URL = os.getenv("HUGEGRAPH_URL", self.URL)
+            self.GRAPH = os.getenv("HUGEGRAPH_GRAPH", self.GRAPH)
+            self.USERNAME = os.getenv("HUGEGRAPH_USER", self.USERNAME)
+            self.PASSWORD = os.getenv("HUGEGRAPH_PASSWORD", self.PASSWORD)
+            self.GRAPHSPACE = os.getenv("HUGEGRAPH_GRAPHSPACE") or self.GRAPHSPACE
         self.client = PyHugeClient(
             url=self.URL,
             user=self.USERNAME,
@@ -56,6 +70,8 @@ class ClientUtils:
         schema.propertyKey("date").asDate().ifNotExist().create()
         schema.propertyKey("price").asInt().ifNotExist().create()
         schema.propertyKey("weight").asDouble().ifNotExist().create()
+        schema.propertyKey("headcount").asInt().ifNotExist().create()
+        schema.propertyKey("floor").asInt().ifNotExist().create()
 
     def init_vertex_label(self):
         schema = self.schema
@@ -68,6 +84,9 @@ class ClientUtils:
         schema.vertexLabel("book").useCustomizeStringId().properties("name", "price").nullableKeys(
             "price"
         ).ifNotExist().create()
+        schema.vertexLabel("department").properties("name", "headcount", "floor").nullableKeys(
+            "floor"
+        ).ifNotExist().create()
 
     def init_edge_label(self):
         schema = self.schema
@@ -77,6 +96,9 @@ class ClientUtils:
         schema.edgeLabel("created").sourceLabel("person").targetLabel("software").properties(
             "date", "city"
         ).nullableKeys("city").ifNotExist().create()
+        schema.edgeLabel("reports_to").sourceLabel("department").targetLabel("department").properties(
+            "date"
+        ).ifNotExist().create()
 
     def init_index_label(self):
         schema = self.schema
