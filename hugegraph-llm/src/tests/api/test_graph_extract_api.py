@@ -330,7 +330,7 @@ def test_graph_extract_api_returns_structured_error_for_invalid_flow_output():
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert response.json()["detail"] == {
         "code": "GRAPH_EXTRACT_INVALID_FLOW_OUTPUT",
-        "message": "Invalid property graph JSON: failed to parse extracted JSON",
+        "message": "Graph extraction flow output is invalid",
         "phase": "extract",
     }
 
@@ -364,9 +364,10 @@ def test_graph_extract_api_returns_structured_error_for_runtime_failure():
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert response.json()["detail"] == {
         "code": "GRAPH_EXTRACT_FAILED",
-        "message": "llm provider timeout",
+        "message": "Graph extraction failed during execution",
         "phase": "extract",
     }
+    assert "llm provider timeout" not in json.dumps(response.json(), ensure_ascii=False)
 
 
 def test_graph_extract_request_validates_content_shape_and_parallel_limit(monkeypatch):

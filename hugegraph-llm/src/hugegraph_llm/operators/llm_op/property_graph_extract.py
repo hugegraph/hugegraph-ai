@@ -116,12 +116,13 @@ class PropertyGraphExtract:
                 proceeded_chunks = list(
                     executor.map(lambda chunk: self.extract_property_graph_by_llm(schema, chunk), chunks)
                 )
-        for chunk, proceeded_chunk in zip(chunks, proceeded_chunks):
+        for index, (chunk, proceeded_chunk) in enumerate(zip(chunks, proceeded_chunks)):
             log.debug(
-                "[LLM] %s input: %s \n output:%s",
+                "[LLM] %s chunk processed: index=%s input_chars=%s output_chars=%s",
                 self.__class__.__name__,
-                chunk,
-                proceeded_chunk,
+                index,
+                len(chunk),
+                len(proceeded_chunk) if isinstance(proceeded_chunk, str) else None,
             )
             items.extend(self._extract_and_filter_label(schema, proceeded_chunk, raise_on_invalid=True))
         items = filter_item(schema, items)
@@ -215,10 +216,23 @@ class PropertyGraphExtract:
                 vertex_id_map,
             )
             if not out_v or not in_v:
-                log.warning("Invalid edge endpoints '%s' have been ignored.", edge)
+                log.warning(
+                    "Invalid edge endpoints have been ignored: label=%s, outVLabel=%s, inVLabel=%s.",
+                    edge.get("label"),
+                    out_v_label,
+                    in_v_label,
+                )
                 continue
             if out_v_label != edge_label.get("source_label") or in_v_label != edge_label.get("target_label"):
-                log.warning("Invalid edge endpoint labels '%s' have been ignored.", edge)
+                log.warning(
+                    "Invalid edge endpoint labels have been ignored: label=%s, outVLabel=%s, inVLabel=%s, "
+                    "expectedOutVLabel=%s, expectedInVLabel=%s.",
+                    edge.get("label"),
+                    out_v_label,
+                    in_v_label,
+                    edge_label.get("source_label"),
+                    edge_label.get("target_label"),
+                )
                 continue
 
             edge["outV"] = out_v

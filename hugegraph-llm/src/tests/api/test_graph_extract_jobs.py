@@ -100,7 +100,7 @@ def test_successful_job_reaches_succeeded_and_exposes_result():
 
 def test_failed_job_stores_error_details():
     service = Mock()
-    service.extract_sync.side_effect = RuntimeError("llm failed")
+    service.extract_sync.side_effect = RuntimeError("llm failed with sensitive raw document")
     client = _client(service, InMemoryGraphExtractJobStore(), run_jobs_inline=True)
 
     created = client.post("/graph/extract/jobs", json=_payload()).json()
@@ -108,8 +108,9 @@ def test_failed_job_stores_error_details():
 
     assert result_response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert result_response.json()["detail"]["code"] == "GRAPH_EXTRACT_JOB_FAILED"
-    assert result_response.json()["detail"]["message"] == "llm failed"
+    assert result_response.json()["detail"]["message"] == "Graph extraction job failed during execution"
     assert result_response.json()["detail"]["phase"] == "extract"
+    assert "sensitive raw document" not in str(result_response.json())
 
 
 def test_pending_job_result_returns_not_complete_semantics_and_can_be_cancelled():

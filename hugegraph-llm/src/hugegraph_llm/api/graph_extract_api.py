@@ -47,6 +47,11 @@ from hugegraph_llm.services.graph_extract_service import (
 )
 from hugegraph_llm.utils.log import log
 
+GRAPH_EXTRACT_FLOW_OUTPUT_ERROR = "Graph extraction flow output is invalid"
+GRAPH_EXTRACT_RUNTIME_ERROR = "Graph extraction failed during execution"
+GRAPH_IMPORT_FLOW_OUTPUT_ERROR = "Graph import flow output is invalid"
+GRAPH_IMPORT_RUNTIME_ERROR = "Graph import failed during execution"
+
 
 def _error(code: str, message: str, phase: str, job_id: Optional[str] = None) -> dict:
     return GraphExtractError(code=code, message=message, phase=phase, job_id=job_id).model_dump(exclude_none=True)
@@ -122,7 +127,7 @@ def graph_extract_http_api(
             log.error("Graph extraction flow output is invalid: %s", exc)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=_error("GRAPH_EXTRACT_INVALID_FLOW_OUTPUT", str(exc), "extract"),
+                detail=_error("GRAPH_EXTRACT_INVALID_FLOW_OUTPUT", GRAPH_EXTRACT_FLOW_OUTPUT_ERROR, "extract"),
             ) from exc
         except ValueError as exc:
             log.error("Graph extraction input is invalid: %s", exc)
@@ -134,7 +139,7 @@ def graph_extract_http_api(
             log.error("Unexpected graph extraction error: %s", exc, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=_error("GRAPH_EXTRACT_FAILED", str(exc), "extract"),
+                detail=_error("GRAPH_EXTRACT_FAILED", GRAPH_EXTRACT_RUNTIME_ERROR, "extract"),
             ) from exc
 
     @router.post(
@@ -275,7 +280,7 @@ def graph_extract_http_api(
         except FlowOutputValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=_error("GRAPH_IMPORT_INVALID_FLOW_OUTPUT", str(exc), "import"),
+                detail=_error("GRAPH_IMPORT_INVALID_FLOW_OUTPUT", GRAPH_IMPORT_FLOW_OUTPUT_ERROR, "import"),
             ) from exc
         except ValueError as exc:
             raise HTTPException(
@@ -286,7 +291,7 @@ def graph_extract_http_api(
             log.error("Unexpected graph import error: %s", exc, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=_error("GRAPH_IMPORT_FAILED", str(exc), "import"),
+                detail=_error("GRAPH_IMPORT_FAILED", GRAPH_IMPORT_RUNTIME_ERROR, "import"),
             ) from exc
 
     @router.post(
@@ -306,6 +311,25 @@ def graph_extract_http_api(
             )
         try:
             extract_response = extract_service.extract_sync(req)
+        except FlowOutputValidationError as exc:
+            log.error("Extract-and-import extraction flow output is invalid: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=_error("GRAPH_EXTRACT_INVALID_FLOW_OUTPUT", GRAPH_EXTRACT_FLOW_OUTPUT_ERROR, "extract"),
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_error("GRAPH_EXTRACT_INVALID_INPUT", str(exc), "request"),
+            ) from exc
+        except Exception as exc:
+            log.error("Unexpected extract-and-import extraction error: %s", exc, exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=_error("GRAPH_EXTRACT_FAILED", GRAPH_EXTRACT_RUNTIME_ERROR, "extract"),
+            ) from exc
+
+        try:
             import_response = graph_import_service.import_graph(
                 GraphImportRequest(
                     schema=req.schema,
@@ -315,26 +339,28 @@ def graph_extract_http_api(
                     options=req.import_options,
                 )
             )
-            return GraphExtractAndImportResponse(
-                status="succeeded",
-                extract_result=extract_response,
-                import_result=import_response,
-            )
         except FlowOutputValidationError as exc:
+            log.error("Extract-and-import import flow output is invalid: %s", exc)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=_error("GRAPH_EXTRACT_IMPORT_INVALID_FLOW_OUTPUT", str(exc), "import"),
+                detail=_error("GRAPH_IMPORT_INVALID_FLOW_OUTPUT", GRAPH_IMPORT_FLOW_OUTPUT_ERROR, "import"),
             ) from exc
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_error("GRAPH_EXTRACT_IMPORT_INVALID_INPUT", str(exc), "import"),
+                detail=_error("GRAPH_IMPORT_INVALID_INPUT", str(exc), "import"),
             ) from exc
         except Exception as exc:
-            log.error("Unexpected extract-and-import error: %s", exc, exc_info=True)
+            log.error("Unexpected extract-and-import import error: %s", exc, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=_error("GRAPH_EXTRACT_IMPORT_FAILED", str(exc), "import"),
+                detail=_error("GRAPH_IMPORT_FAILED", GRAPH_IMPORT_RUNTIME_ERROR, "import"),
             ) from exc
+
+        return GraphExtractAndImportResponse(
+            status=import_response.status,
+            extract_result=extract_response,
+            import_result=import_response,
+        )
 
     router.route_class = original_route_class

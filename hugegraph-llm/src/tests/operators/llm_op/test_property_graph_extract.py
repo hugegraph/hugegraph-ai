@@ -1255,5 +1255,95 @@ Hope this helps."""
         self.assertEqual(result["edges"][0]["properties"]["role"], "Jack Dawson")
 
 
+def test_run_debug_logs_do_not_include_raw_chunk_or_llm_output():
+    schema = {
+        "vertexlabels": [
+            {
+                "id": 1,
+                "name": "person",
+                "primary_keys": ["name"],
+                "nullable_keys": [],
+                "properties": ["name"],
+            }
+        ],
+        "edgelabels": [],
+    }
+    sensitive_chunk = "Alice secret source document"
+    sensitive_output = json.dumps(
+        {
+            "vertices": [
+                {
+                    "type": "vertex",
+                    "label": "person",
+                    "properties": {"name": "Alice secret model output"},
+                }
+            ],
+            "edges": [],
+        }
+    )
+    extractor = PropertyGraphExtract(llm=MagicMock(spec=BaseLLM))
+    extractor.extract_property_graph_by_llm = MagicMock(return_value=sensitive_output)
+
+    with patch("hugegraph_llm.operators.llm_op.property_graph_extract.log.debug") as debug_log:
+        extractor.run({"schema": schema, "chunks": [sensitive_chunk]})
+
+    logged_args = " ".join(str(arg) for call in debug_log.call_args_list for arg in call.args)
+    assert "chunk processed" in logged_args
+    assert sensitive_chunk not in logged_args
+    assert "Alice secret model output" not in logged_args
+
+
+def test_invalid_edge_warning_does_not_include_raw_edge_payload():
+    schema = {
+        "vertexlabels": [
+            {
+                "id": 1,
+                "name": "person",
+                "primary_keys": ["name"],
+                "nullable_keys": [],
+                "properties": ["name"],
+            },
+            {
+                "id": 2,
+                "name": "movie",
+                "primary_keys": ["title"],
+                "nullable_keys": [],
+                "properties": ["title"],
+            },
+        ],
+        "edgelabels": [{"name": "acted_in", "properties": ["role"], "source_label": "person", "target_label": "movie"}],
+    }
+    graph_json = json.dumps(
+        {
+            "vertices": [
+                {
+                    "type": "vertex",
+                    "label": "person",
+                    "properties": {"name": "Alice secret vertex"},
+                }
+            ],
+            "edges": [
+                {
+                    "type": "edge",
+                    "label": "acted_in",
+                    "properties": {"role": "sensitive role"},
+                    "source": {"label": "person", "properties": {"name": "Alice secret vertex"}},
+                    "target": {"label": "movie", "properties": {"title": "Missing secret movie"}},
+                }
+            ],
+        }
+    )
+    extractor = PropertyGraphExtract(llm=MagicMock(spec=BaseLLM))
+
+    with patch("hugegraph_llm.operators.llm_op.property_graph_extract.log.warning") as warning_log:
+        extractor._extract_and_filter_label(schema, graph_json, raise_on_invalid=True)
+
+    logged_args = " ".join(str(arg) for call in warning_log.call_args_list for arg in call.args)
+    assert "Invalid edge endpoints" in logged_args
+    assert "sensitive role" not in logged_args
+    assert "Alice secret vertex" not in logged_args
+    assert "Missing secret movie" not in logged_args
+
+
 if __name__ == "__main__":
     unittest.main()

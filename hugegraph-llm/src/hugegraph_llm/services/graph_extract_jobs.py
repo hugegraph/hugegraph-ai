@@ -27,6 +27,8 @@ from hugegraph_llm.api.models.graph_extract_requests import GraphExtractRequest
 from hugegraph_llm.api.models.graph_extract_responses import GraphExtractError, GraphExtractResponse
 from hugegraph_llm.utils.log import log
 
+JOB_RUNTIME_ERROR = "Graph extraction job failed during execution"
+
 
 class GraphExtractJobStatus(str, Enum):
     PENDING = "pending"
@@ -205,13 +207,13 @@ class InMemoryGraphExtractJobStore:
                 request = GraphExtractRequest(**request)
             result = service.extract_sync(request)
             self.mark_succeeded(job_id, result)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception:  # pylint: disable=broad-exception-caught
             log.exception("Graph extraction job %s failed", job_id)
             self.mark_failed(
                 job_id,
                 GraphExtractError(
                     code="GRAPH_EXTRACT_JOB_FAILED",
-                    message=str(exc),
+                    message=JOB_RUNTIME_ERROR,
                     phase="extract",
                     job_id=job_id,
                 ),

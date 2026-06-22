@@ -26,7 +26,12 @@ from hugegraph_llm.api.models.graph_extract_requests import GraphExtractAndImpor
 from hugegraph_llm.api.models.graph_extract_responses import GraphExtractResponse, GraphImportResponse
 from hugegraph_llm.config import huge_settings
 from hugegraph_llm.flows import FlowName
-from hugegraph_llm.services.graph_extract_service import GraphExtractService, GraphImportService, apply_client_config
+from hugegraph_llm.services.graph_extract_service import (
+    FlowOutputValidationError,
+    GraphExtractService,
+    GraphImportService,
+    apply_client_config,
+)
 
 
 def _payload_data():
@@ -93,6 +98,17 @@ def _import_response(updated_embeddings=False):
         updated_embeddings=updated_embeddings,
         warnings=[],
         meta={"duration_ms": 2},
+    )
+
+
+def _partial_import_response():
+    return GraphImportResponse(
+        status="partial",
+        vertex_count=1,
+        edge_count=0,
+        updated_embeddings=False,
+        warnings=["missing primary key"],
+        meta={"duration_ms": 2, "import_result": {"vertices_created": 1, "edges_skipped": 1}},
     )
 
 
@@ -197,9 +213,109 @@ def test_confirmed_extract_and_import_runs_extraction_before_import():
     response = client.post("/graph/extract-and-import", json=_extract_payload(client_config=_target_client_config()))
 
     assert response.status_code == status.HTTP_200_OK
+    assert response.json()["status"] == "succeeded"
     assert response.json()["import_result"]["status"] == "succeeded"
     extract_service.extract_sync.assert_called_once()
     import_service.import_graph.assert_called_once()
+
+
+def test_extract_and_import_top_status_tracks_import_result():
+    extract_service = Mock()
+    extract_service.extract_sync.return_value = GraphExtractResponse(
+        status="succeeded",
+        result=_payload_data(),
+        warnings=[],
+        meta={},
+    )
+    import_service = Mock()
+    import_service.import_graph.return_value = _partial_import_response()
+    client = _client(extract_service=extract_service, import_service=import_service)
+
+    response = client.post("/graph/extract-and-import", json=_extract_payload(client_config=_target_client_config()))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["status"] == "partial"
+    assert response.json()["import_result"]["status"] == "partial"
+
+
+def test_extract_and_import_extract_phase_runtime_error_is_sanitized():
+    extract_service = Mock()
+    extract_service.extract_sync.side_effect = RuntimeError("raw text provider timeout secret")
+    import_service = Mock()
+    client = _client(extract_service=extract_service, import_service=import_service)
+
+    response = client.post("/graph/extract-and-import", json=_extract_payload(client_config=_target_client_config()))
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == {
+        "code": "GRAPH_EXTRACT_FAILED",
+        "message": "Graph extraction failed during execution",
+        "phase": "extract",
+    }
+    assert "raw text provider timeout secret" not in str(response.json())
+    import_service.import_graph.assert_not_called()
+
+
+def test_extract_and_import_import_phase_runtime_error_is_sanitized():
+    extract_service = Mock()
+    extract_service.extract_sync.return_value = GraphExtractResponse(
+        status="succeeded",
+        result=_payload_data(),
+        warnings=[],
+        meta={},
+    )
+    import_service = Mock()
+    import_service.import_graph.side_effect = RuntimeError("hugegraph password secret")
+    client = _client(extract_service=extract_service, import_service=import_service)
+
+    response = client.post("/graph/extract-and-import", json=_extract_payload(client_config=_target_client_config()))
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == {
+        "code": "GRAPH_IMPORT_FAILED",
+        "message": "Graph import failed during execution",
+        "phase": "import",
+    }
+    assert "hugegraph password secret" not in str(response.json())
+
+
+def test_extract_and_import_flow_output_errors_keep_phase_specific_codes():
+    extract_service = Mock()
+    extract_service.extract_sync.side_effect = FlowOutputValidationError("raw llm output")
+    import_service = Mock()
+    client = _client(extract_service=extract_service, import_service=import_service)
+
+    extract_error = client.post(
+        "/graph/extract-and-import", json=_extract_payload(client_config=_target_client_config())
+    )
+
+    assert extract_error.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert extract_error.json()["detail"] == {
+        "code": "GRAPH_EXTRACT_INVALID_FLOW_OUTPUT",
+        "message": "Graph extraction flow output is invalid",
+        "phase": "extract",
+    }
+    import_service.import_graph.assert_not_called()
+
+    extract_service.extract_sync.side_effect = None
+    extract_service.extract_sync.return_value = GraphExtractResponse(
+        status="succeeded",
+        result=_payload_data(),
+        warnings=[],
+        meta={},
+    )
+    import_service.import_graph.side_effect = FlowOutputValidationError("raw import output")
+
+    import_error = client.post(
+        "/graph/extract-and-import", json=_extract_payload(client_config=_target_client_config())
+    )
+
+    assert import_error.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert import_error.json()["detail"] == {
+        "code": "GRAPH_IMPORT_INVALID_FLOW_OUTPUT",
+        "message": "Graph import flow output is invalid",
+        "phase": "import",
+    }
 
 
 def test_extract_and_import_allows_inline_schema_with_request_graph_config():
