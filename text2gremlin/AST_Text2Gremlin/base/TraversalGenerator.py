@@ -609,7 +609,9 @@ class TraversalGenerator:
                     # by(__.xxx) 嵌套遍历参数
                     nested_variants = self._generate_nested_traversal_variants(first_param, current_depth=0)
                     nested_desc = self._describe_nested_traversal(first_param)
-                    variant_str = f"__.{nested_variants[0]}" if nested_variants else "__.identity()"
+                    variant_str = (
+                        self.format_anonymous_traversal(nested_variants[0]) if nested_variants else "__.identity()"
+                    )
                     # 处理额外参数（如排序方向）
                     if len(step_params) > 1:
                         extra = ", ".join([f"'{p}'" if isinstance(p, str) else str(p) for p in step_params[1:]])
@@ -829,9 +831,10 @@ class TraversalGenerator:
 
                 result = []
                 for variant in nested_variants[:1]:  # 只取第一个变体避免组合爆炸
+                    anonymous = self.format_anonymous_traversal(variant)
                     result.append(
                         {
-                            "query_part": f".{step_name}({variant})",
+                            "query_part": f".{step_name}({anonymous})",
                             "desc_part": f"，执行副作用操作（{nested_desc}）",
                             "new_label": current_label,
                             "new_type": new_type,
@@ -1135,9 +1138,10 @@ class TraversalGenerator:
             nested_variants = self._generate_nested_traversal_variants(param, current_depth=0)
             result = []
             for variant in nested_variants[:1]:  # 只取第一个变体避免组合爆炸
+                anonymous = self.format_anonymous_traversal(variant)
                 result.append(
                     {
-                        "query_part": f".{step_name}({variant})",
+                        "query_part": f".{step_name}({anonymous})",
                         "desc_part": f"，{desc}",
                         "new_label": current_label,
                         "new_type": current_type,
@@ -1374,11 +1378,10 @@ class TraversalGenerator:
 
         # 深度限制
         if current_depth >= max_depth:
-            # 超过最大深度，返回占位符
-            return ["..."]
+            return ["identity()"]
 
         if not anonymous_trav or not anonymous_trav.steps:
-            return [""]
+            return ["identity()"]
 
         # 递归生成每个步骤的变体
         all_step_variants = []
@@ -1395,18 +1398,11 @@ class TraversalGenerator:
 
             if has_nested:
                 # 步骤包含嵌套遍历，递归处理
-                for _param_idx, param in enumerate(step.params):
-                    if isinstance(param, AnonymousTraversal):
-                        # 递归生成嵌套的变体
-                        nested_variants = self._generate_nested_traversal_variants(param, current_depth + 1)
-
-                        # 为当前步骤生成变体（限制数量）
-                        for nested_var in nested_variants[:max_variants_per_step]:
-                            step_str = f"{step.name}({nested_var})"
-                            step_variants.append(step_str)
-                    else:
-                        # 非嵌套参数，直接使用
-                        pass
+                step_variants = self._generate_nested_param_step_variants(
+                    step,
+                    current_depth=current_depth,
+                    max_variants_per_step=max_variants_per_step,
+                )
             else:
                 # 步骤不包含嵌套遍历，生成简单变体
                 step_variants = self._generate_simple_step_variants(step, max_variants_per_step)
@@ -1437,6 +1433,31 @@ class TraversalGenerator:
             traversal_str = ".".join(combo)
             result.append(traversal_str)
 
+        return result
+
+    def _generate_nested_param_step_variants(self, step, current_depth: int, max_variants_per_step: int) -> list[str]:
+        import itertools
+
+        from .GremlinExpr import AnonymousTraversal
+
+        param_variant_lists = []
+        for param in step.params:
+            if isinstance(param, AnonymousTraversal):
+                nested_variants = self._generate_nested_traversal_variants(param, current_depth + 1)
+                formatted_variants = [
+                    self.format_anonymous_traversal(nested_var)
+                    for nested_var in nested_variants[:max_variants_per_step]
+                ]
+                param_variant_lists.append(formatted_variants or ["__.identity()"])
+            else:
+                param_variant_lists.append([self._format_param(param)])
+
+        if not param_variant_lists:
+            return [f"{step.name}()"]
+
+        result = []
+        for combo in itertools.islice(itertools.product(*param_variant_lists), max_variants_per_step):
+            result.append(f"{step.name}({', '.join(combo)})")
         return result
 
     def _describe_nested_traversal(self, anonymous_trav) -> str:
@@ -1727,6 +1748,7 @@ class TraversalGenerator:
         variants = []
         step_name = step.name
         step_params = step.params
+        from .GremlinExpr import Predicate, TextPredicate
 
         # 根据步骤类型生成变体
         if step_name in ["out", "in", "both", "outE", "inE", "bothE"]:
@@ -1795,9 +1817,41 @@ class TraversalGenerator:
             else:
                 variants.append(f"{step_name}()")
 
-        elif step_name in ["where", "not"]:
-            # 嵌套的 where/not：保留原样（避免过深递归）
-            variants.append(f"{step_name}(...)")
+        elif step_name == "where":
+            if len(step_params) == 1 and isinstance(step_params[0], (Predicate, TextPredicate)):
+                predicate_str = self.format_predicate(step_params[0])
+                variants.append(f"where({predicate_str})")
+            elif len(step_params) == 2 and isinstance(step_params[1], (Predicate, TextPredicate)):
+                prop_str = self._format_param(step_params[0])
+                predicate_str = self.format_predicate(step_params[1])
+                variants.append(f"where({prop_str}, {predicate_str})")
+            elif step_params:
+                params_str = ", ".join([self._format_param(p) for p in step_params])
+                variants.append(f"where({params_str})")
+            else:
+                variants.append("where()")
+
+        elif step_name in ["until", "emit", "is"]:
+            if step_params:
+                params_str = ", ".join([self._format_param(p) for p in step_params])
+                variants.append(f"{step_name}({params_str})")
+            else:
+                variants.append(f"{step_name}()")
+
+        elif step_name == "not":
+            # 嵌套的 not 通常携带遍历参数；无嵌套参数时保留源码参数。
+            if step_params:
+                params_str = ", ".join([self._format_param(p) for p in step_params])
+                variants.append(f"not({params_str})")
+            else:
+                variants.append("not()")
+
+        elif step_name == "as":
+            if step_params:
+                params_str = ", ".join([self._format_param(p) for p in step_params])
+                variants.append(f"as({params_str})")
+            else:
+                variants.append("as()")
 
         else:
             # 其他步骤：保留原样
@@ -1847,7 +1901,7 @@ class TraversalGenerator:
     def format_anonymous_traversal(traversal: str) -> str:
         traversal = str(traversal).strip()
         if not traversal:
-            return "__"
+            return "__.identity()"
         if traversal == "__" or traversal.startswith("__."):
             return traversal
         return f"__.{traversal}"
@@ -1961,6 +2015,8 @@ class TraversalGenerator:
             if not step_params:
                 return []
 
+            from .GremlinExpr import Predicate, TextPredicate
+
             # has() 可以有多种形式：
             # 1. has('name') - 只有属性名
             # 2. has('name', 'Tom') - 属性名 + 单个值
@@ -1968,6 +2024,23 @@ class TraversalGenerator:
             recipe_prop = step_params[0]
             recipe_values = step_params[1:] if len(step_params) > 1 else []
             value_count = len(recipe_values)
+            predicate_value = (
+                recipe_values[0]
+                if value_count == 1 and isinstance(recipe_values[0], (Predicate, TextPredicate))
+                else None
+            )
+            if predicate_value is not None:
+                prop_desc = self.gremlin_base.get_schema_desc(recipe_prop)
+                predicate_str = self.format_predicate(predicate_value)
+                options.append(
+                    {
+                        "query_part": f".has('{recipe_prop}', {predicate_str})",
+                        "desc_part": f"，其'{prop_desc}'满足{predicate_value.operator}条件",
+                        "new_label": current_label,
+                        "new_type": current_type,
+                    }
+                )
+                return options
 
             # 判断是否是终端步骤
             is_terminal_step = remaining_steps is None or len(remaining_steps) == 0
@@ -2250,6 +2323,19 @@ class TraversalGenerator:
                 return []
 
             recipe_value = step_params[0]
+            from .GremlinExpr import Predicate, TextPredicate
+
+            if isinstance(recipe_value, (Predicate, TextPredicate)):
+                value_str = self.format_predicate(recipe_value)
+                options.append(
+                    {
+                        "query_part": f".is({value_str})",
+                        "desc_part": f"，判断值是否满足{value_str}",
+                        "new_label": current_label,
+                        "new_type": current_type,
+                    }
+                )
+                return options
 
             # 判断是否是终端步骤
             is_terminal_step = remaining_steps is None or len(remaining_steps) == 0
@@ -2282,10 +2368,11 @@ class TraversalGenerator:
                 selected_values = [recipe_value]
 
             for value in selected_values:
+                value_str = self._format_param(value)
                 options.append(
                     {
-                        "query_part": f".is({value!r})",
-                        "desc_part": f"，判断值是否为{value!r}",
+                        "query_part": f".is({value_str})",
+                        "desc_part": f"，判断值是否为{value_str}",
                         "new_label": current_label,
                         "new_type": current_type,
                     }
@@ -2423,7 +2510,7 @@ class TraversalGenerator:
             # 2. where(Predicate) - 谓词
             # 3. where('property', Predicate) - 属性 + 谓词
 
-            from .GremlinExpr import AnonymousTraversal, Predicate
+            from .GremlinExpr import AnonymousTraversal, Predicate, TextPredicate
 
             first_param = step_params[0]
 
@@ -2433,35 +2520,38 @@ class TraversalGenerator:
                 nested_desc = self._describe_nested_traversal(first_param)
 
                 for nested_str in nested_variants:
+                    anonymous = self.format_anonymous_traversal(nested_str)
                     options.append(
                         {
-                            "query_part": f".where(__.{nested_str})",
+                            "query_part": f".where({anonymous})",
                             "desc_part": f"，条件过滤：{nested_desc}",
                             "new_label": current_label,
                             "new_type": current_type,
                         }
                     )
 
-            elif isinstance(first_param, Predicate):
+            elif isinstance(first_param, (Predicate, TextPredicate)):
                 # 谓词：保留原谓词
+                predicate_str = self.format_predicate(first_param)
                 options.append(
                     {
-                        "query_part": f".where(P.{first_param.operator}({first_param.value}))",
+                        "query_part": f".where({predicate_str})",
                         "desc_part": f"，条件过滤（{first_param.operator}）",
                         "new_label": current_label,
                         "new_type": current_type,
                     }
                 )
 
-            elif len(step_params) == 2 and isinstance(step_params[1], Predicate):
+            elif len(step_params) == 2 and isinstance(step_params[1], (Predicate, TextPredicate)):
                 # 属性 + 谓词：where('name', P.eq('Tom'))
                 prop_name = step_params[0]
                 predicate = step_params[1]
+                predicate_str = self.format_predicate(predicate)
 
                 prop_desc = self.gremlin_base.get_schema_desc(prop_name)
                 options.append(
                     {
-                        "query_part": f".where('{prop_name}', P.{predicate.operator}({predicate.value}))",
+                        "query_part": f".where('{prop_name}', {predicate_str})",
                         "desc_part": f"，条件过滤（{prop_desc} {predicate.operator}）",
                         "new_label": current_label,
                         "new_type": current_type,
@@ -2498,9 +2588,10 @@ class TraversalGenerator:
                 nested_desc = self._describe_nested_traversal(first_param)
 
                 for nested_str in nested_variants:
+                    anonymous = self.format_anonymous_traversal(nested_str)
                     options.append(
                         {
-                            "query_part": f".not(__.{nested_str})",
+                            "query_part": f".not({anonymous})",
                             "desc_part": f"，排除{nested_desc}的结果",
                             "new_label": current_label,
                             "new_type": current_type,
@@ -2532,9 +2623,10 @@ class TraversalGenerator:
                 nested_desc = self._describe_nested_traversal(first_param)
 
                 for nested_str in nested_variants[:1]:  # 只取第一个避免组合爆炸
+                    anonymous = self.format_anonymous_traversal(nested_str)
                     options.append(
                         {
-                            "query_part": f".filter({nested_str})",
+                            "query_part": f".filter({anonymous})",
                             "desc_part": f"，过滤：{nested_desc}",
                             "new_label": current_label,
                             "new_type": current_type,
@@ -2563,7 +2655,7 @@ class TraversalGenerator:
                 variants_list = []
                 for param in step_params:
                     variants = self._generate_nested_traversal_variants(param, current_depth=0)
-                    variants_list.append(variants[0] if variants else "__.identity()")
+                    variants_list.append(self.format_anonymous_traversal(variants[0]) if variants else "__.identity()")
 
                 variants_str = ", ".join(variants_list)
                 options.append(
@@ -2597,7 +2689,7 @@ class TraversalGenerator:
                 variants_list = []
                 for param in step_params:
                     variants = self._generate_nested_traversal_variants(param, current_depth=0)
-                    variants_list.append(variants[0] if variants else "__.identity()")
+                    variants_list.append(self.format_anonymous_traversal(variants[0]) if variants else "__.identity()")
 
                 variants_str = ", ".join(variants_list)
                 options.append(
@@ -2975,9 +3067,10 @@ class TraversalGenerator:
 
                 options = []
                 for nested_str in nested_variants:
+                    anonymous = self.format_anonymous_traversal(nested_str)
                     options.append(
                         {
-                            "query_part": f".select(__.{nested_str})",
+                            "query_part": f".select({anonymous})",
                             "desc_part": f"，{desc}（嵌套遍历）",
                             "new_label": None,
                             "new_type": "value",
@@ -3038,9 +3131,10 @@ class TraversalGenerator:
                 variants = self._generate_nested_traversal_variants(step_params[0], current_depth=0)
                 result = []
                 for variant in variants[:2]:  # 最多2个变体
+                    anonymous = self.format_anonymous_traversal(variant)
                     result.append(
                         {
-                            "query_part": f".addE(__.{variant})",
+                            "query_part": f".addE({anonymous})",
                             "desc_part": "添加边（通过遍历获取标签）",
                             "new_label": None,
                             "new_type": "edge",
@@ -3163,7 +3257,7 @@ class TraversalGenerator:
                 variants = self._generate_nested_traversal_variants(param, current_depth=0)
                 if variants:
                     # 每个参数最多取2个变体（根据嵌套策略）
-                    all_param_variants.append([f"__.{v}" for v in variants[:2]])
+                    all_param_variants.append([self.format_anonymous_traversal(v) for v in variants[:2]])
                 else:
                     all_param_variants.append(["__.identity()"])  # 默认值
 
@@ -3209,7 +3303,7 @@ class TraversalGenerator:
                 variants = self._generate_nested_traversal_variants(param, current_depth=0)
                 if variants:
                     # 每个参数最多取2个变体（根据嵌套策略）
-                    all_param_variants.append([f"__.{v}" for v in variants[:2]])
+                    all_param_variants.append([self.format_anonymous_traversal(v) for v in variants[:2]])
                 else:
                     all_param_variants.append(["__.identity()"])  # 默认值
 
@@ -3244,7 +3338,7 @@ class TraversalGenerator:
 
         # choose() 步骤 - 条件分支
         elif step_name == "choose":
-            from .GremlinExpr import AnonymousTraversal, Predicate
+            from .GremlinExpr import AnonymousTraversal
 
             if not step_params:
                 return []
@@ -3257,9 +3351,10 @@ class TraversalGenerator:
                     cond_desc = self._describe_nested_traversal(step_params[0])
                     result = []
                     for variant in variants[:2]:
+                        anonymous = self.format_anonymous_traversal(variant)
                         result.append(
                             {
-                                "query_part": f".choose(__.{variant})",
+                                "query_part": f".choose({anonymous})",
                                 "desc_part": f"条件分支（条件：{cond_desc}）",
                                 "new_label": None,
                                 "new_type": current_type,
@@ -3280,9 +3375,11 @@ class TraversalGenerator:
                     # 组合（限制数量）
                     for v1 in variants1[:2]:
                         for v2 in variants2[:2]:
+                            anonymous1 = self.format_anonymous_traversal(v1)
+                            anonymous2 = self.format_anonymous_traversal(v2)
                             result.append(
                                 {
-                                    "query_part": f".choose(__.{v1}, __.{v2})",
+                                    "query_part": f".choose({anonymous1}, {anonymous2})",
                                     "desc_part": f"条件分支（若{cond_desc}，则{then_desc}）",
                                     "new_label": None,
                                     "new_type": current_type,
@@ -3310,9 +3407,12 @@ class TraversalGenerator:
                     for v1 in variants1[:2]:
                         for v2 in variants2[:1]:  # 减少组合
                             for v3 in variants3[:1]:
+                                anonymous1 = self.format_anonymous_traversal(v1)
+                                anonymous2 = self.format_anonymous_traversal(v2)
+                                anonymous3 = self.format_anonymous_traversal(v3)
                                 result.append(
                                     {
-                                        "query_part": f".choose(__.{v1}, __.{v2}, __.{v3})",
+                                        "query_part": f".choose({anonymous1}, {anonymous2}, {anonymous3})",
                                         "desc_part": f"条件分支（若{cond_desc}，则{then_desc}，否则{else_desc}）",
                                         "new_label": None,
                                         "new_type": current_type,
@@ -3338,9 +3438,10 @@ class TraversalGenerator:
             nested_variants = self._generate_nested_traversal_variants(step_params[0], current_depth=0)
             nested_desc = self._describe_nested_traversal(step_params[0])
             if nested_variants:
+                anonymous = self.format_anonymous_traversal(nested_variants[0])
                 return [
                     {
-                        "query_part": f".optional(__.{nested_variants[0]})",
+                        "query_part": f".optional({anonymous})",
                         "desc_part": f"可选遍历（{nested_desc}）",
                         "new_label": None,
                         "new_type": current_type,
@@ -3367,9 +3468,10 @@ class TraversalGenerator:
                 nested_desc = self._describe_nested_traversal(step_params[1])
                 result = []
                 for variant in nested_variants[:2]:
+                    anonymous = self.format_anonymous_traversal(variant)
                     result.append(
                         {
-                            "query_part": f".repeat('{label}', __.{variant})",
+                            "query_part": f".repeat('{label}', {anonymous})",
                             "desc_part": f"重复遍历（{nested_desc}，标签：{label}）",
                             "new_label": None,
                             "new_type": current_type,
@@ -3383,9 +3485,10 @@ class TraversalGenerator:
                 nested_desc = self._describe_nested_traversal(step_params[0])
                 result = []
                 for variant in nested_variants[:2]:
+                    anonymous = self.format_anonymous_traversal(variant)
                     result.append(
                         {
-                            "query_part": f".repeat(__.{variant})",
+                            "query_part": f".repeat({anonymous})",
                             "desc_part": f"重复遍历（{nested_desc}）",
                             "new_label": None,
                             "new_type": current_type,
@@ -3397,7 +3500,7 @@ class TraversalGenerator:
 
         # until() 步骤 - 终止条件
         elif step_name == "until":
-            from .GremlinExpr import AnonymousTraversal, Predicate
+            from .GremlinExpr import AnonymousTraversal, Predicate, TextPredicate
 
             if not step_params:
                 return []
@@ -3409,18 +3512,19 @@ class TraversalGenerator:
                 nested_desc = self._describe_nested_traversal(step_params[0])
                 result = []
                 for variant in nested_variants[:2]:
+                    anonymous = self.format_anonymous_traversal(variant)
                     result.append(
                         {
-                            "query_part": f".until(__.{variant})",
+                            "query_part": f".until({anonymous})",
                             "desc_part": f"终止条件（{nested_desc}）",
                             "new_label": None,
                             "new_type": current_type,
                         }
                     )
                 return result if result else []
-            elif isinstance(step_params[0], Predicate):
+            elif isinstance(step_params[0], (Predicate, TextPredicate)):
                 # predicate变体
-                pred_str = self._format_predicate(step_params[0])
+                pred_str = self.format_predicate(step_params[0])
                 return [
                     {
                         "query_part": f".until({pred_str})",
@@ -3448,7 +3552,7 @@ class TraversalGenerator:
 
         # emit() 步骤 - 发射中间结果
         elif step_name == "emit":
-            from .GremlinExpr import AnonymousTraversal, Predicate
+            from .GremlinExpr import AnonymousTraversal, Predicate, TextPredicate
 
             if not step_params:
                 # emit() 无参数
@@ -3468,18 +3572,19 @@ class TraversalGenerator:
                 nested_desc = self._describe_nested_traversal(step_params[0])
                 result = []
                 for variant in nested_variants[:2]:
+                    anonymous = self.format_anonymous_traversal(variant)
                     result.append(
                         {
-                            "query_part": f".emit(__.{variant})",
+                            "query_part": f".emit({anonymous})",
                             "desc_part": f"条件发射（{nested_desc}）",
                             "new_label": current_label,
                             "new_type": current_type,
                         }
                     )
                 return result if result else []
-            elif isinstance(step_params[0], Predicate):
+            elif isinstance(step_params[0], (Predicate, TextPredicate)):
                 # emit(predicate) 带谓词条件
-                pred_str = self._format_predicate(step_params[0])
+                pred_str = self.format_predicate(step_params[0])
                 return [
                     {
                         "query_part": f".emit({pred_str})",
@@ -3501,9 +3606,10 @@ class TraversalGenerator:
             nested_variants = self._generate_nested_traversal_variants(step_params[0], current_depth=0)
             nested_desc = self._describe_nested_traversal(step_params[0])
             if nested_variants:
+                anonymous = self.format_anonymous_traversal(nested_variants[0])
                 return [
                     {
-                        "query_part": f".flatMap(__.{nested_variants[0]})",
+                        "query_part": f".flatMap({anonymous})",
                         "desc_part": f"扁平映射（{nested_desc}）",
                         "new_label": None,
                         "new_type": current_type,
@@ -3521,9 +3627,10 @@ class TraversalGenerator:
             nested_variants = self._generate_nested_traversal_variants(step_params[0], current_depth=0)
             nested_desc = self._describe_nested_traversal(step_params[0])
             if nested_variants:
+                anonymous = self.format_anonymous_traversal(nested_variants[0])
                 return [
                     {
-                        "query_part": f".map(__.{nested_variants[0]})",
+                        "query_part": f".map({anonymous})",
                         "desc_part": f"映射（{nested_desc}）",
                         "new_label": None,
                         "new_type": "value",
@@ -3544,7 +3651,7 @@ class TraversalGenerator:
                 variants = self._generate_nested_traversal_variants(param, current_depth=0)
                 if variants:
                     # 每个模式最多取2个变体（根据嵌套策略）
-                    all_pattern_variants.append([f"__.{v}" for v in variants[:2]])
+                    all_pattern_variants.append([self.format_anonymous_traversal(v) for v in variants[:2]])
                 else:
                     all_pattern_variants.append(["__.identity()"])  # 默认值
 

@@ -63,7 +63,7 @@ def test_format_predicate_supports_p_textp_and_nested_not():
 def test_format_anonymous_traversal_adds_prefix_once():
     assert TraversalGenerator.format_anonymous_traversal("out('knows')") == "__.out('knows')"
     assert TraversalGenerator.format_anonymous_traversal("__.out('knows')") == "__.out('knows')"
-    assert TraversalGenerator.format_anonymous_traversal("") == "__"
+    assert TraversalGenerator.format_anonymous_traversal("") == "__.identity()"
 
 
 def test_loop_predicate_special_steps_use_shared_predicate_formatter():
