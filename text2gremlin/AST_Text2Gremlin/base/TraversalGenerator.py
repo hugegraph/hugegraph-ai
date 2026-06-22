@@ -20,6 +20,7 @@ import json
 import os
 import random
 import string
+from dataclasses import dataclass
 from typing import Any
 
 from .CombinationController import CombinationController
@@ -27,6 +28,30 @@ from .GremlinBase import GremlinBase
 from .GremlinExpr import Predicate
 from .GremlinParse import Step, Traversal
 from .Schema import Schema
+
+
+@dataclass(frozen=True)
+class GeneratedSample:
+    query: str
+    description: str
+    sample_kind: str
+    recipe_step_count: int
+    emitted_step_count: int
+    top_level_step_count: int
+    has_nested_traversal: bool
+
+    def to_dict(self) -> dict:
+        return {
+            "query": self.query,
+            "description": self.description,
+            "metadata": {
+                "sample_kind": self.sample_kind,
+                "recipe_step_count": self.recipe_step_count,
+                "emitted_step_count": self.emitted_step_count,
+                "top_level_step_count": self.top_level_step_count,
+                "has_nested_traversal": self.has_nested_traversal,
+            },
+        }
 
 
 class TraversalGenerator:
@@ -245,6 +270,9 @@ class TraversalGenerator:
         self.recipe = recipe
         self.gremlin_base = gremlin_base
         self.generated_pairs: set[tuple[str, str]] = set()
+        self.generated_samples: dict[str, GeneratedSample] = {}
+        self.selected_samples: list[GeneratedSample] = []
+        self._has_generated = False
 
         # 集成组合控制器
         if controller is None:
@@ -292,6 +320,9 @@ class TraversalGenerator:
             去重后的 (查询, 描述) 对列表
         """
         self.generated_pairs.clear()
+        self.generated_samples.clear()
+        self.selected_samples = []
+        self._has_generated = False
         self.enhancement_counts.clear()
         self.recipe_path_completed = False
 
@@ -329,10 +360,84 @@ class TraversalGenerator:
 
                 print(f"⚠️  生成数量超出限制，已裁剪：{len(self.generated_pairs)} → {max_limit}")
 
+        self.selected_samples = [self._sample_for_result(query, description) for query, description in results]
+        self._has_generated = True
         return results
 
+    def generate_samples(self) -> list[dict]:
+        if not self._has_generated:
+            self.generate()
+        return [sample.to_dict() for sample in self.selected_samples]
+
+    def _sample_for_result(self, query: str, description: str) -> GeneratedSample:
+        sample = self.generated_samples.get(query)
+        if sample is None:
+            top_level_step_count = self._count_top_level_steps(query)
+            return GeneratedSample(
+                query=query,
+                description=description,
+                sample_kind="unknown",
+                recipe_step_count=len(self.recipe.steps),
+                emitted_step_count=top_level_step_count,
+                top_level_step_count=top_level_step_count,
+                has_nested_traversal=self._has_nested_traversal(query),
+            )
+        if sample.description == description:
+            return sample
+        return GeneratedSample(
+            query=query,
+            description=description,
+            sample_kind=sample.sample_kind,
+            recipe_step_count=sample.recipe_step_count,
+            emitted_step_count=sample.emitted_step_count,
+            top_level_step_count=sample.top_level_step_count,
+            has_nested_traversal=sample.has_nested_traversal,
+        )
+
+    @staticmethod
+    def _count_top_level_steps(query: str) -> int:
+        depth = 0
+        count = 0
+        for char in query:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth = max(0, depth - 1)
+            elif char == "." and depth == 0:
+                count += 1
+        return count
+
+    @staticmethod
+    def _has_nested_traversal(query: str) -> bool:
+        return "__." in query
+
+    @staticmethod
+    def _sample_priority(sample_kind: str) -> int:
+        return {"enhancement": 1, "prefix": 2, "complete": 3}.get(sample_kind, 0)
+
+    def _emit_sample(self, query: str, description: str, sample_kind: str, emitted_step_count: int) -> None:
+        sample = GeneratedSample(
+            query=query,
+            description=description,
+            sample_kind=sample_kind,
+            recipe_step_count=len(self.recipe.steps),
+            emitted_step_count=emitted_step_count,
+            top_level_step_count=self._count_top_level_steps(query),
+            has_nested_traversal=self._has_nested_traversal(query),
+        )
+        current = self.generated_samples.get(query)
+        if current is None or self._sample_priority(sample.sample_kind) > self._sample_priority(current.sample_kind):
+            self.generated_samples[query] = sample
+        self.generated_pairs.add((query, description))
+
     def _recursive_generate(
-        self, recipe_steps: list[Step], current_query: str, current_desc: str, current_label: str, current_type: str
+        self,
+        recipe_steps: list[Step],
+        current_query: str,
+        current_desc: str,
+        current_label: str,
+        current_type: str,
+        active_sample_kind: str | None = None,
     ):
         """
         核心递归生成函数 - 深度优先搜索 + 回溯
@@ -346,7 +451,7 @@ class TraversalGenerator:
         """
         # 1. 终止条件：配方步骤用完
         if not recipe_steps:
-            self.generated_pairs.add((current_query, current_desc))
+            self._emit_sample(current_query, current_desc, active_sample_kind or "complete", len(self.recipe.steps))
 
             # 标记配方路径完成（第一次到达终点）
             if not self.recipe_path_completed:
@@ -359,7 +464,7 @@ class TraversalGenerator:
                 if self.controller.should_apply_random_enhancement(True, enhancement_count):
                     enhanced = self._apply_random_enhancement(current_query, current_desc, current_label, current_type)
                     for enh_query, enh_desc in enhanced:
-                        self.generated_pairs.add((enh_query, enh_desc))
+                        self._emit_sample(enh_query, enh_desc, "enhancement", len(self.recipe.steps))
                         self.enhancement_counts[enh_query] = enhancement_count + 1
             return
 
@@ -385,7 +490,8 @@ class TraversalGenerator:
             next_desc = current_desc + option["desc_part"]
 
             # 保存中间结果
-            self.generated_pairs.add((next_query, next_desc))
+            emitted_step_count = len(self.recipe.steps) - len(remaining_steps)
+            self._emit_sample(next_query, next_desc, active_sample_kind or "prefix", emitted_step_count)
 
             # 尝试随机增强（中间步骤）
             if self.controller and remaining_steps:
@@ -397,14 +503,24 @@ class TraversalGenerator:
                     for enh_query, enh_desc in enhanced:
                         # 对增强后的查询继续执行剩余步骤
                         self._recursive_generate(
-                            remaining_steps, enh_query, enh_desc, option["new_label"], option["new_type"]
+                            remaining_steps,
+                            enh_query,
+                            enh_desc,
+                            option["new_label"],
+                            option["new_type"],
+                            active_sample_kind="enhancement",
                         )
                         self.enhancement_counts[enh_query] = enhancement_count + 1
 
             # 继续递归（如果不是终止类型）
             if option["new_type"] != "none":
                 self._recursive_generate(
-                    remaining_steps, next_query, next_desc, option["new_label"], option["new_type"]
+                    remaining_steps,
+                    next_query,
+                    next_desc,
+                    option["new_label"],
+                    option["new_type"],
+                    active_sample_kind=active_sample_kind,
                 )
 
     # 步骤选项生成（分发器）
