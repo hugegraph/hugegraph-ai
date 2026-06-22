@@ -410,8 +410,10 @@ class TestCommit2GraphLoadIntoGraph(unittest.TestCase):
         self.assertEqual(result["edges_attempted"], 1)
         self.assertEqual(result["edges_created"], 0)
         self.assertEqual(result["edges_skipped"], 1)
-        self.assertIn("Failed to create vertex", result["errors"][0])
-        self.assertIn("Failed to create edge", result["errors"][1])
+        self.assertEqual(result["errors"][0], "Failed to create vertex label 'person' at index 0")
+        self.assertEqual(result["errors"][1], "Failed to create edge label 'acted_in' at index 0")
+        self.assertNotIn("Tom Hanks", " ".join(result["errors"]))
+        self.assertNotIn("Forrest Gump", " ".join(result["errors"]))
         self.assertEqual(mock_handle_graph_creation.call_count, 2)
 
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")

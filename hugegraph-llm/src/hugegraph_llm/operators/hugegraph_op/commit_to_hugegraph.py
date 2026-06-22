@@ -116,7 +116,7 @@ class Commit2Graph:
         property_label_map = {p_label["name"]: p_label for p_label in schema["propertykeys"]}
         vid_mapping = {}  # mapping from LLM-generated vertex ID to actual server vertex ID
 
-        for vertex in vertices:
+        for vertex_index, vertex in enumerate(vertices):
             input_label = vertex["label"]
             # 1. ensure the input_label in the graph schema
             if input_label not in vertex_label_map:
@@ -145,7 +145,9 @@ class Commit2Graph:
                             vertex,
                         )
                         has_problem = True
-                        import_result["errors"].append(f"Primary-key '{pk}' missing in vertex {vertex}")
+                        import_result["errors"].append(
+                            f"Primary-key '{pk}' missing in vertex label '{input_label}' at index {vertex_index}"
+                        )
                         break
                     # TODO: transform to Enum first (better in earlier step)
                     data_type = property_label_map[pk]["data_type"]
@@ -202,7 +204,7 @@ class Commit2Graph:
                 result = self._handle_graph_creation(self.client.graph().addVertex, input_label, input_properties)
             if result is None:
                 import_result["vertices_skipped"] += 1
-                import_result["errors"].append(f"Failed to create vertex {vertex}")
+                import_result["errors"].append(f"Failed to create vertex label '{input_label}' at index {vertex_index}")
                 continue
             vid = result.id
             import_result["vertices_created"] += 1
@@ -210,7 +212,7 @@ class Commit2Graph:
             if mapping_id:
                 vid_mapping[mapping_id] = vid
 
-        for edge in edges:
+        for edge_index, edge in enumerate(edges):
             start = vid_mapping.get(edge.get("outV"), edge.get("outV"))
             end = vid_mapping.get(edge.get("inV"), edge.get("inV"))
             label = edge["label"]
@@ -229,7 +231,7 @@ class Commit2Graph:
             result = self._handle_graph_creation(self.client.graph().addEdge, label, start, end, properties)
             if result is None:
                 import_result["edges_skipped"] += 1
-                import_result["errors"].append(f"Failed to create edge {edge}")
+                import_result["errors"].append(f"Failed to create edge label '{label}' at index {edge_index}")
                 continue
             import_result["edges_created"] += 1
         return import_result
@@ -271,20 +273,22 @@ class Commit2Graph:
         self.schema.indexLabel("vertexByName").onV("vertex").by("name").secondary().ifNotExist().create()
         self.schema.indexLabel("edgeByName").onE("edge").by("name").secondary().ifNotExist().create()
 
-        for item in data:
+        for triple_index, item in enumerate(data):
             s, p, o = (element.strip() for element in item)
             s_vertex = self._handle_graph_creation(self.client.graph().addVertex, "vertex", {"name": s}, id=s)
             t_vertex = self._handle_graph_creation(self.client.graph().addVertex, "vertex", {"name": o}, id=o)
             if s_vertex is None or t_vertex is None:
                 import_result["triples_skipped"] += 1
-                import_result["errors"].append(f"Failed to create schema-free vertices for triple {item}")
+                import_result["errors"].append(
+                    f"Failed to create schema-free vertices for triple at index {triple_index}"
+                )
                 continue
             edge = self._handle_graph_creation(
                 self.client.graph().addEdge, "edge", s_vertex.id, t_vertex.id, {"name": p}
             )
             if edge is None:
                 import_result["triples_skipped"] += 1
-                import_result["errors"].append(f"Failed to create schema-free edge for triple {item}")
+                import_result["errors"].append(f"Failed to create schema-free edge for triple at index {triple_index}")
                 continue
             import_result["triples_created"] += 1
         return import_result
