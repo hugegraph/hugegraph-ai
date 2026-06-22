@@ -616,12 +616,8 @@ def test_existing_routes_still_register():
     app = FastAPI()
     app.include_router(router)
 
-    paths = set(app.openapi()["paths"])
-    response_models = {
-        route.path: route.response_model
-        for route in app.routes
-        if hasattr(route, "path") and hasattr(route, "response_model")
-    }
+    openapi_paths = app.openapi()["paths"]
+    paths = set(openapi_paths)
     assert "/rag" in paths
     assert "/text2gremlin" in paths
     assert "/config/graph" in paths
@@ -629,8 +625,14 @@ def test_existing_routes_still_register():
     assert "/graph/extract/jobs" in paths
     assert "/graph/import" in paths
     assert "/graph/extract-and-import" in paths
-    assert response_models["/graph/import"].__name__ == "GraphImportResponse"
-    assert response_models["/graph/extract-and-import"].__name__ == "GraphExtractAndImportResponse"
+    import_schema_ref = openapi_paths["/graph/import"]["post"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
+    extract_import_schema_ref = openapi_paths["/graph/extract-and-import"]["post"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]["$ref"]
+    assert import_schema_ref.endswith("/GraphImportResponse")
+    assert extract_import_schema_ref.endswith("/GraphExtractAndImportResponse")
 
 
 def test_rag_demo_registers_graph_extract_routes_once(monkeypatch):
@@ -643,11 +645,11 @@ def test_rag_demo_registers_graph_extract_routes_once(monkeypatch):
     app = rag_demo_app.create_app()
 
     graph_route_methods = [
-        (route.path, method)
-        for route in app.routes
-        if hasattr(route, "path") and route.path.startswith("/graph/")
-        for method in route.methods
-        if method in {"GET", "POST", "DELETE"}
+        (path, method.upper())
+        for path, path_item in app.openapi()["paths"].items()
+        if path.startswith("/graph/")
+        for method in path_item
+        if method.upper() in {"GET", "POST", "DELETE"}
     ]
     assert len(graph_route_methods) == len(set(graph_route_methods))
     assert ("/graph/extract", "POST") in graph_route_methods
