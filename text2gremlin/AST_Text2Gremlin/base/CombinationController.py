@@ -204,9 +204,10 @@ class CombinationController:
             多参数组合列表 [['person', 'movie'], ['user', 'genre'], ...]
         """
         param_count = len(recipe_params)
-        if param_count <= 1:
-            # 单参数情况，使用原有方法
-            return [self.select_sibling_options(recipe_params[0] if recipe_params else "", all_options, chain_category)]
+        if param_count == 0:
+            return [[]]
+        if param_count == 1:
+            return [[option] for option in self.select_sibling_options(recipe_params[0], all_options, chain_category)]
 
         # 获取多参数策略配置
         multi_config = self.config.get("multi_param_strategy", {})
