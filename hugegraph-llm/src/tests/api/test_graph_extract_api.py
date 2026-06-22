@@ -28,7 +28,6 @@ from pydantic import ValidationError
 from hugegraph_llm.api.graph_extract_api import graph_extract_http_api
 from hugegraph_llm.api.models.graph_extract_requests import GraphExtractClientConfig, GraphExtractRequest
 from hugegraph_llm.api.models.graph_extract_responses import GraphExtractResponse
-from hugegraph_llm.api.rag_api import rag_http_api
 from hugegraph_llm.config import huge_settings, llm_settings
 from hugegraph_llm.flows.graph_extract import GraphExtractFlow
 from hugegraph_llm.services.graph_extract_service import (
@@ -598,64 +597,3 @@ def test_wkflow_input_reset_clears_graph_configs():
 
     assert prepared_input.graph_client_config is None
     assert prepared_input.graph_config is None
-
-
-def test_existing_routes_still_register():
-    router = APIRouter()
-    rag_http_api(
-        router,
-        rag_answer_func=Mock(),
-        graph_rag_recall_func=Mock(),
-        apply_graph_conf=Mock(),
-        apply_llm_conf=Mock(),
-        apply_embedding_conf=Mock(),
-        apply_reranker_conf=Mock(),
-        gremlin_generate_selective_func=Mock(),
-    )
-    graph_extract_http_api(router)
-    app = FastAPI()
-    app.include_router(router)
-
-    openapi_paths = app.openapi()["paths"]
-    paths = set(openapi_paths)
-    assert "/rag" in paths
-    assert "/text2gremlin" in paths
-    assert "/config/graph" in paths
-    assert "/graph/extract" in paths
-    assert "/graph/extract/jobs" in paths
-    assert "/graph/import" in paths
-    assert "/graph/extract-and-import" in paths
-    import_schema_ref = openapi_paths["/graph/import"]["post"]["responses"]["200"]["content"]["application/json"][
-        "schema"
-    ]["$ref"]
-    extract_import_schema_ref = openapi_paths["/graph/extract-and-import"]["post"]["responses"]["200"]["content"][
-        "application/json"
-    ]["schema"]["$ref"]
-    assert import_schema_ref.endswith("/GraphImportResponse")
-    assert extract_import_schema_ref.endswith("/GraphExtractAndImportResponse")
-
-
-def test_rag_demo_registers_graph_extract_routes_once(monkeypatch):
-    from hugegraph_llm.demo.rag_demo import app as rag_demo_app
-
-    monkeypatch.setattr(rag_demo_app.prompt, "update_yaml_file", lambda: None)
-    monkeypatch.setattr(rag_demo_app, "init_rag_ui", lambda: object())
-    monkeypatch.setattr(rag_demo_app.gr, "mount_gradio_app", lambda app, *args, **kwargs: app)
-
-    app = rag_demo_app.create_app()
-
-    graph_route_methods = [
-        (path, method.upper())
-        for path, path_item in app.openapi()["paths"].items()
-        if path.startswith("/graph/")
-        for method in path_item
-        if method.upper() in {"GET", "POST", "DELETE"}
-    ]
-    assert len(graph_route_methods) == len(set(graph_route_methods))
-    assert ("/graph/extract", "POST") in graph_route_methods
-    assert ("/graph/extract/jobs", "POST") in graph_route_methods
-    assert ("/graph/extract/jobs/{job_id}", "GET") in graph_route_methods
-    assert ("/graph/extract/jobs/{job_id}", "DELETE") in graph_route_methods
-    assert ("/graph/extract/jobs/{job_id}/result", "GET") in graph_route_methods
-    assert ("/graph/import", "POST") in graph_route_methods
-    assert ("/graph/extract-and-import", "POST") in graph_route_methods

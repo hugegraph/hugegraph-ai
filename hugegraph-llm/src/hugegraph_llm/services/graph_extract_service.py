@@ -316,7 +316,7 @@ class GraphImportService:
                 updated_embeddings = True
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 log.warning("VID embedding update failed after graph import: %s", exc, exc_info=True)
-                warnings.append(f"update_vid_embeddings failed: {exc}")
+                warnings.append("update_vid_embeddings failed")
                 if status == "succeeded":
                     status = "partial"
 

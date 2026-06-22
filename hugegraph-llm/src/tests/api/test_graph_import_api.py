@@ -411,7 +411,7 @@ def test_graph_import_service_keeps_import_result_when_embedding_update_fails(mo
     scheduler = Mock()
     scheduler.schedule_flow.side_effect = [
         '{"vertices":[{"label":"person"}],"edges":[{"label":"knows"}]}',
-        RuntimeError("embed failed"),
+        RuntimeError("embed failed at http://internal.example/token=secret"),
     ]
     monkeypatch.setattr(
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
@@ -426,7 +426,9 @@ def test_graph_import_service_keeps_import_result_when_embedding_update_fails(mo
     assert response.vertex_count == 1
     assert response.edge_count == 1
     assert response.updated_embeddings is False
-    assert response.warnings == ["update_vid_embeddings failed: embed failed"]
+    assert response.warnings == ["update_vid_embeddings failed"]
+    assert "internal.example" not in " ".join(response.warnings)
+    assert "secret" not in " ".join(response.warnings)
     assert scheduler.schedule_flow.call_args_list[0].args[0] == FlowName.IMPORT_GRAPH_DATA
     assert scheduler.schedule_flow.call_args_list[1].args[0] == FlowName.UPDATE_VID_EMBEDDINGS
 
