@@ -1808,17 +1808,56 @@ class TraversalGenerator:
 
         return variants[:max_variants]
 
-    def _format_param(self, param):
-        """格式化参数为字符串"""
+    @staticmethod
+    def format_gremlin_value(value) -> str:
+        from .GremlinExpr import Predicate, TextPredicate
 
-        if isinstance(param, str):
-            return f"'{param}'"
-        elif isinstance(param, Predicate):
-            return f"P.{param.operator}({param.value})"
-        elif isinstance(param, (int, float)):
-            return str(param)
-        else:
-            return "..."
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (int, float)):
+            return str(value)
+        if isinstance(value, (Predicate, TextPredicate)):
+            return TraversalGenerator.format_predicate(value)
+        if isinstance(value, (list, tuple)):
+            return ", ".join(TraversalGenerator.format_gremlin_value(item) for item in value)
+        if isinstance(value, set):
+            return ", ".join(
+                TraversalGenerator.format_gremlin_value(item)
+                for item in sorted(value, key=TraversalGenerator.format_gremlin_value)
+            )
+        if isinstance(value, str):
+            escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+            return f"'{escaped}'"
+        return str(value)
+
+    @staticmethod
+    def format_predicate(predicate) -> str:
+        from .GremlinExpr import Predicate, TextPredicate
+
+        if not isinstance(predicate, (Predicate, TextPredicate)):
+            return TraversalGenerator.format_gremlin_value(predicate)
+
+        prefix = "TextP" if isinstance(predicate, TextPredicate) else "P"
+        value_text = TraversalGenerator.format_gremlin_value(predicate.value)
+        return f"{prefix}.{predicate.operator}({value_text})"
+
+    @staticmethod
+    def format_anonymous_traversal(traversal: str) -> str:
+        traversal = str(traversal).strip()
+        if not traversal:
+            return "__"
+        if traversal == "__" or traversal.startswith("__."):
+            return traversal
+        return f"__.{traversal}"
+
+    def _format_predicate(self, predicate) -> str:
+        return self.format_predicate(predicate)
+
+    def _format_param(self, param):
+        """格式化 Gremlin 参数为合法源码片段。"""
+        return self.format_gremlin_value(param)
 
     #   E. 过滤步骤处理器
 
