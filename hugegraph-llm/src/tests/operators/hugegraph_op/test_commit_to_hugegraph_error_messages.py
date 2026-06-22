@@ -66,7 +66,9 @@ def test_import_errors_do_not_include_raw_vertex_or_edge_payloads():
             "label": "acted_in",
             "properties": {"role": "Forrest Gump"},
             "outV": "person:Tom Hanks",
+            "outVLabel": "person",
             "inV": "movie:Forrest Gump",
+            "inVLabel": "movie",
         }
     ]
 
@@ -74,10 +76,10 @@ def test_import_errors_do_not_include_raw_vertex_or_edge_payloads():
         result = commit2graph.load_into_graph(vertices, edges, _schema())
 
     assert result["errors"] == [
-        "Failed to create vertex label 'person' at index 0",
-        "Failed to create edge label 'acted_in' at index 0",
+        {"kind": "vertex", "index": 0, "reason": "create_failed", "label": "person"},
+        {"kind": "edge", "index": 0, "reason": "create_failed", "label": "acted_in"},
     ]
-    error_text = " ".join(result["errors"])
+    error_text = str(result["errors"])
     assert "Tom Hanks" not in error_text
     assert "Forrest Gump" not in error_text
 
@@ -88,8 +90,10 @@ def test_primary_key_import_error_identifies_key_label_and_index_only():
 
     result = commit2graph.load_into_graph(vertices, [], _schema())
 
-    assert result["errors"] == ["Primary-key 'name' missing in vertex label 'person' at index 0"]
-    assert "{'label':" not in result["errors"][0]
+    assert result["errors"] == [
+        {"kind": "vertex", "index": 0, "reason": "missing_primary_key", "label": "person", "key": "name"}
+    ]
+    assert "{'label':" not in str(result["errors"])
 
 
 def test_schema_free_import_errors_do_not_include_raw_triple_payloads():
@@ -99,7 +103,37 @@ def test_schema_free_import_errors_do_not_include_raw_triple_payloads():
     with patch.object(commit2graph, "_handle_graph_creation", return_value=None):
         result = commit2graph.schema_free_mode(triples)
 
-    assert result["errors"] == ["Failed to create schema-free vertices for triple at index 0"]
-    error_text = " ".join(result["errors"])
+    assert result["errors"] == [{"kind": "triple", "index": 0, "reason": "create_vertices_failed"}]
+    error_text = str(result["errors"])
     assert "Alice Sensitive" not in error_text
     assert "Bob Sensitive" not in error_text
+
+
+def test_import_rejects_edge_endpoint_label_mismatch_before_writing():
+    commit2graph = _commit_operator()
+    edges = [
+        {
+            "label": "acted_in",
+            "properties": {"role": "Forrest Gump"},
+            "outV": "person:Tom Hanks",
+            "outVLabel": "movie",
+            "inV": "movie:Forrest Gump",
+            "inVLabel": "movie",
+        }
+    ]
+
+    with patch.object(commit2graph, "_handle_graph_creation") as mock_handle_graph_creation:
+        result = commit2graph.load_into_graph([], edges, _schema())
+
+    assert result["edges_created"] == 0
+    assert result["edges_skipped"] == 1
+    assert result["errors"] == [
+        {
+            "kind": "edge",
+            "index": 0,
+            "reason": "source_label_mismatch",
+            "label": "acted_in",
+            "key": "outVLabel",
+        }
+    ]
+    mock_handle_graph_creation.assert_not_called()

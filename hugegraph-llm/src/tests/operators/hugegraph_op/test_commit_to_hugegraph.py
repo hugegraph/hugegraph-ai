@@ -382,7 +382,10 @@ class TestCommit2Graph(unittest.TestCase):
         self.assertEqual(result["edges_attempted"], 1)
         self.assertEqual(result["edges_created"], 0)
         self.assertEqual(result["edges_skipped"], 1)
-        self.assertIn("VertexLabel unknown not found in schema", result["errors"])
+        self.assertIn(
+            {"kind": "vertex", "index": 1, "reason": "vertex_label_not_found", "label": "unknown"},
+            result["errors"],
+        )
 
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")
     def test_load_into_graph_with_data_type_validation_success(self, mock_handle_graph_creation):

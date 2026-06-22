@@ -51,6 +51,19 @@ def _validate_schema_value(schema: SchemaInput) -> SchemaInput:
     return schema_text
 
 
+def _schema_object(schema: SchemaInput) -> Optional[Dict[str, Any]]:
+    if isinstance(schema, dict):
+        return schema
+    schema_text = str(schema).strip()
+    if not schema_text.startswith("{"):
+        return None
+    try:
+        parsed_schema = json.loads(schema_text)
+    except json.JSONDecodeError:
+        return None
+    return parsed_schema if isinstance(parsed_schema, dict) else None
+
+
 class GraphExtractOptions(BaseModel):
     include_meta: bool = Field(default=False, description="Whether to include response metadata.")
     include_warnings: bool = Field(default=True, description="Whether to include extraction warnings.")
@@ -255,6 +268,7 @@ class GraphImportRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_write_target(self):
+        self._validate_edge_endpoint_labels()
         schema = self.schema_data
         is_named_schema = isinstance(schema, str) and not schema.strip().startswith("{")
         if (
@@ -266,6 +280,28 @@ class GraphImportRequest(BaseModel):
         if is_named_schema and self.client_config is not None and self.client_config.graph not in {None, schema}:
             raise ValueError("schema graph name must match client_config.graph")
         return self
+
+    def _validate_edge_endpoint_labels(self):
+        schema = _schema_object(self.schema_data)
+        if schema is None:
+            return
+        edge_schema = {
+            edge_label["name"]: edge_label
+            for edge_label in schema.get("edgelabels", [])
+            if isinstance(edge_label, dict) and "name" in edge_label
+        }
+        for index, edge in enumerate(self.data.get("edges", []) or []):
+            schema_edge = edge_schema.get(edge.get("label"))
+            if schema_edge is None:
+                continue
+            if edge.get("outVLabel") != schema_edge.get("source_label"):
+                raise ValueError(
+                    f"edges[{index}].outVLabel must match schema source_label for edge label '{edge.get('label')}'"
+                )
+            if edge.get("inVLabel") != schema_edge.get("target_label"):
+                raise ValueError(
+                    f"edges[{index}].inVLabel must match schema target_label for edge label '{edge.get('label')}'"
+                )
 
 
 class GraphExtractAndImportRequest(GraphExtractRequest):

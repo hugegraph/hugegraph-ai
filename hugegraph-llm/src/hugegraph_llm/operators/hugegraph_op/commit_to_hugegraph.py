@@ -57,6 +57,14 @@ class Commit2Graph:
             "errors": [],
         }
 
+    def _import_error(self, kind, index, reason, label=None, key=None) -> Dict[str, Any]:
+        error = {"kind": kind, "index": index, "reason": reason}
+        if label:
+            error["label"] = label
+        if key:
+            error["key"] = key
+        return error
+
     def run(self, data: dict) -> Dict[str, Any]:
         schema = data.get("schema")
         vertices = data.get("vertices", []) or []
@@ -125,7 +133,9 @@ class Commit2Graph:
                     input_label,
                 )
                 import_result["vertices_skipped"] += 1
-                import_result["errors"].append(f"VertexLabel {input_label} not found in schema")
+                import_result["errors"].append(
+                    self._import_error("vertex", vertex_index, "vertex_label_not_found", label=input_label)
+                )
                 continue
 
             input_properties = vertex["properties"]
@@ -146,7 +156,7 @@ class Commit2Graph:
                         )
                         has_problem = True
                         import_result["errors"].append(
-                            f"Primary-key '{pk}' missing in vertex label '{input_label}' at index {vertex_index}"
+                            self._import_error("vertex", vertex_index, "missing_primary_key", input_label, pk)
                         )
                         break
                     # TODO: transform to Enum first (better in earlier step)
@@ -181,7 +191,9 @@ class Commit2Graph:
                         key,
                     )
                     has_problem = True
-                    import_result["errors"].append(f"Property type/format '{key}' is not correct")
+                    import_result["errors"].append(
+                        self._import_error("vertex", vertex_index, "invalid_property_type", input_label, key)
+                    )
                     break
             if has_problem:
                 import_result["vertices_skipped"] += 1
@@ -204,7 +216,9 @@ class Commit2Graph:
                 result = self._handle_graph_creation(self.client.graph().addVertex, input_label, input_properties)
             if result is None:
                 import_result["vertices_skipped"] += 1
-                import_result["errors"].append(f"Failed to create vertex label '{input_label}' at index {vertex_index}")
+                import_result["errors"].append(
+                    self._import_error("vertex", vertex_index, "create_failed", label=input_label)
+                )
                 continue
             vid = result.id
             import_result["vertices_created"] += 1
@@ -224,14 +238,30 @@ class Commit2Graph:
                     label,
                 )
                 import_result["edges_skipped"] += 1
-                import_result["errors"].append(f"EdgeLabel {label} not found in schema")
+                import_result["errors"].append(
+                    self._import_error("edge", edge_index, "edge_label_not_found", label=label)
+                )
+                continue
+
+            edge_label = edge_label_map[label]
+            if edge.get("outVLabel") is not None and edge.get("outVLabel") != edge_label.get("source_label"):
+                import_result["edges_skipped"] += 1
+                import_result["errors"].append(
+                    self._import_error("edge", edge_index, "source_label_mismatch", label=label, key="outVLabel")
+                )
+                continue
+            if edge.get("inVLabel") is not None and edge.get("inVLabel") != edge_label.get("target_label"):
+                import_result["edges_skipped"] += 1
+                import_result["errors"].append(
+                    self._import_error("edge", edge_index, "target_label_mismatch", label=label, key="inVLabel")
+                )
                 continue
 
             # TODO: we could try batch add edges first, setback to single-mode if failed
             result = self._handle_graph_creation(self.client.graph().addEdge, label, start, end, properties)
             if result is None:
                 import_result["edges_skipped"] += 1
-                import_result["errors"].append(f"Failed to create edge label '{label}' at index {edge_index}")
+                import_result["errors"].append(self._import_error("edge", edge_index, "create_failed", label=label))
                 continue
             import_result["edges_created"] += 1
         return import_result
@@ -279,16 +309,14 @@ class Commit2Graph:
             t_vertex = self._handle_graph_creation(self.client.graph().addVertex, "vertex", {"name": o}, id=o)
             if s_vertex is None or t_vertex is None:
                 import_result["triples_skipped"] += 1
-                import_result["errors"].append(
-                    f"Failed to create schema-free vertices for triple at index {triple_index}"
-                )
+                import_result["errors"].append(self._import_error("triple", triple_index, "create_vertices_failed"))
                 continue
             edge = self._handle_graph_creation(
                 self.client.graph().addEdge, "edge", s_vertex.id, t_vertex.id, {"name": p}
             )
             if edge is None:
                 import_result["triples_skipped"] += 1
-                import_result["errors"].append(f"Failed to create schema-free edge for triple at index {triple_index}")
+                import_result["errors"].append(self._import_error("triple", triple_index, "create_edge_failed"))
                 continue
             import_result["triples_created"] += 1
         return import_result

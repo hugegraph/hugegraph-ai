@@ -36,6 +36,7 @@ from hugegraph_llm.flows.scheduler import SchedulerSingleton
 from hugegraph_llm.utils.log import log
 
 SENSITIVE_CLIENT_CONFIG_KEYS = {"pwd", "password", "token", "api_key", "secret"}
+SAFE_IMPORT_ERROR_KEYS = {"kind", "index", "label", "key", "reason"}
 
 
 class FlowOutputValidationError(ValueError):
@@ -154,6 +155,29 @@ def _build_import_status(import_result: Dict[str, Any]) -> str:
     if skipped and not created:
         return "failed"
     return "succeeded"
+
+
+def _sanitize_import_error(error: Any) -> Dict[str, Any]:
+    if not isinstance(error, dict):
+        return {"kind": "import", "reason": "import_error"}
+    sanitized = {
+        key: value for key, value in error.items() if key in SAFE_IMPORT_ERROR_KEYS and isinstance(value, (str, int))
+    }
+    return sanitized or {"kind": "import", "reason": "import_error"}
+
+
+def _format_import_warning(error: Dict[str, Any]) -> str:
+    kind = error.get("kind", "import")
+    reason = error.get("reason", "import_error")
+    parts = ["import error" if kind == "import" else f"{kind} import error"]
+    if "index" in error:
+        parts.append(f"index={error['index']}")
+    if "label" in error:
+        parts.append(f"label={error['label']}")
+    if "key" in error:
+        parts.append(f"key={error['key']}")
+    parts.append(f"reason={reason}")
+    return " ".join(parts)
 
 
 class GraphExtractService:
@@ -299,7 +323,9 @@ class GraphImportService:
         warnings = _pop_warnings(parsed_result)
         import_result = parsed_result.get("import_result")
         if isinstance(import_result, dict):
-            warnings.extend(str(item) for item in import_result.get("errors", []))
+            import_errors = [_sanitize_import_error(item) for item in import_result.get("errors", [])]
+            import_result["errors"] = import_errors
+            warnings.extend(_format_import_warning(item) for item in import_errors)
             status = _build_import_status(import_result)
             vertex_count = int(import_result.get("vertices_created", 0))
             edge_count = int(import_result.get("edges_created", 0))

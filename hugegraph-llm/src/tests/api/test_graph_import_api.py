@@ -179,6 +179,14 @@ def test_graph_import_request_rejects_malformed_property_graph_data():
             GraphImportRequest(**_import_payload(data=data))
 
 
+def test_graph_import_request_rejects_edge_endpoint_label_mismatch():
+    data = _payload_data()
+    data["edges"][0]["outVLabel"] = "movie"
+
+    with pytest.raises(ValueError, match="outVLabel must match schema source_label"):
+        GraphImportRequest(**_import_payload(data=data))
+
+
 def test_graph_import_request_requires_explicit_target_graph_for_inline_schema_write():
     with pytest.raises(ValueError, match="client_config.graph"):
         GraphImportRequest(**_import_payload(client_config=None))
@@ -572,7 +580,7 @@ def test_graph_import_response_counts_actual_import_result_not_request_size(monk
         '{"import_result":{"vertices_attempted":1,"vertices_created":0,"vertices_skipped":1,'
         '"edges_attempted":1,"edges_created":1,"edges_skipped":0,'
         '"triples_attempted":0,"triples_created":0,"triples_skipped":0,'
-        '"errors":["missing primary key"]}}'
+        '"errors":[{"kind":"vertex","index":0,"label":"person","key":"name","reason":"missing_primary_key"}]}}'
     )
     monkeypatch.setattr(
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
@@ -585,7 +593,10 @@ def test_graph_import_response_counts_actual_import_result_not_request_size(monk
     assert response.vertex_count == 0
     assert response.edge_count == 1
     assert response.meta["import_result"]["vertices_skipped"] == 1
-    assert response.warnings == ["missing primary key"]
+    assert response.meta["import_result"]["errors"] == [
+        {"kind": "vertex", "index": 0, "label": "person", "key": "name", "reason": "missing_primary_key"}
+    ]
+    assert response.warnings == ["vertex import error index=0 label=person key=name reason=missing_primary_key"]
 
 
 def test_graph_import_response_marks_all_skipped_result_as_failed(monkeypatch):
@@ -594,7 +605,7 @@ def test_graph_import_response_marks_all_skipped_result_as_failed(monkeypatch):
         '{"import_result":{"vertices_attempted":0,"vertices_created":0,"vertices_skipped":1,'
         '"edges_attempted":0,"edges_created":0,"edges_skipped":0,'
         '"triples_attempted":0,"triples_created":0,"triples_skipped":0,'
-        '"errors":["vertex creation failed before attempt count"]}}'
+        '"errors":["vertex creation failed for Tom Hanks with token=secret"]}}'
     )
     monkeypatch.setattr(
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
@@ -605,7 +616,10 @@ def test_graph_import_response_marks_all_skipped_result_as_failed(monkeypatch):
 
     assert response.status == "failed"
     assert response.vertex_count == 0
-    assert response.warnings == ["vertex creation failed before attempt count"]
+    assert response.meta["import_result"]["errors"] == [{"kind": "import", "reason": "import_error"}]
+    assert response.warnings == ["import error reason=import_error"]
+    assert "Tom Hanks" not in str(response.warnings)
+    assert "secret" not in str(response.meta["import_result"]["errors"])
 
 
 def test_extract_endpoint_never_invokes_import_service():
