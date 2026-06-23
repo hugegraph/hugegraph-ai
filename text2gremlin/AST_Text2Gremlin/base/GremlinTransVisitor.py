@@ -29,7 +29,7 @@ from antlr4.InputStream import InputStream
 from .gremlin.GremlinLexer import GremlinLexer
 from .gremlin.GremlinParser import GremlinParser
 from .gremlin.GremlinVisitor import GremlinVisitor
-from .GremlinExpr import AnonymousTraversal, Predicate, Terminal, TextPredicate
+from .GremlinExpr import AnonymousTraversal, Predicate, RawGremlinToken, Terminal, TextPredicate
 from .GremlinParse import Step, Traversal
 
 
@@ -1712,7 +1712,7 @@ class GremlinTransVisitor(GremlinVisitor):
         """choose(Function)变体"""
         params = []
         if hasattr(ctx, "traversalFunction") and ctx.traversalFunction():
-            params.append(self.visit(ctx.traversalFunction()))
+            params.append(RawGremlinToken(ctx.traversalFunction().getText()))
         self.traversal.add_step(Step("choose", params))
 
     def visitTraversalMethod_choose_Traversal_Traversal(self, ctx):

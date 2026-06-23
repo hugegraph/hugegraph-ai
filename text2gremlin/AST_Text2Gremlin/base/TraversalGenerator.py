@@ -2052,10 +2052,12 @@ class TraversalGenerator:
 
     @staticmethod
     def format_gremlin_value(value) -> str:
-        from .GremlinExpr import Predicate, TextPredicate
+        from .GremlinExpr import Predicate, RawGremlinToken, TextPredicate
 
         if value is None:
             return "null"
+        if isinstance(value, RawGremlinToken):
+            return value.text
         if isinstance(value, bool):
             return "true" if value else "false"
         if isinstance(value, (int, float)):

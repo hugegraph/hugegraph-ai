@@ -20,6 +20,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
@@ -270,6 +272,25 @@ def test_parse_generate_choose_predicate_condition_keeps_complete_sample_and_syn
 
     for template, expected_fragment in cases:
         _assert_complete_generated_sample(template, expected_fragment)
+
+
+@pytest.mark.parametrize(
+    ("template", "expected_token", "expected_fragment"),
+    [
+        ("g.V().choose(T.label)", "T.label", "choose(T.label)"),
+        ("g.V().choose(Column.keys)", "Column.keys", "choose(Column.keys)"),
+        ("g.V().choose(label)", "label", "choose(label)"),
+    ],
+)
+def test_parse_generate_choose_function_keeps_raw_token_complete_sample_and_syntax(
+    template: str, expected_token: str, expected_fragment: str
+):
+    step = _parsed_step(template, "choose")
+
+    assert step.params
+    assert step.params[0] is not None
+    assert str(step.params[0]) == expected_token
+    _assert_complete_generated_sample(template, expected_fragment)
 
 
 def test_empty_anonymous_traversal_generation_uses_identity_and_is_parseable():

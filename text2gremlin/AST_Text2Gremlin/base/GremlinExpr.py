@@ -30,6 +30,17 @@ if TYPE_CHECKING:
     from .GremlinParse import Step
 
 
+class RawGremlinToken:
+    def __init__(self, text: str):
+        self.text = text
+
+    def __str__(self) -> str:
+        return self.text
+
+    def __repr__(self) -> str:
+        return self.text
+
+
 class Predicate:
     """
     表示一个 Gremlin 谓词，例如 P.gt(30)、P.within('a', 'b') 等。
