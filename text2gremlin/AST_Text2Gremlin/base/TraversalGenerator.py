@@ -561,7 +561,14 @@ class TraversalGenerator:
 
             # 保存中间结果
             emitted_step_count = len(self.recipe.steps) - len(remaining_steps)
-            self._emit_sample(next_query, next_desc, active_sample_kind or "prefix", emitted_step_count)
+            sample_kind = active_sample_kind or ("complete" if not remaining_steps else "prefix")
+            self._emit_sample(next_query, next_desc, sample_kind, emitted_step_count)
+
+            if not remaining_steps and option["new_type"] == "none":
+                if not self.recipe_path_completed:
+                    self.recipe_path_completed = True
+                    print(f"✅ 配方路径完成: {next_query}")
+                continue
 
             # 尝试随机增强（中间步骤）
             if self.controller and remaining_steps:

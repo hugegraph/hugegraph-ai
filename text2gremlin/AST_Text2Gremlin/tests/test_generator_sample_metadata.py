@@ -266,6 +266,35 @@ def test_generate_keeps_tuple_return_and_generate_samples_metadata():
     }
 
 
+def test_terminal_none_steps_are_complete_samples():
+    for terminal_step in ("drop", "iterate"):
+        generator = _generator([Step("V"), Step(terminal_step)])
+
+        payloads_by_query = _payload_by_query(generator.generate_samples())
+
+        assert payloads_by_query["g.V()"]["metadata"]["sample_kind"] == "prefix"
+        assert payloads_by_query[f"g.V().{terminal_step}()"]["metadata"] == {
+            "sample_kind": "complete",
+            "recipe_step_count": 2,
+            "emitted_step_count": 2,
+            "top_level_step_count": 2,
+            "has_nested_traversal": False,
+        }
+
+
+def test_max_total_keeps_terminal_none_complete_sample_over_prefix():
+    for terminal_step in ("drop", "iterate"):
+        generator = _generator([Step("V"), Step(terminal_step)], controller=_MaxOneController())
+
+        results = generator.generate()
+        payloads = generator.generate_samples()
+
+        assert [query for query, _desc in results] == [f"g.V().{terminal_step}()"]
+        assert len(payloads) == 1
+        assert payloads[0]["query"] == f"g.V().{terminal_step}()"
+        assert payloads[0]["metadata"]["sample_kind"] == "complete"
+
+
 def test_generate_samples_runs_generate_when_needed():
     generator = _generator([Step("V"), Step("count")])
 
