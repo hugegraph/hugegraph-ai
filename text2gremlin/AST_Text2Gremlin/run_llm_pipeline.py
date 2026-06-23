@@ -62,9 +62,34 @@ STAGE_NAMES = {
     "dpo": "DPO 偏好数据",
 }
 
-STAGE_OPTION_OWNERS = {
-    "--migration-mode": "migrate",
-    "--same-operation-sample-count": "migrate",
+STAGE_OPTION_CANDIDATES = {
+    "--translated": ("migrate", "merge"),
+    "--migrated": ("merge", "dpo"),
+    "--migration-mode": ("migrate",),
+    "--same-operation-sample-count": ("migrate",),
+    "--output-dir": ("merge",),
+    "--num-a": ("dpo",),
+    "--num-b": ("dpo",),
+    "--num-c": ("dpo",),
+    "--migrated-num-a": ("dpo",),
+    "--migrated-num-b": ("dpo",),
+    "--migrated-num-c": ("dpo",),
+    "--skip-movie": ("dpo",),
+    "--skip-migrated": ("dpo",),
+}
+
+VALUE_TAKING_OPTIONS = {
+    "--translated",
+    "--migrated",
+    "--migration-mode",
+    "--same-operation-sample-count",
+    "--output-dir",
+    "--num-a",
+    "--num-b",
+    "--num-c",
+    "--migrated-num-a",
+    "--migrated-num-b",
+    "--migrated-num-c",
 }
 
 
@@ -82,6 +107,15 @@ def run_stage(stage: str, extra_args: list[str]) -> int:
     return result.returncode
 
 
+def _resolve_option_owner(option: str, stages_to_run: list[str]) -> str | None:
+    """Return the earliest selected stage that can consume option."""
+    candidates = STAGE_OPTION_CANDIDATES.get(option, ())
+    for selected_stage in stages_to_run:
+        if selected_stage in candidates:
+            return selected_stage
+    return None
+
+
 def get_stage_extra_args(stage: str, stages_to_run: list[str], extra_args: list[str]) -> list[str]:
     """Route known stage-specific args and keep unknown args on the first stage."""
     stage_args = {selected_stage: [] for selected_stage in stages_to_run}
@@ -90,7 +124,7 @@ def get_stage_extra_args(stage: str, stages_to_run: list[str], extra_args: list[
     while index < len(extra_args):
         arg = extra_args[index]
         option = arg.split("=", 1)[0]
-        owner = STAGE_OPTION_OWNERS.get(option)
+        owner = _resolve_option_owner(option, stages_to_run)
         target = stage_args.get(owner) if owner else first_stage_args
         if target is None:
             target = first_stage_args
@@ -98,7 +132,7 @@ def get_stage_extra_args(stage: str, stages_to_run: list[str], extra_args: list[
 
         has_inline_value = "=" in arg
         has_separate_value = index + 1 < len(extra_args) and not extra_args[index + 1].startswith("--")
-        if owner and not has_inline_value and has_separate_value:
+        if owner and option in VALUE_TAKING_OPTIONS and not has_inline_value and has_separate_value:
             index += 1
             target.append(extra_args[index])
         index += 1
