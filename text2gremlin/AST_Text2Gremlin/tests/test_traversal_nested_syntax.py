@@ -152,6 +152,22 @@ def _generate_samples_from_parsed_template(query: str) -> list[dict]:
     return generator.generate_samples()
 
 
+def _assert_complete_generated_sample(template: str, expected_fragment: str) -> None:
+    generated_samples = _generate_samples_from_parsed_template(template)
+    generated_queries = [sample["query"] for sample in generated_samples]
+    complete_queries = [
+        sample["query"] for sample in generated_samples if sample["metadata"]["sample_kind"] == "complete"
+    ]
+
+    assert generated_queries
+    assert all("..." not in query for query in generated_queries)
+    assert complete_queries
+    assert any(expected_fragment in query for query in complete_queries)
+    for query in complete_queries:
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+
+
 def _parsed_step(query: str, step_name: str) -> Step:
     recipe = GremlinTransVisitor().parse_and_visit(query)
     assert recipe is not None
@@ -224,6 +240,36 @@ def test_where_generation_uses_predicate_formatter_for_all_where_forms():
             remaining_steps=[],
         )
         assert any(option["query_part"] == expected for option in options)
+
+
+def test_parse_generate_filter_predicate_keeps_complete_sample_and_syntax():
+    cases = [
+        ("g.V().filter(P.eq('marko'))", "filter(P.eq('marko'))"),
+        ("g.V().filter(TextP.containing('mar'))", "filter(TextP.containing('mar'))"),
+    ]
+
+    for template, expected_fragment in cases:
+        _assert_complete_generated_sample(template, expected_fragment)
+
+
+def test_parse_generate_choose_predicate_condition_keeps_complete_sample_and_syntax():
+    cases = [
+        (
+            "g.V().choose(P.eq('marko'), __.out('acted_in'))",
+            "choose(P.eq('marko'), __.out('acted_in'))",
+        ),
+        (
+            "g.V().choose(P.eq('marko'), __.out('acted_in'), __.in('directed'))",
+            "choose(P.eq('marko'), __.out('acted_in'), __.in('directed'))",
+        ),
+        (
+            "g.V().choose(TextP.containing('mar'), __.values('name'))",
+            "choose(TextP.containing('mar'), __.values('name'))",
+        ),
+    ]
+
+    for template, expected_fragment in cases:
+        _assert_complete_generated_sample(template, expected_fragment)
 
 
 def test_empty_anonymous_traversal_generation_uses_identity_and_is_parseable():

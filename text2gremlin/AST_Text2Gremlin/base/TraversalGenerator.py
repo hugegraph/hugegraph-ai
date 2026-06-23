@@ -2801,7 +2801,7 @@ class TraversalGenerator:
             if not step_params:
                 return []
 
-            from .GremlinExpr import AnonymousTraversal
+            from .GremlinExpr import AnonymousTraversal, Predicate, TextPredicate
 
             first_param = step_params[0]
 
@@ -2820,6 +2820,16 @@ class TraversalGenerator:
                             "new_type": current_type,
                         }
                     )
+            elif isinstance(first_param, (Predicate, TextPredicate)):
+                predicate_str = self.format_predicate(first_param)
+                options.append(
+                    {
+                        "query_part": f".filter({predicate_str})",
+                        "desc_part": f"，通用过滤（{first_param.operator}）",
+                        "new_label": current_label,
+                        "new_type": current_type,
+                    }
+                )
             else:
                 options.append(
                     {
@@ -3526,93 +3536,58 @@ class TraversalGenerator:
 
         # choose() 步骤 - 条件分支
         elif step_name == "choose":
-            from .GremlinExpr import AnonymousTraversal
+            import itertools
+
+            from .GremlinExpr import AnonymousTraversal, Predicate, TextPredicate
 
             if not step_params:
                 return []
 
-            # choose有多个变体，根据参数数量和类型处理
-            if len(step_params) == 1:
-                # choose(traversal) - 单参数
-                if isinstance(step_params[0], AnonymousTraversal):
-                    variants = self._generate_nested_traversal_variants(step_params[0], current_depth=0)
-                    cond_desc = self._describe_nested_traversal(step_params[0])
-                    result = []
-                    for variant in variants[:2]:
-                        anonymous = self.format_anonymous_traversal(variant)
-                        result.append(
-                            {
-                                "query_part": f".choose({anonymous})",
-                                "desc_part": f"条件分支（条件：{cond_desc}）",
-                                "new_label": None,
-                                "new_type": current_type,
-                            }
-                        )
-                    return result if result else []
+            def format_choose_param_options(param, max_variants: int) -> list[str]:
+                if isinstance(param, AnonymousTraversal):
+                    variants = self._generate_nested_traversal_variants(param, current_depth=0)
+                    return [self.format_anonymous_traversal(v) for v in variants[:max_variants]] or ["__.identity()"]
+                if isinstance(param, (Predicate, TextPredicate)):
+                    return [self.format_predicate(param)]
+                return [self._format_param(param)]
 
-            elif len(step_params) == 2:
-                # choose(traversal, traversal) - 两参数
-                if all(isinstance(p, AnonymousTraversal) for p in step_params):
-                    # 为每个参数生成变体
-                    variants1 = self._generate_nested_traversal_variants(step_params[0], current_depth=0)
-                    variants2 = self._generate_nested_traversal_variants(step_params[1], current_depth=0)
-                    cond_desc = self._describe_nested_traversal(step_params[0])
-                    then_desc = self._describe_nested_traversal(step_params[1])
+            def describe_choose_param(param) -> str:
+                if isinstance(param, AnonymousTraversal):
+                    return self._describe_nested_traversal(param)
+                if isinstance(param, (Predicate, TextPredicate)):
+                    return self.format_predicate(param)
+                return str(param)
 
-                    result = []
-                    # 组合（限制数量）
-                    for v1 in variants1[:2]:
-                        for v2 in variants2[:2]:
-                            anonymous1 = self.format_anonymous_traversal(v1)
-                            anonymous2 = self.format_anonymous_traversal(v2)
-                            result.append(
-                                {
-                                    "query_part": f".choose({anonymous1}, {anonymous2})",
-                                    "desc_part": f"条件分支（若{cond_desc}，则{then_desc}）",
-                                    "new_label": None,
-                                    "new_type": current_type,
-                                }
-                            )
-                            if len(result) >= 4:  # 最多4个组合
-                                break
-                        if len(result) >= 4:
-                            break
-                    return result if result else []
-
-            elif len(step_params) == 3:
-                # choose(traversal, traversal, traversal) - 三参数
-                if all(isinstance(p, AnonymousTraversal) for p in step_params):
-                    # 为每个参数生成变体
-                    variants1 = self._generate_nested_traversal_variants(step_params[0], current_depth=0)
-                    variants2 = self._generate_nested_traversal_variants(step_params[1], current_depth=0)
-                    variants3 = self._generate_nested_traversal_variants(step_params[2], current_depth=0)
-                    cond_desc = self._describe_nested_traversal(step_params[0])
-                    then_desc = self._describe_nested_traversal(step_params[1])
-                    else_desc = self._describe_nested_traversal(step_params[2])
-
-                    result = []
-                    # 组合（限制数量）
-                    for v1 in variants1[:2]:
-                        for v2 in variants2[:1]:  # 减少组合
-                            for v3 in variants3[:1]:
-                                anonymous1 = self.format_anonymous_traversal(v1)
-                                anonymous2 = self.format_anonymous_traversal(v2)
-                                anonymous3 = self.format_anonymous_traversal(v3)
-                                result.append(
-                                    {
-                                        "query_part": f".choose({anonymous1}, {anonymous2}, {anonymous3})",
-                                        "desc_part": f"条件分支（若{cond_desc}，则{then_desc}，否则{else_desc}）",
-                                        "new_label": None,
-                                        "new_type": current_type,
-                                    }
-                                )
-                                if len(result) >= 4:  # 最多4个组合
-                                    break
-                            if len(result) >= 4:
-                                break
-                        if len(result) >= 4:
-                            break
-                    return result if result else []
+            # choose 有多个变体，根据参数数量和类型处理。
+            if len(step_params) in (1, 2, 3):
+                per_param_limits = [2] * len(step_params)
+                if len(step_params) == 3:
+                    per_param_limits = [2, 1, 1]
+                all_param_variants = [
+                    format_choose_param_options(param, max_variants)
+                    for param, max_variants in zip(step_params, per_param_limits, strict=True)
+                ]
+                descs = [describe_choose_param(param) for param in step_params]
+                result = []
+                for combo in itertools.product(*all_param_variants):
+                    choose_str = ", ".join(combo)
+                    if len(step_params) == 1:
+                        desc_part = f"条件分支（条件：{descs[0]}）"
+                    elif len(step_params) == 2:
+                        desc_part = f"条件分支（若{descs[0]}，则{descs[1]}）"
+                    else:
+                        desc_part = f"条件分支（若{descs[0]}，则{descs[1]}，否则{descs[2]}）"
+                    result.append(
+                        {
+                            "query_part": f".choose({choose_str})",
+                            "desc_part": desc_part,
+                            "new_label": None,
+                            "new_type": current_type,
+                        }
+                    )
+                    if len(result) >= 4:
+                        break
+                return result if result else []
 
             return []
 
