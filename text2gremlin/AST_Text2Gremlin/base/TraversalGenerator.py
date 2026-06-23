@@ -20,6 +20,7 @@ import json
 import os
 import random
 import string
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -52,6 +53,94 @@ class GeneratedSample:
                 "has_nested_traversal": self.has_nested_traversal,
             },
         }
+
+
+def _stable_sample_key(sample: GeneratedSample) -> tuple:
+    sample_kind_order = {"complete": 0, "prefix": 1, "enhancement": 2, "unknown": 3}
+    return (
+        sample_kind_order.get(sample.sample_kind, 99),
+        -sample.emitted_step_count,
+        -sample.top_level_step_count,
+        sample.query,
+        sample.description,
+        sample.recipe_step_count,
+        sample.has_nested_traversal,
+    )
+
+
+def _select_prefix_by_depth_bucket(samples: list[GeneratedSample]) -> GeneratedSample | None:
+    prefix_samples = [sample for sample in samples if sample.sample_kind == "prefix"]
+    if not prefix_samples:
+        return None
+
+    ordered = sorted(prefix_samples, key=_stable_sample_key)
+    depths = [sample.top_level_step_count for sample in ordered]
+    min_depth = min(depths)
+    max_depth = max(depths)
+
+    if min_depth == max_depth:
+        return ordered[0]
+
+    span = max_depth - min_depth
+    target_depth = min_depth + (span / 2)
+
+    def depth_bucket(sample: GeneratedSample) -> int:
+        position = (sample.top_level_step_count - min_depth) / span
+        if position < 1 / 3:
+            return 0
+        if position < 2 / 3:
+            return 1
+        return 2
+
+    middle_bucket = [sample for sample in ordered if depth_bucket(sample) == 1]
+    candidates = middle_bucket or ordered
+    return min(
+        candidates, key=lambda sample: (abs(sample.top_level_step_count - target_depth), _stable_sample_key(sample))
+    )
+
+
+def select_generated_samples(samples: list[GeneratedSample], max_limit: int | None = None) -> list[GeneratedSample]:
+    ordered_samples = sorted(samples, key=_stable_sample_key)
+    unique_samples: dict[str, GeneratedSample] = {}
+    for sample in ordered_samples:
+        unique_samples.setdefault(sample.query, sample)
+
+    ordered_samples = list(unique_samples.values())
+    if max_limit is None or len(ordered_samples) <= max_limit:
+        return ordered_samples
+    if max_limit <= 0:
+        return []
+
+    selected: dict[str, GeneratedSample] = {}
+
+    def add_sample(sample: GeneratedSample | None) -> None:
+        if sample is not None and len(selected) < max_limit:
+            selected.setdefault(sample.query, sample)
+
+    complete_samples = [sample for sample in ordered_samples if sample.sample_kind == "complete"]
+    prefix_samples = [sample for sample in ordered_samples if sample.sample_kind == "prefix"]
+
+    if max_limit >= 2 and complete_samples and prefix_samples:
+        add_sample(complete_samples[0])
+        add_sample(_select_prefix_by_depth_bucket(prefix_samples))
+    elif complete_samples:
+        add_sample(complete_samples[0])
+    elif prefix_samples:
+        add_sample(_select_prefix_by_depth_bucket(prefix_samples))
+
+    for sample in ordered_samples:
+        add_sample(sample)
+        if len(selected) >= max_limit:
+            break
+
+    return sorted(selected.values(), key=_stable_sample_key)
+
+
+def _format_sample_kind_distribution(samples: list[GeneratedSample]) -> str:
+    counts = Counter(sample.sample_kind for sample in samples)
+    if not counts:
+        return "empty"
+    return ", ".join(f"{sample_kind}={counts[sample_kind]}" for sample_kind in sorted(counts))
 
 
 class TraversalGenerator:
@@ -334,33 +423,23 @@ class TraversalGenerator:
             current_type="graph",
         )
 
-        # 后处理：如果超出限制，优先保留深层查询
-        results = list(self.generated_pairs)
-
+        max_limit = None
         if self.controller:
             category = self.controller.get_chain_category(len(self.recipe.steps))
             max_limit = self.controller.max_total.get(category)
 
-            if max_limit and len(results) > max_limit:
-                # 超出限制，按深度排序，保留深层查询
-                def get_depth(query_desc_pair):
-                    query = query_desc_pair[0]
-                    # 统计步骤数（排除字符串中的点号）
-                    # 简单方法：统计方法调用（大写字母开头或小写方法名）
-                    import re
+        generated_samples = list(self.generated_samples.values())
+        self.selected_samples = select_generated_samples(generated_samples, max_limit)
 
-                    steps = re.findall(r"\.\w+\(", query)
-                    return len(steps)
+        if max_limit is not None and len(generated_samples) > len(self.selected_samples):
+            print(f"⚠️  生成数量超出限制，已裁剪：{len(generated_samples)} → {len(self.selected_samples)}")
+            print(
+                "   sample_kind分布: "
+                f"裁剪前 {_format_sample_kind_distribution(generated_samples)}; "
+                f"裁剪后 {_format_sample_kind_distribution(self.selected_samples)}"
+            )
 
-                # 按深度降序排序
-                results.sort(key=get_depth, reverse=True)
-
-                # 保留前max_limit个
-                results = results[:max_limit]
-
-                print(f"⚠️  生成数量超出限制，已裁剪：{len(self.generated_pairs)} → {max_limit}")
-
-        self.selected_samples = [self._sample_for_result(query, description) for query, description in results]
+        results = [(sample.query, sample.description) for sample in self.selected_samples]
         self._has_generated = True
         return results
 
@@ -472,19 +551,10 @@ class TraversalGenerator:
         step_recipe = recipe_steps[0]
         remaining_steps = recipe_steps[1:]
 
-        # 3. 检查是否应该停止生成（保护机制）
-        if self.controller:
-            category = self.controller.get_chain_category(len(self.recipe.steps))
-
-            # 如果配方路径未完成，不停止（保护机制）
-            if self.recipe_path_completed:
-                if self.controller.should_stop_generation(len(self.generated_pairs), category):
-                    return
-
-        # 4. 获取当前步骤的所有合法选项
+        # 3. 获取当前步骤的所有合法选项
         options = self._get_valid_options_for_step(step_recipe, current_label, current_type, remaining_steps)
 
-        # 5. 遍历每个选项，继续递归
+        # 4. 遍历每个选项，继续递归
         for option in options:
             next_query = current_query + option["query_part"]
             next_desc = current_desc + option["desc_part"]

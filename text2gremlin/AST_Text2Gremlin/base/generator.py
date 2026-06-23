@@ -104,7 +104,7 @@ def generate_corpus_from_template(
         config: 加载的 Config 对象。
         schema: 加载的 Schema 对象。
         gremlin_base: 加载的 GremlinBase 对象。
-        global_corpus_dict: 用于存储唯一 query-description 对的全局字典。
+        global_corpus_dict: 用于存储唯一 query-payload 对的全局字典。
 
     Returns:
         tuple: (添加到全局语料库的新的唯一对的数量, 处理统计信息)
@@ -144,6 +144,7 @@ def generate_corpus_from_template(
             stats["error_message"] = "Generator returned empty corpus"
             return 0, stats
 
+        sample_payloads = {sample["query"]: sample for sample in generator.generate_samples()}
         stats["generated_count"] = len(corpus)
 
         # 语法检查 & 全局去重
@@ -166,7 +167,10 @@ def generate_corpus_from_template(
                     continue
 
                 # 新的查询且语法正确，添加到全局字典
-                global_corpus_dict[query] = description
+                payload = sample_payloads.get(query, {"query": query, "description": description})
+                if payload.get("description") != description:
+                    payload = {**payload, "description": description}
+                global_corpus_dict[query] = payload
                 new_pairs_count += 1
 
             except Exception:
@@ -250,7 +254,7 @@ def generate_gremlin_corpus(
     gremlin_base = GremlinBase(config)
 
     # --- Run the generation process for each template with global deduplication ---
-    global_corpus_dict = {}  # 使用字典进行去重，key是query，value是description
+    global_corpus_dict = {}  # 使用字典进行去重，key是query，value是payload dict
     total_new_pairs = 0
 
     # 处理统计信息
@@ -320,8 +324,9 @@ def generate_gremlin_corpus(
             print(f"[{i}/{len(templates)}] ❌ 意外错误: {e!s}")
             continue  # 继续处理下一个模板
 
-    # 转换为列表格式以便后续处理
-    full_corpus = list(global_corpus_dict.items())
+    # 转换为列表格式以便后续处理；返回值继续保持旧的 (query, description) tuple list
+    full_corpus_payloads = list(global_corpus_dict.values())
+    full_corpus = [(payload["query"], payload["description"]) for payload in full_corpus_payloads]
 
     # --- Save the full corpus to a local file (if output_file is provided) ---
     if output_file:
@@ -339,7 +344,7 @@ def generate_gremlin_corpus(
                 "total_unique_queries": len(full_corpus),
                 "generation_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             },
-            "corpus": [{"query": query, "description": desc} for query, desc in full_corpus],
+            "corpus": full_corpus_payloads,
         }
 
         with open(output_file, "w", encoding="utf-8") as f:

@@ -17,14 +17,19 @@
 
 # ruff: noqa: E402
 
+import json
 import sys
+from importlib import import_module
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
+import base.generator as generator_module
 from base.GremlinParse import Step, Traversal
 from base.TraversalGenerator import GeneratedSample, TraversalGenerator
+
+traversal_generator_module = import_module("base.TraversalGenerator")
 
 
 class _GremlinBase:
@@ -53,6 +58,11 @@ class _MaxOneController(_TerminalEnhancementController):
 
     def should_apply_random_enhancement(self, is_terminal: bool, enhancement_count: int) -> bool:
         return False
+
+
+class _RaiseStopController(_MaxOneController):
+    def should_stop_generation(self, generated_count: int, category: str) -> bool:
+        raise AssertionError("generate() should select after complete recursion")
 
 
 class _OrderedPairs:
@@ -86,6 +96,26 @@ class _DuplicateQueryMaxLimitGenerator(TraversalGenerator):
     def _recursive_generate(self, *args, **kwargs):
         self._emit_sample("g.V()", "prefix desc", "prefix", 1)
         self._emit_sample("g.V()", "complete desc", "complete", 1)
+
+
+class _BranchingMaxLimitGenerator(TraversalGenerator):
+    def __init__(self):
+        super().__init__(
+            schema=object(),
+            recipe=_recipe(Step("V"), Step("count")),
+            gremlin_base=_GremlinBase(),
+            controller=_RaiseStopController(),
+        )
+
+    def _get_valid_options_for_step(self, step_recipe, current_label, current_type, remaining_steps=None):
+        if step_recipe.name == "V":
+            return [
+                {"query_part": ".V()", "desc_part": "，V", "new_label": None, "new_type": "vertex"},
+                {"query_part": ".E()", "desc_part": "，E", "new_label": None, "new_type": "edge"},
+            ]
+        if step_recipe.name == "count":
+            return [{"query_part": ".count()", "desc_part": "，count", "new_label": None, "new_type": "number"}]
+        return []
 
 
 class _EmptyGenerator(TraversalGenerator):
@@ -129,6 +159,18 @@ def _payload_by_query(payloads: list[dict]) -> dict[str, dict]:
     return {payload["query"]: payload for payload in payloads}
 
 
+def _sample(query: str, sample_kind: str, depth: int) -> GeneratedSample:
+    return GeneratedSample(
+        query=query,
+        description=f"{sample_kind} depth {depth}",
+        sample_kind=sample_kind,
+        recipe_step_count=6,
+        emitted_step_count=depth,
+        top_level_step_count=depth,
+        has_nested_traversal="__." in query,
+    )
+
+
 def test_generated_sample_keeps_query_description_and_metadata():
     sample = GeneratedSample(
         query="g.V().hasLabel('person')",
@@ -149,6 +191,46 @@ def test_generated_sample_keeps_query_description_and_metadata():
     assert payload["metadata"]["emitted_step_count"] == 2
     assert payload["metadata"]["top_level_step_count"] == 2
     assert payload["metadata"]["has_nested_traversal"] is False
+
+
+def test_select_generated_samples_keeps_complete_prefix_and_medium_depth_prefix():
+    medium_prefix = _sample("g.V().out().hasLabel('person')", "prefix", 3)
+    samples = [
+        _sample("g.V()", "prefix", 1),
+        _sample("g.V().out().out().out().out().out()", "prefix", 6),
+        _sample("g.V().out().count()", "complete", 4),
+        medium_prefix,
+        _sample("g.V().out().values('name').limit(1)", "enhancement", 4),
+        _sample("g.E().count()", "complete", 2),
+    ]
+
+    selected = traversal_generator_module.select_generated_samples(samples, max_limit=4)
+
+    assert len(selected) == 4
+    assert any(sample.sample_kind == "complete" for sample in selected)
+    assert any(sample.sample_kind == "prefix" for sample in selected)
+    assert medium_prefix in selected
+
+
+def test_select_generated_samples_is_stable_when_input_order_is_reversed():
+    samples = [
+        _sample("g.V()", "prefix", 1),
+        _sample("g.V().out()", "prefix", 2),
+        _sample("g.V().out().out()", "prefix", 3),
+        _sample("g.V().out().out().count()", "complete", 4),
+        _sample("g.E().count()", "complete", 2),
+        _sample("g.V().values('name').limit(1)", "enhancement", 3),
+    ]
+
+    selected_queries = [
+        sample.query for sample in traversal_generator_module.select_generated_samples(samples, max_limit=4)
+    ]
+    reversed_selected_queries = [
+        sample.query
+        for sample in traversal_generator_module.select_generated_samples(list(reversed(samples)), max_limit=4)
+    ]
+
+    assert reversed_selected_queries == selected_queries
 
 
 def test_generate_keeps_tuple_return_and_generate_samples_metadata():
@@ -198,7 +280,7 @@ def test_generate_samples_descriptions_match_final_result_tuples_after_max_limit
     results = generator.generate()
     payloads = generator.generate_samples()
 
-    assert results == [("g.V()", "prefix desc")]
+    assert results == [("g.V()", "complete desc")]
     assert [(payload["query"], payload["description"]) for payload in payloads] == results
     assert payloads[0]["metadata"]["sample_kind"] == "complete"
 
@@ -255,3 +337,69 @@ def test_emit_sample_prioritizes_duplicate_query_without_changing_generated_pair
         (query, "enhancement desc"),
         (query, "complete desc"),
     }
+
+
+def test_generate_completes_recursion_before_applying_max_total():
+    generator = _BranchingMaxLimitGenerator()
+
+    results = generator.generate()
+
+    assert len(results) == 1
+    assert {"g.V().count()", "g.E().count()"}.issubset(generator.generated_samples)
+
+
+def test_generate_gremlin_corpus_writes_sample_metadata_but_returns_tuple_queries(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    schema_path = tmp_path / "schema.json"
+    data_path = tmp_path / "data"
+    output_path = tmp_path / "corpus.json"
+    config_path.write_text("{}", encoding="utf-8")
+    schema_path.write_text("{}", encoding="utf-8")
+    data_path.mkdir()
+
+    samples = [
+        _sample("g.V()", "prefix", 1),
+        _sample("g.V().count()", "complete", 2),
+    ]
+
+    class _Config:
+        def __init__(self, file_path):
+            self.file_path = file_path
+
+    class _Schema:
+        def __init__(self, schema_path, data_path):
+            self.schema_path = schema_path
+            self.data_path = data_path
+
+    class _Generator:
+        def __init__(self, schema, recipe, gremlin_base):
+            self.selected_samples = samples
+
+        def generate(self):
+            return [(sample.query, sample.description) for sample in self.selected_samples]
+
+        def generate_samples(self):
+            return [sample.to_dict() for sample in self.selected_samples]
+
+    class _Visitor:
+        def parse_and_visit(self, template_string):
+            return _recipe(Step("V"), Step("count"))
+
+    monkeypatch.setattr(generator_module, "Config", _Config)
+    monkeypatch.setattr(generator_module, "Schema", _Schema)
+    monkeypatch.setattr(generator_module, "GremlinBase", lambda config: object())
+    monkeypatch.setattr(generator_module, "GremlinTransVisitor", _Visitor)
+    monkeypatch.setattr(generator_module, "TraversalGenerator", _Generator)
+    monkeypatch.setattr(generator_module, "check_gremlin_syntax", lambda query: (True, "Syntax OK"))
+
+    result = generator_module.generate_gremlin_corpus(
+        templates=["g.V().count()"],
+        config_path=str(config_path),
+        schema_path=str(schema_path),
+        data_path=str(data_path),
+        output_file=str(output_path),
+    )
+    output_data = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result["queries"] == [(sample.query, sample.description) for sample in samples]
+    assert output_data["corpus"] == [sample.to_dict() for sample in samples]
