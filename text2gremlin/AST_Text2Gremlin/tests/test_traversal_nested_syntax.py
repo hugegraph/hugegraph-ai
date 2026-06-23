@@ -340,6 +340,22 @@ def test_parse_generate_numeric_param_steps_preserve_arity_and_syntax(
         assert ok, message
 
 
+def test_parse_generate_sample_param_preserves_literal_and_syntax():
+    template = "g.V().sample(3)"
+    step = _parsed_step(template, "sample")
+    generated_samples = _generate_samples_from_parsed_template(template)
+    complete_queries = [
+        sample["query"] for sample in generated_samples if sample["metadata"]["sample_kind"] == "complete"
+    ]
+
+    assert step.params == [3]
+    assert complete_queries
+    assert any("sample(3)" in query for query in complete_queries), complete_queries
+    for query in complete_queries:
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+
+
 def test_no_param_range_numeric_fallback_generates_valid_bounds_and_syntax():
     complete_queries = _generate_complete_queries_from_steps([Step("V"), Step("range", [])])
 

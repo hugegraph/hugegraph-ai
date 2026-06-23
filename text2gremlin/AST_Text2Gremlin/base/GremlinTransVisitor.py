@@ -2405,8 +2405,8 @@ class GremlinTransVisitor(GremlinVisitor):
     def visitTraversalMethod_sample_int(self, ctx):
         """处理sample(int)方法"""
         params = []
-        if hasattr(ctx, "integerArgument") and ctx.integerArgument():
-            params.append(self.visit(ctx.integerArgument()))
+        if hasattr(ctx, "integerLiteral") and ctx.integerLiteral():
+            params.append(self.visit(ctx.integerLiteral()))
         self.traversal.add_step(Step("sample", params))
 
     def visitTraversalMethod_coin(self, ctx):
