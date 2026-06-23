@@ -163,6 +163,23 @@ Published Dataset               Hugging Face: Lriver/Text2Gremlin
     └── preference_data/        # DPO preference data
 ```
 
+### ANTLR 生成的 Gremlin Parser 文件
+
+`base/gremlin/` 下的文件由 `base/gremlin/Gremlin.g4` 生成并提交到仓库，因此 pipeline 可以直接运行，不要求每个使用者在本地安装 ANTLR。已提交的生成文件包括 `GremlinLexer.py`、`GremlinParser.py`、`GremlinListener.py`、`GremlinVisitor.py`，以及对应的 `.interp` 和 `.tokens` artifacts。
+
+如需使用 ANTLR 4.13.1 重新生成 parser，请执行：
+
+```bash
+cd text2gremlin/AST_Text2Gremlin/base/gremlin
+java -jar /path/to/antlr-4.13.1-complete.jar -Dlanguage=Python3 -visitor Gremlin.g4
+```
+
+重新生成后运行端到端质量测试：
+
+```bash
+uv run pytest text2gremlin/AST_Text2Gremlin/tests/test_generation_e2e_quality.py -q
+```
+
 ---
 
 ## Configuration
@@ -223,6 +240,32 @@ Published generated data can be downloaded from [Lriver/Text2Gremlin](https://hu
   ]
 }
 ```
+
+#### 生成样本 Metadata
+
+Stage 1 会保留 Gremlin 的过程式 traversal 结构进行 AST 泛化。生成器默认输出 prefix query，因为很多 Gremlin prefix 本身就是合法的独立 traversal，也能帮助语料覆盖中间查询形态。每条 corpus item 继续保留旧字段 `query` 和 `description`，新版输出还会附带 `metadata`：
+
+```json
+{
+  "query": "g.V().hasLabel('person')",
+  "description": "从图中开始，查询person顶点",
+  "metadata": {
+    "sample_kind": "prefix",
+    "recipe_step_count": 3,
+    "emitted_step_count": 2,
+    "top_level_step_count": 2,
+    "has_nested_traversal": false
+  }
+}
+```
+
+`sample_kind` 有三种主要取值：
+
+- `prefix`：递归生成过程中产出的中间 traversal 前缀。
+- `complete`：完整覆盖原始 recipe 所有步骤的查询。
+- `enhancement`：在 prefix 或 complete 基础上追加随机增强步骤后产出的查询。
+
+生成器会先完成递归泛化，再在配置了 `max_total_combinations` 时应用稳定的后置分层保留策略；也就是说，最终输出上限只影响保留哪些样本，不会让递归泛化提前停止。保留策略会优先确保完整查询和有代表性的 prefix query 进入最终结果，再按稳定排序补足剩余样本。
 
 ### LLM Translation (`llm_translated_*.json`)
 ```json
