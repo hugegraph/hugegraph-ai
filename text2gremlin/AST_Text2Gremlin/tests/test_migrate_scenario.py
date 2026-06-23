@@ -253,3 +253,107 @@ def test_migrate_one_preserves_source_metadata():
 
     assert result["source_metadata"] == source_metadata
     assert "_error" not in result
+
+
+def test_migrate_one_retries_transient_generic_exception_and_preserves_source_metadata(monkeypatch):
+    source_metadata = {"source_id": "movie-004", "template": "transient_retry"}
+
+    class FakeCompletions:
+        def __init__(self):
+            self.calls = 0
+
+        async def create(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("temporary 503")
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=json.dumps(
+                                {
+                                    "source_pattern": "start_vertex",
+                                    "source_intent": "Find all movies",
+                                    "target_domain": "social",
+                                    "mapping_explanation": "Map movie vertices to users",
+                                    "generated_samples": [
+                                        {
+                                            "operation": "read",
+                                            "language_style": "en_formal",
+                                            "query": "g.V().hasLabel('user')",
+                                            "natural_language": "Find all users",
+                                        }
+                                    ],
+                                }
+                            )
+                        )
+                    )
+                ]
+            )
+
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(migrate_scenario.asyncio, "sleep", no_sleep)
+    completions = FakeCompletions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    result = asyncio.run(
+        migrate_scenario.migrate_one(
+            client,
+            {
+                "text": "Find all movies",
+                "gremlin": "g.V().hasLabel('movie')",
+                "source_metadata": source_metadata,
+            },
+            {"domain": "social", "name_zh": "社交", "schema": SIMPLE_SCHEMA},
+            asyncio.Semaphore(1),
+            {"model": "test", "temperature": 0, "max_retries": 2, "timeout": 1},
+            {"migration_mode": "same_operation", "same_operation_sample_count": 1},
+        )
+    )
+
+    assert completions.calls == 2
+    assert result["source_metadata"] == source_metadata
+    assert result["generated_samples"][0]["query"] == "g.V().hasLabel('user')"
+    assert "_error" not in result
+
+
+def test_migrate_one_reports_timeout_error_after_retries_and_preserves_source_metadata(monkeypatch):
+    source_metadata = {"source_id": "movie-005", "template": "timeout_retry"}
+
+    class FakeCompletions:
+        def __init__(self):
+            self.calls = 0
+
+        async def create(self, **_kwargs):
+            self.calls += 1
+            await asyncio.Event().wait()
+
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(migrate_scenario.asyncio, "sleep", no_sleep)
+    completions = FakeCompletions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    result = asyncio.run(
+        migrate_scenario.migrate_one(
+            client,
+            {
+                "text": "Find all movies",
+                "gremlin": "g.V().hasLabel('movie')",
+                "source_metadata": source_metadata,
+            },
+            {"domain": "social", "name_zh": "社交", "schema": SIMPLE_SCHEMA},
+            asyncio.Semaphore(1),
+            {"model": "test", "temperature": 0, "max_retries": 2, "timeout": 0.001},
+            {"migration_mode": "same_operation", "same_operation_sample_count": 1},
+        )
+    )
+
+    assert completions.calls == 2
+    assert result["source_metadata"] == source_metadata
+    assert result["generated_samples"] == []
+    assert "_error" in result
+    assert "TimeoutError" in result["_error"] or "timeout" in result["_error"].lower()

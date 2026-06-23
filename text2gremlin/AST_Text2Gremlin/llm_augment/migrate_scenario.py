@@ -392,6 +392,7 @@ async def migrate_one(
     - 全部语法错误则重试
     """
     max_retries = llm_config["max_retries"]
+    timeout = llm_config.get("timeout", 40)
 
     async with semaphore:
         for attempt in range(max_retries):
@@ -404,10 +405,13 @@ async def migrate_one(
                     sample_count=migration_config["same_operation_sample_count"],
                 )
 
-                response = await client.chat.completions.create(
-                    model=llm_config["model"],
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=llm_config["temperature"],
+                response = await asyncio.wait_for(
+                    client.chat.completions.create(
+                        model=llm_config["model"],
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=llm_config["temperature"],
+                    ),
+                    timeout=timeout,
                 )
                 content = response.choices[0].message.content
 
@@ -458,7 +462,11 @@ async def migrate_one(
                 else:
                     return _fallback_migration(pair, target_schema, f"迁移失败(重试{max_retries}次): {e}")
             except Exception as e:
-                return _fallback_migration(pair, target_schema, f"迁移异常: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(min(2**attempt, 8) + random.random() * 0.25)
+                    continue
+                error_message = str(e) or "no message"
+                return _fallback_migration(pair, target_schema, f"迁移异常 {type(e).__name__}: {error_message}")
 
 
 def _fallback_migration(pair: dict, target_schema: dict, error: str) -> dict:
