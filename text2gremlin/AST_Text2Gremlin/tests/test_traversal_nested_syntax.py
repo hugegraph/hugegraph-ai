@@ -17,6 +17,7 @@
 
 # ruff: noqa: E402
 
+import re
 import sys
 from pathlib import Path
 
@@ -27,7 +28,7 @@ sys.path.insert(0, str(PROJECT_DIR))
 
 from base.generator import check_gremlin_syntax
 from base.GremlinExpr import AnonymousTraversal, Predicate, TextPredicate
-from base.GremlinParse import Step
+from base.GremlinParse import Step, Traversal
 from base.GremlinTransVisitor import GremlinTransVisitor
 from base.TraversalGenerator import TraversalGenerator
 
@@ -152,6 +153,23 @@ def _generate_samples_from_parsed_template(query: str) -> list[dict]:
     )
     generator.controller = None
     return generator.generate_samples()
+
+
+def _generate_complete_queries_from_steps(steps: list[Step]) -> list[str]:
+    traversal = Traversal()
+    for step in steps:
+        traversal.add_step(step)
+
+    generator = TraversalGenerator(
+        schema=_Schema(),
+        recipe=traversal,
+        gremlin_base=_GremlinBase(),
+        controller=None,
+    )
+    generator.controller = None
+    return [
+        sample["query"] for sample in generator.generate_samples() if sample["metadata"]["sample_kind"] == "complete"
+    ]
 
 
 def _assert_complete_generated_sample(template: str, expected_fragment: str) -> None:
@@ -320,6 +338,44 @@ def test_parse_generate_numeric_param_steps_preserve_arity_and_syntax(
     for query in complete_queries:
         ok, message = check_gremlin_syntax(query)
         assert ok, message
+
+
+def test_no_param_range_numeric_fallback_generates_valid_bounds_and_syntax():
+    complete_queries = _generate_complete_queries_from_steps([Step("V"), Step("range", [])])
+
+    assert complete_queries
+    for query in complete_queries:
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+        match = re.search(r"\.range\((\d+), (\d+)\)", query)
+        assert match, query
+        start, end = (int(value) for value in match.groups())
+        assert start < end
+
+
+def test_no_param_coin_numeric_fallback_generates_probability_and_syntax():
+    complete_queries = _generate_complete_queries_from_steps([Step("V"), Step("coin", [])])
+
+    assert complete_queries
+    for query in complete_queries:
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+        match = re.search(r"\.coin\((\d+\.\d+)\)", query)
+        assert match, query
+        value = float(match.group(1))
+        assert 0 < value < 1
+
+
+@pytest.mark.parametrize("step_name", ["limit", "sample", "skip", "tail"])
+def test_no_param_single_integer_numeric_fallbacks_preserve_one_arg_and_syntax(step_name: str):
+    complete_queries = _generate_complete_queries_from_steps([Step("V"), Step(step_name, [])])
+
+    assert complete_queries
+    for query in complete_queries:
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+        match = re.search(rf"\.{step_name}\((\d+)\)", query)
+        assert match, query
 
 
 def test_empty_anonymous_traversal_generation_uses_identity_and_is_parseable():

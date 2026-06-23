@@ -1130,9 +1130,19 @@ class TraversalGenerator:
         else:
             # 否则在合理范围内随机生成
             min_val, max_val = config["range"]
-            value = random.randint(min_val, max_val)
-            params_str = self._format_param(value)
-            desc_value = value
+            if step_name == "range":
+                start = random.randint(min_val, max_val - 1)
+                end = random.randint(start + 1, max_val)
+                params_str = f"{start}, {end}"
+                desc_value = f"{start}, {end}"
+            elif config.get("type") == "float":
+                value = round(random.uniform(min_val, max_val), 2)
+                params_str = self._format_param(value)
+                desc_value = value
+            else:
+                value = random.randint(min_val, max_val)
+                params_str = self._format_param(value)
+                desc_value = value
 
         # 从GremlinBase获取翻译
         desc = self.gremlin_base.get_token_desc(step_name)
