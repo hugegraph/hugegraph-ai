@@ -423,6 +423,47 @@ def test_parse_generate_nested_multi_argument_anonymous_steps_preserve_arity():
             assert ok, message
 
 
+def test_parse_generate_nested_fallback_steps_preserve_parameters_and_syntax():
+    cases = [
+        (
+            "g.V().filter(__.out('acted_in').limit(1))",
+            ".filter(",
+            ".filter(__.out('acted_in').limit(1))",
+            "limit(1)",
+        ),
+        (
+            "g.V().filter(__.out('acted_in').range(0, 2))",
+            ".filter(",
+            ".filter(__.out('acted_in').range(0, 2))",
+            "range(0, 2)",
+        ),
+        (
+            "g.V().filter(__.out('acted_in').dedup('name'))",
+            ".filter(",
+            ".filter(__.out('acted_in').dedup('name'))",
+            "dedup('name')",
+        ),
+        (
+            "g.V().map(__.values('name').limit(1))",
+            ".map(",
+            ".map(__.values('name').limit(1))",
+            "limit(1)",
+        ),
+    ]
+
+    for template, call_fragment, expected_fragment, expected_param in cases:
+        generated_queries = _generate_queries_from_parsed_template(template)
+        relevant_queries = [query for query in generated_queries if call_fragment in query]
+
+        assert relevant_queries
+        assert all("..." not in query for query in generated_queries)
+        assert any(expected_fragment in query for query in relevant_queries)
+        assert any(expected_param in query for query in relevant_queries)
+        for query in relevant_queries:
+            ok, message = check_gremlin_syntax(query)
+            assert ok, message
+
+
 def test_has_generation_uses_predicate_formatter_for_predicate_values():
     generator = TraversalGenerator(
         schema=_Schema(),

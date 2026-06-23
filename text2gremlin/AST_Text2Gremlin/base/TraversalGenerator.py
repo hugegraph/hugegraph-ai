@@ -2042,7 +2042,8 @@ class TraversalGenerator:
         else:
             # 其他步骤：保留原样
             if step_params:
-                variants.append(f"{step_name}(...)")
+                params_str = ", ".join([self._format_param(p) for p in step_params])
+                variants.append(f"{step_name}({params_str})")
             else:
                 variants.append(f"{step_name}()")
 
