@@ -1984,7 +1984,8 @@ class TraversalGenerator:
                 param_str = self._format_param(step_params[0])
                 variants.append(f"has({param_str})")
             else:
-                variants.append("has(...)")
+                params_str = ", ".join([self._format_param(p) for p in step_params])
+                variants.append(f"has({params_str})")
 
         elif step_name in ["hasKey", "hasValue"]:
             # hasKey/hasValue: 保留原样（数据值，不泛化）

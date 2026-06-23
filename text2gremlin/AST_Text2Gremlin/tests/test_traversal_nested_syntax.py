@@ -139,6 +139,19 @@ def _generate_queries_from_parsed_template(query: str) -> list[str]:
     return [generated_query for generated_query, _desc in generator.generate()]
 
 
+def _generate_samples_from_parsed_template(query: str) -> list[dict]:
+    recipe = GremlinTransVisitor().parse_and_visit(query)
+    assert recipe is not None
+    generator = TraversalGenerator(
+        schema=_Schema(),
+        recipe=recipe,
+        gremlin_base=_GremlinBase(),
+        controller=None,
+    )
+    generator.controller = None
+    return generator.generate_samples()
+
+
 def _parsed_step(query: str, step_name: str) -> Step:
     recipe = GremlinTransVisitor().parse_and_visit(query)
     assert recipe is not None
@@ -349,6 +362,43 @@ def test_parse_generate_nested_predicate_steps_keep_formatter_output():
             assert "..." not in query
             for forbidden in forbidden_fragments:
                 assert forbidden not in query
+            ok, message = check_gremlin_syntax(query)
+            assert ok, message
+
+
+def test_parse_generate_nested_has_label_key_value_preserves_parameters():
+    cases = [
+        (
+            "g.V().filter(__.has('person', 'name', 'marko'))",
+            ".filter(__.has",
+            ".filter(__.has('person', 'name', 'marko'))",
+        ),
+        (
+            "g.V().where(__.has('person', 'name', 'marko'))",
+            ".where(__.has",
+            ".where(__.has('person', 'name', 'marko'))",
+        ),
+        (
+            "g.V().not(__.has('person', 'name', 'marko'))",
+            ".not(__.has",
+            ".not(__.has('person', 'name', 'marko'))",
+        ),
+    ]
+
+    for template, relevant_fragment, expected_fragment in cases:
+        generated_samples = _generate_samples_from_parsed_template(template)
+        generated_queries = [sample["query"] for sample in generated_samples]
+        complete_queries = [
+            sample["query"]
+            for sample in generated_samples
+            if sample["metadata"]["sample_kind"] == "complete" and relevant_fragment in sample["query"]
+        ]
+
+        assert generated_queries
+        assert all("..." not in query for query in generated_queries)
+        assert complete_queries
+        assert any(expected_fragment in query for query in complete_queries)
+        for query in complete_queries:
             ok, message = check_gremlin_syntax(query)
             assert ok, message
 
