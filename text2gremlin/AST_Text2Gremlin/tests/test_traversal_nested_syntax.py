@@ -293,6 +293,35 @@ def test_parse_generate_choose_function_keeps_raw_token_complete_sample_and_synt
     _assert_complete_generated_sample(template, expected_fragment)
 
 
+@pytest.mark.parametrize(
+    ("template", "step_name", "expected_param_count", "expected_fragment"),
+    [
+        ("g.V().range(0, 10)", "range", 2, "range(0, 10)"),
+        ("g.V().limit(5)", "limit", 1, "limit(5)"),
+        ("g.V().skip(2)", "skip", 1, "skip(2)"),
+        ("g.V().tail(2)", "tail", 1, "tail(2)"),
+    ],
+)
+def test_parse_generate_numeric_param_steps_preserve_arity_and_syntax(
+    template: str,
+    step_name: str,
+    expected_param_count: int,
+    expected_fragment: str,
+):
+    step = _parsed_step(template, step_name)
+    generated_samples = _generate_samples_from_parsed_template(template)
+    complete_queries = [
+        sample["query"] for sample in generated_samples if sample["metadata"]["sample_kind"] == "complete"
+    ]
+
+    assert len(step.params) == expected_param_count
+    assert complete_queries
+    assert any(expected_fragment in query for query in complete_queries), complete_queries
+    for query in complete_queries:
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+
+
 def test_empty_anonymous_traversal_generation_uses_identity_and_is_parseable():
     empty = AnonymousTraversal()
     generator = TraversalGenerator(

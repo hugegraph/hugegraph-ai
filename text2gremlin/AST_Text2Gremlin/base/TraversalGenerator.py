@@ -1125,22 +1125,25 @@ class TraversalGenerator:
 
         # 如果配方提供了参数，使用配方参数
         if params:
-            value = params[0]
+            params_str = ", ".join(self._format_param(param) for param in params)
+            desc_value = ", ".join(str(param) for param in params)
         else:
             # 否则在合理范围内随机生成
             min_val, max_val = config["range"]
             value = random.randint(min_val, max_val)
+            params_str = self._format_param(value)
+            desc_value = value
 
         # 从GremlinBase获取翻译
         desc = self.gremlin_base.get_token_desc(step_name)
 
         # 如果翻译中包含占位符，替换它
         if "{}" in desc:
-            desc = desc.format(value)
+            desc = desc.format(desc_value)
 
         return [
             {
-                "query_part": f".{step_name}({value})",
+                "query_part": f".{step_name}({params_str})",
                 "desc_part": f"，{desc}",
                 "new_label": current_label,
                 "new_type": current_type,
