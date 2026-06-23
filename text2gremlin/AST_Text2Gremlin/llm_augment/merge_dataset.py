@@ -59,6 +59,8 @@ def load_from_translated(path: str) -> list[dict]:
     corpus = data.get("corpus", [])
     pairs = []
     for item in corpus:
+        if "_error" in item:
+            continue
         query = item.get("query", "")
         if not query:
             continue
@@ -74,6 +76,7 @@ def load_from_translated(path: str) -> list[dict]:
                         "source": "llm_translated",
                         "language_style": style,
                         "domain": "movie",
+                        "source_metadata": item.get("metadata", {}),
                     }
                 )
     return pairs
@@ -88,6 +91,7 @@ def load_from_migrated(path: str) -> list[dict]:
     pairs = []
     for m in migrations:
         domain = m.get("target_domain", "unknown")
+        source_metadata = m.get("source_metadata", {})
         for sample in m.get("generated_samples", []):
             query = sample.get("query", "")
             nl = sample.get("natural_language", "")
@@ -100,6 +104,7 @@ def load_from_migrated(path: str) -> list[dict]:
                         "language_style": sample.get("language_style", "unknown"),
                         "domain": domain,
                         "operation": sample.get("operation", "unknown"),
+                        "source_metadata": source_metadata,
                     }
                 )
     return pairs
@@ -217,6 +222,7 @@ def main():
                 "operation": p["operation"],
                 "language_style": p["language_style"],
                 "source": p["source"],
+                "source_metadata": p.get("source_metadata", {}),
             }
             for p in all_pairs
         ],

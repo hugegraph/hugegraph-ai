@@ -184,6 +184,7 @@ def prepare_pairs(translated_path: str, output_dir: str = "output") -> tuple[str
                 "text": style_map[chosen_style],
                 "gremlin": item["query"],
                 "style": chosen_style,
+                "source_metadata": item.get("metadata", {}),
             }
         )
         style_counts[chosen_style] = style_counts.get(chosen_style, 0) + 1
@@ -442,6 +443,7 @@ async def migrate_one(
                 return {
                     "source_text": pair["text"],
                     "source_gremlin": pair["gremlin"],
+                    "source_metadata": pair.get("source_metadata", {}),
                     "target_domain": target_schema["domain"],
                     "target_name_zh": target_schema["name_zh"],
                     "source_pattern": validated.source_pattern,
@@ -463,6 +465,7 @@ def _fallback_migration(pair: dict, target_schema: dict, error: str) -> dict:
     return {
         "source_text": pair["text"],
         "source_gremlin": pair["gremlin"],
+        "source_metadata": pair.get("source_metadata", {}),
         "target_domain": target_schema["domain"],
         "target_name_zh": target_schema["name_zh"],
         "source_pattern": "",

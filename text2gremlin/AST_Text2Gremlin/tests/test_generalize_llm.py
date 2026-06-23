@@ -84,3 +84,49 @@ def test_translate_one_retries_transient_llm_exception(monkeypatch):
     assert completions.calls == 2
     assert "_error" not in result
     assert len(result["translations"]) == 6
+
+
+def test_translate_one_preserves_source_metadata(monkeypatch):
+    monkeypatch.setattr(generalize_llm, "pick_random_styles", lambda n=2: ["mixed_lang", "abbreviated"])
+
+    class FakeCompletions:
+        async def create(self, **_kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=(
+                                '{"zh_formal":"q1","zh_casual":"q2","en_formal":"q3",'
+                                '"en_casual":"q4","mixed_lang":"q5","abbreviated":"q6"}'
+                            )
+                        )
+                    )
+                ]
+            )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+    metadata = {"source_id": "movie-001", "template": "vertex_scan"}
+
+    result = asyncio.run(
+        generalize_llm.translate_one(
+            client,
+            {"query": "g.V()", "description": "查询所有顶点", "metadata": metadata},
+            asyncio.Semaphore(1),
+            {"model": "test", "temperature": 0, "max_retries": 1, "timeout": 1},
+        )
+    )
+
+    assert result["metadata"] == metadata
+
+
+def test_fallback_result_preserves_metadata_and_error():
+    metadata = {"source_id": "movie-002", "template": "fallback"}
+
+    result = generalize_llm._fallback_result(
+        {"query": "g.V()", "description": "查询所有顶点", "metadata": metadata},
+        ["zh_formal"],
+        error="boom",
+    )
+
+    assert result["metadata"] == metadata
+    assert result["_error"] == "boom"

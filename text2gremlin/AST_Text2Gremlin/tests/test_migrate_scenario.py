@@ -17,9 +17,12 @@
 
 # ruff: noqa: E402,I001
 
+import asyncio
+import json
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
@@ -30,6 +33,7 @@ generator_module.check_gremlin_syntax = lambda query: (True, "Syntax OK")
 sys.modules.setdefault("base", base_module)
 sys.modules.setdefault("base.generator", generator_module)
 
+from llm_augment import migrate_scenario
 from llm_augment.migrate_scenario import (
     GeneratedSample,
     build_migration_prompt,
@@ -155,3 +159,97 @@ def test_same_operation_filter_rejects_mismatched_operation_and_query_type():
 
     assert len(filtered) == 1
     assert filtered[0]["query"] == "g.V().hasLabel('person')"
+
+
+def test_prepare_pairs_persists_source_metadata(tmp_path, monkeypatch):
+    metadata = {"source_id": "movie-001", "template": "vertex_scan"}
+    translated_path = tmp_path / "translated.json"
+    translated_path.write_text(
+        json.dumps(
+            {
+                "corpus": [
+                    {
+                        "query": "g.V()",
+                        "metadata": metadata,
+                        "translations": [
+                            {"style": "zh_formal", "text": "查询所有顶点"},
+                            {"style": "en_formal", "text": "Find all vertices"},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(migrate_scenario.random, "choice", lambda styles: styles[0])
+    monkeypatch.setattr(migrate_scenario.random, "shuffle", lambda pairs: None)
+
+    pairs_path, pairs = migrate_scenario.prepare_pairs(str(translated_path), str(tmp_path))
+
+    assert pairs[0]["source_metadata"] == metadata
+    saved_pairs = json.loads(Path(pairs_path).read_text(encoding="utf-8"))["pairs"]
+    assert saved_pairs[0]["source_metadata"] == metadata
+
+
+def test_fallback_migration_preserves_source_metadata():
+    source_metadata = {"source_id": "movie-002", "template": "fallback"}
+
+    result = migrate_scenario._fallback_migration(
+        {"text": "查询所有顶点", "gremlin": "g.V()", "source_metadata": source_metadata},
+        {"domain": "social", "name_zh": "社交", "schema": SIMPLE_SCHEMA},
+        "boom",
+    )
+
+    assert result["source_metadata"] == source_metadata
+    assert result["_error"] == "boom"
+
+
+def test_migrate_one_preserves_source_metadata():
+    source_metadata = {"source_id": "movie-003", "template": "migrate"}
+
+    class FakeCompletions:
+        async def create(self, **_kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=json.dumps(
+                                {
+                                    "source_pattern": "start_vertex",
+                                    "source_intent": "Find all vertices",
+                                    "target_domain": "social",
+                                    "mapping_explanation": "Map movie vertices to users",
+                                    "generated_samples": [
+                                        {
+                                            "operation": "read",
+                                            "language_style": "en_formal",
+                                            "query": "g.V().hasLabel('user')",
+                                            "natural_language": "Find all users",
+                                        }
+                                    ],
+                                }
+                            )
+                        )
+                    )
+                ]
+            )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+
+    result = asyncio.run(
+        migrate_scenario.migrate_one(
+            client,
+            {
+                "text": "Find all movies",
+                "gremlin": "g.V().hasLabel('movie')",
+                "source_metadata": source_metadata,
+            },
+            {"domain": "social", "name_zh": "社交", "schema": SIMPLE_SCHEMA},
+            asyncio.Semaphore(1),
+            {"model": "test", "temperature": 0, "max_retries": 1},
+            {"migration_mode": "same_operation", "same_operation_sample_count": 1},
+        )
+    )
+
+    assert result["source_metadata"] == source_metadata
+    assert "_error" not in result

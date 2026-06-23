@@ -278,6 +278,7 @@ async def translate_one(
                 return {
                     "query": item["query"],
                     "description": item["description"],
+                    "metadata": item.get("metadata", {}),
                     "translations": translations,
                 }
 
@@ -299,6 +300,7 @@ def _fallback_result(item: dict, all_styles: list[str], error: str | None = None
     result = {
         "query": item["query"],
         "description": desc,
+        "metadata": item.get("metadata", {}),
         "translations": [{"style": style, "text": desc} for style in all_styles],
     }
     if error:

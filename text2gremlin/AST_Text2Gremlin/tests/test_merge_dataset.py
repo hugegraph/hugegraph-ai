@@ -17,6 +17,7 @@
 
 # ruff: noqa: E402
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -24,7 +25,8 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
-from llm_augment.merge_dataset import compute_crud_stats, guess_operation
+from llm_augment import merge_dataset
+from llm_augment.merge_dataset import compute_crud_stats, guess_operation, load_from_migrated, load_from_translated
 
 
 def test_guess_operation_classifies_common_gremlin_operations():
@@ -59,3 +61,130 @@ def test_main_exits_nonzero_when_required_inputs_are_missing(tmp_path):
 
     assert result.returncode == 1
     assert "未找到 llm_translated" in result.stderr
+
+
+def test_load_from_translated_skips_failed_items_and_preserves_metadata(tmp_path):
+    metadata = {"source_id": "movie-001", "template": "vertex_scan"}
+    translated_path = tmp_path / "translated.json"
+    translated_path.write_text(
+        json.dumps(
+            {
+                "corpus": [
+                    {
+                        "query": "g.V()",
+                        "metadata": metadata,
+                        "translations": [{"style": "zh_formal", "text": "查询所有顶点"}],
+                    },
+                    {
+                        "query": "g.E()",
+                        "metadata": {"source_id": "failed"},
+                        "translations": [{"style": "zh_formal", "text": "查询所有边"}],
+                        "_error": "translation failed",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    pairs = load_from_translated(str(translated_path))
+
+    assert len(pairs) == 1
+    assert pairs[0]["gremlin"] == "g.V()"
+    assert pairs[0]["source_metadata"] == metadata
+
+
+def test_load_from_migrated_preserves_source_metadata(tmp_path):
+    source_metadata = {"source_id": "movie-002", "template": "migrate"}
+    migrated_path = tmp_path / "migrated.json"
+    migrated_path.write_text(
+        json.dumps(
+            {
+                "migrations": [
+                    {
+                        "target_domain": "social",
+                        "source_metadata": source_metadata,
+                        "generated_samples": [
+                            {
+                                "query": "g.V().hasLabel('user')",
+                                "natural_language": "Find all users",
+                                "language_style": "en_formal",
+                                "operation": "read",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    pairs = load_from_migrated(str(migrated_path))
+
+    assert len(pairs) == 1
+    assert pairs[0]["source_metadata"] == source_metadata
+
+
+def test_main_output_corpus_preserves_source_metadata(tmp_path, monkeypatch):
+    translated_metadata = {"source_id": "movie-003", "template": "translate"}
+    migrated_metadata = {"source_id": "movie-004", "template": "migrate"}
+    translated_path = tmp_path / "llm_translated.json"
+    migrated_path = tmp_path / "migrated.json"
+    output_dir = tmp_path / "out"
+    translated_path.write_text(
+        json.dumps(
+            {
+                "corpus": [
+                    {
+                        "query": "g.V()",
+                        "metadata": translated_metadata,
+                        "translations": [{"style": "zh_formal", "text": "查询所有顶点"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    migrated_path.write_text(
+        json.dumps(
+            {
+                "migrations": [
+                    {
+                        "target_domain": "social",
+                        "source_metadata": migrated_metadata,
+                        "generated_samples": [
+                            {
+                                "query": "g.V().hasLabel('user')",
+                                "natural_language": "Find all users",
+                                "language_style": "en_formal",
+                                "operation": "read",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "merge_dataset",
+            "--translated",
+            str(translated_path),
+            "--migrated",
+            str(migrated_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    merge_dataset.main()
+
+    output_path = next(output_dir.glob("text2gremlin_dataset_*.json"))
+    corpus = json.loads(output_path.read_text(encoding="utf-8"))["corpus"]
+    assert [item["source_metadata"] for item in corpus] == [
+        translated_metadata,
+        migrated_metadata,
+    ]
