@@ -47,7 +47,7 @@ dependencies = [
     # LLM specific dependencies
     "openai",
     "ollama",
-    "retry",
+    "tenacity",
     "tiktoken",
     "nltk",
     "gradio",
