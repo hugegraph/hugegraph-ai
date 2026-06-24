@@ -326,7 +326,9 @@ def gremlin_cost_warnings(gremlin_query: str) -> list[str]:
     """轻量成本边界检查：只产 warning 不阻断。非完整 parser，仅挡明显风险。"""
 
     query_without_strings = _strip_string_literals(gremlin_query)
-    methods = [method.lower() for method in _extract_method_names(query_without_strings)]
+    methods = [
+        method.lower() for method in _extract_method_names(query_without_strings)
+    ]
     method_set = set(methods)
     warnings: list[str] = []
 
@@ -352,10 +354,11 @@ def gremlin_cost_warnings(gremlin_query: str) -> list[str]:
                         f"maximum {max_times}."
                     )
 
-    if (
-        any(method in method_set for method in ("path", "group", "profile"))
-        and method_set.isdisjoint({"limit", "range"})
-    ):
-        warnings.append("Heavy step (path/group/profile) without limit/range may be expensive.")
+    if any(
+        method in method_set for method in ("path", "group", "profile")
+    ) and method_set.isdisjoint({"limit", "range"}):
+        warnings.append(
+            "Heavy step (path/group/profile) without limit/range may be expensive."
+        )
 
     return list(dict.fromkeys(warnings))
