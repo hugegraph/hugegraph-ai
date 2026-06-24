@@ -39,7 +39,7 @@ class SchemaNode(BaseNode):
         from_user_defined=None,
     ):
         if from_hugegraph:
-            return SchemaManager(from_hugegraph)
+            return SchemaManager(from_hugegraph, connection=self.wk_input.graph_client_config)
         if from_user_defined:
             return CheckSchema(from_user_defined)
         if from_extraction:

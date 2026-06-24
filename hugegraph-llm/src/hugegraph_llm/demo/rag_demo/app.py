@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from hugegraph_llm.api.admin_api import admin_http_api
+from hugegraph_llm.api.graph_extract_api import graph_extract_http_api
 from hugegraph_llm.api.rag_api import rag_http_api
 from hugegraph_llm.api.thin_api import thin_router
 from hugegraph_llm.config import admin_settings, huge_settings, prompt
@@ -180,6 +181,7 @@ def create_app():
     )
     admin_http_api(api_auth, log_stream)
     api_auth.include_router(thin_router)
+    graph_extract_http_api(api_auth)
 
     app.include_router(api_auth)
     # Mount Gradio inside FastAPI
