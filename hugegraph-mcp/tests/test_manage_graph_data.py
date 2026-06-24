@@ -15,7 +15,11 @@ from copy import deepcopy
 import re
 
 from hugegraph_mcp.tools import manage_graph_data as manage_graph_data_module
-from hugegraph_mcp.tools.graph_data_gremlin import _g
+from hugegraph_mcp.tools.graph_data_gremlin import (
+    _create_edge_query,
+    _create_vertex_query,
+    _g,
+)
 
 
 def _live_schema():
@@ -668,6 +672,56 @@ def test_graph_data_to_change_plan_preserves_outv_inv_id_contract():
     assert edge_op["target_match"] == {"id": "1:Bob"}
 
 
+def test_graph_data_to_change_plan_object_id_endpoint_is_id():
+    result = manage_graph_data_module.graph_data_to_change_plan(
+        {
+            "vertices": [
+                {"id": "1:Alice", "label": "person", "properties": {"name": "Alice"}},
+                {"id": "1:Bob", "label": "person", "properties": {"name": "Bob"}},
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "source": {"id": "1:Alice"},
+                    "target_label": "person",
+                    "target": {"id": "1:Bob"},
+                }
+            ],
+        },
+        live_schema=_live_schema(),
+    )
+
+    edge_op = result["operations"][2]
+    assert edge_op["source_match"] == {"id": "1:Alice"}
+    assert edge_op["target_match"] == {"id": "1:Bob"}
+
+
+def test_graph_data_to_change_plan_object_primary_key_endpoint():
+    result = manage_graph_data_module.graph_data_to_change_plan(
+        {
+            "vertices": [
+                {"label": "person", "properties": {"name": "Alice"}},
+                {"label": "person", "properties": {"name": "Bob"}},
+            ],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "source": {"name": "Alice"},
+                    "target_label": "person",
+                    "target": {"name": "Bob"},
+                }
+            ],
+        },
+        live_schema=_live_schema(),
+    )
+
+    edge_op = result["operations"][2]
+    assert edge_op["source_match"] == {"name": "Alice"}
+    assert edge_op["target_match"] == {"name": "Bob"}
+
+
 def test_graph_data_to_change_plan_maps_scalar_endpoints_to_single_primary_key():
     result = manage_graph_data_module.graph_data_to_change_plan(
         {
@@ -760,7 +814,7 @@ def test_graph_data_to_change_plan_does_not_degrade_numeric_ids_to_properties():
 
 
 def test_create_vertex_query_preserves_explicit_id():
-    query = manage_graph_data_module._create_vertex_query(
+    query = _create_vertex_query(
         {
             "op": "create_vertex",
             "label": "person",
@@ -844,7 +898,7 @@ def test_dry_run_create_vertex_rejects_existing_primary_key(monkeypatch):
 
 
 def test_create_edge_query_matches_endpoints_by_id():
-    query = manage_graph_data_module._create_edge_query(
+    query = _create_edge_query(
         {
             "op": "create_edge",
             "label": "knows",

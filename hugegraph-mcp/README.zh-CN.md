@@ -137,6 +137,24 @@ confirm 阶段必须全量重验。dry-run 结果过期、目标图变化、sche
 
 响应需要包含已写数量、失败明细和可补偿建议，避免出现“半写半崩但不可追踪”。
 
+#### 边端点契约
+
+边端点同时支持 object 和 scalar 写法：
+
+```text
+object source/target  -> 原样透传
+  {"id": "1:Alice"}   -> 按 HugeGraph vertex id 匹配
+  {"name": "Alice"}   -> 按主键/属性匹配
+
+scalar source/target  -> 如果 live schema 中该端点 label 恰好是单主键，
+                         优先按该主键匹配；否则回退为 {"id": value}
+
+outV / inV / payload 中显式 vertex id -> 始终表示 HugeGraph vertex id，
+                                        不做主键改写
+```
+
+scalar 端点是 same-payload import 的便捷写法，但在单主键 live schema 下会按主键解析，可能匹配图中已存在的顶点；它不只在当前 payload 内查找。
+
 ### 删除语义
 
 `delete_graph_data_tool` 的删除是受控删除：
@@ -166,6 +184,9 @@ confirm 阶段必须全量重验。dry-run 结果过期、目标图变化、sche
 | `HUGEGRAPH_AI_URL` | `http://127.0.0.1:8001` | HugeGraph-AI 地址 |
 | `HUGEGRAPH_AI_GRAPH_URL` | 未设置 | AI 侧使用的图地址，未设置时使用 `HUGEGRAPH_URL` |
 | `HUGEGRAPH_MCP_TIMEOUT_SECONDS` | `30` | AI 调用超时时间 |
+| `HUGEGRAPH_MCP_MAX_REPEAT_TIMES` | `10` | `repeat().times(n)` 只读成本 warning 的建议最大值 |
+
+`HUGEGRAPH_MCP_TIMEOUT_SECONDS` 仅作用于 HugeGraph-AI HTTP 调用，不作用于 PyHugeClient 的 Gremlin 查询。只读 Gremlin 的成本边界由 read cost guard 以非阻塞 warning 形式提示，包括裸全图扫描、`repeat()` 无 `times()` 上限、以及 `path` / `group` / `profile` 无 `limit` 或 `range`。
 
 推荐默认安全姿态：
 

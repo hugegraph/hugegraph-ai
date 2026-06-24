@@ -25,7 +25,7 @@ from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
-from hugegraph_mcp.gremlin_policy import check_gremlin_read
+from hugegraph_mcp.gremlin_policy import check_gremlin_read, gremlin_cost_warnings
 from hugegraph_mcp.guard import Capability, guard_write
 from hugegraph_mcp.hugegraph_client import build_hugegraph_client
 
@@ -350,6 +350,7 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
                 "is_read": True,
             },
             duration_ms=duration_ms,
+            warnings=gremlin_cost_warnings(gremlin_query),
         )
     else:
         return _gremlin_error_envelope(result)

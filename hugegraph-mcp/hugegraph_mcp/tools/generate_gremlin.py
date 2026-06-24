@@ -97,8 +97,8 @@ def generate_gremlin(
 
     data["executed"] = True
     execution_result = execute_gremlin_read(gremlin)
-    data["execution_result"] = execution_result
     if isinstance(execution_result, dict) and execution_result.get("ok") is False:
+        data["execution_result"] = execution_result
         error = execution_result.get("error") or {}
         return envelope_err(
             error.get("type", ErrorType.FLOW_EXECUTION_FAILED),
@@ -113,11 +113,17 @@ def generate_gremlin(
             warnings=execution_result.get("warnings", []),
         )
     if isinstance(execution_result, dict) and execution_result.get("success") is False:
+        data["execution_result"] = execution_result
         return envelope_err(
             ErrorType.FLOW_EXECUTION_FAILED,
             "Generated Gremlin execution failed.",
             details={"gremlin": gremlin, "generation": data},
         )
+    if isinstance(execution_result, dict) and execution_result.get("ok") is True:
+        data["execution_result"] = execution_result.get("data")
+        data["execution_meta"] = execution_result.get("meta")
+    else:
+        data["execution_result"] = execution_result
     return envelope_ok(data)
 
 

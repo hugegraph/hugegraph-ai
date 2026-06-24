@@ -125,6 +125,29 @@ def test_manage_schema_design():
     assert result["data"]["next_thought_needed"] is True
 
 
+def test_manage_schema_design_does_not_fetch_live_schema(monkeypatch):
+    def raise_connection_error():
+        raise Exception("connection refused")
+
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", raise_connection_error
+    )
+
+    result = manage_schema(
+        mode="design",
+        operations=[
+            {
+                "thought": "Need a graph for users",
+                "thought_number": 1,
+                "total_thoughts": 4,
+                "next_thought_needed": True,
+            }
+        ],
+    )
+
+    assert result["ok"] is True
+
+
 def test_manage_schema_validate_valid(monkeypatch):
     monkeypatch.setattr(
         manage_schema_module.schema_tools, "get_live_schema", _empty_schema
@@ -135,6 +158,24 @@ def test_manage_schema_validate_valid(monkeypatch):
     assert result["ok"] is True
     assert result["data"]["valid"] is True
     assert result["data"]["errors"] == []
+
+
+def test_manage_schema_validate_returns_connection_failed_when_schema_unreachable(
+    monkeypatch,
+):
+    def raise_connection_error():
+        raise Exception("connection refused")
+
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", raise_connection_error
+    )
+
+    result = manage_schema(mode="validate", operations=[_property_key()])
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "CONNECTION_FAILED"
+    assert result["error"]["retryable"] is True
+    assert result["error"]["details"]["stage"] == "schema_fetch"
 
 
 def test_manage_schema_validate_invalid_missing_name(monkeypatch):
@@ -267,6 +308,24 @@ def test_manage_schema_validate_accepts_semantically_valid_operations(monkeypatc
     assert result["ok"] is True
     assert result["data"]["valid"] is True
     assert result["data"]["errors"] == []
+
+
+def test_manage_schema_dry_run_returns_connection_failed_when_schema_unreachable(
+    monkeypatch,
+):
+    def raise_connection_error():
+        raise Exception("connection refused")
+
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", raise_connection_error
+    )
+
+    result = manage_schema(mode="dry_run", operations=[_property_key()])
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "CONNECTION_FAILED"
+    assert result["error"]["retryable"] is True
+    assert result["error"]["details"]["stage"] == "schema_fetch"
 
 
 def test_same_batch_pk_to_vertex_label(monkeypatch):

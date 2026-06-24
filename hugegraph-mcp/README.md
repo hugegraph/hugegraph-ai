@@ -132,6 +132,25 @@ When `import_graph_data_tool(mode="ingest")` executes a create operation, it ret
 
 The response should include written counts, failure details, and compensation suggestions to avoid an untraceable partial write.
 
+#### Edge Endpoint Contract
+
+Edge endpoints accept both object and scalar forms:
+
+```text
+object source/target  -> forwarded as-is
+  {"id": "1:Alice"}   -> HugeGraph vertex id match
+  {"name": "Alice"}   -> primary-key/property match
+
+scalar source/target  -> if the live schema says the endpoint label has exactly
+                         one primary key, match by that primary key first;
+                         otherwise fall back to {"id": value}
+
+outV / inV / vertex id in payload -> always HugeGraph vertex id, with no
+                                     primary-key remapping
+```
+
+The scalar endpoint form is a same-payload import convenience, but under a single-primary-key live schema it is resolved as a primary-key match and may match an already existing vertex in the graph. It is not limited to vertices in the current payload.
+
 ### Delete Semantics
 
 `delete_graph_data_tool` is a controlled delete tool:
@@ -161,6 +180,9 @@ All configuration is read from environment variables.
 | `HUGEGRAPH_AI_URL` | `http://127.0.0.1:8001` | HugeGraph-AI URL |
 | `HUGEGRAPH_AI_GRAPH_URL` | unset | Graph URL used by HugeGraph-AI; defaults to `HUGEGRAPH_URL` when unset |
 | `HUGEGRAPH_MCP_TIMEOUT_SECONDS` | `30` | AI call timeout in seconds |
+| `HUGEGRAPH_MCP_MAX_REPEAT_TIMES` | `10` | Recommended maximum for read-cost warnings on `repeat().times(n)` |
+
+`HUGEGRAPH_MCP_TIMEOUT_SECONDS` only applies to HugeGraph-AI HTTP calls; it does not apply to PyHugeClient Gremlin queries. Read-only Gremlin cost boundaries are reported as non-blocking read cost guard warnings for bare full-graph scans, `repeat()` without a `times()` bound, and `path` / `group` / `profile` without `limit` or `range`.
 
 Recommended safe defaults:
 

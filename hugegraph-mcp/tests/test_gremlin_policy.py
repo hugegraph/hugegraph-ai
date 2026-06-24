@@ -17,6 +17,7 @@ from hugegraph_mcp.gremlin_policy import (
     GremlinDecision,
     GremlinPolicy,
     check_gremlin_read,
+    gremlin_cost_warnings,
 )
 
 
@@ -119,3 +120,44 @@ def test_edge_endpoint_where_traversal_is_safe():
 
     assert decision.allowed is True
     assert decision.classification == "safe"
+
+
+def test_gremlin_cost_warnings_bounded_limit_query_is_empty():
+    assert gremlin_cost_warnings("g.V().limit(10)") == []
+
+
+def test_gremlin_cost_warnings_count_query_is_empty():
+    assert gremlin_cost_warnings("g.V().count()") == []
+
+
+def test_gremlin_cost_warnings_unbounded_query_mentions_limit():
+    warnings = gremlin_cost_warnings("g.V()")
+
+    assert warnings
+    assert any("limit" in warning for warning in warnings)
+
+
+def test_gremlin_cost_warnings_repeat_without_times():
+    warnings = gremlin_cost_warnings("g.V().repeat(out())")
+
+    assert any("repeat" in warning and "times" in warning for warning in warnings)
+
+
+def test_gremlin_cost_warnings_repeat_times_exceeds_threshold(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_MAX_REPEAT_TIMES", "10")
+
+    warnings = gremlin_cost_warnings("g.V().repeat(out()).times(100).limit(10)")
+
+    assert any("depth" in warning or "maximum" in warning for warning in warnings)
+
+
+def test_gremlin_cost_warnings_group_with_limit_is_not_heavy_warning():
+    warnings = gremlin_cost_warnings('g.V().group().by("name").limit(5)')
+
+    assert not any("Heavy step" in warning for warning in warnings)
+
+
+def test_gremlin_cost_warnings_group_without_limit_is_heavy_warning():
+    warnings = gremlin_cost_warnings("g.V().group()")
+
+    assert any("Heavy step" in warning for warning in warnings)

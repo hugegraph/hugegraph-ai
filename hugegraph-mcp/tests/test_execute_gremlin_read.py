@@ -100,6 +100,34 @@ def test_execute_gremlin_read_counts_empty_hugegraph_data_shape(monkeypatch):
     assert result["data"]["total"] == 0
 
 
+def test_execute_gremlin_read_includes_unbounded_cost_warning(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeGremlinClient()
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V()")
+
+    assert result["ok"] is True
+    assert result["warnings"]
+
+
+def test_execute_gremlin_read_has_no_cost_warning_for_limited_query(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeGremlinClient()
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().limit(2)")
+
+    assert result["ok"] is True
+    assert result["warnings"] == []
+
+
 def test_execute_gremlin_read_counts_single_string_as_one(monkeypatch):
     from hugegraph_mcp import gremlin_tools
 

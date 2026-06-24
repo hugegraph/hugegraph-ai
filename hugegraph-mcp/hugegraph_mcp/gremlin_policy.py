@@ -22,6 +22,7 @@ gremlin_safety.py 保留为兼容 wrapper，重新导出公共 API。
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from typing import Literal
@@ -34,6 +35,7 @@ GremlinSafety = GremlinClassification  # 兼容别名
 _METHOD_RE = re.compile(r"\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 _READ_START_RE = re.compile(r"^\s*g\s*\.\s*(?:V|E)\s*\(", re.IGNORECASE)
 _DYNAMIC_MARKERS = ("${", "#{", "->")
+_MAX_REPEAT_TIMES = 10
 _ALLOWED_ARG_TOKENS = {"true", "false", "null"}
 _WRITE_METHODS = {
     "addv",
@@ -305,3 +307,55 @@ _policy = GremlinPolicy()
 def check_gremlin_read(gremlin_query: str) -> GremlinDecision:
     """便捷函数：使用默认策略检查 Gremlin 查询。"""
     return _policy.check_read(gremlin_query)
+
+
+def _parse_repeat_threshold() -> int:
+    value = os.getenv("HUGEGRAPH_MCP_MAX_REPEAT_TIMES")
+    if value is None or value.strip() == "":
+        return _MAX_REPEAT_TIMES
+    try:
+        parsed = int(value)
+    except ValueError:
+        return _MAX_REPEAT_TIMES
+    if parsed <= 0:
+        return _MAX_REPEAT_TIMES
+    return parsed
+
+
+def gremlin_cost_warnings(gremlin_query: str) -> list[str]:
+    """轻量成本边界检查：只产 warning 不阻断。非完整 parser，仅挡明显风险。"""
+
+    query_without_strings = _strip_string_literals(gremlin_query)
+    methods = [method.lower() for method in _extract_method_names(query_without_strings)]
+    method_set = set(methods)
+    warnings: list[str] = []
+
+    if method_set.isdisjoint({"limit", "range", "count"}):
+        warnings.append(
+            "Unbounded traversal: result set is not limited; consider adding "
+            ".limit() or .range()."
+        )
+
+    if "repeat" in method_set:
+        if "times" not in method_set:
+            warnings.append(
+                "repeat() without times() may recurse without an explicit depth bound."
+            )
+        else:
+            max_times = _parse_repeat_threshold()
+            match = re.search(r"times\(\s*(\d+)\s*\)", query_without_strings)
+            if match is not None:
+                depth = int(match.group(1))
+                if depth > max_times:
+                    warnings.append(
+                        f"repeat().times(n) depth {depth} exceeds recommended "
+                        f"maximum {max_times}."
+                    )
+
+    if (
+        any(method in method_set for method in ("path", "group", "profile"))
+        and method_set.isdisjoint({"limit", "range"})
+    ):
+        warnings.append("Heavy step (path/group/profile) without limit/range may be expensive.")
+
+    return list(dict.fromkeys(warnings))

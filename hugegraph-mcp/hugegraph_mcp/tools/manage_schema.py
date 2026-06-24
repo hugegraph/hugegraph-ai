@@ -459,8 +459,26 @@ def _mutation_summary(operations: list[dict[str, Any]]) -> str:
     return "Schema operations planned: " + ", ".join(parts)
 
 
-def dry_run_schema_operations(operations: list[dict[str, Any]]) -> dict[str, Any]:
-    live_schema = current_live_schema()
+def _safe_fetch_live_schema() -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    try:
+        return current_live_schema(), None
+    except Exception as exc:
+        return None, envelope_err(
+            ErrorType.CONNECTION_FAILED,
+            "Cannot read live schema from HugeGraph Server for schema validation.",
+            suggestion=(
+                "Ensure HugeGraph Server is running and credentials/graphspace are "
+                "correct, then retry."
+            ),
+            retryable=True,
+            details={"stage": "schema_fetch", "error": str(exc)},
+        )
+
+
+def dry_run_schema_operations(
+    operations: list[dict[str, Any]], live_schema: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    live_schema = current_live_schema(live_schema)
     validation = validate_schema_operations(operations, live_schema)
     if not validation["valid"]:
         return validation
@@ -510,10 +528,16 @@ def manage_schema(
         return envelope_ok(_design_from_operations(operations))
 
     if mode == "validate":
-        return envelope_ok(validate_schema_operations(operations))
+        live_schema, error = _safe_fetch_live_schema()
+        if error:
+            return error
+        return envelope_ok(validate_schema_operations(operations, live_schema))
 
     if mode == "dry_run":
-        return envelope_ok(dry_run_schema_operations(operations))
+        live_schema, error = _safe_fetch_live_schema()
+        if error:
+            return error
+        return envelope_ok(dry_run_schema_operations(operations, live_schema))
 
     return envelope_err(
         ErrorType.SCHEMA_MISMATCH,
