@@ -878,7 +878,7 @@ class TraversalGenerator:
             # constant接受一个值参数
             if step_params:
                 value = step_params[0]
-                value_str = f"'{value}'" if isinstance(value, str) else str(value)
+                value_str = self._format_param(value)
                 options.append(
                     {
                         "query_part": f".{step_name}({value_str})",
@@ -2479,26 +2479,34 @@ class TraversalGenerator:
                     ]
 
                     for id_val in selected_ids:
+                        id_str = self._format_param(id_val)
                         options.append(
                             {
-                                "query_part": f".hasId({id_val})",
-                                "desc_part": f"，筛选ID为{id_val}的元素",
+                                "query_part": f".hasId({id_str})",
+                                "desc_part": f"，筛选ID为{id_str}的元素",
                                 "new_label": current_label,
                                 "new_type": current_type,
                             }
                         )
                 else:
-                    # 多参数：使用多参数泛化，保持参数数量一致
-                    id_combinations = self.controller.select_multi_param_schema_options(
-                        recipe_params=[str(i) for i in recipe_ids],  # 转为字符串便于处理
-                        all_options=[str(i) for i in all_ids],
-                        chain_category=chain_category,
+                    # 多参数：数值ID沿用数值组合泛化；非数值ID保留原配方，避免破坏Object ID语义
+                    use_numeric_id_combinations = all(
+                        isinstance(recipe_id, int) and not isinstance(recipe_id, bool) for recipe_id in recipe_ids
                     )
+                    if use_numeric_id_combinations:
+                        id_combinations = self.controller.select_multi_param_schema_options(
+                            recipe_params=[str(i) for i in recipe_ids],  # 转为字符串便于处理
+                            all_options=[str(i) for i in all_ids],
+                            chain_category=chain_category,
+                        )
+                    else:
+                        id_combinations = [recipe_ids]
 
                     for combo in id_combinations:
-                        # 转回整数
-                        int_combo = [int(i) for i in combo]
-                        ids_str = ", ".join(str(i) for i in int_combo)
+                        if use_numeric_id_combinations:
+                            ids_str = ", ".join(self._format_param(int(i)) for i in combo)
+                        else:
+                            ids_str = ", ".join(self._format_param(i) for i in combo)
                         options.append(
                             {
                                 "query_part": f".hasId({ids_str})",
@@ -2510,16 +2518,17 @@ class TraversalGenerator:
             else:
                 # 没有控制器，只保留原配方
                 if param_count == 1:
+                    id_str = self._format_param(recipe_ids[0])
                     options.append(
                         {
-                            "query_part": f".hasId({recipe_ids[0]})",
-                            "desc_part": f"，筛选ID为{recipe_ids[0]}的元素",
+                            "query_part": f".hasId({id_str})",
+                            "desc_part": f"，筛选ID为{id_str}的元素",
                             "new_label": current_label,
                             "new_type": current_type,
                         }
                     )
                 else:
-                    ids_str = ", ".join(str(i) for i in recipe_ids)
+                    ids_str = ", ".join(self._format_param(i) for i in recipe_ids)
                     options.append(
                         {
                             "query_part": f".hasId({ids_str})",

@@ -363,6 +363,13 @@ def test_parse_generate_sample_param_preserves_literal_and_syntax():
         ("g.V().hasValue(false)", "hasValue", [False], "hasValue(false)"),
         ("g.V().hasValue(null)", "hasValue", [None], "hasValue(null)"),
         ("g.V().values('active').is(true)", "is", [True], "is(true)"),
+        ("g.V().constant(true)", "constant", [True], "constant(true)"),
+        ("g.V().constant(false)", "constant", [False], "constant(false)"),
+        ("g.V().constant(null)", "constant", [None], "constant(null)"),
+        ("g.V().hasId(true)", "hasId", [True], "hasId(true)"),
+        ("g.V().hasId(null)", "hasId", [None], "hasId(null)"),
+        ("g.V().hasId('abc')", "hasId", ["abc"], "hasId('abc')"),
+        ("g.V().hasId('abc', 'def')", "hasId", ["abc", "def"], "hasId('abc', 'def')"),
     ],
 )
 def test_parse_generate_generic_literals_preserves_gremlin_bool_and_null(
