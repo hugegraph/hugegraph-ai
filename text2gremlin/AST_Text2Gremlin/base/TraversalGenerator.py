@@ -1267,7 +1267,7 @@ class TraversalGenerator:
         # inject - 支持多参数
         elif step_info.get("multi_param"):
             if step_params:
-                params_str = ", ".join([str(p) for p in step_params])
+                params_str = ", ".join(self._format_param(p) for p in step_params)
             else:
                 params_str = "1, 2, 3"  # 默认值
             return [
@@ -2308,10 +2308,11 @@ class TraversalGenerator:
 
                             prop_desc = self.gremlin_base.get_schema_desc(prop_name)
                             for value in selected_values:
+                                value_str = self._format_param(value)
                                 options.append(
                                     {
-                                        "query_part": f".has('{prop_name}', {value!r})",
-                                        "desc_part": f"，其'{prop_desc}'为'{value}'",
+                                        "query_part": f".has('{prop_name}', {value_str})",
+                                        "desc_part": f"，其'{prop_desc}'为{value_str}",
                                         "new_label": current_label,
                                         "new_type": current_type,
                                     }
@@ -2340,7 +2341,7 @@ class TraversalGenerator:
                                 # 生成查询选项
                                 prop_desc = self.gremlin_base.get_schema_desc(prop_name)
                                 for combo in generated_combos:
-                                    values_str = ", ".join(repr(v) for v in combo)
+                                    values_str = ", ".join(self._format_param(v) for v in combo)
                                     options.append(
                                         {
                                             "query_part": f".has('{prop_name}', {values_str})",
@@ -2351,7 +2352,7 @@ class TraversalGenerator:
                                     )
 
                             # 确保包含原配方组合
-                            values_str = ", ".join(repr(v) for v in recipe_values)
+                            values_str = ", ".join(self._format_param(v) for v in recipe_values)
                             prop_desc = self.gremlin_base.get_schema_desc(prop_name)
                             recipe_option = {
                                 "query_part": f".has('{prop_name}', {values_str})",
@@ -2399,10 +2400,11 @@ class TraversalGenerator:
 
                             prop_desc = self.gremlin_base.get_schema_desc(recipe_prop)
                             for value in selected_values:
+                                value_str = self._format_param(value)
                                 options.append(
                                     {
-                                        "query_part": f".has('{recipe_prop}', {value!r})",
-                                        "desc_part": f"，其'{prop_desc}'为'{value}'",
+                                        "query_part": f".has('{recipe_prop}', {value_str})",
+                                        "desc_part": f"，其'{prop_desc}'为{value_str}",
                                         "new_label": label,
                                         "new_type": current_type,
                                     }
@@ -2431,7 +2433,7 @@ class TraversalGenerator:
                                 # 生成查询选项
                                 prop_desc = self.gremlin_base.get_schema_desc(recipe_prop)
                                 for combo in generated_combos:
-                                    values_str = ", ".join(repr(v) for v in combo)
+                                    values_str = ", ".join(self._format_param(v) for v in combo)
                                     options.append(
                                         {
                                             "query_part": f".has('{recipe_prop}', {values_str})",
@@ -2442,7 +2444,7 @@ class TraversalGenerator:
                                     )
 
                             # 确保包含原配方组合
-                            values_str = ", ".join(repr(v) for v in recipe_values)
+                            values_str = ", ".join(self._format_param(v) for v in recipe_values)
                             prop_desc = self.gremlin_base.get_schema_desc(recipe_prop)
                             recipe_option = {
                                 "query_part": f".has('{recipe_prop}', {values_str})",
@@ -2689,10 +2691,11 @@ class TraversalGenerator:
 
             # 生成单值选项
             for value in selected_values:
+                value_str = self._format_param(value)
                 options.append(
                     {
-                        "query_part": f".hasValue({value!r})",
-                        "desc_part": f"，筛选包含值{value!r}的属性",
+                        "query_part": f".hasValue({value_str})",
+                        "desc_part": f"，筛选包含值{value_str}的属性",
                         "new_label": current_label,
                         "new_type": current_type,
                     }
@@ -2700,7 +2703,7 @@ class TraversalGenerator:
 
             # 如果配方有多个值，也生成多值选项
             if len(recipe_values) > 1:
-                values_str = ", ".join(repr(v) for v in recipe_values)
+                values_str = ", ".join(self._format_param(v) for v in recipe_values)
                 options.append(
                     {
                         "query_part": f".hasValue({values_str})",
@@ -3190,7 +3193,7 @@ class TraversalGenerator:
         if step_name == "V":
             if step_params:
                 # V(id) - 指定ID
-                ids = ", ".join([repr(p) for p in step_params])
+                ids = ", ".join(self._format_param(p) for p in step_params)
                 return [
                     {
                         "query_part": f".V({ids})",
@@ -3221,8 +3224,9 @@ class TraversalGenerator:
                 )
                 if prop_info:
                     prop_value = self._get_random_value(label, prop_info, for_update=True)
-                    query_part += f".property('{prop_name}', {prop_value!r})"
-                    desc_part += f"，并设置其'{self.gremlin_base.get_schema_desc(prop_name)}'为'{prop_value}'"
+                    value_str = self._format_param(prop_value)
+                    query_part += f".property('{prop_name}', {value_str})"
+                    desc_part += f"，并设置其'{self.gremlin_base.get_schema_desc(prop_name)}'为{value_str}"
 
             return [{"query_part": query_part, "desc_part": desc_part, "new_label": label, "new_type": "vertex"}]
 
@@ -3257,7 +3261,7 @@ class TraversalGenerator:
                     return options
                 else:
                     # 单参数或无控制器：保留原配方
-                    ids = ", ".join([repr(p) for p in step_params])
+                    ids = ", ".join(self._format_param(p) for p in step_params)
                     return [
                         {
                             "query_part": f".E({ids})",
@@ -3406,14 +3410,16 @@ class TraversalGenerator:
                         key = step_params[1]
                         value = step_params[2]
                         extra_params = step_params[3:] if len(step_params) > 3 else []
+                        key_str = self._format_param(key)
+                        value_str = self._format_param(value)
 
                         result = []
                         # 基础变体
                         if extra_params:
-                            extra_str = ", ".join([f"'{p}'" if isinstance(p, str) else str(p) for p in extra_params])
-                            query_part = f".property({card_type}('{card_value}'), '{key}', '{value}', {extra_str})"
+                            extra_str = ", ".join(self._format_param(p) for p in extra_params)
+                            query_part = f".property({card_type}('{card_value}'), {key_str}, {value_str}, {extra_str})"
                         else:
-                            query_part = f".property({card_type}('{card_value}'), '{key}', '{value}')"
+                            query_part = f".property({card_type}('{card_value}'), {key_str}, {value_str})"
 
                         result.append(
                             {
@@ -3429,14 +3435,16 @@ class TraversalGenerator:
                     key = step_params[0]
                     value = step_params[1]
                     extra_params = step_params[2:] if len(step_params) > 2 else []
+                    key_str = self._format_param(key)
+                    value_str = self._format_param(value)
 
                     result = []
                     # 基础变体
                     if extra_params:
-                        extra_str = ", ".join([f"'{p}'" if isinstance(p, str) else str(p) for p in extra_params])
-                        query_part = f".property('{key}', '{value}', {extra_str})"
+                        extra_str = ", ".join(self._format_param(p) for p in extra_params)
+                        query_part = f".property({key_str}, {value_str}, {extra_str})"
                     else:
-                        query_part = f".property('{key}', '{value}')"
+                        query_part = f".property({key_str}, {value_str})"
 
                     result.append(
                         {

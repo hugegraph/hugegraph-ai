@@ -1409,6 +1409,13 @@ class GremlinTransVisitor(GremlinVisitor):
     def visitGenericLiteral(self, ctx: GremlinParser.GenericLiteralContext):
         # 处理通用字面量，可能是字符串、数字等
         text = ctx.getText()
+        lowered = text.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "null":
+            return None
         # 尝试解析为不同类型
         if text.startswith('"') or text.startswith("'"):
             return text.strip("'\"")

@@ -356,6 +356,64 @@ def test_parse_generate_sample_param_preserves_literal_and_syntax():
         assert ok, message
 
 
+@pytest.mark.parametrize(
+    ("template", "step_name", "expected_params", "expected_fragment"),
+    [
+        ("g.V().hasValue(true)", "hasValue", [True], "hasValue(true)"),
+        ("g.V().hasValue(false)", "hasValue", [False], "hasValue(false)"),
+        ("g.V().hasValue(null)", "hasValue", [None], "hasValue(null)"),
+        ("g.V().values('active').is(true)", "is", [True], "is(true)"),
+    ],
+)
+def test_parse_generate_generic_literals_preserves_gremlin_bool_and_null(
+    template: str,
+    step_name: str,
+    expected_params: list,
+    expected_fragment: str,
+):
+    step = _parsed_step(template, step_name)
+    generated_samples = _generate_samples_from_parsed_template(template)
+    complete_queries = [
+        sample["query"] for sample in generated_samples if sample["metadata"]["sample_kind"] == "complete"
+    ]
+
+    assert step.params == expected_params
+    assert complete_queries
+    assert any(expected_fragment in query for query in complete_queries), complete_queries
+    for query in complete_queries:
+        assert "'true'" not in query
+        assert "'false'" not in query
+        assert "'null'" not in query
+        assert "True" not in query
+        assert "False" not in query
+        assert "None" not in query
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+
+
+@pytest.mark.parametrize(
+    ("step", "expected_fragment"),
+    [
+        (Step("hasValue", [True]), "hasValue(true)"),
+        (Step("hasValue", [None]), "hasValue(null)"),
+        (Step("property", ["active", True]), "property('active', true)"),
+        (Step("inject", [True, None]), "inject(true, null)"),
+    ],
+)
+def test_direct_steps_format_bool_and_null_as_gremlin_literals(step: Step, expected_fragment: str):
+    complete_queries = _generate_complete_queries_from_steps([Step("V"), step])
+
+    assert complete_queries
+    assert any(expected_fragment in query for query in complete_queries), complete_queries
+    for query in complete_queries:
+        assert "'true'" not in query
+        assert "'null'" not in query
+        assert "True" not in query
+        assert "None" not in query
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+
+
 def test_no_param_range_numeric_fallback_generates_valid_bounds_and_syntax():
     complete_queries = _generate_complete_queries_from_steps([Step("V"), Step("range", [])])
 

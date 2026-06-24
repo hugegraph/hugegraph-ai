@@ -20,18 +20,11 @@
 import asyncio
 import json
 import sys
-import types
 from pathlib import Path
 from types import SimpleNamespace
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
-
-base_module = types.ModuleType("base")
-generator_module = types.ModuleType("base.generator")
-generator_module.check_gremlin_syntax = lambda query: (True, "Syntax OK")
-sys.modules.setdefault("base", base_module)
-sys.modules.setdefault("base.generator", generator_module)
 
 from llm_augment import migrate_scenario
 from llm_augment.migrate_scenario import (
