@@ -130,6 +130,7 @@ def test_groups_are_server_level():
     auth2.list_groups()
     assert "auth/groups" in sess2.last
 
+
 class _VersionResponse:
     def __init__(self, core: str):
         self._core = core
