@@ -115,6 +115,16 @@ class _SiblingController:
         return min(2, available_count)
 
 
+class _MultiParamController(_SiblingController):
+    max_total = {}
+
+    def select_multi_param_schema_options(self, recipe_params, all_options, chain_category):
+        return [recipe_params]
+
+    def should_apply_random_enhancement(self, is_terminal: bool, current_enhancement_count: int) -> bool:
+        return False
+
+
 def _anonymous_out(label: str) -> AnonymousTraversal:
     traversal = AnonymousTraversal()
     traversal.add_step(Step("out", [label]))
@@ -370,6 +380,8 @@ def test_parse_generate_sample_param_preserves_literal_and_syntax():
         ("g.V().hasId(null)", "hasId", [None], "hasId(null)"),
         ("g.V().hasId('abc')", "hasId", ["abc"], "hasId('abc')"),
         ("g.V().hasId('abc', 'def')", "hasId", ["abc", "def"], "hasId('abc', 'def')"),
+        ("g.E('abc', 'def')", "E", ["abc", "def"], "E('abc', 'def')"),
+        ("g.E(true, null)", "E", [True, None], "E(true, null)"),
     ],
 )
 def test_parse_generate_generic_literals_preserves_gremlin_bool_and_null(
@@ -417,6 +429,43 @@ def test_direct_steps_format_bool_and_null_as_gremlin_literals(step: Step, expec
         assert "'null'" not in query
         assert "True" not in query
         assert "None" not in query
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+
+
+@pytest.mark.parametrize(
+    ("template", "expected_params", "expected_fragment"),
+    [
+        ("g.E('abc', 'def')", ["abc", "def"], "E('abc', 'def')"),
+        ("g.E(true, null)", [True, None], "E(true, null)"),
+    ],
+)
+def test_parse_generate_e_object_ids_with_controller_preserves_gremlin_literals(
+    template: str,
+    expected_params: list,
+    expected_fragment: str,
+):
+    recipe = GremlinTransVisitor().parse_and_visit(template)
+    assert recipe is not None
+    assert recipe.steps[-1].name == "E"
+    assert recipe.steps[-1].params == expected_params
+
+    generator = TraversalGenerator(
+        schema=_Schema(),
+        recipe=recipe,
+        gremlin_base=_GremlinBase(),
+        controller=_MultiParamController(),
+    )
+    complete_queries = [
+        sample["query"] for sample in generator.generate_samples() if sample["metadata"]["sample_kind"] == "complete"
+    ]
+
+    assert complete_queries
+    assert any(expected_fragment in query for query in complete_queries), complete_queries
+    for query in complete_queries:
+        assert "True" not in query
+        assert "None" not in query
+        assert "E(abc" not in query
         ok, message = check_gremlin_syntax(query)
         assert ok, message
 

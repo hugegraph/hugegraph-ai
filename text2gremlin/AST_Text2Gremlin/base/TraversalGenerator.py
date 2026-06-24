@@ -3247,18 +3247,26 @@ class TraversalGenerator:
                 all_ids = list(range(1, 101))
 
                 if self.controller and param_count > 1:
-                    # 多参数：使用多参数泛化
-                    chain_category = self.controller.get_chain_category(len(self.recipe.steps))
-                    id_combinations = self.controller.select_multi_param_schema_options(
-                        recipe_params=[str(i) for i in step_params],
-                        all_options=[str(i) for i in all_ids],
-                        chain_category=chain_category,
+                    # 多参数：数值ID沿用数值组合泛化；非数值ID保留原配方，避免破坏Object ID语义
+                    use_numeric_id_combinations = all(
+                        isinstance(step_param, int) and not isinstance(step_param, bool) for step_param in step_params
                     )
+                    if use_numeric_id_combinations:
+                        chain_category = self.controller.get_chain_category(len(self.recipe.steps))
+                        id_combinations = self.controller.select_multi_param_schema_options(
+                            recipe_params=[str(i) for i in step_params],
+                            all_options=[str(i) for i in all_ids],
+                            chain_category=chain_category,
+                        )
+                    else:
+                        id_combinations = [step_params]
 
                     options = []
                     for combo in id_combinations:
-                        int_combo = [int(i) for i in combo]
-                        ids_str = ", ".join(str(i) for i in int_combo)
+                        if use_numeric_id_combinations:
+                            ids_str = ", ".join(self._format_param(int(i)) for i in combo)
+                        else:
+                            ids_str = ", ".join(self._format_param(i) for i in combo)
                         options.append(
                             {
                                 "query_part": f".E({ids_str})",
