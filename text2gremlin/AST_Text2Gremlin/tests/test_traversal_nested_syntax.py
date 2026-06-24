@@ -117,6 +117,13 @@ class _SiblingController:
 
 class _MultiParamController(_SiblingController):
     max_total = {}
+    config = {
+        "property_generalization": {
+            "medium": {
+                "additional_random_max": 2,
+            }
+        }
+    }
 
     def select_multi_param_schema_options(self, recipe_params, all_options, chain_category):
         return [recipe_params]
@@ -466,6 +473,43 @@ def test_parse_generate_e_object_ids_with_controller_preserves_gremlin_literals(
         assert "True" not in query
         assert "None" not in query
         assert "E(abc" not in query
+        ok, message = check_gremlin_syntax(query)
+        assert ok, message
+
+
+@pytest.mark.parametrize(
+    ("template", "expected_params", "expected_queries"),
+    [
+        ("g.V().hasId('abc')", ["abc"], {"g.V().hasId('abc')"}),
+        ("g.V().hasId(true)", [True], {"g.V().hasId(true)"}),
+        ("g.V().hasId(null)", [None], {"g.V().hasId(null)"}),
+    ],
+)
+def test_parse_generate_has_id_object_id_with_controller_does_not_cross_type_generalize(
+    template: str,
+    expected_params: list,
+    expected_queries: set[str],
+):
+    recipe = GremlinTransVisitor().parse_and_visit(template)
+    assert recipe is not None
+    assert recipe.steps[-1].name == "hasId"
+    assert recipe.steps[-1].params == expected_params
+
+    generator = TraversalGenerator(
+        schema=_Schema(),
+        recipe=recipe,
+        gremlin_base=_GremlinBase(),
+        controller=_MultiParamController(),
+    )
+    complete_queries = {
+        sample["query"] for sample in generator.generate_samples() if sample["metadata"]["sample_kind"] == "complete"
+    }
+
+    assert complete_queries == expected_queries
+    for query in complete_queries:
+        assert "True" not in query
+        assert "None" not in query
+        assert "hasId(abc)" not in query
         ok, message = check_gremlin_syntax(query)
         assert ok, message
 

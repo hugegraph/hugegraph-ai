@@ -2469,14 +2469,17 @@ class TraversalGenerator:
                 chain_category = self.controller.get_chain_category(len(self.recipe.steps))
 
                 if param_count == 1:
-                    # 单参数：使用原有的单参数泛化
+                    # 单参数：数值ID可泛化；Object ID只保留原配方，避免跨类型改写
                     recipe_id = recipe_ids[0]
-                    strategy = self.controller.config["property_generalization"][chain_category]
-                    max_ids = strategy.get("additional_random_max", 3)
-                    selected_ids = [
-                        recipe_id,
-                        *random.sample([i for i in all_ids if i != recipe_id], min(max_ids, len(all_ids) - 1)),
-                    ]
+                    if isinstance(recipe_id, int) and not isinstance(recipe_id, bool):
+                        strategy = self.controller.config["property_generalization"][chain_category]
+                        max_ids = strategy.get("additional_random_max", 3)
+                        selected_ids = [
+                            recipe_id,
+                            *random.sample([i for i in all_ids if i != recipe_id], min(max_ids, len(all_ids) - 1)),
+                        ]
+                    else:
+                        selected_ids = [recipe_id]
 
                     for id_val in selected_ids:
                         id_str = self._format_param(id_val)
