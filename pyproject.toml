@@ -46,6 +46,7 @@ dev = [
     "pylint~=3.0.0",
     "ruff>=0.11.0",
     "mypy>=1.16.1",
+    "ty>=0.0.51",  # pre-stable (0.0.x): consider tight pinning to avoid surprise breakage
     "pre-commit>=3.5.0",
 ]
 
@@ -197,3 +198,6 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = true
+
+[tool.ty.rules]
+# Start permissive; tighten incrementally as errors are fixed
