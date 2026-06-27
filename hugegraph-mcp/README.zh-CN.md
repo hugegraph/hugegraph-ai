@@ -144,7 +144,7 @@ confirm 阶段必须全量重验。dry-run 结果过期、目标图变化、sche
 ```text
 object source/target  -> 原样透传
   {"id": "1:Alice"}   -> 按 HugeGraph vertex id 匹配
-  {"name": "Alice"}   -> 按主键/属性匹配
+  {"name": "Alice"}   -> 按完整主键匹配；任意属性匹配不属于 public graph_data 契约
 
 scalar source/target  -> 如果 live schema 中该端点 label 恰好是单主键，
                          优先按该主键匹配；否则回退为 {"id": value}

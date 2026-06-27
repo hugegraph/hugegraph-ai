@@ -139,7 +139,8 @@ Edge endpoints accept both object and scalar forms:
 ```text
 object source/target  -> forwarded as-is
   {"id": "1:Alice"}   -> HugeGraph vertex id match
-  {"name": "Alice"}   -> primary-key/property match
+  {"name": "Alice"}   -> complete primary-key match; arbitrary property
+                         matching is not part of the public graph_data contract
 
 scalar source/target  -> if the live schema says the endpoint label has exactly
                          one primary key, match by that primary key first;

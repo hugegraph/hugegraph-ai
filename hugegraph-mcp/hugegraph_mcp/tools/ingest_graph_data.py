@@ -110,6 +110,12 @@ def _edge_endpoint(edge: dict[str, Any], endpoint: str) -> tuple[Any, Any]:
     return label, value
 
 
+def _has_mixed_endpoint_forms(edge: dict[str, Any], endpoint: str) -> bool:
+    if endpoint == "source":
+        return "source" in edge and "outV" in edge
+    return "target" in edge and "inV" in edge
+
+
 def _identity_value_present(value: Any) -> bool:
     return value is not None and value != ""
 
@@ -579,6 +585,14 @@ def validate_graph_payload(
             label = edge.get("label")
             src_label, source = _edge_endpoint(edge, "source")
             tgt_label, target = _edge_endpoint(edge, "target")
+            if _has_mixed_endpoint_forms(edge, "source"):
+                errors.append(
+                    f"edge {idx} mixes source and outV endpoint forms; use either source/source_label or outV/outVLabel, not both"
+                )
+            if _has_mixed_endpoint_forms(edge, "target"):
+                errors.append(
+                    f"edge {idx} mixes target and inV endpoint forms; use either target/target_label or inV/inVLabel, not both"
+                )
             if label in (None, ""):
                 errors.append(f"edge {idx} missing required field: label")
             if src_label in (None, ""):

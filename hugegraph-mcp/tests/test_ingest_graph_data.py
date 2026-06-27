@@ -361,6 +361,52 @@ def test_validate_graph_payload_allows_explicit_id_endpoint_without_primary_key(
     assert result["valid"] is True
 
 
+def test_validate_graph_payload_rejects_mixed_source_endpoint_forms():
+    result = ingest_graph_data_module.validate_graph_payload(
+        {
+            "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "source": {"name": "Alice"},
+                    "outV": "1:Alice",
+                    "outVLabel": "person",
+                    "target_label": "person",
+                    "target": {"name": "Bob"},
+                }
+            ],
+        },
+        live_schema=_live_schema(),
+    )
+
+    assert result["valid"] is False
+    assert any("mixes source and outV endpoint forms" in e for e in result["errors"])
+
+
+def test_validate_graph_payload_rejects_mixed_target_endpoint_forms():
+    result = ingest_graph_data_module.validate_graph_payload(
+        {
+            "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "source": {"name": "Alice"},
+                    "target_label": "person",
+                    "target": {"name": "Bob"},
+                    "inV": "1:Bob",
+                    "inVLabel": "person",
+                }
+            ],
+        },
+        live_schema=_live_schema(),
+    )
+
+    assert result["valid"] is False
+    assert any("mixes target and inV endpoint forms" in e for e in result["errors"])
+
+
 def test_ingest_graph_data_rejects_edge_endpoint_missing_primary_key(monkeypatch):
     _mock_schema(monkeypatch)
 
