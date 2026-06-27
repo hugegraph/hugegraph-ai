@@ -149,7 +149,7 @@ outV / inV / vertex id in payload -> always HugeGraph vertex id, with no
                                      primary-key remapping
 ```
 
-The scalar endpoint form is a same-payload import convenience, but under a single-primary-key live schema it is resolved as a primary-key match and may match an already existing vertex in the graph. It is not limited to vertices in the current payload.
+The scalar endpoint form is a same-payload import convenience, but under a single-primary-key live schema it is resolved as a primary-key match and may match an already existing vertex in the graph. It is not limited to vertices in the current payload, so edge-only or edge-to-existing-vertex payloads are valid when the dry-run live match resolves each endpoint to exactly one vertex.
 
 ### Delete Semantics
 

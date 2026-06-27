@@ -319,7 +319,7 @@ def test_ingest_graph_data_rejects_missing_schema_primary_key(monkeypatch):
     )
 
 
-def test_ingest_graph_data_rejects_edge_target_not_in_payload(monkeypatch):
+def test_ingest_graph_data_allows_edge_target_outside_payload(monkeypatch):
     _mock_schema(monkeypatch)
 
     result = ingest_graph_data_module.ingest_graph_data(
@@ -337,12 +337,28 @@ def test_ingest_graph_data_rejects_edge_target_not_in_payload(monkeypatch):
         }
     )
 
-    assert result["ok"] is False
-    assert result["error"]["type"] == "SCHEMA_MISMATCH"
-    assert any(
-        "edge 0 target endpoint not found for label 'person': {'name': 'Bob'}" in e
-        for e in result["error"]["details"]["errors"]
+    assert result["ok"] is True
+    assert result["data"]["mutation_summary"] == {"vertices": 1, "edges": 1}
+
+
+def test_validate_graph_payload_allows_explicit_id_endpoint_without_primary_key():
+    result = ingest_graph_data_module.validate_graph_payload(
+        {
+            "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "target_label": "person",
+                    "source": {"name": "Alice"},
+                    "target": {"id": "1:Bob"},
+                }
+            ],
+        },
+        live_schema=_live_schema(),
     )
+
+    assert result["valid"] is True
 
 
 def test_ingest_graph_data_rejects_edge_endpoint_missing_primary_key(monkeypatch):

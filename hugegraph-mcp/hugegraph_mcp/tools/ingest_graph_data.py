@@ -140,6 +140,8 @@ def _endpoint_identities(
                 if pk not in value or not _identity_value_present(value.get(pk))
             ]
             if missing:
+                if identities:
+                    return identities, None
                 return identities, missing[0]
             identities.append(
                 (label, "pk", tuple(value.get(pk) for pk in primary_keys))
@@ -673,10 +675,6 @@ def validate_graph_payload(
                         f"edge {idx} {endpoint_name} scalar endpoint is ambiguous for "
                         f"label '{endpoint_label}': {_format_endpoint_value(endpoint_value)} "
                         "matches different vertices by id and primary key"
-                    )
-                elif not matched_vertex_indices:
-                    errors.append(
-                        f"edge {idx} {endpoint_name} endpoint not found for label '{endpoint_label}': {_format_endpoint_value(endpoint_value)}"
                     )
 
     if isinstance(edges, list):

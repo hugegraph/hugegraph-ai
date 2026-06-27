@@ -747,6 +747,28 @@ def test_graph_data_to_change_plan_maps_scalar_endpoints_to_single_primary_key()
     assert edge_op["target_match"] == {"name": "Bob"}
 
 
+def test_graph_data_to_change_plan_maps_edge_only_scalar_to_single_primary_key():
+    result = manage_graph_data_module.graph_data_to_change_plan(
+        {
+            "vertices": [],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "source": "Alice",
+                    "target_label": "person",
+                    "target": "Bob",
+                }
+            ],
+        },
+        live_schema=_live_schema(),
+    )
+
+    edge_op = result["operations"][0]
+    assert edge_op["source_match"] == {"name": "Alice"}
+    assert edge_op["target_match"] == {"name": "Bob"}
+
+
 def test_manage_graph_data_import_uses_primary_key_for_scalar_endpoints(monkeypatch):
     _mock_schema(monkeypatch)
     reads = []
@@ -783,6 +805,51 @@ def test_manage_graph_data_import_uses_primary_key_for_scalar_endpoints(monkeypa
     assert result["ok"] is True
     assert not any("hasId('Alice')" in query for query in reads)
     assert not any("hasId('Bob')" in query for query in reads)
+    assert reads[-2:] == [
+        "g.V().hasLabel('person').has('name','Alice').count()",
+        "g.V().hasLabel('person').has('name','Bob').count()",
+    ]
+
+
+def test_manage_graph_data_import_allows_edge_to_existing_vertex(monkeypatch):
+    _mock_schema(monkeypatch)
+    counts = iter([0, 0, 1])
+    reads = []
+
+    def fake_read(query):
+        reads.append(query)
+        return {"data": [next(counts)], "total": 1, "duration_ms": 1, "is_read": True}
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        fake_read,
+    )
+
+    result = manage_graph_data_module.manage_graph_data(
+        mode="import",
+        graph_data={
+            "vertices": [{"label": "person", "properties": {"name": "Alice"}}],
+            "edges": [
+                {
+                    "label": "knows",
+                    "source_label": "person",
+                    "source": "Alice",
+                    "target_label": "person",
+                    "target": "Bob",
+                }
+            ],
+        },
+    )
+
+    assert result["ok"] is True
+    preview = result["data"]["preview"][1]
+    assert preview["source_planned_count"] == 1
+    assert preview["source_live_count"] == 0
+    assert preview["source_matched_count"] == 1
+    assert preview["target_planned_count"] == 0
+    assert preview["target_live_count"] == 1
+    assert preview["target_matched_count"] == 1
     assert reads[-2:] == [
         "g.V().hasLabel('person').has('name','Alice').count()",
         "g.V().hasLabel('person').has('name','Bob').count()",

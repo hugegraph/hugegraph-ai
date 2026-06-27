@@ -153,7 +153,7 @@ outV / inV / payload 中显式 vertex id -> 始终表示 HugeGraph vertex id，
                                         不做主键改写
 ```
 
-scalar 端点是 same-payload import 的便捷写法，但在单主键 live schema 下会按主键解析，可能匹配图中已存在的顶点；它不只在当前 payload 内查找。
+scalar 端点是 same-payload import 的便捷写法，但在单主键 live schema 下会按主键解析，可能匹配图中已存在的顶点；它不只在当前 payload 内查找。因此 edge-only 或连接 payload 外已有顶点的输入是合法的，前提是 dry-run 的 live match 能把每个端点唯一解析到一个顶点。
 
 ### 删除语义
 

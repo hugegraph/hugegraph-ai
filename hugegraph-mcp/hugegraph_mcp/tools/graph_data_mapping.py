@@ -155,8 +155,8 @@ def _edge_endpoint_match(
 ) -> dict[str, Any]:
     """确定边端点的匹配条件。
 
-    source/target 对象保持原样；scalar 在单主键 schema 下优先匹配 payload
-    顶点主键，显式 payload id 与 outV/inV 始终保持 id 语义。
+    source/target 对象保持原样；scalar 在单主键 schema 下优先匹配主键，
+    允许指向已存在顶点；显式 payload id 与 outV/inV 始终保持 id 语义。
     """
     explicit_endpoint = endpoint in edge
     if endpoint == "source":
@@ -186,6 +186,10 @@ def _edge_endpoint_match(
                 primary_key_value = primary_key_values.get(
                     (endpoint_label, fallback_id.split(":", 1)[1])
                 )
-            if primary_key is not None and primary_key_value is not None:
-                return {primary_key: primary_key_value}
+            if primary_key is not None:
+                return {
+                    primary_key: primary_key_value
+                    if primary_key_value is not None
+                    else fallback_id
+                }
     return {"id": fallback_id}
