@@ -19,8 +19,14 @@
 import json
 from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Optional
 
+import httpx
 import ollama
-from retry import retry
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.utils.log import log
@@ -34,13 +40,17 @@ class OllamaClient(BaseLLM):
         self.client = ollama.Client(host=f"http://{host}:{port}", **kwargs)
         self.async_client = ollama.AsyncClient(host=f"http://{host}:{port}", **kwargs)
 
-    @retry(tries=3, delay=1)
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type((ollama.ResponseError, httpx.ConnectError, httpx.TimeoutException)),
+    )
     def generate(
         self,
         messages: Optional[List[Dict[str, Any]]] = None,
         prompt: Optional[str] = None,
     ) -> str:
-        """Comment"""
+        """Generate a response to the query messages/prompt."""
         if messages is None:
             assert prompt is not None, "Messages or prompt must be provided."
             messages = [{"role": "user", "content": prompt}]
@@ -56,17 +66,21 @@ class OllamaClient(BaseLLM):
             }
             log.info("Token usage: %s", json.dumps(usage))
             return response["message"]["content"]
-        except Exception as e:
-            print(f"Retrying LLM call {e}")
-            raise e
+        except (ollama.ResponseError, httpx.ConnectError, httpx.TimeoutException) as e:
+            log.error("Retrying LLM call %s", e)
+            raise
 
-    @retry(tries=3, delay=1)
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type((ollama.ResponseError, httpx.ConnectError, httpx.TimeoutException)),
+    )
     async def agenerate(
         self,
         messages: Optional[List[Dict[str, Any]]] = None,
         prompt: Optional[str] = None,
     ) -> str:
-        """Comment"""
+        """Generate a response to the query messages/prompt asynchronously."""
         if messages is None:
             assert prompt is not None, "Messages or prompt must be provided."
             messages = [{"role": "user", "content": prompt}]
@@ -82,9 +96,9 @@ class OllamaClient(BaseLLM):
             }
             log.info("Token usage: %s", json.dumps(usage))
             return response["message"]["content"]
-        except Exception as e:
-            print(f"Retrying LLM call {e}")
-            raise e
+        except (ollama.ResponseError, httpx.ConnectError, httpx.TimeoutException) as e:
+            log.error("Retrying LLM call %s", e)
+            raise
 
     def generate_streaming(
         self,
@@ -92,7 +106,7 @@ class OllamaClient(BaseLLM):
         prompt: Optional[str] = None,
         on_token_callback: Optional[Callable] = None,
     ) -> Generator[str, None, None]:
-        """Comment"""
+        """Stream response tokens one by one."""
         if messages is None:
             assert prompt is not None, "Messages or prompt must be provided."
             messages = [{"role": "user", "content": prompt}]
@@ -112,7 +126,7 @@ class OllamaClient(BaseLLM):
         prompt: Optional[str] = None,
         on_token_callback: Optional[Callable] = None,
     ) -> AsyncGenerator[str, None]:
-        """Comment"""
+        """Stream response tokens one by one."""
         if messages is None:
             assert prompt is not None, "Messages or prompt must be provided."
             messages = [{"role": "user", "content": prompt}]
@@ -124,9 +138,9 @@ class OllamaClient(BaseLLM):
                 if on_token_callback:
                     on_token_callback(token)
                 yield token
-        except Exception as e:
-            print(f"Retrying LLM call {e}")
-            raise e
+        except (ollama.ResponseError, httpx.ConnectError, httpx.TimeoutException) as e:
+            log.error("Error in agenerate_streaming: %s", e)
+            raise
 
     def num_tokens_from_string(
         self,

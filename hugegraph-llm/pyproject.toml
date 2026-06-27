@@ -47,7 +47,7 @@ dependencies = [
     # LLM specific dependencies
     "openai",
     "ollama",
-    "retry",
+    "tenacity",
     "tiktoken",
     "nltk",
     "gradio",
@@ -99,11 +99,6 @@ allow-direct-references = true
 [tool.uv.sources]
 hugegraph-python-client = { workspace = true }
 pycgraph = { git = "https://github.com/ChunelFeng/CGraph.git", subdirectory = "python", tag = "v3.2.2", marker = "platform_machine == 'aarch64'" }
-
-[tool.mypy]
-disable_error_code = ["import-untyped"]
-check_untyped_defs = true
-disallow_untyped_defs = false
 
 [tool.ruff]
 line-length = 120
