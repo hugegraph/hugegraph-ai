@@ -11,76 +11,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
+"""Gremlin 执行层 — 封装 HugeGraph Gremlin 读写客户端。
+
+所有 Gremlin 查询统一通过 GremlinExecutor 执行，对连接失败/认证错误/
+HTTP 错误/语法错误做结构化错误收集，不抛异常到上层。
+"""
+
 import time
-from dataclasses import dataclass
 from typing import Any
 
 import requests
 from pyhugegraph.client import PyHugeClient
 
-
-@dataclass
-class HugeGraphGremlinConfig:
-    url: str = "http://127.0.0.1:8080"
-    graph: str = "hugegraph"
-    user: str = "admin"
-    password: str = "xxx"
-    graphspace: str | None = "DEFAULT"  # HugeGraph 1.7.0+ enhanced graph space support
-
-    @classmethod
-    def from_env(cls) -> "HugeGraphGremlinConfig":
-        # 支持字符串拼接格式：HUGEGRAPH_GRAPH_PATH="DEFAULT/hugegraph"，仅此一种方式
-        graph_path = os.getenv("HUGEGRAPH_GRAPH_PATH") or "DEFAULT/hugegraph"
-
-        if "/" in graph_path:
-            graphspace, graph = graph_path.split("/", 1)
-        else:
-            graphspace, graph = "DEFAULT", graph_path
-
-        graphspace = (graphspace or "DEFAULT").strip() or "DEFAULT"
-        graph = (graph or "hugegraph").strip() or "hugegraph"
-
-        return cls(
-            url=os.getenv("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
-            graph=graph,
-            user=os.getenv("HUGEGRAPH_USER", "admin"),
-            password=os.getenv("HUGEGRAPH_PASSWORD", "xxx"),
-            graphspace=graphspace,
-        )
-
-
-_cfg = HugeGraphGremlinConfig.from_env()
+from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
+from hugegraph_mcp.gremlin_policy import check_gremlin_read, gremlin_cost_warnings
+from hugegraph_mcp.guard import Capability, guard_write
+from hugegraph_mcp.hugegraph_client import build_hugegraph_client
 
 
 class GremlinExecutor:
-    """Encapsulate HugeGraph Gremlin read/write clients.
+    """封装 HugeGraph Gremlin 读写客户端，自动处理 graphspace 兼容性。
 
-    HugeGraph 1.7.0+ compatible with enhanced graph space support.
-    Uses HTTP REST + pyhugegraph.gremlin(), ready for WebSocket or URL splitting.
+    HugeGraph 1.7.0+ 支持 graph space，配置为空时回退到默认客户端。
     """
 
-    def __init__(self, cfg: HugeGraphGremlinConfig) -> None:
+    def __init__(self, cfg: MCPConfig) -> None:
         self._cfg = cfg
 
     def _build_client(self) -> PyHugeClient:
-        # HugeGraph 1.7.0+ graph space support - only use if explicitly set
-        if self._cfg.graphspace and self._cfg.graphspace.strip():
-            return PyHugeClient(
-                url=self._cfg.url,
-                graph=self._cfg.graph,
-                user=self._cfg.user,
-                pwd=self._cfg.password,
-                graphspace=self._cfg.graphspace.strip(),
-            )
-        else:
-            # Default client without graphspace for 1.7.0 compatibility
-            return PyHugeClient(
-                url=self._cfg.url,
-                graph=self._cfg.graph,
-                user=self._cfg.user,
-                pwd=self._cfg.password,
-            )
+        return build_hugegraph_client(self._cfg, client_cls=PyHugeClient)
 
     def get_read_client(self):
         return self._build_client().gremlin()
@@ -89,65 +49,163 @@ class GremlinExecutor:
         return self._build_client().gremlin()
 
 
-_executor = GremlinExecutor(_cfg)
+_GREMLIN_ERROR_TYPE_MAP = {
+    "connection_error": ErrorType.CONNECTION_FAILED,
+    "timeout_error": ErrorType.TIMEOUT,
+    "authentication_error": ErrorType.AUTHENTICATION_FAILED,
+    "authorization_error": ErrorType.AUTHORIZATION_FAILED,
+    "no_index_error": ErrorType.NO_INDEX,
+    "query_syntax_error": ErrorType.QUERY_SYNTAX_ERROR,
+    "server_error": ErrorType.SERVER_ERROR,
+    "http_error": ErrorType.SERVER_ERROR,
+    "not_found_error": ErrorType.NOT_FOUND,
+    "unknown_error": ErrorType.SERVER_ERROR,
+}
 
 
 def _get_read_client():
-    return _executor.get_read_client()
+    return GremlinExecutor(MCPConfig.from_env()).get_read_client()
 
 
 def _get_write_client():
-    return _executor.get_write_client()
+    return GremlinExecutor(MCPConfig.from_env()).get_write_client()
 
 
-_WRITE_KEYWORDS = ("addV", "addE", "dropV", "dropE", "property(")
+def _gremlin_error_envelope(result: dict[str, Any]) -> dict[str, Any]:
+    error_type = _GREMLIN_ERROR_TYPE_MAP.get(
+        result.get("error_type"),
+        ErrorType.SERVER_ERROR,
+    )
+    suggestions = result.get("suggestions") or []
+    suggestion = "; ".join(suggestions) if suggestions else None
+    return envelope_err(
+        error_type,
+        result.get("message", "Gremlin query failed"),
+        suggestion=suggestion,
+        retryable=_gremlin_error_retryable(result),
+        details=result,
+        duration_ms=result.get("duration_ms"),
+    )
+
+
+def _gremlin_error_retryable(result: dict[str, Any]) -> bool:
+    error_type = result.get("error_type")
+    if error_type in {"connection_error", "timeout_error"}:
+        return True
+    if error_type not in {"server_error", "http_error"}:
+        return False
+
+    try:
+        status_code = int(result.get("status_code"))
+    except (TypeError, ValueError):
+        return error_type == "server_error"
+    return status_code in {500, 502, 503, 504}
+
+
+def _gremlin_result_count(data: Any) -> int:
+    """Return the number of result items from HugeGraph/PyHugeGraph shapes."""
+    if data is None:
+        return 0
+    if isinstance(data, dict) and "data" in data:
+        inner_data = data.get("data")
+        if inner_data is None:
+            return 0
+        if isinstance(inner_data, (list, tuple, set)):
+            return len(inner_data)
+        return 1
+    if isinstance(data, (list, tuple, set)):
+        return len(data)
+    return 1
+
+
+def _is_no_index_error(message: Any) -> bool:
+    lowered = str(message).lower()
+    return "noindexexception" in lowered or "no index" in lowered
+
+
+def _no_index_error_result(
+    message: str,
+    duration_ms: float,
+    operation_type: str,
+) -> dict[str, Any]:
+    return {
+        "success": False,
+        "error_type": "no_index_error",
+        "message": message,
+        "suggestions": [
+            "Create an index for the queried property before using has() filters",
+            "Use primary-key based lookups when possible",
+            "Check HugeGraph schema index labels with inspect_graph_tool",
+        ],
+        "duration_ms": duration_ms,
+        "operation_type": operation_type,
+    }
+
+
+def _get_client_address(client) -> str:
+    """Extract server address from a pyhugegraph client for error messages.
+
+    pyhugegraph does not expose a public URL getter; we read the private
+    ``_url`` attribute with a ``hasattr`` guard as a last resort.  This is
+    safe for error-reporting purposes only and should not be relied on for
+    logic.
+    """
+    if client is not None and hasattr(client, "_url"):
+        return str(client._url)
+    return "unknown address"
 
 
 def _execute_gremlin_with_error_handling(
     client, gremlin_query: str, operation_type: str = "read"
 ) -> dict[str, Any]:
-    """Execute Gremlin query with comprehensive error handling.
+    """执行 Gremlin 查询并做结构化错误处理。
 
-    Args:
-        client: The Gremlin client instance
-        gremlin_query: The Gremlin query to execute
-        operation_type: "read" or "write" for context in error messages
-
-    Returns:
-        Dict containing either successful result or structured error information
+    连接失败、HTTP 错误、语法错误等均返回结构化 dict 而非抛异常，
+    便于上层统一处理。区分 401/403/404/500 等状态码给出针对性建议。
     """
-    start = time.time()
+    start = time.perf_counter()
+    actual_client = None
 
     try:
-        data = client.exec(gremlin_query)
-        duration_ms = (time.time() - start) * 1000.0
-
-        # Try to count results
-        try:
-            count = len(data)  # type: ignore[arg-type]
-        except TypeError:
-            count = 1 if data is not None else 0
+        actual_client = client() if callable(client) else client
+        data = actual_client.exec(gremlin_query)
+        duration_ms = (time.perf_counter() - start) * 1000.0
 
         return {
             "success": True,
             "data": data,
-            "count": count,
+            "count": _gremlin_result_count(data),
             "duration_ms": duration_ms,
             "operation_type": operation_type,
         }
 
     except requests.exceptions.ConnectionError:
+        address = _get_client_address(actual_client)
         return {
             "success": False,
             "error_type": "connection_error",
-            "message": f"Cannot connect to HugeGraph server at "
-            f"{client._url if hasattr(client, '_url') else 'unknown address'}",
+            "message": f"Cannot connect to HugeGraph server at {address}",
             "suggestions": [
                 "Check if HugeGraph server is running",
                 "Verify the HUGEGRAPH_URL environment variable",
                 "Check network connectivity to the server",
             ],
-            "duration_ms": (time.time() - start) * 1000.0,
+            "duration_ms": (time.perf_counter() - start) * 1000.0,
+            "operation_type": operation_type,
+        }
+
+    except requests.exceptions.Timeout:
+        address = _get_client_address(actual_client)
+        return {
+            "success": False,
+            "error_type": "timeout_error",
+            "message": f"HugeGraph request timed out at {address}",
+            "suggestions": [
+                "Retry the request after checking HugeGraph server health",
+                "Verify the query is bounded and can complete within the client timeout",
+                "Check network latency to the server",
+            ],
+            "duration_ms": (time.perf_counter() - start) * 1000.0,
             "operation_type": operation_type,
         }
 
@@ -181,15 +239,13 @@ def _execute_gremlin_with_error_handling(
             ]
         elif status_code == 500:
             error_type = "server_error"
-            # Try to extract detailed error message from response body
+            # 尝试从响应体中提取 HugeGraph 详细错误信息
             detail_message = ""
             try:
                 if hasattr(e, "response") and e.response is not None:
                     error_json = e.response.json()
-                    # HugeGraph returns error in format: {"exception": "detailed message"}
                     detail_message = error_json.get("exception") or ""
                     if not detail_message:
-                        # Try other common fields
                         detail_message = (
                             error_json.get("message")
                             or error_json.get("detail")
@@ -197,9 +253,15 @@ def _execute_gremlin_with_error_handling(
                             or str(error_json)
                         )
             except Exception:
-                pass  # Use default message if extraction fails
+                pass
 
             if detail_message:
+                if _is_no_index_error(detail_message):
+                    return _no_index_error_result(
+                        f"Query requires an index: {detail_message}",
+                        (time.perf_counter() - start) * 1000.0,
+                        operation_type,
+                    )
                 message = f"HugeGraph server internal error: {detail_message}"
             else:
                 message = "HugeGraph server internal error"
@@ -220,7 +282,7 @@ def _execute_gremlin_with_error_handling(
             "message": message,
             "status_code": status_code,
             "suggestions": suggestions,
-            "duration_ms": (time.time() - start) * 1000.0,
+            "duration_ms": (time.perf_counter() - start) * 1000.0,
             "operation_type": operation_type,
         }
 
@@ -234,81 +296,94 @@ def _execute_gremlin_with_error_handling(
                 "Verify all steps and parameters are valid",
                 "Ensure proper use of Gremlin traversal steps",
             ],
-            "duration_ms": (time.time() - start) * 1000.0,
+            "duration_ms": (time.perf_counter() - start) * 1000.0,
             "operation_type": operation_type,
         }
 
     except Exception as e:
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        message = f"Unexpected error: {e!s}"
+        if _is_no_index_error(message):
+            return _no_index_error_result(message, duration_ms, operation_type)
         return {
             "success": False,
             "error_type": "unknown_error",
-            "message": f"Unexpected error: {e!s}",
+            "message": message,
             "suggestions": [
                 "Check HugeGraph server logs",
                 "Verify the query format and parameters",
                 "Try a simpler query to test connectivity",
             ],
-            "duration_ms": (time.time() - start) * 1000.0,
+            "duration_ms": duration_ms,
             "operation_type": operation_type,
         }
 
 
 def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
-    """Execute a read-only Gremlin query and return standardized metadata.
+    """执行只读 Gremlin 查询。
 
-    - Rejects queries that clearly contain write keywords.
-    - Returns: {data, total, duration_ms, is_read} or structured error information.
+    通过 GremlinPolicy.check_read() 做安全检查，
+    拒绝写入类和无法确定的查询，只放行明确安全的遍历。
+    返回 {data, total, duration_ms, is_read}。
     """
 
-    # Validate query doesn't contain write operations
-    lowered = gremlin_query.lower()
-    if any(k.lower() in lowered for k in _WRITE_KEYWORDS):
-        # For backward compatibility, raise ValueError as expected by existing tests
-        raise ValueError("execute_gremlin_read does not allow write operations")
-
-    client = _get_read_client()
-    result = _execute_gremlin_with_error_handling(client, gremlin_query, "read")
-
-    # Transform successful result to match expected format
-    if result.get("success"):
-        return {
-            "data": result["data"],
-            "total": result["count"],
-            "duration_ms": result["duration_ms"],
-            "is_read": True,
-        }
-    else:
-        # Return error result as-is (already structured)
-        return result
-
-
-def execute_gremlin_write(gremlin_query: str) -> dict[str, Any]:
-    """Execute a Gremlin write query and return affected count & metadata.
-
-    Behaviour as per tests:
-    - Uses a dedicated write client.
-    - When HUGEGRAPH_MCP_READONLY is true, raise PermissionError.
-    - Returns structured error information for all failure cases.
-    """
-
-    # Global readonly guard for all write operations
-    if os.getenv("HUGEGRAPH_MCP_READONLY", "").lower() in {"1", "true", "yes"}:
-        # For backward compatibility with existing tests, raise PermissionError
-        raise PermissionError(
-            "HugeGraph MCP server is in read-only mode; write queries are disabled"
+    decision = check_gremlin_read(gremlin_query)
+    if not decision.allowed:
+        return envelope_err(
+            ErrorType.UNSAFE_GREMLIN,
+            decision.reason,
+            suggestion=decision.suggestion,
+            details={"classification": decision.classification},
         )
 
-    client = _get_write_client()
-    result = _execute_gremlin_with_error_handling(client, gremlin_query, "write")
+    result = _execute_gremlin_with_error_handling(
+        _get_read_client, gremlin_query, "read"
+    )
 
-    # Transform successful result to match expected format
     if result.get("success"):
-        return {
-            "success": True,
-            "affected": result["count"],
-            "duration_ms": result["duration_ms"],
-            "is_write": True,
-        }
+        duration_ms = result["duration_ms"]
+        return envelope_ok(
+            {
+                "data": result["data"],
+                "total": result["count"],
+                "duration_ms": duration_ms,
+                "is_read": True,
+            },
+            duration_ms=duration_ms,
+            warnings=gremlin_cost_warnings(gremlin_query),
+        )
     else:
-        # Return error result as-is (already structured)
-        return result
+        return _gremlin_error_envelope(result)
+
+
+def execute_gremlin_write(
+    gremlin_query: str,
+    *,
+    capability: Capability = Capability.DATA_WRITE,
+) -> dict[str, Any]:
+    """执行 Gremlin 写查询。
+
+    readonly 模式下通过 guard_write 拒绝执行，
+    正常模式返回 {success, affected, duration_ms, is_write}。
+    """
+
+    violation = guard_write(capability)
+    if violation is not None:
+        return violation
+
+    result = _execute_gremlin_with_error_handling(
+        _get_write_client, gremlin_query, "write"
+    )
+
+    if result.get("success"):
+        duration_ms = result["duration_ms"]
+        return envelope_ok(
+            {
+                "affected": result["count"],
+                "duration_ms": duration_ms,
+                "is_write": True,
+            },
+            duration_ms=duration_ms,
+        )
+    else:
+        return _gremlin_error_envelope(result)

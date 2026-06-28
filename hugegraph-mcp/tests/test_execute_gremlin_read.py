@@ -11,16 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import sys
-from pathlib import Path
-
-import pytest
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 
 class FakeGremlinClient:
     def __init__(self):
@@ -30,6 +20,34 @@ class FakeGremlinClient:
         self.last_query = query
         # return a fake list result
         return ["alice", "bob"]
+
+
+class FakeHugeGraphShapeClient:
+    def __init__(self, data):
+        self.data = data
+        self.last_query = None
+
+    def exec(self, query: str):
+        self.last_query = query
+        return self.data
+
+
+class FakePyHugeClient:
+    init_kwargs: list[dict] = []
+
+    def __init__(self, url: str, graph: str, user: str, pwd: str, graphspace=None):
+        self.init_kwargs.append(
+            {
+                "url": url,
+                "graph": graph,
+                "user": user,
+                "pwd": pwd,
+                "graphspace": graphspace,
+            }
+        )
+
+    def gremlin(self):
+        return FakeGremlinClient()
 
 
 def test_execute_gremlin_read_basic(monkeypatch):
@@ -45,9 +63,97 @@ def test_execute_gremlin_read_basic(monkeypatch):
     result = gremlin_tools.execute_gremlin_read("g.V().limit(2)")
 
     assert client.last_query == "g.V().limit(2)"
-    assert result["is_read"] is True
-    assert result["total"] == 2
-    assert isinstance(result["duration_ms"], (int, float))
+    assert result["ok"] is True
+    assert result["error"] is None
+    assert result["data"]["is_read"] is True
+    assert result["data"]["total"] == 2
+    assert isinstance(result["data"]["duration_ms"], (int, float))
+    assert result["meta"]["duration_ms"] == result["data"]["duration_ms"]
+
+
+def test_execute_gremlin_read_counts_hugegraph_data_shape(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeHugeGraphShapeClient({"data": [{"id": "1:Alice"}], "meta": {}})
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().limit(1).elementMap()")
+
+    assert result["ok"] is True
+    assert result["data"]["total"] == 1
+    assert result["data"]["data"] == {"data": [{"id": "1:Alice"}], "meta": {}}
+
+
+def test_execute_gremlin_read_counts_empty_hugegraph_data_shape(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeHugeGraphShapeClient({"data": [], "meta": {}})
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().has('name','missing')")
+
+    assert result["ok"] is True
+    assert result["data"]["total"] == 0
+
+
+def test_execute_gremlin_read_includes_unbounded_cost_warning(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeGremlinClient()
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V()")
+
+    assert result["ok"] is True
+    assert result["warnings"]
+
+
+def test_execute_gremlin_read_has_no_cost_warning_for_limited_query(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeGremlinClient()
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().limit(2)")
+
+    assert result["ok"] is True
+    assert result["warnings"] == []
+
+
+def test_execute_gremlin_read_counts_single_string_as_one(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeHugeGraphShapeClient({"data": "Alice", "meta": {}})
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().values('name').limit(1)")
+
+    assert result["ok"] is True
+    assert result["data"]["total"] == 1
+
+
+def test_execute_gremlin_read_counts_single_map_as_one(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    client = FakeHugeGraphShapeClient({"data": {"id": "1", "label": "person"}})
+    monkeypatch.setattr(
+        gremlin_tools, "_get_read_client", lambda: client, raising=False
+    )
+
+    result = gremlin_tools.execute_gremlin_read("g.V().limit(1).elementMap()")
+
+    assert result["ok"] is True
+    assert result["data"]["total"] == 1
 
 
 def test_execute_gremlin_read_rejects_obvious_writes(monkeypatch):
@@ -60,14 +166,17 @@ def test_execute_gremlin_read_rejects_obvious_writes(monkeypatch):
         gremlin_tools, "_get_read_client", lambda: client, raising=False
     )
 
-    with pytest.raises(ValueError):
-        gremlin_tools.execute_gremlin_read("g.addV('person')")
+    result = gremlin_tools.execute_gremlin_read("g.addV('person')")
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "UNSAFE_GREMLIN"
+    assert result["meta"]
 
 
 def test_execute_gremlin_read_respects_readonly_env(monkeypatch):
     """When HUGEGRAPH_MCP_READONLY is true, execute_gremlin_read should still work (it's read)."""
 
-    os.environ["HUGEGRAPH_MCP_READONLY"] = "true"
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
 
     from hugegraph_mcp import gremlin_tools
 
@@ -78,5 +187,26 @@ def test_execute_gremlin_read_respects_readonly_env(monkeypatch):
 
     result = gremlin_tools.execute_gremlin_read("g.V().count()")
 
-    assert result["is_read"] is True
-    assert "total" in result
+    assert result["ok"] is True
+    assert result["data"]["is_read"] is True
+    assert "total" in result["data"]
+
+
+def test_get_read_client_uses_current_env(monkeypatch):
+    from hugegraph_mcp import gremlin_tools
+
+    FakePyHugeClient.init_kwargs = []
+    monkeypatch.setattr(gremlin_tools, "PyHugeClient", FakePyHugeClient)
+
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "first_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "first_space")
+    gremlin_tools._get_read_client()
+
+    monkeypatch.setenv("HUGEGRAPH_GRAPH", "second_graph")
+    monkeypatch.setenv("HUGEGRAPH_GRAPHSPACE", "second_space")
+    gremlin_tools._get_read_client()
+
+    assert FakePyHugeClient.init_kwargs[0]["graph"] == "first_graph"
+    assert FakePyHugeClient.init_kwargs[0]["graphspace"] == "first_space"
+    assert FakePyHugeClient.init_kwargs[1]["graph"] == "second_graph"
+    assert FakePyHugeClient.init_kwargs[1]["graphspace"] == "second_space"

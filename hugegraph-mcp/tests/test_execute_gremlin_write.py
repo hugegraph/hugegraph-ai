@@ -11,15 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-from pathlib import Path
-
-import pytest
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 
 class FakeGremlinClient:
     def __init__(self, results):
@@ -38,8 +29,16 @@ def test_execute_gremlin_write_basic(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
 
     from hugegraph_mcp import gremlin_tools
+    from hugegraph_mcp.guard import Capability
 
     fake_client = FakeGremlinClient(results=[{"id": 1}, {"id": 2}])
+    guarded = []
+
+    def fake_guard_write(capability=Capability.DATA_WRITE, **_kwargs):
+        guarded.append(capability)
+        return None
+
+    monkeypatch.setattr(gremlin_tools, "guard_write", fake_guard_write)
     monkeypatch.setattr(
         gremlin_tools, "_get_write_client", lambda: fake_client, raising=False
     )
@@ -50,9 +49,13 @@ def test_execute_gremlin_write_basic(monkeypatch):
 
     assert fake_client.last_query is not None
     assert fake_client.last_query.startswith("g.addV")
-    assert res["is_write"] is True
-    assert res["affected"] == 2
-    assert isinstance(res["duration_ms"], (int, float))
+    assert res["ok"] is True
+    assert res["error"] is None
+    assert res["data"]["is_write"] is True
+    assert res["data"]["affected"] == 2
+    assert isinstance(res["data"]["duration_ms"], (int, float))
+    assert res["meta"]["duration_ms"] == res["data"]["duration_ms"]
+    assert guarded == [Capability.DATA_WRITE]
 
 
 def test_execute_gremlin_write_blocked_in_readonly(monkeypatch):
@@ -68,5 +71,9 @@ def test_execute_gremlin_write_blocked_in_readonly(monkeypatch):
         gremlin_tools, "_get_write_client", lambda: fake_client, raising=False
     )
 
-    with pytest.raises(PermissionError):
-        gremlin_tools.execute_gremlin_write("g.addV('person')")
+    result = gremlin_tools.execute_gremlin_write("g.addV('person')")
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "READONLY_VIOLATION"
+    assert result["meta"]["readonly"] is True
+    assert fake_client.last_query is None
