@@ -65,6 +65,44 @@ class Commit2Graph:
             error["key"] = key
         return error
 
+    def _validate_input_properties(
+        self,
+        kind,
+        index,
+        label,
+        properties,
+        allowed_properties,
+        property_label_map,
+        import_result,
+    ) -> bool:
+        allowed = set(allowed_properties)
+        skipped_key = "vertices_skipped" if kind == "vertex" else "edges_skipped"
+        for key, value in properties.items():
+            property_label = property_label_map.get(key)
+            if key not in allowed or property_label is None:
+                log.error(
+                    "(Input) %s property '%s' is not defined in schema label '%s', skip it & need check it again",
+                    kind,
+                    key,
+                    label,
+                )
+                import_result[skipped_key] += 1
+                import_result["errors"].append(self._import_error(kind, index, "unknown_property", label, key))
+                return False
+            # TODO: transform to Enum first (better in earlier step)
+            data_type = property_label["data_type"]
+            cardinality = property_label["cardinality"]
+            if not self._check_property_data_type(data_type, cardinality, value):
+                log.error(
+                    "(Input) %s property type/format '%s' is not correct, skip it & need check it again",
+                    kind,
+                    key,
+                )
+                import_result[skipped_key] += 1
+                import_result["errors"].append(self._import_error(kind, index, "invalid_property_type", label, key))
+                return False
+        return True
+
     def run(self, data: dict) -> Dict[str, Any]:
         schema = data.get("schema")
         vertices = data.get("vertices", []) or []
@@ -180,23 +218,16 @@ class Commit2Graph:
                 if key not in input_properties:
                     self._set_default_property(key, input_properties, property_label_map)
 
-            # 4. Check all data type value is right
-            for key, value in input_properties.items():
-                # TODO: transform to Enum first (better in earlier step)
-                data_type = property_label_map[key]["data_type"]
-                cardinality = property_label_map[key]["cardinality"]
-                if not self._check_property_data_type(data_type, cardinality, value):
-                    log.error(
-                        "Property type/format '%s' is not correct, skip it & need check it again",
-                        key,
-                    )
-                    has_problem = True
-                    import_result["errors"].append(
-                        self._import_error("vertex", vertex_index, "invalid_property_type", input_label, key)
-                    )
-                    break
-            if has_problem:
-                import_result["vertices_skipped"] += 1
+            # 4. Check all property keys and data types are schema-compliant.
+            if not self._validate_input_properties(
+                "vertex",
+                vertex_index,
+                input_label,
+                input_properties,
+                vertex_label["properties"],
+                property_label_map,
+                import_result,
+            ):
                 continue
 
             # TODO: we could try batch add vertices first, setback to single-mode if failed
@@ -255,6 +286,17 @@ class Commit2Graph:
                 import_result["errors"].append(
                     self._import_error("edge", edge_index, "target_label_mismatch", label=label, key="inVLabel")
                 )
+                continue
+
+            if not self._validate_input_properties(
+                "edge",
+                edge_index,
+                label,
+                properties,
+                edge_label.get("properties", []),
+                property_label_map,
+                import_result,
+            ):
                 continue
 
             # TODO: we could try batch add edges first, setback to single-mode if failed

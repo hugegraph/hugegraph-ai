@@ -57,6 +57,9 @@ def _target_client_config(graph="target_graph"):
 def _import_payload(**overrides):
     payload = {
         "schema": {
+            "propertykeys": [
+                {"name": "name", "data_type": "TEXT", "cardinality": "SINGLE"},
+            ],
             "vertexlabels": [{"name": "person", "properties": ["name"]}],
             "edgelabels": [{"name": "knows", "source_label": "person", "target_label": "person"}],
         },
@@ -184,6 +187,30 @@ def test_graph_import_request_rejects_edge_endpoint_label_mismatch():
     data["edges"][0]["outVLabel"] = "movie"
 
     with pytest.raises(ValueError, match="outVLabel must match schema source_label"):
+        GraphImportRequest(**_import_payload(data=data))
+
+
+def test_graph_import_request_rejects_inline_schema_unknown_property():
+    data = _payload_data()
+    data["vertices"][0]["properties"]["secret"] = "raw user data"
+
+    with pytest.raises(ValueError, match="vertices\\[0\\].properties.secret"):
+        GraphImportRequest(**_import_payload(data=data))
+
+
+def test_graph_import_request_rejects_inline_schema_invalid_property_type():
+    data = _payload_data()
+    data["vertices"][0]["properties"]["name"] = 123
+
+    with pytest.raises(ValueError, match="vertices\\[0\\].properties.name must match schema property type"):
+        GraphImportRequest(**_import_payload(data=data))
+
+
+def test_graph_import_request_rejects_inline_schema_unknown_edge_property():
+    data = _payload_data()
+    data["edges"][0]["properties"]["secret"] = "raw edge data"
+
+    with pytest.raises(ValueError, match="edges\\[0\\].properties.secret"):
         GraphImportRequest(**_import_payload(data=data))
 
 

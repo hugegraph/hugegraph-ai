@@ -137,3 +137,69 @@ def test_import_rejects_edge_endpoint_label_mismatch_before_writing():
         }
     ]
     mock_handle_graph_creation.assert_not_called()
+
+
+def test_import_rejects_unknown_vertex_property_without_raw_payload():
+    commit2graph = _commit_operator()
+    vertices = [{"label": "person", "properties": {"name": "Tom Hanks", "secret": "raw user data"}}]
+
+    with patch.object(commit2graph, "_handle_graph_creation") as mock_handle_graph_creation:
+        result = commit2graph.load_into_graph(vertices, [], _schema())
+
+    assert result["vertices_created"] == 0
+    assert result["vertices_skipped"] == 1
+    assert result["errors"] == [
+        {"kind": "vertex", "index": 0, "reason": "unknown_property", "label": "person", "key": "secret"}
+    ]
+    assert "Tom Hanks" not in str(result["errors"])
+    assert "raw user data" not in str(result["errors"])
+    mock_handle_graph_creation.assert_not_called()
+
+
+def test_import_rejects_unknown_edge_property_before_writing():
+    commit2graph = _commit_operator()
+    edges = [
+        {
+            "label": "acted_in",
+            "properties": {"secret": "raw edge data"},
+            "outV": "person:Tom Hanks",
+            "outVLabel": "person",
+            "inV": "movie:Forrest Gump",
+            "inVLabel": "movie",
+        }
+    ]
+
+    with patch.object(commit2graph, "_handle_graph_creation") as mock_handle_graph_creation:
+        result = commit2graph.load_into_graph([], edges, _schema())
+
+    assert result["edges_created"] == 0
+    assert result["edges_skipped"] == 1
+    assert result["errors"] == [
+        {"kind": "edge", "index": 0, "reason": "unknown_property", "label": "acted_in", "key": "secret"}
+    ]
+    assert "raw edge data" not in str(result["errors"])
+    mock_handle_graph_creation.assert_not_called()
+
+
+def test_import_rejects_invalid_edge_property_type_before_writing():
+    commit2graph = _commit_operator()
+    edges = [
+        {
+            "label": "acted_in",
+            "properties": {"role": 123},
+            "outV": "person:Tom Hanks",
+            "outVLabel": "person",
+            "inV": "movie:Forrest Gump",
+            "inVLabel": "movie",
+        }
+    ]
+
+    with patch.object(commit2graph, "_handle_graph_creation") as mock_handle_graph_creation:
+        result = commit2graph.load_into_graph([], edges, _schema())
+
+    assert result["edges_created"] == 0
+    assert result["edges_skipped"] == 1
+    assert result["errors"] == [
+        {"kind": "edge", "index": 0, "reason": "invalid_property_type", "label": "acted_in", "key": "role"}
+    ]
+    mock_handle_graph_creation.assert_not_called()

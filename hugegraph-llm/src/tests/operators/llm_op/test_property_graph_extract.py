@@ -1068,6 +1068,46 @@ Hope this helps."""
 
         self.assertEqual(result, [])
 
+    def test_extract_and_filter_label_drops_items_with_non_object_properties(self):
+        """Drop malformed LLM items whose properties field is not an object."""
+        extractor = PropertyGraphExtract(llm=self.mock_llm)
+        text = """{
+            "vertices": [
+            {
+                "label": "person",
+                "properties": null
+            },
+            {
+                "label": "movie",
+                "properties": {
+                    "title": "Forrest Gump"
+                }
+            }
+            ],
+            "edges": [
+            {
+                "label": "acted_in",
+                "properties": ["role"],
+                "source": {
+                    "label": "person",
+                    "properties": ["Tom Hanks"]
+                },
+                "target": {
+                    "label": "movie",
+                    "properties": {
+                        "title": "Forrest Gump"
+                    }
+                }
+            }
+            ]
+        }"""
+
+        result = extractor._extract_and_filter_label(self.schema, text)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["type"], "vertex")
+        self.assertEqual(result[0]["label"], "movie")
+
     def test_run(self):
         """Test the run method."""
         extractor = PropertyGraphExtract(llm=self.mock_llm)

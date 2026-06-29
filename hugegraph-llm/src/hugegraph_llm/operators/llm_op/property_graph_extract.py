@@ -190,6 +190,13 @@ class PropertyGraphExtract:
 
         label = legacy_endpoint.get("label")
         properties = legacy_endpoint.get("properties", {})
+        if not isinstance(properties, dict):
+            log.warning(
+                "Invalid %s endpoint properties type '%s' has been ignored.",
+                legacy_key,
+                type(properties),
+            )
+            return None, label
         if label not in vertex_label_map:
             return None, label
         canonical_id = self._primary_key_id(vertex_label_map[label], properties)
@@ -289,6 +296,13 @@ class PropertyGraphExtract:
                     item["type"] = item_type_value
                     if not self.NECESSARY_ITEM_KEYS.issubset(item.keys()):
                         log.warning("Invalid item keys '%s'.", item.keys())
+                        continue
+                    if not isinstance(item.get("properties"), dict):
+                        log.warning(
+                            "Invalid %s properties type '%s' has been ignored.",
+                            item_type,
+                            type(item.get("properties")),
+                        )
                         continue
                     if item_type_value != item_type:
                         log.warning("Invalid %s type '%s' has been ignored.", item_type, item_type_value)

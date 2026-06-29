@@ -16,6 +16,7 @@
 # under the License.
 
 import json
+import re
 from copy import deepcopy
 from typing import Any, Dict, List, Literal, Optional, Union
 
@@ -62,6 +63,30 @@ def _schema_object(schema: SchemaInput) -> Optional[Dict[str, Any]]:
     except json.JSONDecodeError:
         return None
     return parsed_schema if isinstance(parsed_schema, dict) else None
+
+
+def _is_schema_property_value(value: Any, prop_schema: Dict[str, Any]) -> bool:
+    data_type = prop_schema.get("data_type")
+    cardinality = prop_schema.get("cardinality")
+    if not data_type or not cardinality:
+        return True
+    if cardinality in {"LIST", "SET"}:
+        return isinstance(value, list) and all(_is_schema_property_single_value(item, data_type) for item in value)
+    return _is_schema_property_single_value(value, data_type)
+
+
+def _is_schema_property_single_value(value: Any, data_type: str) -> bool:
+    if data_type == "BOOLEAN":
+        return isinstance(value, bool)
+    if data_type in {"BYTE", "INT", "LONG"}:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if data_type in {"FLOAT", "DOUBLE"}:
+        return isinstance(value, float)
+    if data_type in {"TEXT", "UUID"}:
+        return isinstance(value, str)
+    if data_type == "DATE":
+        return isinstance(value, str) and bool(re.match(r"^\d{4}-\d{2}-\d{2}$", value))
+    return True
 
 
 class GraphExtractOptions(BaseModel):
@@ -268,6 +293,7 @@ class GraphImportRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_write_target(self):
+        self._validate_schema_properties()
         self._validate_edge_endpoint_labels()
         schema = self.schema_data
         is_named_schema = isinstance(schema, str) and not schema.strip().startswith("{")
@@ -280,6 +306,64 @@ class GraphImportRequest(BaseModel):
         if is_named_schema and self.client_config is not None and self.client_config.graph not in {None, schema}:
             raise ValueError("schema graph name must match client_config.graph")
         return self
+
+    def _validate_schema_properties(self):
+        schema = _schema_object(self.schema_data)
+        if schema is None:
+            return
+        vertex_schema = {
+            vertex_label["name"]: vertex_label
+            for vertex_label in schema.get("vertexlabels", [])
+            if isinstance(vertex_label, dict) and "name" in vertex_label
+        }
+        edge_schema = {
+            edge_label["name"]: edge_label
+            for edge_label in schema.get("edgelabels", [])
+            if isinstance(edge_label, dict) and "name" in edge_label
+        }
+        property_schema = {
+            prop["name"]: prop for prop in schema.get("propertykeys", []) if isinstance(prop, dict) and "name" in prop
+        }
+        for index, vertex in enumerate(self.data.get("vertices", []) or []):
+            label = vertex.get("label")
+            schema_vertex = vertex_schema.get(label)
+            if schema_vertex is None:
+                raise ValueError(f"vertices[{index}].label is not defined in schema")
+            self._validate_item_properties(
+                f"vertices[{index}]",
+                str(label),
+                vertex.get("properties", {}),
+                schema_vertex.get("properties", []),
+                property_schema,
+            )
+        for index, edge in enumerate(self.data.get("edges", []) or []):
+            label = edge.get("label")
+            schema_edge = edge_schema.get(label)
+            if schema_edge is None:
+                raise ValueError(f"edges[{index}].label is not defined in schema")
+            self._validate_item_properties(
+                f"edges[{index}]",
+                str(label),
+                edge.get("properties", {}),
+                schema_edge.get("properties", []),
+                property_schema,
+            )
+
+    @staticmethod
+    def _validate_item_properties(
+        item_path: str,
+        label: str,
+        properties: Dict[str, Any],
+        allowed_properties: List[str],
+        property_schema: Dict[str, Dict[str, Any]],
+    ):
+        allowed = set(allowed_properties)
+        for key, value in properties.items():
+            if key not in allowed:
+                raise ValueError(f"{item_path}.properties.{key} is not defined for label '{label}'")
+            prop_schema = property_schema.get(key)
+            if prop_schema is not None and not _is_schema_property_value(value, prop_schema):
+                raise ValueError(f"{item_path}.properties.{key} must match schema property type")
 
     def _validate_edge_endpoint_labels(self):
         schema = _schema_object(self.schema_data)
