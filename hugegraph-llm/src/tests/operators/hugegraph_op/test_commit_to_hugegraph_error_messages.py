@@ -37,13 +37,15 @@ def _schema():
             {"name": "name", "data_type": "TEXT", "cardinality": "SINGLE"},
             {"name": "title", "data_type": "TEXT", "cardinality": "SINGLE"},
             {"name": "role", "data_type": "TEXT", "cardinality": "SINGLE"},
+            {"name": "age", "data_type": "INT", "cardinality": "SINGLE"},
+            {"name": "score", "data_type": "DOUBLE", "cardinality": "SINGLE"},
         ],
         "vertexlabels": [
             {
                 "name": "person",
-                "properties": ["name"],
+                "properties": ["name", "age", "score"],
                 "primary_keys": ["name"],
-                "nullable_keys": [],
+                "nullable_keys": ["age", "score"],
                 "id_strategy": "PRIMARY_KEY",
             },
             {
@@ -203,3 +205,30 @@ def test_import_rejects_invalid_edge_property_type_before_writing():
         {"kind": "edge", "index": 0, "reason": "invalid_property_type", "label": "acted_in", "key": "role"}
     ]
     mock_handle_graph_creation.assert_not_called()
+
+
+def test_import_rejects_bool_for_int_property_before_writing():
+    commit2graph = _commit_operator()
+    vertices = [{"label": "person", "properties": {"name": "Tom Hanks", "age": True}}]
+
+    with patch.object(commit2graph, "_handle_graph_creation") as mock_handle_graph_creation:
+        result = commit2graph.load_into_graph(vertices, [], _schema())
+
+    assert result["vertices_created"] == 0
+    assert result["vertices_skipped"] == 1
+    assert result["errors"] == [
+        {"kind": "vertex", "index": 0, "reason": "invalid_property_type", "label": "person", "key": "age"}
+    ]
+    mock_handle_graph_creation.assert_not_called()
+
+
+def test_import_accepts_integer_for_double_property():
+    commit2graph = _commit_operator()
+    vertices = [{"label": "person", "properties": {"name": "Tom Hanks", "score": 1}}]
+
+    with patch.object(commit2graph, "_handle_graph_creation", return_value=MagicMock(id="person:Tom Hanks")):
+        result = commit2graph.load_into_graph(vertices, [], _schema())
+
+    assert result["vertices_created"] == 1
+    assert result["vertices_skipped"] == 0
+    assert result["errors"] == []

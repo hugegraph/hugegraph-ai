@@ -139,6 +139,21 @@ def test_post_graph_import_requires_write_confirmation_before_writing():
     import_service.import_graph.assert_not_called()
 
 
+def test_post_graph_import_validation_error_uses_import_code():
+    import_service = Mock()
+    client = _client(import_service=import_service)
+
+    response = client.post(
+        "/graph/import",
+        json=_import_payload(data={"vertices": [{"label": "person", "properties": None}]}),
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.json()["detail"]["code"] == "GRAPH_IMPORT_VALIDATION_ERROR"
+    assert response.json()["detail"]["phase"] == "import"
+    import_service.import_graph.assert_not_called()
+
+
 def test_graph_import_request_rejects_empty_graph_data():
     with pytest.raises(ValueError, match="vertex or edge"):
         GraphImportRequest(schema={"vertices": [{"label": "person"}]}, data={"vertices": [], "edges": []})
@@ -204,6 +219,28 @@ def test_graph_import_request_rejects_inline_schema_invalid_property_type():
 
     with pytest.raises(ValueError, match="vertices\\[0\\].properties.name must match schema property type"):
         GraphImportRequest(**_import_payload(data=data))
+
+
+def test_graph_import_request_rejects_bool_for_integer_property_and_accepts_integer_double():
+    payload = _import_payload(
+        schema={
+            "propertykeys": [
+                {"name": "name", "data_type": "TEXT", "cardinality": "SINGLE"},
+                {"name": "age", "data_type": "INT", "cardinality": "SINGLE"},
+                {"name": "score", "data_type": "DOUBLE", "cardinality": "SINGLE"},
+            ],
+            "vertexlabels": [{"name": "person", "properties": ["name", "age", "score"]}],
+            "edgelabels": [],
+        },
+        data={"vertices": [{"label": "person", "properties": {"name": "marko", "age": 29, "score": 1}}]},
+    )
+
+    request = GraphImportRequest(**payload)
+    assert request.data["vertices"][0]["properties"]["score"] == 1
+
+    payload["data"]["vertices"][0]["properties"]["age"] = True
+    with pytest.raises(ValueError, match="vertices\\[0\\].properties.age must match schema property type"):
+        GraphImportRequest(**payload)
 
 
 def test_graph_import_request_rejects_inline_schema_unknown_edge_property():

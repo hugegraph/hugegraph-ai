@@ -321,6 +321,34 @@ class TestCommit2Graph(unittest.TestCase):
         # Verify that edgeLabel was called for each edge label
         self.assertEqual(schema_mocks["edge_label"].call_count, 1)  # 1 edge label
 
+    def test_run_initializes_customize_string_schema_with_custom_id_strategy(self):
+        """Test run creates custom string id vertex labels for CUSTOMIZE_STRING schema."""
+        schema_mocks = self._setup_schema_mocks()
+        schema = {
+            "propertykeys": [{"name": "name", "data_type": "TEXT", "cardinality": "SINGLE"}],
+            "vertexlabels": [
+                {
+                    "name": "person",
+                    "id_strategy": "CUSTOMIZE_STRING",
+                    "primary_keys": ["name"],
+                    "properties": ["name"],
+                    "nullable_keys": [],
+                }
+            ],
+            "edgelabels": [],
+        }
+        vertices = [{"id": "marko", "label": "person", "properties": {"name": "marko"}}]
+
+        with (
+            patch.object(self.commit2graph, "_create_property"),
+            patch.object(self.commit2graph, "_handle_graph_creation", return_value=MagicMock(id="marko")),
+        ):
+            self.commit2graph.run({"schema": schema, "vertices": vertices, "edges": []})
+
+        vertex_builder = schema_mocks["vertex_label"].return_value
+        vertex_builder.useCustomizeStringId.assert_called_once()
+        vertex_builder.usePrimaryKeyId.assert_not_called()
+
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._check_property_data_type")
     @patch("hugegraph_llm.operators.hugegraph_op.commit_to_hugegraph.Commit2Graph._handle_graph_creation")
     def test_load_into_graph(self, mock_handle_graph_creation, mock_check_property_data_type):
@@ -615,6 +643,7 @@ class TestCommit2Graph(unittest.TestCase):
 
         # Test INT type
         self.assertTrue(self.commit2graph._check_property_data_type("INT", "SINGLE", 67))
+        self.assertFalse(self.commit2graph._check_property_data_type("INT", "SINGLE", True))
 
         # Test LIST type with valid items
         self.assertTrue(self.commit2graph._check_property_data_type("TEXT", "LIST", ["hobby1", "hobby2"]))
@@ -642,6 +671,7 @@ class TestCommit2Graph(unittest.TestCase):
         # Test FLOAT/DOUBLE type
         self.assertTrue(self.commit2graph._check_property_data_type("FLOAT", "SINGLE", 3.14))
         self.assertTrue(self.commit2graph._check_property_data_type("DOUBLE", "SINGLE", 3.14))
+        self.assertTrue(self.commit2graph._check_property_data_type("DOUBLE", "SINGLE", 1))
         self.assertFalse(self.commit2graph._check_property_data_type("FLOAT", "SINGLE", "3.14"))
 
         # Test DATE type (format: yyyy-MM-dd)

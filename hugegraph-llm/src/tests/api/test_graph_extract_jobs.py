@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from queue import Full
@@ -96,6 +97,29 @@ def test_successful_job_reaches_succeeded_and_exposes_result():
     assert status_response.json()["status"] == GraphExtractJobStatus.SUCCEEDED
     assert result_response.status_code == status.HTTP_200_OK
     assert result_response.json()["result"]["vertices"] == [{"label": "person"}]
+
+
+def test_default_job_route_runs_through_background_worker_and_exposes_result():
+    service = Mock()
+    service.extract_sync.return_value = _success_response()
+    store = InMemoryGraphExtractJobStore()
+    client = _client(service, store, run_jobs_inline=None)
+
+    created = client.post("/graph/extract/jobs", json=_payload()).json()
+
+    status_body = {}
+    for _ in range(50):
+        status_response = client.get(f"/graph/extract/jobs/{created['job_id']}")
+        status_body = status_response.json()
+        if status_body["status"] == GraphExtractJobStatus.SUCCEEDED:
+            break
+        time.sleep(0.02)
+
+    assert status_body["status"] == GraphExtractJobStatus.SUCCEEDED
+    result_response = client.get(f"/graph/extract/jobs/{created['job_id']}/result")
+    assert result_response.status_code == status.HTTP_200_OK
+    assert result_response.json()["status"] == "succeeded"
+    service.extract_sync.assert_called_once()
 
 
 def test_failed_job_stores_error_details():

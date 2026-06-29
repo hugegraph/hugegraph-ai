@@ -128,15 +128,32 @@ def _validate_property_graph_result(result: Dict[str, Any]) -> None:
     edges = result.get("edges", [])
     if not isinstance(vertices, list) or not isinstance(edges, list):
         raise FlowOutputValidationError("property graph result must contain list vertices and edges")
-    for vertex in vertices:
+    for index, vertex in enumerate(vertices):
         if not isinstance(vertex, dict) or "label" not in vertex or "properties" not in vertex:
             raise FlowOutputValidationError("canonical property graph vertex must include label and properties")
+        if not _is_non_empty_string(vertex["label"]):
+            raise FlowOutputValidationError(
+                f"canonical property graph vertex[{index}].label must be a non-empty string"
+            )
+        if not isinstance(vertex["properties"], dict):
+            raise FlowOutputValidationError(f"canonical property graph vertex[{index}].properties must be an object")
     required_edge_keys = {"label", "outV", "outVLabel", "inV", "inVLabel", "properties"}
-    for edge in edges:
+    for index, edge in enumerate(edges):
         if not isinstance(edge, dict) or not required_edge_keys.issubset(edge):
             raise FlowOutputValidationError(
                 "canonical property graph edge must include label, outV, outVLabel, inV, inVLabel, and properties"
             )
+        for key in ("label", "outV", "outVLabel", "inV", "inVLabel"):
+            if not _is_non_empty_string(edge[key]):
+                raise FlowOutputValidationError(
+                    f"canonical property graph edge[{index}].{key} must be a non-empty string"
+                )
+        if not isinstance(edge["properties"], dict):
+            raise FlowOutputValidationError(f"canonical property graph edge[{index}].properties must be an object")
+
+
+def _is_non_empty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 def _build_import_status(import_result: Dict[str, Any]) -> str:

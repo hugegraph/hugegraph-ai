@@ -84,6 +84,14 @@ def _validation_message(errors) -> str:
     return "; ".join(details) or "request validation failed"
 
 
+def _validation_error_for_path(path: str, message: str) -> dict:
+    if path.endswith("/graph/import"):
+        return _error("GRAPH_IMPORT_VALIDATION_ERROR", message, "import")
+    if path.endswith("/graph/extract-and-import"):
+        return _error("GRAPH_EXTRACT_AND_IMPORT_VALIDATION_ERROR", message, "request")
+    return _error("GRAPH_EXTRACT_VALIDATION_ERROR", message, "request")
+
+
 class GraphExtractAPIRoute(APIRoute):
     def get_route_handler(self):
         original_route_handler = super().get_route_handler()
@@ -92,15 +100,10 @@ class GraphExtractAPIRoute(APIRoute):
             try:
                 return await original_route_handler(request)
             except RequestValidationError as exc:
+                message = _validation_message(exc.errors())
                 return JSONResponse(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    content={
-                        "detail": _error(
-                            "GRAPH_EXTRACT_VALIDATION_ERROR",
-                            _validation_message(exc.errors()),
-                            "request",
-                        )
-                    },
+                    content={"detail": _validation_error_for_path(request.url.path, message)},
                 )
 
         return custom_route_handler

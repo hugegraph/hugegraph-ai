@@ -24,6 +24,7 @@ from hugegraph_llm.config import huge_settings
 from hugegraph_llm.enums.property_cardinality import PropertyCardinality
 from hugegraph_llm.enums.property_data_type import PropertyDataType, default_value_map
 from hugegraph_llm.utils.log import log
+from hugegraph_llm.utils.schema_property import is_property_value_for_type
 
 
 class Commit2Graph:
@@ -321,9 +322,12 @@ class Commit2Graph:
             properties = vertex["properties"]
             nullable_keys = vertex["nullable_keys"]
             primary_keys = vertex["primary_keys"]
-            self.schema.vertexLabel(vertex_label).properties(*properties).nullableKeys(
-                *nullable_keys
-            ).usePrimaryKeyId().primaryKeys(*primary_keys).ifNotExist().create()
+            vertex_builder = self.schema.vertexLabel(vertex_label).properties(*properties).nullableKeys(*nullable_keys)
+            if vertex.get("id_strategy") == "CUSTOMIZE_STRING":
+                vertex_builder = vertex_builder.useCustomizeStringId()
+            else:
+                vertex_builder = vertex_builder.usePrimaryKeyId().primaryKeys(*primary_keys)
+            vertex_builder.ifNotExist().create()
 
         for edge in edges:
             edge_label = edge["name"]
@@ -421,12 +425,7 @@ class Commit2Graph:
             log.error("Unknown cardinality %s for property_key %s", cardinality, property_key)
 
     def _check_property_data_type(self, data_type: str, cardinality: str, value) -> bool:
-        if cardinality in (
-            PropertyCardinality.LIST.value,
-            PropertyCardinality.SET.value,
-        ):
-            return self._check_collection_data_type(data_type, value)
-        return self._check_single_data_type(data_type, value)
+        return is_property_value_for_type(data_type, cardinality, value, strict_data_type=True)
 
     def _check_collection_data_type(self, data_type: str, value) -> bool:
         if not isinstance(value, list):
@@ -444,9 +443,9 @@ class Commit2Graph:
             PropertyDataType.INT.value,
             PropertyDataType.LONG.value,
         ):
-            return isinstance(value, int)
+            return isinstance(value, int) and not isinstance(value, bool)
         if data_type in (PropertyDataType.FLOAT.value, PropertyDataType.DOUBLE.value):
-            return isinstance(value, float)
+            return isinstance(value, (int, float)) and not isinstance(value, bool)
         if data_type in (PropertyDataType.TEXT.value, PropertyDataType.UUID.value):
             return isinstance(value, str)
         # TODO: check ok below

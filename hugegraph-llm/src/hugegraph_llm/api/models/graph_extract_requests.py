@@ -16,7 +16,6 @@
 # under the License.
 
 import json
-import re
 from copy import deepcopy
 from typing import Any, Dict, List, Literal, Optional, Union
 
@@ -24,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from hugegraph_llm.config import llm_settings
 from hugegraph_llm.operators.common_op.check_schema import CheckSchema
+from hugegraph_llm.utils.schema_property import is_schema_property_value
 
 SchemaInput = Union[str, Dict[str, Any]]
 ContentInput = Union[str, List[str]]
@@ -63,30 +63,6 @@ def _schema_object(schema: SchemaInput) -> Optional[Dict[str, Any]]:
     except json.JSONDecodeError:
         return None
     return parsed_schema if isinstance(parsed_schema, dict) else None
-
-
-def _is_schema_property_value(value: Any, prop_schema: Dict[str, Any]) -> bool:
-    data_type = prop_schema.get("data_type")
-    cardinality = prop_schema.get("cardinality")
-    if not data_type or not cardinality:
-        return True
-    if cardinality in {"LIST", "SET"}:
-        return isinstance(value, list) and all(_is_schema_property_single_value(item, data_type) for item in value)
-    return _is_schema_property_single_value(value, data_type)
-
-
-def _is_schema_property_single_value(value: Any, data_type: str) -> bool:
-    if data_type == "BOOLEAN":
-        return isinstance(value, bool)
-    if data_type in {"BYTE", "INT", "LONG"}:
-        return isinstance(value, int) and not isinstance(value, bool)
-    if data_type in {"FLOAT", "DOUBLE"}:
-        return isinstance(value, float)
-    if data_type in {"TEXT", "UUID"}:
-        return isinstance(value, str)
-    if data_type == "DATE":
-        return isinstance(value, str) and bool(re.match(r"^\d{4}-\d{2}-\d{2}$", value))
-    return True
 
 
 class GraphExtractOptions(BaseModel):
@@ -362,7 +338,7 @@ class GraphImportRequest(BaseModel):
             if key not in allowed:
                 raise ValueError(f"{item_path}.properties.{key} is not defined for label '{label}'")
             prop_schema = property_schema.get(key)
-            if prop_schema is not None and not _is_schema_property_value(value, prop_schema):
+            if prop_schema is not None and not is_schema_property_value(value, prop_schema):
                 raise ValueError(f"{item_path}.properties.{key} must match schema property type")
 
     def _validate_edge_endpoint_labels(self):

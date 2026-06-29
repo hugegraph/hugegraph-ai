@@ -334,6 +334,25 @@ def test_graph_extract_api_returns_structured_error_for_invalid_flow_output():
     }
 
 
+def test_graph_extract_api_rejects_malformed_workflow_property_graph_output():
+    scheduler = Mock()
+    scheduler.schedule_flow.return_value = json.dumps(
+        {"vertices": [{"label": "person", "properties": None}], "edges": []}
+    )
+
+    response = _graph_client(GraphExtractService(scheduler)).post(
+        "/graph/extract",
+        json={"content_type": "text", "content": "bad workflow output", "schema": VALID_SCHEMA},
+    )
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == {
+        "code": "GRAPH_EXTRACT_INVALID_FLOW_OUTPUT",
+        "message": "Graph extraction flow output is invalid",
+        "phase": "extract",
+    }
+
+
 def test_graph_extract_api_maps_client_value_error_to_bad_request():
     service = Mock()
     service.extract_sync.side_effect = ValueError("schema graph name must match client_config.graph")
@@ -493,6 +512,16 @@ def test_property_graph_response_rejects_legacy_edge_shape():
     )
 
     with pytest.raises(ValueError, match="canonical property graph edge"):
+        GraphExtractService(scheduler).extract_sync(GraphExtractRequest(texts="x", schema=INLINE_SCHEMA))
+
+
+def test_property_graph_response_rejects_non_object_properties():
+    scheduler = Mock()
+    scheduler.schedule_flow.return_value = json.dumps(
+        {"vertices": [{"label": "person", "properties": None}], "edges": []}
+    )
+
+    with pytest.raises(ValueError, match=r"vertex\[0\].properties"):
         GraphExtractService(scheduler).extract_sync(GraphExtractRequest(texts="x", schema=INLINE_SCHEMA))
 
 
