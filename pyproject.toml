@@ -163,6 +163,9 @@ addopts = "--strict-markers --strict-config"
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+extend-exclude = [
+    "text2gremlin/AST_Text2Gremlin/base/gremlin/*.py",
+]
 
 [tool.ruff.lint]
 # Select a broad set of rules for comprehensive checks.
@@ -188,6 +191,30 @@ ignore = [
 "tests/**/*.py" = ["T20"]
 "hugegraph-ml/src/hugegraph_ml/examples/**/*.py" = ["T20"]
 "hugegraph-python-client/src/pyhugegraph/structure/*.py" = ["N802"]
+"text2gremlin/AST_Text2Gremlin/base/*.py" = [
+    "N999", # Keep existing standalone module names such as GremlinBase.py.
+]
+"text2gremlin/AST_Text2Gremlin/analyze_syntax.py" = ["T20"]
+"text2gremlin/AST_Text2Gremlin/generate_corpus.py" = ["T20"]
+"text2gremlin/AST_Text2Gremlin/run_llm_pipeline.py" = ["T20"]
+"text2gremlin/AST_Text2Gremlin/base/GremlinBase.py" = ["T20"]
+"text2gremlin/AST_Text2Gremlin/base/GremlinTransVisitor.py" = [
+    "F403", # ANTLR visitor compatibility import style.
+    "F811", # Visitor methods mirror grammar alternatives and may intentionally repeat names.
+    "T20",  # Parser diagnostics are printed by the standalone visitor helper.
+]
+"text2gremlin/AST_Text2Gremlin/base/TraversalGenerator.py" = [
+    "E501",   # Long generated traversal fragments are kept readable.
+    "E741",   # Gremlin examples may use compact variable names in local comprehensions.
+    "RUF012", # Class-level step configuration dictionaries are constants in practice.
+    "SIM102", # Keep complex traversal-generation branching explicit.
+    "SIM108", # Keep complex traversal-generation branching explicit.
+]
+"text2gremlin/AST_Text2Gremlin/llm_augment/*.py" = [
+    "E501",   # Long prompts are kept readable.
+    "RUF002", # Chinese prompt text intentionally uses full-width punctuation.
+    "T20",    # Standalone data-generation scripts write progress to stdout.
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["hugegraph_llm", "hugegraph_python_client", "hugegraph_ml", "vermeer_python_client"]
