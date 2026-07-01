@@ -1,0 +1,22 @@
+{
+  "samples": [
+    {
+      "sample_id": "abl_001",
+      "question": "What are the main causes of climate change?",
+      "gold_answer": "The main causes of climate change include greenhouse gas emissions from burning fossil fuels, deforestation, industrial processes, and agricultural activities.",
+      "raw_answer": "Climate change is caused by many factors including pollution and natural cycles.",
+      "vector_only_answer": "Climate change is primarily caused by greenhouse gas emissions from human activities such as burning fossil fuels and industrial processes.",
+      "graph_only_answer": "The causes of climate change include greenhouse gas emissions, deforestation, and industrial activities based on scientific data.",
+      "graph_vector_answer": "The main causes of climate change include greenhouse gas emissions from burning fossil fuels, deforestation, industrial processes, and agricultural activities."
+    },
+    {
+      "sample_id": "abl_002",
+      "question": "Explain the difference between TCP and UDP protocols.",
+      "gold_answer": "TCP is a connection-oriented protocol that guarantees reliable delivery through acknowledgments and retransmissions. UDP is connectionless and does not guarantee delivery, making it faster but less reliable.",
+      "raw_answer": "TCP and UDP are both network protocols. TCP is reliable while UDP is faster.",
+      "vector_only_answer": "TCP is connection-oriented with guaranteed delivery via acknowledgments. UDP is connectionless without delivery guarantees, offering lower latency.",
+      "graph_only_answer": "TCP provides reliable ordered delivery using handshakes and retransmissions. UDP sends datagrams without connections or guarantees.",
+      "graph_vector_answer": "TCP is a connection-oriented protocol that guarantees reliable delivery through acknowledgments and retransmissions. UDP is connectionless and does not guarantee delivery, making it faster but less reliable."
+    }
+  ]
+}

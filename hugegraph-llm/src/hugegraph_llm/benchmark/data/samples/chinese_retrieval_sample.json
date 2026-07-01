@@ -1,0 +1,25 @@
+{
+  "samples": [
+    {
+      "sample_id": "ret_zh_001",
+      "question": "标致5008的质保期是多久？",
+      "gold_docs": ["doc_peugeot_5008_warranty", "doc_peugeot_after_sales"],
+      "retrieved_docs": [
+        "doc_peugeot_5008_warranty",
+        "doc_peugeot_after_sales",
+        "doc_audi_a8_engine",
+        "doc_bmw_i7_charging"
+      ]
+    },
+    {
+      "sample_id": "ret_zh_002",
+      "question": "奥迪A8的空气悬架有什么作用？",
+      "gold_docs": ["doc_audi_a8_air_suspension"],
+      "retrieved_docs": [
+        "doc_audi_a8_air_suspension",
+        "doc_audi_a8_comfort",
+        "doc_peugeot_5008_warranty"
+      ]
+    }
+  ]
+}
