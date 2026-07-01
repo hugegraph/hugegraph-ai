@@ -630,11 +630,18 @@ class TestCommit2Graph(unittest.TestCase):
             }
         ]
 
-        # Call the method - should skip vertices due to data type validation failure
-        self.commit2graph.load_into_graph(vertices, edges, self.schema)
+        # Call the method - should skip vertices and edges whose batch endpoints failed.
+        result = self.commit2graph.load_into_graph(vertices, edges, self.schema)
 
-        # Verify that _handle_graph_creation was called only for the edge (vertices were skipped)
-        self.assertEqual(mock_handle_graph_creation.call_count, 1)  # Only 1 edge, vertices skipped
+        self.assertEqual(result["vertices_created"], 0)
+        self.assertEqual(result["vertices_skipped"], 2)
+        self.assertEqual(result["edges_created"], 0)
+        self.assertEqual(result["edges_skipped"], 1)
+        self.assertEqual(
+            result["errors"][-1],
+            {"kind": "edge", "index": 0, "reason": "endpoint_vertex_failed", "label": "acted_in", "key": "outV"},
+        )
+        mock_handle_graph_creation.assert_not_called()
 
     def test_check_property_data_type_success(self):
         """Test _check_property_data_type method with valid data types."""

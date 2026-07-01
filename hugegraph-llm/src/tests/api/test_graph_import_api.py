@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -101,6 +102,33 @@ def _import_response(updated_embeddings=False):
         updated_embeddings=updated_embeddings,
         warnings=[],
         meta={"duration_ms": 2},
+    )
+
+
+def _flow_import_result(
+    vertices_created=1,
+    edges_created=1,
+    triples_created=0,
+    vertices_skipped=0,
+    edges_skipped=0,
+    triples_skipped=0,
+    errors=None,
+):
+    return json.dumps(
+        {
+            "import_result": {
+                "vertices_attempted": vertices_created + vertices_skipped,
+                "vertices_created": vertices_created,
+                "vertices_skipped": vertices_skipped,
+                "edges_attempted": edges_created + edges_skipped,
+                "edges_created": edges_created,
+                "edges_skipped": edges_skipped,
+                "triples_attempted": triples_created + triples_skipped,
+                "triples_created": triples_created,
+                "triples_skipped": triples_skipped,
+                "errors": errors or [],
+            }
+        }
     )
 
 
@@ -452,7 +480,7 @@ def test_extract_and_import_rejects_triples_extraction_at_request_boundary():
 
 def test_graph_import_service_uses_import_flow_and_updates_embeddings_only_when_requested(monkeypatch):
     scheduler = Mock()
-    scheduler.schedule_flow.side_effect = ['{"vertices":[{"label":"person"}],"edges":[{"label":"knows"}]}', "{}"]
+    scheduler.schedule_flow.side_effect = [_flow_import_result(), "{}"]
     monkeypatch.setattr(
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
         lambda: scheduler,
@@ -482,7 +510,7 @@ def test_graph_import_service_requires_write_confirmation():
 def test_graph_import_service_keeps_import_result_when_embedding_update_fails(monkeypatch):
     scheduler = Mock()
     scheduler.schedule_flow.side_effect = [
-        '{"vertices":[{"label":"person"}],"edges":[{"label":"knows"}]}',
+        _flow_import_result(),
         RuntimeError("embed failed at http://internal.example/token=secret"),
     ]
     monkeypatch.setattr(
@@ -507,7 +535,7 @@ def test_graph_import_service_keeps_import_result_when_embedding_update_fails(mo
 
 def test_graph_import_service_does_not_update_embeddings_by_default(monkeypatch):
     scheduler = Mock()
-    scheduler.schedule_flow.return_value = '{"vertices":[{"label":"person"}],"edges":[{"label":"knows"}]}'
+    scheduler.schedule_flow.return_value = _flow_import_result()
     monkeypatch.setattr(
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
         lambda: scheduler,
@@ -522,7 +550,7 @@ def test_graph_import_service_does_not_update_embeddings_by_default(monkeypatch)
 
 def test_graph_import_service_uses_request_graph_config_without_mutating_global_config(monkeypatch):
     scheduler = Mock()
-    scheduler.schedule_flow.return_value = '{"vertices":[{"label":"person"}],"edges":[]}'
+    scheduler.schedule_flow.return_value = _flow_import_result(edges_created=0)
     monkeypatch.setattr(
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
         lambda: scheduler,
@@ -563,7 +591,7 @@ def test_graph_import_service_uses_request_graph_config_without_mutating_global_
 
 def test_graph_import_service_aligns_graph_name_schema_with_write_target(monkeypatch):
     scheduler = Mock()
-    scheduler.schedule_flow.return_value = '{"vertices":[],"edges":[]}'
+    scheduler.schedule_flow.return_value = _flow_import_result(vertices_created=0, edges_created=0)
     monkeypatch.setattr(
         "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
         lambda: scheduler,
@@ -614,7 +642,7 @@ def test_graph_import_service_rejects_schema_graph_and_target_graph_mismatch(mon
 def test_graph_import_service_passes_graph_config_to_vid_embedding_update(monkeypatch):
     scheduler = Mock()
     scheduler.schedule_flow.side_effect = [
-        '{"vertices":[],"edges":[]}',
+        _flow_import_result(vertices_created=0, edges_created=0),
         "{}",
     ]
     monkeypatch.setattr(
@@ -684,6 +712,19 @@ def test_graph_import_response_marks_all_skipped_result_as_failed(monkeypatch):
     assert response.warnings == ["import error reason=import_error"]
     assert "Tom Hanks" not in str(response.warnings)
     assert "secret" not in str(response.meta["import_result"]["errors"])
+
+
+@pytest.mark.parametrize("raw_result", ["{}", '{"import_result":{}}'])
+def test_graph_import_service_rejects_missing_or_malformed_import_result(monkeypatch, raw_result):
+    scheduler = Mock()
+    scheduler.schedule_flow.return_value = raw_result
+    monkeypatch.setattr(
+        "hugegraph_llm.services.graph_extract_service.SchedulerSingleton.get_instance",
+        lambda: scheduler,
+    )
+
+    with pytest.raises(FlowOutputValidationError, match="import_result"):
+        GraphImportService().import_graph(GraphImportRequest(**_import_payload()))
 
 
 def test_extract_endpoint_never_invokes_import_service():

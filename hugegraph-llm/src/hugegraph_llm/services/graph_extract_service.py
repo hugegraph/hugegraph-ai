@@ -174,6 +174,31 @@ def _build_import_status(import_result: Dict[str, Any]) -> str:
     return "succeeded"
 
 
+def _validate_import_result(import_result: Any) -> Dict[str, Any]:
+    counter_keys = (
+        "vertices_attempted",
+        "vertices_created",
+        "vertices_skipped",
+        "edges_attempted",
+        "edges_created",
+        "edges_skipped",
+        "triples_attempted",
+        "triples_created",
+        "triples_skipped",
+    )
+    if not isinstance(import_result, dict):
+        raise FlowOutputValidationError("graph import flow output must include import_result")
+    for key in counter_keys:
+        value = import_result.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise FlowOutputValidationError(
+                f"graph import flow output import_result.{key} must be a non-negative integer"
+            )
+    if not isinstance(import_result.get("errors"), list):
+        raise FlowOutputValidationError("graph import flow output import_result.errors must be a list")
+    return import_result
+
+
 def _sanitize_import_error(error: Any) -> Dict[str, Any]:
     if not isinstance(error, dict):
         return {"kind": "import", "reason": "import_error"}
@@ -338,20 +363,14 @@ class GraphImportService:
 
         parsed_result = _parse_flow_json(raw_result, "Invalid graph import flow JSON")
         warnings = _pop_warnings(parsed_result)
-        import_result = parsed_result.get("import_result")
-        if isinstance(import_result, dict):
-            import_errors = [_sanitize_import_error(item) for item in import_result.get("errors", [])]
-            import_result["errors"] = import_errors
-            warnings.extend(_format_import_warning(item) for item in import_errors)
-            status = _build_import_status(import_result)
-            vertex_count = int(import_result.get("vertices_created", 0))
-            edge_count = int(import_result.get("edges_created", 0))
-            triple_count = int(import_result.get("triples_created", 0))
-        else:
-            status = "succeeded"
-            vertex_count = _count_items(request.data, "vertices")
-            edge_count = _count_items(request.data, "edges")
-            triple_count = _count_items(request.data, "triples")
+        import_result = _validate_import_result(parsed_result.get("import_result"))
+        import_errors = [_sanitize_import_error(item) for item in import_result.get("errors", [])]
+        import_result["errors"] = import_errors
+        warnings.extend(_format_import_warning(item) for item in import_errors)
+        status = _build_import_status(import_result)
+        vertex_count = int(import_result["vertices_created"])
+        edge_count = int(import_result["edges_created"])
+        triple_count = int(import_result["triples_created"])
         updated_embeddings = False
         if request.options.update_vid_embeddings:
             try:
@@ -364,8 +383,7 @@ class GraphImportService:
                     status = "partial"
 
         meta = {"duration_ms": int((time.perf_counter() - started) * 1000)}
-        if isinstance(import_result, dict):
-            meta["import_result"] = import_result
+        meta["import_result"] = import_result
         if client_config_meta:
             meta["client_config"] = client_config_meta
         return GraphImportResponse(

@@ -19,7 +19,7 @@ import json
 from copy import deepcopy
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from hugegraph_llm.config import llm_settings
 from hugegraph_llm.operators.common_op.check_schema import CheckSchema
@@ -98,7 +98,13 @@ class GraphExtractRequest(BaseModel):
     )
     content: Optional[ContentInput] = Field(default=None, description="Raw document text or pre-split chunks.")
     texts: Optional[ContentInput] = Field(default=None, description="Deprecated alias for text or chunk content.")
-    schema_data: SchemaInput = Field(..., alias="schema", description="Graph schema JSON object/string, or graph name.")
+    schema_data: SchemaInput = Field(
+        ...,
+        alias="schema",
+        validation_alias=AliasChoices("schema", "graph_schema", "schema_data"),
+        serialization_alias="schema",
+        description="Graph schema JSON object/string, or graph name.",
+    )
     example_prompt: Optional[str] = Field(default=None, description="Extraction prompt header or examples.")
     extract_type: Literal["property_graph"] = Field(default="property_graph")
     language: Literal["zh", "en"] = Field(default="zh")

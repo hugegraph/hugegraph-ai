@@ -66,6 +66,18 @@ class Commit2Graph:
             error["key"] = key
         return error
 
+    def _vertex_mapping_id(self, vertex, vertex_label=None):
+        explicit_id = vertex.get("id")
+        if explicit_id:
+            return explicit_id
+        if vertex_label is None:
+            return None
+        primary_keys = vertex_label.get("primary_keys", [])
+        properties = vertex.get("properties") or {}
+        if primary_keys and all(properties.get(pk) for pk in primary_keys):
+            return f"{vertex['label']}:{'!'.join(str(properties[pk]) for pk in primary_keys)}"
+        return None
+
     def _validate_input_properties(
         self,
         kind,
@@ -162,6 +174,8 @@ class Commit2Graph:
         edge_label_map = {e_label["name"]: e_label for e_label in schema["edgelabels"]}
         property_label_map = {p_label["name"]: p_label for p_label in schema["propertykeys"]}
         vid_mapping = {}  # mapping from LLM-generated vertex ID to actual server vertex ID
+        batch_vertex_refs = set()
+        failed_vertex_refs = set()
 
         for vertex_index, vertex in enumerate(vertices):
             input_label = vertex["label"]
@@ -175,6 +189,10 @@ class Commit2Graph:
                 import_result["errors"].append(
                     self._import_error("vertex", vertex_index, "vertex_label_not_found", label=input_label)
                 )
+                vertex_ref = self._vertex_mapping_id(vertex)
+                if vertex_ref:
+                    batch_vertex_refs.add(vertex_ref)
+                    failed_vertex_refs.add(vertex_ref)
                 continue
 
             input_properties = vertex["properties"]
@@ -212,7 +230,14 @@ class Commit2Graph:
                     )
             if has_problem:
                 import_result["vertices_skipped"] += 1
+                vertex_ref = self._vertex_mapping_id(vertex, vertex_label)
+                if vertex_ref:
+                    batch_vertex_refs.add(vertex_ref)
+                    failed_vertex_refs.add(vertex_ref)
                 continue
+            mapping_id = self._vertex_mapping_id(vertex, vertex_label)
+            if mapping_id:
+                batch_vertex_refs.add(mapping_id)
 
             # 3. Ensure all non-nullable props are set
             for key in non_null_keys:
@@ -229,14 +254,12 @@ class Commit2Graph:
                 property_label_map,
                 import_result,
             ):
+                if mapping_id:
+                    failed_vertex_refs.add(mapping_id)
                 continue
 
             # TODO: we could try batch add vertices first, setback to single-mode if failed
             explicit_id = vertex.get("id")
-            mapping_id = explicit_id
-            if not mapping_id and primary_keys:
-                mapping_id = f"{input_label}:{'!'.join(str(input_properties[pk]) for pk in primary_keys)}"
-
             if vertex_label.get("id_strategy") == "CUSTOMIZE_STRING" and explicit_id:
                 result = self._handle_graph_creation(
                     self.client.graph().addVertex,
@@ -251,6 +274,8 @@ class Commit2Graph:
                 import_result["errors"].append(
                     self._import_error("vertex", vertex_index, "create_failed", label=input_label)
                 )
+                if mapping_id:
+                    failed_vertex_refs.add(mapping_id)
                 continue
             vid = result.id
             import_result["vertices_created"] += 1
@@ -259,8 +284,6 @@ class Commit2Graph:
                 vid_mapping[mapping_id] = vid
 
         for edge_index, edge in enumerate(edges):
-            start = vid_mapping.get(edge.get("outV"), edge.get("outV"))
-            end = vid_mapping.get(edge.get("inV"), edge.get("inV"))
             label = edge["label"]
             properties = edge["properties"]
 
@@ -288,6 +311,26 @@ class Commit2Graph:
                     self._import_error("edge", edge_index, "target_label_mismatch", label=label, key="inVLabel")
                 )
                 continue
+
+            start_ref = edge.get("outV")
+            end_ref = edge.get("inV")
+            endpoint_error = None
+            for endpoint_key, endpoint_ref in (("outV", start_ref), ("inV", end_ref)):
+                if endpoint_ref in failed_vertex_refs:
+                    endpoint_error = ("endpoint_vertex_failed", endpoint_key)
+                    break
+                if endpoint_ref in batch_vertex_refs and endpoint_ref not in vid_mapping:
+                    endpoint_error = ("missing_endpoint", endpoint_key)
+                    break
+            if endpoint_error is not None:
+                reason, endpoint_key = endpoint_error
+                import_result["edges_skipped"] += 1
+                import_result["errors"].append(
+                    self._import_error("edge", edge_index, reason, label=label, key=endpoint_key)
+                )
+                continue
+            start = vid_mapping.get(start_ref, start_ref)
+            end = vid_mapping.get(end_ref, end_ref)
 
             if not self._validate_input_properties(
                 "edge",

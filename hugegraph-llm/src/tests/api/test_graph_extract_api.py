@@ -532,6 +532,9 @@ def test_request_model_validation_and_aliases():
     assert req.schema == INLINE_SCHEMA
     assert req.client_config is None
 
+    legacy_schema_alias = GraphExtractRequest(texts="hello", graph_schema=INLINE_SCHEMA)
+    assert legacy_schema_alias.schema == INLINE_SCHEMA
+
     legacy_chunks = GraphExtractRequest(texts=["hello", "world"], schema=INLINE_SCHEMA)
     assert legacy_chunks.content_type == "chunks"
     assert legacy_chunks.texts == ["hello", "world"]

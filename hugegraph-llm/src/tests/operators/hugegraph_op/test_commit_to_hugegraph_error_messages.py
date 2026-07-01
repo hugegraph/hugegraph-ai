@@ -79,7 +79,13 @@ def test_import_errors_do_not_include_raw_vertex_or_edge_payloads():
 
     assert result["errors"] == [
         {"kind": "vertex", "index": 0, "reason": "create_failed", "label": "person"},
-        {"kind": "edge", "index": 0, "reason": "create_failed", "label": "acted_in"},
+        {
+            "kind": "edge",
+            "index": 0,
+            "reason": "endpoint_vertex_failed",
+            "label": "acted_in",
+            "key": "outV",
+        },
     ]
     error_text = str(result["errors"])
     assert "Tom Hanks" not in error_text
@@ -205,6 +211,70 @@ def test_import_rejects_invalid_edge_property_type_before_writing():
         {"kind": "edge", "index": 0, "reason": "invalid_property_type", "label": "acted_in", "key": "role"}
     ]
     mock_handle_graph_creation.assert_not_called()
+
+
+def test_import_skips_edge_when_batch_endpoint_vertex_failed():
+    commit2graph = _commit_operator()
+    vertices = [{"label": "person", "properties": {"name": "Tom Hanks", "secret": "raw user data"}}]
+    edges = [
+        {
+            "label": "acted_in",
+            "properties": {"role": "Forrest Gump"},
+            "outV": "person:Tom Hanks",
+            "outVLabel": "person",
+            "inV": "movie:Forrest Gump",
+            "inVLabel": "movie",
+        }
+    ]
+
+    with patch.object(commit2graph, "_handle_graph_creation") as mock_handle_graph_creation:
+        result = commit2graph.load_into_graph(vertices, edges, _schema())
+
+    assert result["vertices_created"] == 0
+    assert result["vertices_skipped"] == 1
+    assert result["edges_created"] == 0
+    assert result["edges_skipped"] == 1
+    assert result["errors"] == [
+        {"kind": "vertex", "index": 0, "reason": "unknown_property", "label": "person", "key": "secret"},
+        {
+            "kind": "edge",
+            "index": 0,
+            "reason": "endpoint_vertex_failed",
+            "label": "acted_in",
+            "key": "outV",
+        },
+    ]
+    assert "Tom Hanks" not in str(result["errors"])
+    assert "raw user data" not in str(result["errors"])
+    mock_handle_graph_creation.assert_not_called()
+
+
+def test_import_keeps_raw_endpoint_fallback_for_existing_vertices():
+    commit2graph = _commit_operator()
+    edges = [
+        {
+            "label": "acted_in",
+            "properties": {"role": "Forrest Gump"},
+            "outV": "person:Tom Hanks",
+            "outVLabel": "person",
+            "inV": "movie:Forrest Gump",
+            "inVLabel": "movie",
+        }
+    ]
+
+    with patch.object(commit2graph, "_handle_graph_creation", return_value=MagicMock(id="edge_id")) as mock_create:
+        result = commit2graph.load_into_graph([], edges, _schema())
+
+    assert result["edges_created"] == 1
+    assert result["edges_skipped"] == 0
+    assert result["errors"] == []
+    mock_create.assert_called_once_with(
+        commit2graph.client.graph().addEdge,
+        "acted_in",
+        "person:Tom Hanks",
+        "movie:Forrest Gump",
+        {"role": "Forrest Gump"},
+    )
 
 
 def test_import_rejects_bool_for_int_property_before_writing():
