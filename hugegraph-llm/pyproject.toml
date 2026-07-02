@@ -52,6 +52,7 @@ dependencies = [
     "nltk",
     "gradio",
     "jieba",
+    "rouge_score",
     "python-docx",
     "pypdf",
     "langchain-text-splitters",
@@ -71,6 +72,9 @@ vectordb = [
     "pymilvus==2.5.9",
     "qdrant-client==1.14.2",
 ]
+
+[project.scripts]
+hugegraph-benchmark = "hugegraph_llm.benchmark.cli:main"
 
 [project.urls]
 homepage = "https://hugegraph.apache.org/"

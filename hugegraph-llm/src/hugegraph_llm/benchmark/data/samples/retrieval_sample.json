@@ -1,0 +1,22 @@
+{
+  "samples": [
+    {
+      "sample_id": "ret_001",
+      "question": "What is the capital of France?",
+      "gold_docs": ["doc_paris", "doc_france_capital"],
+      "retrieved_docs": ["doc_paris", "doc_france_capital", "doc_london", "doc_berlin", "doc_madrid"]
+    },
+    {
+      "sample_id": "ret_002",
+      "question": "How does photosynthesis work?",
+      "gold_docs": ["doc_photosynthesis", "doc_chloroplast", "doc_light_reaction"],
+      "retrieved_docs": ["doc_photosynthesis", "doc_cell_biology", "doc_mitosis", "doc_evolution"]
+    },
+    {
+      "sample_id": "ret_003",
+      "question": "Who wrote Dream of the Red Chamber?",
+      "gold_docs": ["doc_cao_xueqin", "doc_dream_red_chamber"],
+      "retrieved_docs": ["doc_journey_west", "doc_water_margin", "doc_three_kingdoms", "doc_chatgpt", "doc_llm"]
+    }
+  ]
+}

@@ -1,0 +1,3086 @@
+{
+  "schema": {
+    "vertexlabels": [
+      {
+        "name": "VehicleBrand",
+        "primary_keys": [
+          "brand_name"
+        ]
+      },
+      {
+        "name": "VehicleModel",
+        "primary_keys": [
+          "model_name"
+        ]
+      },
+      {
+        "name": "VehicleSystem",
+        "primary_keys": [
+          "system_name"
+        ]
+      },
+      {
+        "name": "Component",
+        "primary_keys": [
+          "comp_name"
+        ]
+      },
+      {
+        "name": "Function",
+        "primary_keys": [
+          "func_name"
+        ]
+      },
+      {
+        "name": "Status",
+        "primary_keys": [
+          "status_name"
+        ]
+      },
+      {
+        "name": "Operation",
+        "primary_keys": [
+          "op_name"
+        ]
+      },
+      {
+        "name": "Specification",
+        "primary_keys": [
+          "spec_name"
+        ]
+      }
+    ],
+    "edgelabels": [
+      {
+        "name": "HAS_MODEL",
+        "source_label": "VehicleBrand",
+        "target_label": "VehicleModel"
+      },
+      {
+        "name": "HAS_SYSTEM",
+        "source_label": "VehicleModel",
+        "target_label": "VehicleSystem"
+      },
+      {
+        "name": "HAS_COMPONENT",
+        "source_label": "VehicleModel",
+        "target_label": "Component"
+      },
+      {
+        "name": "HAS_FUNCTION",
+        "source_label": "VehicleModel",
+        "target_label": "Function"
+      },
+      {
+        "name": "ACTIVATES",
+        "source_label": "Component",
+        "target_label": "Function"
+      },
+      {
+        "name": "OPERATED_BY",
+        "source_label": "Function",
+        "target_label": "Operation"
+      },
+      {
+        "name": "OPERATES_ON",
+        "source_label": "Operation",
+        "target_label": "Component"
+      },
+      {
+        "name": "HAS_STATUS",
+        "source_label": "Component",
+        "target_label": "Status"
+      },
+      {
+        "name": "SYSTEM_HAS_STATUS",
+        "source_label": "VehicleSystem",
+        "target_label": "Status"
+      },
+      {
+        "name": "RESOLVED_BY",
+        "source_label": "Status",
+        "target_label": "Operation"
+      },
+      {
+        "name": "MODEL_HAS_SPEC",
+        "source_label": "VehicleModel",
+        "target_label": "Specification"
+      }
+    ]
+  },
+  "samples": [
+    {
+      "sample_id": "car_audi_a8",
+      "input_text": "doc_name: 2011款奥迪A8-Audi_A8_2011_使用说明书.pdf.md\nvehicle_brand: 奥迪\nvehicle_model: 奥迪A8\nsource_section: 一般说明 || 发动机未被关闭 || 发动机再次自行启动 || 提示\n\n发动机在变速箱P、D、D和S或手动运行模式下关闭。当变速箱P档位时，如果把脚从制动器上移开的话，那么发动机也保持关闭状态。如果挂入一个其它行驶档位或松开制动器，那么发动机才再次启动。\n\n如果在停机阶段变速箱切换到R倒车档位，那么发动机再次启动。\n\n从D向P档位切换要迅速，以避免在通过R档时不必要地启动发动机。\n\n不管发动机关闭与否，你可以降低或提高制动力量自己进行控制。在走走停停的行驶或转弯时，如果制动踩起来不轻便，那么表示车辆静止时未\n\n导入停机。一旦重踩制动，那么发动机即被关闭。\n\n常规的智能启动/停止运作可能受不同的系统原因的制约而被中断。\n\n图104 组合仪表：暂时没有发动机关闭功能\n\n每次停机前，系统检查特定的条件是否已经满足。在下列情形中，发动机不关闭。\n\n- 发动机尚未达到使用能启动/停止运行系统的最低温度。  \n- 尚未达到通过空调装置设置的内部温度。  \n- 外界温度很高或很低。  \n- 前挡风玻璃正被除霜 $\\Rightarrow 59$ 页。  \n- 驻车辅助系统* 已打开。  \n- 蓄电池充电状态过低。  \n- 方向盘大幅度偏转或有方向盘运动。  \n- 挂入了倒车档。  \n- 坡度很陡。\n\n在组合仪表显示屏上的信息栏中会出现指示灯 $\\Rightarrow$ 图104。\n\n在停机阶段，在下列情形下会中断常规的启动/停止运行。发动机无需驾驶员动作再次启动。\n\n- 内部温度偏离通过空调装置选择的数值。  \n- 前挡风玻璃正被除霜 $\\Rightarrow 59$ 页。  \n- 多次踩过制动器。  \n- 蓄电池充电状态过低。  \n- 高电流消耗。\n\n如果要在挂入倒车档后切换到D、N或S档位，那么必须先以10公里/小时速度行驶，以便系统能够再次关闭发动机。",
+      "gold_vertices": [
+        {
+          "label": "VehicleBrand",
+          "name": "奥迪",
+          "properties": {
+            "brand_name": "奥迪"
+          }
+        },
+        {
+          "label": "VehicleModel",
+          "name": "奥迪A8",
+          "properties": {
+            "model_name": "奥迪A8"
+          }
+        },
+        {
+          "label": "VehicleSystem",
+          "name": "智能启动/停止系统",
+          "properties": {
+            "system_name": "智能启动/停止系统",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "VehicleSystem",
+          "name": "空调装置",
+          "properties": {
+            "system_name": "空调装置",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "VehicleSystem",
+          "name": "驻车辅助系统",
+          "properties": {
+            "system_name": "驻车辅助系统",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "发动机",
+          "properties": {
+            "comp_name": "发动机",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "变速箱",
+          "properties": {
+            "comp_name": "变速箱",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "制动器",
+          "properties": {
+            "comp_name": "制动器",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "前挡风玻璃",
+          "properties": {
+            "comp_name": "前挡风玻璃",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "蓄电池",
+          "properties": {
+            "comp_name": "蓄电池",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "方向盘",
+          "properties": {
+            "comp_name": "方向盘",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "组合仪表显示屏",
+          "properties": {
+            "comp_name": "组合仪表显示屏",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Function",
+          "name": "发动机自动关闭功能",
+          "properties": {
+            "func_name": "发动机自动关闭功能",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Function",
+          "name": "发动机自动再次启动功能",
+          "properties": {
+            "func_name": "发动机自动再次启动功能",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "挂入其它行驶档位",
+          "properties": {
+            "op_name": "挂入其它行驶档位",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "松开制动器",
+          "properties": {
+            "op_name": "松开制动器",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "变速箱切换到R倒车档位",
+          "properties": {
+            "op_name": "变速箱切换到R倒车档位",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "从D向P档位迅速切换",
+          "properties": {
+            "op_name": "从D向P档位迅速切换",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "重踩制动",
+          "properties": {
+            "op_name": "重踩制动",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "挂入倒车档后切换到D、N或S档位",
+          "properties": {
+            "op_name": "挂入倒车档后切换到D、N或S档位",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "发动机再次启动",
+          "properties": {
+            "status_name": "发动机再次启动",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "常规智能启动/停止运作被中断",
+          "properties": {
+            "status_name": "常规智能启动/停止运作被中断",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "暂时没有发动机关闭功能",
+          "properties": {
+            "status_name": "暂时没有发动机关闭功能",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "发动机不关闭",
+          "properties": {
+            "status_name": "发动机不关闭",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "发动机尚未达到使用启动/停止运行系统的最低温度",
+          "properties": {
+            "status_name": "发动机尚未达到使用启动/停止运行系统的最低温度",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "尚未达到通过空调装置设置的内部温度",
+          "properties": {
+            "status_name": "尚未达到通过空调装置设置的内部温度",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "外界温度很高或很低",
+          "properties": {
+            "status_name": "外界温度很高或很低",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "前挡风玻璃正被除霜",
+          "properties": {
+            "status_name": "前挡风玻璃正被除霜",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "驻车辅助系统已打开",
+          "properties": {
+            "status_name": "驻车辅助系统已打开",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "蓄电池充电状态过低",
+          "properties": {
+            "status_name": "蓄电池充电状态过低",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "方向盘大幅度偏转或有方向盘运动",
+          "properties": {
+            "status_name": "方向盘大幅度偏转或有方向盘运动",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "挂入了倒车档",
+          "properties": {
+            "status_name": "挂入了倒车档",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "坡度很陡",
+          "properties": {
+            "status_name": "坡度很陡",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "常规启动/停止运行被中断",
+          "properties": {
+            "status_name": "常规启动/停止运行被中断",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "内部温度偏离通过空调装置选择的数值",
+          "properties": {
+            "status_name": "内部温度偏离通过空调装置选择的数值",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "多次踩过制动器",
+          "properties": {
+            "status_name": "多次踩过制动器",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "高电流消耗",
+          "properties": {
+            "status_name": "高电流消耗",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "10公里/小时速度",
+          "properties": {
+            "spec_name": "10公里/小时速度",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        }
+      ],
+      "gold_edges": [
+        {
+          "label": "HAS_MODEL",
+          "outV": "奥迪",
+          "inV": "奥迪A8",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_SYSTEM",
+          "outV": "奥迪A8",
+          "inV": "智能启动/停止系统",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_SYSTEM",
+          "outV": "奥迪A8",
+          "inV": "空调装置",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_SYSTEM",
+          "outV": "奥迪A8",
+          "inV": "驻车辅助系统",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "发动机",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "前挡风玻璃",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "蓄电池",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "方向盘",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "组合仪表显示屏",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_FUNCTION",
+          "outV": "奥迪A8",
+          "inV": "发动机自动关闭功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_FUNCTION",
+          "outV": "奥迪A8",
+          "inV": "发动机自动再次启动功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "ACTIVATES",
+          "outV": "制动器",
+          "inV": "发动机自动关闭功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "ACTIVATES",
+          "outV": "变速箱",
+          "inV": "发动机自动再次启动功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "ACTIVATES",
+          "outV": "制动器",
+          "inV": "发动机自动再次启动功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动再次启动功能",
+          "inV": "挂入其它行驶档位",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动再次启动功能",
+          "inV": "松开制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动再次启动功能",
+          "inV": "变速箱切换到R倒车档位",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动关闭功能",
+          "inV": "重踩制动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动关闭功能",
+          "inV": "挂入倒车档后切换到D、N或S档位",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "挂入其它行驶档位",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "松开制动器",
+          "inV": "制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "变速箱切换到R倒车档位",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "从D向P档位迅速切换",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "重踩制动",
+          "inV": "制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "挂入倒车档后切换到D、N或S档位",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "发动机",
+          "inV": "发动机再次启动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "发动机",
+          "inV": "发动机不关闭",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "前挡风玻璃",
+          "inV": "前挡风玻璃正被除霜",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "蓄电池",
+          "inV": "蓄电池充电状态过低",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "方向盘",
+          "inV": "方向盘大幅度偏转或有方向盘运动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "变速箱",
+          "inV": "挂入了倒车档",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "制动器",
+          "inV": "多次踩过制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "发动机再次启动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "暂时没有发动机关闭功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "发动机不关闭",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "发动机尚未达到使用启动/停止运行系统的最低温度",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "尚未达到通过空调装置设置的内部温度",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "外界温度很高或很低",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "前挡风玻璃正被除霜",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "驻车辅助系统已打开",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "蓄电池充电状态过低",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "方向盘大幅度偏转或有方向盘运动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "挂入了倒车档",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "坡度很陡",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "常规启动/停止运行被中断",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "内部温度偏离通过空调装置选择的数值",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "多次踩过制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "高电流消耗",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "空调装置",
+          "inV": "尚未达到通过空调装置设置的内部温度",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "空调装置",
+          "inV": "内部温度偏离通过空调装置选择的数值",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "驻车辅助系统",
+          "inV": "驻车辅助系统已打开",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "奥迪A8",
+          "inV": "10公里/小时速度",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "RESOLVED_BY",
+          "outV": "挂入了倒车档",
+          "inV": "挂入倒车档后切换到D、N或S档位",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        }
+      ],
+      "candidate_vertices": [
+        {
+          "label": "VehicleBrand",
+          "name": "奥迪",
+          "properties": {
+            "brand_name": "奥迪"
+          }
+        },
+        {
+          "label": "VehicleModel",
+          "name": "奥迪A8",
+          "properties": {
+            "model_name": "奥迪A8"
+          }
+        },
+        {
+          "label": "VehicleSystem",
+          "name": "智能启动/停止系统",
+          "properties": {
+            "system_name": "智能启动/停止系统",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "VehicleSystem",
+          "name": "空调装置",
+          "properties": {
+            "system_name": "空调装置",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "VehicleSystem",
+          "name": "驻车辅助系统",
+          "properties": {
+            "system_name": "驻车辅助系统",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "发动机",
+          "properties": {
+            "comp_name": "发动机",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "变速箱",
+          "properties": {
+            "comp_name": "变速箱",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "制动器",
+          "properties": {
+            "comp_name": "制动器",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "前挡风玻璃",
+          "properties": {
+            "comp_name": "前挡风玻璃",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "蓄电池",
+          "properties": {
+            "comp_name": "蓄电池",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "方向盘",
+          "properties": {
+            "comp_name": "方向盘",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "组合仪表显示屏",
+          "properties": {
+            "comp_name": "组合仪表显示屏",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Function",
+          "name": "发动机自动关闭功能",
+          "properties": {
+            "func_name": "发动机自动关闭功能",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Function",
+          "name": "发动机自动再次启动功能",
+          "properties": {
+            "func_name": "发动机自动再次启动功能",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "挂入其它行驶档位",
+          "properties": {
+            "op_name": "挂入其它行驶档位",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "松开制动器",
+          "properties": {
+            "op_name": "松开制动器",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "变速箱切换到R倒车档位",
+          "properties": {
+            "op_name": "变速箱切换到R倒车档位",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "从D向P档位迅速切换",
+          "properties": {
+            "op_name": "从D向P档位迅速切换",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "重踩制动",
+          "properties": {
+            "op_name": "重踩制动",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Operation",
+          "name": "挂入倒车档后切换到D、N或S档位",
+          "properties": {
+            "op_name": "挂入倒车档后切换到D、N或S档位",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "发动机再次启动",
+          "properties": {
+            "status_name": "发动机再次启动",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "常规智能启动/停止运作被中断",
+          "properties": {
+            "status_name": "常规智能启动/停止运作被中断",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "暂时没有发动机关闭功能",
+          "properties": {
+            "status_name": "暂时没有发动机关闭功能",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "发动机不关闭",
+          "properties": {
+            "status_name": "发动机不关闭",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "发动机尚未达到使用启动/停止运行系统的最低温度",
+          "properties": {
+            "status_name": "发动机尚未达到使用启动/停止运行系统的最低温度",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "尚未达到通过空调装置设置的内部温度",
+          "properties": {
+            "status_name": "尚未达到通过空调装置设置的内部温度",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "外界温度很高或很低",
+          "properties": {
+            "status_name": "外界温度很高或很低",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "前挡风玻璃正被除霜",
+          "properties": {
+            "status_name": "前挡风玻璃正被除霜",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "驻车辅助系统已打开",
+          "properties": {
+            "status_name": "驻车辅助系统已打开",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "蓄电池充电状态过低",
+          "properties": {
+            "status_name": "蓄电池充电状态过低",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "方向盘大幅度偏转或有方向盘运动",
+          "properties": {
+            "status_name": "方向盘大幅度偏转或有方向盘运动",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "挂入了倒车档",
+          "properties": {
+            "status_name": "挂入了倒车档",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "坡度很陡",
+          "properties": {
+            "status_name": "坡度很陡",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "常规启动/停止运行被中断",
+          "properties": {
+            "status_name": "常规启动/停止运行被中断",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "内部温度偏离通过空调装置选择的数值",
+          "properties": {
+            "status_name": "内部温度偏离通过空调装置选择的数值",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Status",
+          "name": "多次踩过制动器",
+          "properties": {
+            "status_name": "多次踩过制动器",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "Component",
+          "name": "涡轮增压器",
+          "properties": {
+            "comp_name": "涡轮增压器",
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        }
+      ],
+      "candidate_edges": [
+        {
+          "label": "HAS_MODEL",
+          "outV": "奥迪",
+          "inV": "奥迪A8",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_SYSTEM",
+          "outV": "奥迪A8",
+          "inV": "智能启动/停止系统",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_SYSTEM",
+          "outV": "奥迪A8",
+          "inV": "空调装置",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_SYSTEM",
+          "outV": "奥迪A8",
+          "inV": "驻车辅助系统",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "发动机",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "前挡风玻璃",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "蓄电池",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "方向盘",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_COMPONENT",
+          "outV": "奥迪A8",
+          "inV": "组合仪表显示屏",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_FUNCTION",
+          "outV": "奥迪A8",
+          "inV": "发动机自动关闭功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_FUNCTION",
+          "outV": "奥迪A8",
+          "inV": "发动机自动再次启动功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "ACTIVATES",
+          "outV": "制动器",
+          "inV": "发动机自动关闭功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "ACTIVATES",
+          "outV": "变速箱",
+          "inV": "发动机自动再次启动功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "ACTIVATES",
+          "outV": "制动器",
+          "inV": "发动机自动再次启动功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动再次启动功能",
+          "inV": "挂入其它行驶档位",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动再次启动功能",
+          "inV": "松开制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动再次启动功能",
+          "inV": "变速箱切换到R倒车档位",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动关闭功能",
+          "inV": "重踩制动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATED_BY",
+          "outV": "发动机自动关闭功能",
+          "inV": "挂入倒车档后切换到D、N或S档位",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "挂入其它行驶档位",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "松开制动器",
+          "inV": "制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "变速箱切换到R倒车档位",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "从D向P档位迅速切换",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "重踩制动",
+          "inV": "制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "OPERATES_ON",
+          "outV": "挂入倒车档后切换到D、N或S档位",
+          "inV": "变速箱",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "发动机",
+          "inV": "发动机再次启动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "发动机",
+          "inV": "发动机不关闭",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "前挡风玻璃",
+          "inV": "前挡风玻璃正被除霜",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "蓄电池",
+          "inV": "蓄电池充电状态过低",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "方向盘",
+          "inV": "方向盘大幅度偏转或有方向盘运动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "变速箱",
+          "inV": "挂入了倒车档",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "HAS_STATUS",
+          "outV": "制动器",
+          "inV": "多次踩过制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "发动机再次启动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "暂时没有发动机关闭功能",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "发动机不关闭",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "发动机尚未达到使用启动/停止运行系统的最低温度",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "尚未达到通过空调装置设置的内部温度",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "外界温度很高或很低",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "前挡风玻璃正被除霜",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "驻车辅助系统已打开",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "蓄电池充电状态过低",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "方向盘大幅度偏转或有方向盘运动",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "挂入了倒车档",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "坡度很陡",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "常规启动/停止运行被中断",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "内部温度偏离通过空调装置选择的数值",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "智能启动/停止系统",
+          "inV": "多次踩过制动器",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "空调装置",
+          "inV": "尚未达到通过空调装置设置的内部温度",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "空调装置",
+          "inV": "内部温度偏离通过空调装置选择的数值",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "SYSTEM_HAS_STATUS",
+          "outV": "驻车辅助系统",
+          "inV": "驻车辅助系统已打开",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        },
+        {
+          "label": "RESOLVED_BY",
+          "outV": "挂入了倒车档",
+          "inV": "挂入倒车档后切换到D、N或S档位",
+          "properties": {
+            "vehicle_brand": "奥迪",
+            "vehicle_model": "奥迪A8"
+          }
+        }
+      ]
+    },
+    {
+      "sample_id": "car_peugeot_5008",
+      "input_text": "vehicle_brand: 标致\nvehicle_model: 5008\nsource_section: 整车技术参数 || 油耗、车轮定位参数\n\n制动盘单边磨损量大于1毫米时应立即更换。请向东风标致授权销售服务商咨询有关制动盘磨损方面的信息。\n\n整车技术参数  \n\n<table><tr><td>公告车型</td><td>DC6479TLAB16、DC6479TLBB16</td><td>DC6479TLAB18、DC6479TLBB18</td><td>DC6479KLAB16、DC6479KLBB16</td><td>DC6479KLCB16、DC6479KLDB16</td><td>DC6479KLAB18、DC6479KLBB18</td></tr><tr><td>汽油发动机</td><td>1.6T</td><td>1.8T</td><td>1.6T</td><td>1.6T</td><td>1.8T</td></tr><tr><td>变速箱</td><td>自动6挡</td><td>自动6挡</td><td>自动6挡</td><td>自动6挡</td><td>自动8挡</td></tr><tr><td>燃油箱有效容量(L)</td><td colspan=\"5\">56</td></tr><tr><td>燃油</td><td colspan=\"5\">92#或92#以上无铅汽油。为了获得更大的驾驶乐趣,推荐您使用95#或95#以上无铅汽油。</td></tr><tr><td>排量(L)</td><td>1.598</td><td>1.751</td><td>1.598</td><td>1.598</td><td>1.751</td></tr><tr><td>缸径×冲程(mm×mm)</td><td>77×85.8</td><td>77.5×92.8</td><td>77×85.8</td><td>77×85.8</td><td>77.5×92.8</td></tr><tr><td>额定功率/转速(kw/r/min)</td><td>123/6000</td><td>150/5500</td><td>125/6000</td><td>125/5500</td><td>155/5500</td></tr><tr><td>最大净功率/转速(kw/r/min)</td><td>123/6000</td><td>150/5500</td><td>125/6000</td><td>125/5500</td><td>155/5500</td></tr><tr><td>最大扭矩/转速(N·m/r/min)</td><td>245/(1400~4000)</td><td>280(1400~4000)</td><td>260(2000~3500)</td><td>250(1750~4500)</td><td>300/(1900-4500)</td></tr><tr><td>最大设计车速(km/h)</td><td>205</td><td>220</td><td>205</td><td>205</td><td>220</td></tr><tr><td>排放标准</td><td colspan=\"2\">国V</td><td colspan=\"3\">国VI</td></tr><tr><td>驱动形式</td><td colspan=\"5\">前轮驱动</td></tr></table>\n\n<table><tr><td>公告车型</td><td>DC6479TLAB16</td><td>DC6479TLBB16</td><td>DC6479KLAB16</td><td>DC6479KLBB16</td><td>DC64799KLCB16</td><td>DC6479KLDB16</td><td>DC6479TLAB18</td><td>DC6479TLBB18</td><td>DC6479KLAB18</td><td>DC6479KLBB18</td></tr><tr><td>汽油发动机</td><td colspan=\"6\">1.6T</td><td colspan=\"4\">1.8T</td></tr><tr><td>变速箱</td><td colspan=\"6\">自动6挡</td><td colspan=\"2\">自动6挡</td><td colspan=\"2\">自动8挡</td></tr><tr><td>整备质量</td><td>1541</td><td>1570</td><td>1550</td><td>1595</td><td>1541</td><td>1585</td><td>1550</td><td>1595</td><td>1560</td><td>1600</td></tr><tr><td>整备质量下的前轴轴荷</td><td>931</td><td>919</td><td>932</td><td>935</td><td>906</td><td>928</td><td>926</td><td>934</td><td>914</td><td>938</td></tr><tr><td>整备质量下的后轴轴荷</td><td>610</td><td>651</td><td>618</td><td>660</td><td>635</td><td>657</td><td>624</td><td>661</td><td>646</td><td>662</td></tr><tr><td>最大允许总质量</td><td>2099</td><td>2099</td><td>2127</td><td>2127</td><td>2117</td><td>2117</td><td>2143</td><td>2143</td><td>2144</td><td>2144</td></tr><tr><td>最大允许总质量下的前轴轴荷</td><td>1031</td><td>1031</td><td>1050</td><td>1050</td><td>1054</td><td>1054</td><td>1056</td><td>1056</td><td>1057</td><td>1057</td></tr><tr><td>最大允许总质量下的后轴轴荷</td><td>1068</td><td>1068</td><td>1077</td><td>1077</td><td>1063</td><td>1063</td><td>1087</td><td>1087</td><td>1087</td><td>1087</td></tr><tr><td>额定乘员数(人)</td><td>5</td><td>7</td><td>5</td><td>7</td><td>5</td><td>7</td><td>5</td><td>7</td><td>5</td><td>7</td></tr><tr><td>最大爬坡度(%)</td><td colspan=\"10\">30</td></tr><tr><td>最小转弯直径(m)</td><td colspan=\"10\">11.2</td></tr><tr><td>制动踏板自由行程(mm)</td><td colspan=\"10\">≤5.95</td></tr><tr><td>车顶行李架最大允许载重量(kg)</td><td colspan=\"10\">80</td></tr></table>\n\n油耗、车轮定位参数  \n\n<table><tr><td colspan=\"5\">油耗(L/100km)</td></tr><tr><td>公告车型</td><td>变速箱</td><td>城市工况</td><td>市郊工况</td><td>混合工况</td></tr><tr><td>DC6479TLAB16、DC6479TLBB16</td><td>自动</td><td>8.7</td><td>5.4</td><td>6.6</td></tr><tr><td>DC6479KLAB16、DC6479KLBB16</td><td>自动</td><td>8.2</td><td>5.4</td><td>6.4</td></tr><tr><td>DC6479KLCB16、DC6479KLDB16</td><td>自动</td><td>8.2</td><td>5.3</td><td>6.3</td></tr><tr><td>DC6479TLAB18、DC6479TLBB18</td><td>自动</td><td>8.9</td><td>5.6</td><td>6.8</td></tr><tr><td>DC6479KLAB18、DC6479KLBB18</td><td>自动</td><td>8.2</td><td>5.6</td><td>6.5</td></tr></table>\n\n油耗根据以下标准进行试验测定：GB/T19233。  \n实际油耗会受驾驶习惯、行驶条件、天气条件、汽车负载、汽车保养和附件的使用等情况的影响而变化。  \n上表所列燃油消耗量对应的是本手册印刷时所获得的数据，供用户参考。\n\n<table><tr><td colspan=\"3\">车轮定位参数</td></tr><tr><td rowspan=\"4\">前轮</td><td>车轮外倾角(°)</td><td>-0.6±0.5</td></tr><tr><td>主销内倾角(°)</td><td>13.7±0.5</td></tr><tr><td>主销后倾角(°)</td><td>4.0±0.5</td></tr><tr><td>前束(mm)</td><td>-1.5±1</td></tr><tr><td rowspan=\"2\">后轮</td><td>车轮外倾角(°)</td><td>-1.85±0.5</td></tr><tr><td>前束(mm)</td><td>5.2±1</td></tr></table>\n\n车轮定位参数为车辆装载4个68kg乘员 $+28\\mathrm{kg}$ 行李状态下的数值。",
+      "gold_vertices": [
+        {
+          "label": "VehicleBrand",
+          "name": "标致",
+          "properties": {
+            "brand_name": "标致"
+          }
+        },
+        {
+          "label": "VehicleModel",
+          "name": "5008",
+          "properties": {
+            "model_name": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最高车速_1.6T",
+          "properties": {
+            "spec_name": "最高车速",
+            "value_text": "205 km/h",
+            "value_num": 205,
+            "unit": "km/h",
+            "condition_note": "1.6T发动机相关车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最高车速_1.8T",
+          "properties": {
+            "spec_name": "最高车速",
+            "value_text": "220 km/h",
+            "value_num": 220,
+            "unit": "km/h",
+            "condition_note": "1.8T发动机相关车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "排放标准_国V",
+          "properties": {
+            "spec_name": "排放标准",
+            "value_text": "国V",
+            "condition_note": "公告车型DC6479TLAB16/DC6479TLBB16/DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "排放标准_国VI",
+          "properties": {
+            "spec_name": "排放标准",
+            "value_text": "国VI",
+            "condition_note": "公告车型DC6479KLAB16/DC6479KLBB16/DC6479KLCB16/DC6479KLDB16/DC6479KLAB18/DC6479KLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "驱动形式",
+          "properties": {
+            "spec_name": "驱动形式",
+            "value_text": "前轮驱动",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "整备质量_1.6T_5座",
+          "properties": {
+            "spec_name": "整备质量",
+            "value_text": "1541 kg",
+            "value_num": 1541,
+            "unit": "kg",
+            "condition_note": "1.6T发动机, 5座, 公告车型DC6479TLAB16或DC6479KLCB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "整备质量_1.6T_7座",
+          "properties": {
+            "spec_name": "整备质量",
+            "value_text": "1570 kg",
+            "value_num": 1570,
+            "unit": "kg",
+            "condition_note": "1.6T发动机, 7座, 公告车型DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "整备质量_1.8T_5座",
+          "properties": {
+            "spec_name": "整备质量",
+            "value_text": "1550 kg",
+            "value_num": 1550,
+            "unit": "kg",
+            "condition_note": "1.8T发动机, 5座, 公告车型DC6479TLAB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "整备质量_1.8T_7座",
+          "properties": {
+            "spec_name": "整备质量",
+            "value_text": "1595 kg",
+            "value_num": 1595,
+            "unit": "kg",
+            "condition_note": "1.8T发动机, 7座, 公告车型DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最大允许总质量_1.6T",
+          "properties": {
+            "spec_name": "最大允许总质量",
+            "value_text": "2099 kg",
+            "value_num": 2099,
+            "unit": "kg",
+            "condition_note": "1.6T发动机, 公告车型DC6479TLAB16/DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最大允许总质量_1.8T",
+          "properties": {
+            "spec_name": "最大允许总质量",
+            "value_text": "2143 kg",
+            "value_num": 2143,
+            "unit": "kg",
+            "condition_note": "1.8T发动机, 自动6挡, 公告车型DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "额定乘员数_5座",
+          "properties": {
+            "spec_name": "额定乘员数",
+            "value_text": "5人",
+            "value_num": 5,
+            "unit": "人",
+            "condition_note": "5座配置",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "额定乘员数_7座",
+          "properties": {
+            "spec_name": "额定乘员数",
+            "value_text": "7人",
+            "value_num": 7,
+            "unit": "人",
+            "condition_note": "7座配置",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最大爬坡度",
+          "properties": {
+            "spec_name": "最大爬坡度",
+            "value_text": "30%",
+            "value_num": 30,
+            "unit": "%",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最小转弯直径",
+          "properties": {
+            "spec_name": "最小转弯直径",
+            "value_text": "11.2 m",
+            "value_num": 11.2,
+            "unit": "m",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "制动踏板自由行程",
+          "properties": {
+            "spec_name": "制动踏板自由行程",
+            "value_text": "≤5.95 mm",
+            "value_num": 5.95,
+            "unit": "mm",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "车顶行李架最大允许载重量",
+          "properties": {
+            "spec_name": "车顶行李架最大允许载重量",
+            "value_text": "80 kg",
+            "value_num": 80,
+            "unit": "kg",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_城市工况_1.6T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "8.7 L/100km",
+            "value_num": 8.7,
+            "unit": "L/100km",
+            "condition_note": "城市工况, 1.6T发动机, 自动变速箱, 公告车型DC6479TLAB16/DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_市郊工况_1.6T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "5.4 L/100km",
+            "value_num": 5.4,
+            "unit": "L/100km",
+            "condition_note": "市郊工况, 1.6T发动机, 自动变速箱, 公告车型DC6479TLAB16/DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_混合工况_1.6T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "6.6 L/100km",
+            "value_num": 6.6,
+            "unit": "L/100km",
+            "condition_note": "混合工况, 1.6T发动机, 自动变速箱, 公告车型DC6479TLAB16/DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_城市工况_1.8T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "8.9 L/100km",
+            "value_num": 8.9,
+            "unit": "L/100km",
+            "condition_note": "城市工况, 1.8T发动机, 自动变速箱, 公告车型DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_市郊工况_1.8T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "5.6 L/100km",
+            "value_num": 5.6,
+            "unit": "L/100km",
+            "condition_note": "市郊工况, 1.8T发动机, 自动变速箱, 公告车型DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_混合工况_1.8T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "6.8 L/100km",
+            "value_num": 6.8,
+            "unit": "L/100km",
+            "condition_note": "混合工况, 1.8T发动机, 自动变速箱, 公告车型DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "前轮_车轮外倾角",
+          "properties": {
+            "spec_name": "车轮外倾角",
+            "value_text": "-0.6±0.5°",
+            "value_num": -0.6,
+            "unit": "°",
+            "condition_note": "前轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "前轮_主销内倾角",
+          "properties": {
+            "spec_name": "主销内倾角",
+            "value_text": "13.7±0.5°",
+            "value_num": 13.7,
+            "unit": "°",
+            "condition_note": "前轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "前轮_主销后倾角",
+          "properties": {
+            "spec_name": "主销后倾角",
+            "value_text": "4.0±0.5°",
+            "value_num": 4.0,
+            "unit": "°",
+            "condition_note": "前轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "前轮_前束",
+          "properties": {
+            "spec_name": "前束",
+            "value_text": "-1.5±1 mm",
+            "value_num": -1.5,
+            "unit": "mm",
+            "condition_note": "前轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "后轮_车轮外倾角",
+          "properties": {
+            "spec_name": "车轮外倾角",
+            "value_text": "-1.85±0.5°",
+            "value_num": -1.85,
+            "unit": "°",
+            "condition_note": "后轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "后轮_前束",
+          "properties": {
+            "spec_name": "前束",
+            "value_text": "5.2±1 mm",
+            "value_num": 5.2,
+            "unit": "mm",
+            "condition_note": "后轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        }
+      ],
+      "gold_edges": [
+        {
+          "label": "HAS_MODEL",
+          "outV": "标致",
+          "inV": "5008",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最高车速_1.6T",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最高车速_1.8T",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "排放标准_国V",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "排放标准_国VI",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "驱动形式",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "整备质量_1.6T_5座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "整备质量_1.6T_7座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "整备质量_1.8T_5座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "整备质量_1.8T_7座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最大允许总质量_1.6T",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最大允许总质量_1.8T",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "额定乘员数_5座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "额定乘员数_7座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最大爬坡度",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最小转弯直径",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "制动踏板自由行程",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "车顶行李架最大允许载重量",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_城市工况_1.6T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_市郊工况_1.6T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_混合工况_1.6T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_城市工况_1.8T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_市郊工况_1.8T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_混合工况_1.8T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "前轮_车轮外倾角",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "前轮_主销内倾角",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "前轮_主销后倾角",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "前轮_前束",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "后轮_车轮外倾角",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "后轮_前束",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        }
+      ],
+      "candidate_vertices": [
+        {
+          "label": "VehicleBrand",
+          "name": "标致",
+          "properties": {
+            "brand_name": "标致"
+          }
+        },
+        {
+          "label": "VehicleModel",
+          "name": "5008",
+          "properties": {
+            "model_name": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最高车速_1.6T",
+          "properties": {
+            "spec_name": "最高车速",
+            "value_text": "205 km/h",
+            "value_num": 205,
+            "unit": "km/h",
+            "condition_note": "1.6T发动机相关车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最高车速_1.8T",
+          "properties": {
+            "spec_name": "最高车速",
+            "value_text": "220 km/h",
+            "value_num": 220,
+            "unit": "km/h",
+            "condition_note": "1.8T发动机相关车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "排放标准_国V",
+          "properties": {
+            "spec_name": "排放标准",
+            "value_text": "国V",
+            "condition_note": "公告车型DC6479TLAB16/DC6479TLBB16/DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "排放标准_国VI",
+          "properties": {
+            "spec_name": "排放标准",
+            "value_text": "国VI",
+            "condition_note": "公告车型DC6479KLAB16/DC6479KLBB16/DC6479KLCB16/DC6479KLDB16/DC6479KLAB18/DC6479KLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "驱动形式",
+          "properties": {
+            "spec_name": "驱动形式",
+            "value_text": "前轮驱动",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "整备质量_1.6T_5座",
+          "properties": {
+            "spec_name": "整备质量",
+            "value_text": "1541 kg",
+            "value_num": 1541,
+            "unit": "kg",
+            "condition_note": "1.6T发动机, 5座, 公告车型DC6479TLAB16或DC6479KLCB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "整备质量_1.6T_7座",
+          "properties": {
+            "spec_name": "整备质量",
+            "value_text": "1570 kg",
+            "value_num": 1570,
+            "unit": "kg",
+            "condition_note": "1.6T发动机, 7座, 公告车型DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "整备质量_1.8T_5座",
+          "properties": {
+            "spec_name": "整备质量",
+            "value_text": "1550 kg",
+            "value_num": 1550,
+            "unit": "kg",
+            "condition_note": "1.8T发动机, 5座, 公告车型DC6479TLAB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "整备质量_1.8T_7座",
+          "properties": {
+            "spec_name": "整备质量",
+            "value_text": "1595 kg",
+            "value_num": 1595,
+            "unit": "kg",
+            "condition_note": "1.8T发动机, 7座, 公告车型DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最大允许总质量_1.6T",
+          "properties": {
+            "spec_name": "最大允许总质量",
+            "value_text": "2099 kg",
+            "value_num": 2099,
+            "unit": "kg",
+            "condition_note": "1.6T发动机, 公告车型DC6479TLAB16/DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最大允许总质量_1.8T",
+          "properties": {
+            "spec_name": "最大允许总质量",
+            "value_text": "2143 kg",
+            "value_num": 2143,
+            "unit": "kg",
+            "condition_note": "1.8T发动机, 自动6挡, 公告车型DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "额定乘员数_5座",
+          "properties": {
+            "spec_name": "额定乘员数",
+            "value_text": "5人",
+            "value_num": 5,
+            "unit": "人",
+            "condition_note": "5座配置",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "额定乘员数_7座",
+          "properties": {
+            "spec_name": "额定乘员数",
+            "value_text": "7人",
+            "value_num": 7,
+            "unit": "人",
+            "condition_note": "7座配置",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最大爬坡度",
+          "properties": {
+            "spec_name": "最大爬坡度",
+            "value_text": "30%",
+            "value_num": 30,
+            "unit": "%",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "最小转弯直径",
+          "properties": {
+            "spec_name": "最小转弯直径",
+            "value_text": "11.2 m",
+            "value_num": 11.2,
+            "unit": "m",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "制动踏板自由行程",
+          "properties": {
+            "spec_name": "制动踏板自由行程",
+            "value_text": "≤5.95 mm",
+            "value_num": 5.95,
+            "unit": "mm",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "车顶行李架最大允许载重量",
+          "properties": {
+            "spec_name": "车顶行李架最大允许载重量",
+            "value_text": "80 kg",
+            "value_num": 80,
+            "unit": "kg",
+            "condition_note": "所有车型",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_城市工况_1.6T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "8.7 L/100km",
+            "value_num": 8.7,
+            "unit": "L/100km",
+            "condition_note": "城市工况, 1.6T发动机, 自动变速箱, 公告车型DC6479TLAB16/DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_市郊工况_1.6T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "5.4 L/100km",
+            "value_num": 5.4,
+            "unit": "L/100km",
+            "condition_note": "市郊工况, 1.6T发动机, 自动变速箱, 公告车型DC6479TLAB16/DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_混合工况_1.6T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "6.6 L/100km",
+            "value_num": 6.6,
+            "unit": "L/100km",
+            "condition_note": "混合工况, 1.6T发动机, 自动变速箱, 公告车型DC6479TLAB16/DC6479TLBB16",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_城市工况_1.8T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "8.9 L/100km",
+            "value_num": 8.9,
+            "unit": "L/100km",
+            "condition_note": "城市工况, 1.8T发动机, 自动变速箱, 公告车型DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_市郊工况_1.8T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "5.6 L/100km",
+            "value_num": 5.6,
+            "unit": "L/100km",
+            "condition_note": "市郊工况, 1.8T发动机, 自动变速箱, 公告车型DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "油耗_混合工况_1.8T_自动",
+          "properties": {
+            "spec_name": "油耗",
+            "value_text": "6.8 L/100km",
+            "value_num": 6.8,
+            "unit": "L/100km",
+            "condition_note": "混合工况, 1.8T发动机, 自动变速箱, 公告车型DC6479TLAB18/DC6479TLBB18",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "前轮_车轮外倾角",
+          "properties": {
+            "spec_name": "车轮外倾角",
+            "value_text": "-0.6±0.5°",
+            "value_num": -0.6,
+            "unit": "°",
+            "condition_note": "前轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "前轮_主销内倾角",
+          "properties": {
+            "spec_name": "主销内倾角",
+            "value_text": "13.7±0.5°",
+            "value_num": 13.7,
+            "unit": "°",
+            "condition_note": "前轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "前轮_主销后倾角",
+          "properties": {
+            "spec_name": "主销后倾角",
+            "value_text": "4.0±0.5°",
+            "value_num": 4.0,
+            "unit": "°",
+            "condition_note": "前轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "前轮_前束",
+          "properties": {
+            "spec_name": "前束",
+            "value_text": "-1.5±1 mm",
+            "value_num": -1.5,
+            "unit": "mm",
+            "condition_note": "前轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "后轮_车轮外倾角",
+          "properties": {
+            "spec_name": "车轮外倾角",
+            "value_text": "-1.85±0.5°",
+            "value_num": -1.85,
+            "unit": "°",
+            "condition_note": "后轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "Specification",
+          "name": "后轮_前束",
+          "properties": {
+            "spec_name": "前束",
+            "value_text": "5.2±1 mm",
+            "value_num": 5.2,
+            "unit": "mm",
+            "condition_note": "后轮, 车辆装载4个68kg乘员+行李状态",
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        }
+      ],
+      "candidate_edges": [
+        {
+          "label": "HAS_MODEL",
+          "outV": "标致",
+          "inV": "5008",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最高车速_1.6T",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最高车速_1.8T",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "排放标准_国V",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "排放标准_国VI",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "驱动形式",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "整备质量_1.6T_5座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "整备质量_1.6T_7座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "整备质量_1.8T_5座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "整备质量_1.8T_7座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最大允许总质量_1.6T",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最大允许总质量_1.8T",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "额定乘员数_5座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "额定乘员数_7座",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最大爬坡度",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "最小转弯直径",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "制动踏板自由行程",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "车顶行李架最大允许载重量",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_城市工况_1.6T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_市郊工况_1.6T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_混合工况_1.6T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_城市工况_1.8T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_市郊工况_1.8T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "油耗_混合工况_1.8T_自动",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "前轮_车轮外倾角",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "前轮_主销内倾角",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "前轮_主销后倾角",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "前轮_前束",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "后轮_车轮外倾角",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        },
+        {
+          "label": "MODEL_HAS_SPEC",
+          "outV": "5008",
+          "inV": "后轮_前束",
+          "properties": {
+            "vehicle_brand": "标致",
+            "vehicle_model": "5008"
+          }
+        }
+      ]
+    }
+  ]
+}

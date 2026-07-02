@@ -1,0 +1,75 @@
+{
+  "schema": {
+    "vertexlabels": [
+      {
+        "id": 1,
+        "name": "person",
+        "properties": ["name", "age"]
+      }
+    ],
+    "edgelabels": [
+      {
+        "id": 2,
+        "name": "knows",
+        "source_label": "person",
+        "target_label": "person",
+        "properties": ["since"]
+      }
+    ]
+  },
+  "samples": [
+    {
+      "sample_id": "ext_001",
+      "input_text": "Alice knows Bob since 2020. Bob is 30 years old.",
+      "gold_vertices": [
+        {"label": "person", "properties": {"name": "Alice"}},
+        {"label": "person", "properties": {"name": "Bob"}}
+      ],
+      "gold_edges": [
+        {"label": "knows", "source": "Alice", "target": "Bob", "properties": {"since": "2020"}}
+      ],
+      "candidate_vertices": [
+        {"label": "person", "properties": {"name": "Alice"}},
+        {"label": "person", "properties": {"name": "Bob"}}
+      ],
+      "candidate_edges": [
+        {"label": "knows", "source": "Alice", "target": "Bob", "properties": {"since": "2020"}}
+      ]
+    },
+    {
+      "sample_id": "ext_002",
+      "input_text": "Charlie met Diana at the conference.",
+      "gold_vertices": [
+        {"label": "person", "properties": {"name": "Charlie"}},
+        {"label": "person", "properties": {"name": "Diana"}}
+      ],
+      "gold_edges": [
+        {"label": "knows", "source": "Charlie", "target": "Diana"}
+      ],
+      "candidate_vertices": [
+        {"label": "person", "properties": {"name": "Charlie"}}
+      ],
+      "candidate_edges": []
+    },
+    {
+      "sample_id": "ext_003",
+      "input_text": "Eve works with Frank on the project.",
+      "gold_vertices": [
+        {"label": "person", "properties": {"name": "Eve"}},
+        {"label": "person", "properties": {"name": "Frank"}}
+      ],
+      "gold_edges": [
+        {"label": "knows", "source": "Eve", "target": "Frank"}
+      ],
+      "candidate_vertices": [
+        {"label": "person", "properties": {"name": "Eve"}},
+        {"label": "person", "properties": {"name": "Frank"}},
+        {"label": "person", "properties": {"name": "Ghost"}}
+      ],
+      "candidate_edges": [
+        {"label": "knows", "source": "Eve", "target": "Frank"},
+        {"label": "knows", "source": "Eve", "target": "Ghost"}
+      ]
+    }
+  ]
+}
