@@ -15,10 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Tests for MarkdownReporter failure/degradation reporting."""
+"""Tests for MarkdownReporter failure and direction reporting."""
 
 import pytest
 
+from hugegraph_llm.benchmark.baseline.compare import ComparisonResult
 from hugegraph_llm.benchmark.models.result import BenchmarkResult, SampleResult
 from hugegraph_llm.benchmark.reporters.markdown_reporter import MarkdownReporter
 
@@ -41,58 +42,78 @@ def test_report_includes_failed_samples():
     assert "triple_f1" in report
 
 
-def test_report_includes_low_performing_samples():
+def test_report_overall_metrics_show_direction():
     result = BenchmarkResult(
-        samples=[
-            SampleResult(sample_id="good", metrics={"entity_f1": 1.0, "triple_f1": 1.0}),
-            SampleResult(sample_id="bad", metrics={"entity_f1": 0.0, "triple_f1": 0.5, "clustering_coefficient": 0.0}),
-        ],
-        overall={"entity_f1": 0.5, "triple_f1": 0.75},
+        samples=[],
+        overall={"entity_f1": 0.8, "conflict_rate": 0.1},
         metadata={"mode": "extraction"},
     )
     report = MarkdownReporter.report(result)
-    assert "## Low-performing Samples" in report
-    assert "bad" in report
-    assert "entity_f1=0.0" in report
-    # Non-primary metrics should not be flagged.
-    assert "clustering_coefficient" not in report.split("## Low-performing Samples")[1].split("\n## ")[0]
+    assert "## Overall Metrics" in report
+    assert "| entity_f1 | ↑ |" in report
+    assert "| conflict_rate | ↓ |" in report
 
 
-def test_report_retrieval_mode_flags_low_recall():
+def test_report_by_type_metrics_show_direction():
     result = BenchmarkResult(
-        samples=[
-            SampleResult(sample_id="q1", metrics={"recall@1": 0.0, "recall@5": 0.2, "mrr": 0.1}),
-            SampleResult(sample_id="q2", metrics={"recall@1": 0.8, "recall@5": 0.9, "mrr": 0.85}),
-        ],
-        overall={"recall@1": 0.4, "recall@5": 0.55, "mrr": 0.475},
-        metadata={"mode": "retrieval"},
+        samples=[],
+        overall={},
+        by_type={"simple": {"entity_f1": 0.9, "orphan_edge_rate": 0.05}},
+        metadata={},
     )
     report = MarkdownReporter.report(result)
-    assert "## Low-performing Samples" in report
-    assert "q1" in report
-    assert "recall@1=0.0" in report
-    assert "q2" not in report.split("## Low-performing Samples")[1].split("\n## ")[0]
+    assert "## Metrics by Question Type" in report
+    assert "### simple" in report
+    assert "| entity_f1 | ↑ |" in report
+    assert "| orphan_edge_rate | ↓ |" in report
 
 
-def test_report_omits_low_performing_section_when_all_perfect():
+def test_report_comparison_includes_direction_and_delta():
     result = BenchmarkResult(
-        samples=[SampleResult(sample_id="good", metrics={"entity_f1": 1.0})],
-        overall={"entity_f1": 1.0},
+        samples=[
+            SampleResult(sample_id="s1", metrics={"entity_f1": 0.6, "conflict_rate": 0.2})
+        ],
+        overall={"entity_f1": 0.6, "conflict_rate": 0.2},
+        metadata={"mode": "extraction"},
+    )
+    comparison = ComparisonResult(
+        overall_diff={"entity_f1": -0.2, "conflict_rate": -0.1},
+        regressed_samples=[
+            {
+                "sample_id": "s1",
+                "regressions": {"entity_f1": -0.2},
+                "baseline_metrics": {"entity_f1": 0.8, "conflict_rate": 0.1},
+                "candidate_metrics": {"entity_f1": 0.6, "conflict_rate": 0.2},
+            }
+        ],
+    )
+    report = MarkdownReporter.report(result, comparison=comparison)
+    assert "## Overall Metrics" in report
+    assert "| entity_f1 | ↑ | 0.6000 | -0.2000 |" in report
+    assert "## Regressed Samples" in report
+    assert "| Sample ID | Metric | Direction | Baseline | Candidate | Delta |" in report
+    assert "| s1 | entity_f1 | ↑ |" in report
+
+
+def test_report_unknown_metric_defaults_to_higher_direction():
+    result = BenchmarkResult(
+        samples=[],
+        overall={"unknown_metric": 0.5},
+        metadata={},
+    )
+    report = MarkdownReporter.report(result)
+    assert "| unknown_metric | ↑ |" in report
+
+
+def test_report_omits_low_performing_section():
+    result = BenchmarkResult(
+        samples=[SampleResult(sample_id="s1", metrics={"entity_f1": 0.0})],
+        overall={"entity_f1": 0.0},
         metadata={"mode": "extraction"},
     )
     report = MarkdownReporter.report(result)
     assert "## Low-performing Samples" not in report
     assert "## Failed Samples" not in report
-
-
-def test_report_omits_low_performing_section_for_unknown_mode():
-    result = BenchmarkResult(
-        samples=[SampleResult(sample_id="s1", metrics={"entity_f1": 0.0})],
-        overall={"entity_f1": 0.0},
-        metadata={},
-    )
-    report = MarkdownReporter.report(result)
-    assert "## Low-performing Samples" not in report
 
 
 def test_failed_samples_error_truncation():

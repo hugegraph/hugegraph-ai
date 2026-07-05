@@ -17,7 +17,7 @@
 
 """Markdown reporter for benchmark results."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 # Import the metrics package to trigger self-registration before querying directions.
 from hugegraph_llm.benchmark import metrics  # noqa: F401
@@ -33,77 +33,11 @@ def _format_delta(value: float) -> str:
     return f"{value:.4f}"
 
 
-# Threshold below/above which a primary metric is considered low-performing in a
-# single-run report. True regression/degradation requires a baseline and is
-# handled by the `compare` command.
-_LOW_PERFORMANCE_THRESHOLD = 0.5
-
-# Primary quality metrics used to flag low-performing samples per mode.
-# Retrieval primary metrics are computed dynamically from metric names.
-_PRIMARY_METRICS_BY_MODE: Dict[str, frozenset] = {
-    "extraction": frozenset({"entity_f1", "triple_f1", "property_f1"}),
-    "ablation": frozenset(
-        {"token_f1", "exact_match", "rouge_l", "answer_correctness", "faithfulness", "coverage"}
-    ),
-}
-
-
-def _primary_metrics(mode: Optional[str], sample_metric_names: List[str]) -> set:
-    """Return the metric names considered primary for low-performance detection."""
-    if mode == "retrieval":
-        return {
-            name
-            for name in sample_metric_names
-            if name.startswith("recall@")
-            or name.startswith("hit_any@")
-            or name.startswith("hit_all@")
-            or name == "mrr"
-            or name in ("context_precision", "context_relevancy", "evidence_recall_llm")
-        }
-    return set(_PRIMARY_METRICS_BY_MODE.get(mode or "", frozenset()))
-
-
-def _is_low_performing(metric_name: str, value: float, threshold: float = _LOW_PERFORMANCE_THRESHOLD) -> bool:
-    """Return True when a metric value is at or below the low-performance threshold.
-
-    Uses registered metric direction metadata. Higher-is-better metrics are
-    flagged when they fall at or below the threshold; lower-is-better metrics
-    are flagged when they rise to or above the threshold.
-
-    Note: this is a single-run quality signal, not a regression. Use the
-    ``compare`` command to detect true degradation against a baseline.
-    """
+def _direction_symbol(metric_name: str) -> str:
+    """Return an arrow indicating whether higher or lower values are better."""
     if MetricRegistry.is_higher_is_better(metric_name):
-        return float(value) <= threshold
-    return float(value) >= threshold
-
-
-def _collect_low_performing_samples(
-    result: BenchmarkResult, mode: Optional[str]
-) -> List[Tuple[str, List[Tuple[str, Any]]]]:
-    """Return samples with low-performing primary metrics, sorted by severity.
-
-    Each entry is ``(sample_id, [(metric, value), ...])``. Samples with more
-    flagged metrics come first.
-    """
-    all_metric_names = set()
-    for sample in result.samples:
-        all_metric_names.update(sample.metrics.keys())
-    primary = _primary_metrics(mode, sorted(all_metric_names))
-
-    flagged: List[Tuple[str, List[Tuple[str, Any]]]] = []
-    for sample in result.samples:
-        bad: List[Tuple[str, Any]] = []
-        for metric, value in sample.metrics.items():
-            if metric not in primary:
-                continue
-            if value is None or _is_low_performing(metric, value):
-                bad.append((metric, value))
-        if bad:
-            bad.sort(key=lambda x: x[0])
-            flagged.append((sample.sample_id, bad))
-    flagged.sort(key=lambda item: (-len(item[1]), item[0]))
-    return flagged
+        return "↑"
+    return "↓"
 
 
 class MarkdownReporter:
@@ -150,19 +84,19 @@ class MarkdownReporter:
         lines.append("")
 
         if comparison and comparison.overall_diff:
-            lines.append("| Metric | Score | Delta |")
-            lines.append("|--------|-------|-------|")
+            lines.append("| Metric | Direction | Score | Delta |")
+            lines.append("|--------|-----------|-------|-------|")
             all_keys = sorted(set(result.overall.keys()) | set(comparison.overall_diff.keys()))
             for key in all_keys:
                 score = result.overall.get(key, 0.0)
                 diff = comparison.overall_diff.get(key, 0.0)
                 diff_str = _format_delta(diff)
-                lines.append(f"| {key} | {score:.4f} | {diff_str} |")
+                lines.append(f"| {key} | {_direction_symbol(key)} | {score:.4f} | {diff_str} |")
         else:
-            lines.append("| Metric | Score |")
-            lines.append("|--------|-------|")
+            lines.append("| Metric | Direction | Score |")
+            lines.append("|--------|-----------|-------|")
             for key in sorted(result.overall.keys()):
-                lines.append(f"| {key} | {result.overall[key]:.4f} |")
+                lines.append(f"| {key} | {_direction_symbol(key)} | {result.overall[key]:.4f} |")
 
         lines.append("")
 
@@ -174,10 +108,10 @@ class MarkdownReporter:
                 tier_overall = result.by_type[tier]
                 lines.append(f"### {tier}")
                 lines.append("")
-                lines.append("| Metric | Score |")
-                lines.append("|--------|-------|")
+                lines.append("| Metric | Direction | Score |")
+                lines.append("|--------|-----------|-------|")
                 for key in sorted(tier_overall.keys()):
-                    lines.append(f"| {key} | {tier_overall[key]:.4f} |")
+                    lines.append(f"| {key} | {_direction_symbol(key)} | {tier_overall[key]:.4f} |")
                 lines.append("")
 
         # Failed samples (single-run errors)
@@ -196,35 +130,12 @@ class MarkdownReporter:
                 lines.append(f"| {sid} | {metric} | {display_error} |")
             lines.append("")
 
-        # Low-performing samples (single-run primary metrics below threshold).
-        # True regression/degradation must be detected with the `compare` command.
-        if not comparison:
-            low_performing = _collect_low_performing_samples(result, meta.get("mode"))
-            if low_performing:
-                lines.append("## Low-performing Samples")
-                lines.append("")
-                lines.append(
-                    "_Single-run quality signal (threshold = 0.5). "
-                    "Use `compare` against a baseline to detect true regression._"
-                )
-                lines.append("")
-                lines.append("| Sample ID | Low-performing Metrics |")
-                lines.append("|-----------|------------------------|")
-                for sid, bad_metrics in low_performing:
-                    metric_cells = ", ".join(
-                        f"{name}={value if value is not None else 'N/A'}" for name, value in bad_metrics
-                    )
-                    # Escape pipe characters in metric names/values
-                    metric_cells = metric_cells.replace("|", "\\|")
-                    lines.append(f"| {sid} | {metric_cells} |")
-                lines.append("")
-
         # Regressed samples (if comparison available)
         if comparison and comparison.regressed_samples:
             lines.append("## Regressed Samples")
             lines.append("")
-            lines.append("| Sample ID | Metric | Baseline | Candidate | Delta |")
-            lines.append("|-----------|--------|----------|-----------|-------|")
+            lines.append("| Sample ID | Metric | Direction | Baseline | Candidate | Delta |")
+            lines.append("|-----------|--------|-----------|----------|-----------|-------|")
 
             # Flatten and sort by delta ascending (worst first)
             rows: List[Dict[str, Any]] = []
@@ -248,7 +159,7 @@ class MarkdownReporter:
 
             for row in rows:
                 lines.append(
-                    f"| {row['sample_id']} | {row['metric']} "
+                    f"| {row['sample_id']} | {row['metric']} | {_direction_symbol(row['metric'])} "
                     f"| {row['baseline']:.4f} | {row['candidate']:.4f} "
                     f"| {_format_delta(row['delta'])} |"
                 )
