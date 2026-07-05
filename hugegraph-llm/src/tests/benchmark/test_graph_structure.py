@@ -113,3 +113,18 @@ def test_graphstructure_clustering_coefficient_triangle():
     assert result['num_edges'] == 3.0
     assert result['clustering_coefficient'] > 0.0
     assert result['clustering_coefficient'] == 1.0
+
+
+def test_graphstructure_labeled_vertices_source_target_edges_no_extra_nodes():
+    metric = GraphStructure()
+    prediction = {
+        'vertices': [
+            {'label': 'person', 'properties': {'name': 'Alice'}},
+            {'label': 'person', 'properties': {'name': 'Bob'}},
+        ],
+        'edges': [{'label': 'knows', 'source': 'Alice', 'target': 'Bob'}],
+    }
+    result = metric.calculate(prediction)
+    assert result['num_nodes'] == 2.0
+    assert result['num_edges'] == 1.0
+    assert result['num_components'] == 1.0

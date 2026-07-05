@@ -106,9 +106,9 @@ class ContextPrecision(BaseMetric):
         if not contexts:
             return {"context_precision": 0.0}
 
-        # Judge each context for relevance
+        # Judge each context for relevance (limit to top 3 for speed)
         relevances: List[int] = []
-        for ctx in contexts:
+        for ctx in contexts[:3]:
             prompt = get_prompt("CONTEXT_PRECISION_PROMPT", language).format(
                 question=question,
                 ground_truth=ground_truth,

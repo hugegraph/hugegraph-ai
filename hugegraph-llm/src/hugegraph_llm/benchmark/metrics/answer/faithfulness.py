@@ -40,6 +40,8 @@ from hugegraph_llm.benchmark.metrics.registry import MetricRegistry
 
 logger = logging.getLogger(__name__)
 
+_MAX_CONTEXT_CHARS = 6000
+
 
 def _decompose_statements(llm: Any, question: str, answer: str, language: str = "en") -> List[str]:
     """Decompose an answer into atomic statements using LLM."""
@@ -120,7 +122,7 @@ class Faithfulness(BaseMetric):
         if not contexts:
             return {"faithfulness": 0.0}
 
-        combined_context = "\n\n".join(contexts)
+        combined_context = "\n\n".join(contexts)[:_MAX_CONTEXT_CHARS]
 
         if not answer:
             # Vacuous truth: an empty answer has no statements to verify,

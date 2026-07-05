@@ -1,0 +1,29 @@
+{
+  "samples": [
+    {
+      "sample_id": "ret_ctx_001",
+      "question": "What is the capital of France?",
+      "gold_answer": "Paris is the capital of France.",
+      "gold_evidence": ["Paris is the capital and most populous city of France."],
+      "retrieved_contexts": [
+        "Paris is the capital and most populous city of France.",
+        "France is a country in Western Europe.",
+        "London is the capital city of the United Kingdom."
+      ]
+    },
+    {
+      "sample_id": "ret_ctx_002",
+      "question": "How does photosynthesis work?",
+      "gold_answer": "Photosynthesis uses light energy to convert carbon dioxide and water into glucose and oxygen.",
+      "gold_evidence": [
+        "Photosynthesis converts light energy into chemical energy stored in glucose.",
+        "Chloroplasts contain chlorophyll, which absorbs light for photosynthesis."
+      ],
+      "retrieved_contexts": [
+        "Photosynthesis converts light energy into chemical energy stored in glucose.",
+        "Mitosis is a process of cell division.",
+        "Chloroplasts contain chlorophyll, which absorbs light for photosynthesis."
+      ]
+    }
+  ]
+}

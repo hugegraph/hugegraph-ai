@@ -17,10 +17,12 @@
 
 """CLI integration tests for the benchmark module."""
 
+import argparse
 import json
 import os
 import subprocess
 import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -30,7 +32,7 @@ _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 _SRC_DIR = os.path.join(_PROJECT_ROOT, 'src')
 _SAMPLES_DIR = os.path.join(_SRC_DIR, 'hugegraph_llm', 'benchmark', 'data', 'samples')
 _EXTRACTION_DATA = os.path.join(_SAMPLES_DIR, 'extraction_sample.json')
-_RETRIEVAL_DATA = os.path.join(_SAMPLES_DIR, 'retrieval_sample.json')
+_RETRIEVAL_DATA = os.path.join(_SAMPLES_DIR, 'retrieval_docid_sample.json')
 
 
 def _run_cli(*args: str, timeout: int = 60) -> subprocess.CompletedProcess:
@@ -82,15 +84,15 @@ def test_clirunretrieval_samples_filter_recomputes_by_type(tmp_path):
                         'sample_id': 'keep',
                         'question': 'Which doc is relevant?',
                         'question_type': 'Fact Retrieval',
-                        'gold_docs': ['doc_a'],
-                        'retrieved_docs': ['doc_a'],
+                        'gold_doc_ids': ['doc_a'],
+                        'retrieved_doc_ids': ['doc_a'],
                     },
                     {
                         'sample_id': 'drop',
                         'question': 'Which doc is relevant?',
                         'question_type': 'Complex Reasoning',
-                        'gold_docs': ['doc_b'],
-                        'retrieved_docs': ['doc_b'],
+                        'gold_doc_ids': ['doc_b'],
+                        'retrieved_doc_ids': ['doc_b'],
                     },
                 ]
             }
@@ -141,8 +143,8 @@ def test_clirunall_output_uses_envelope_for_multiple_results(tmp_path):
                         'candidate_vertices': [{'label': 'person', 'properties': {'name': 'Alice'}}],
                         'gold_edges': [],
                         'candidate_edges': [],
-                        'gold_docs': ['doc_a'],
-                        'retrieved_docs': ['doc_a', 'doc_b'],
+                        'gold_doc_ids': ['doc_a'],
+                        'retrieved_doc_ids': ['doc_a', 'doc_b'],
                         'gold_answer': 'Alice',
                         'raw_answer': 'Alice',
                         'vector_only_answer': 'Alice',
@@ -170,6 +172,39 @@ def test_clirunall_output_uses_envelope_for_multiple_results(tmp_path):
     assert result.returncode == 0, f'stderr: {result.stderr}'
     output = json.loads(output_path.read_text(encoding='utf-8'))
     assert set(output['results']) == {'extraction', 'retrieval', 'ablation'}
+
+
+def test_clirunretrieval_rejects_mode_mismatched_metric():
+    result = _run_cli(
+        'run',
+        '--mode',
+        'retrieval',
+        '--data',
+        _RETRIEVAL_DATA,
+        '--metrics',
+        'entity_f1',
+        '--format',
+        'json',
+    )
+    assert result.returncode == 2
+    assert 'not valid for retrieval mode' in result.stderr
+
+
+def test_clirunretrieval_rejects_offline_llm_metric():
+    result = _run_cli(
+        'run',
+        '--mode',
+        'retrieval',
+        '--data',
+        _RETRIEVAL_DATA,
+        '--metrics',
+        'context_relevancy',
+        '--offline',
+        '--format',
+        'json',
+    )
+    assert result.returncode == 2
+    assert 'require online mode' in result.stderr
 
 
 def test_clicompare_compare_two_baselines(tmp_path):
@@ -203,3 +238,71 @@ def test_clihelp_run_missing_data_errors():
     result = _run_cli('run', '--data', '/nonexistent/file.json')
     assert result.returncode != 0
     assert 'not found' in result.stderr.lower() or 'error' in result.stderr.lower()
+
+
+def test_createllmclient_uses_fixed_judge_params():
+    """_create_llm_client builds an OpenAI-compatible client with fixed temperature/seed."""
+    from hugegraph_llm.benchmark.cli import _create_llm_client
+
+    class _FakeSettings:
+        openai_chat_api_key = "test-key"
+        openai_chat_api_base = "https://test.example/v1"
+        openai_chat_language_model = "test-model"
+        openai_chat_tokens = 1024
+
+    fake_choice = MagicMock()
+    fake_choice.message.content = "json response"
+    fake_response = MagicMock()
+    fake_response.choices = [fake_choice]
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = fake_response
+
+    with patch("hugegraph_llm.benchmark.cli.OpenAI", return_value=fake_client) as mock_openai:
+        llm, meta = _create_llm_client(settings=_FakeSettings())
+
+    assert meta == {"model": "test-model", "temperature": 0.0, "seed": 42}
+    mock_openai.assert_called_once_with(api_key="test-key", base_url="https://test.example/v1")
+    response = llm.generate(prompt="hello")
+    fake_client.chat.completions.create.assert_called_once_with(
+        model="test-model",
+        messages=[{"role": "user", "content": "hello"}],
+        temperature=0.0,
+        max_tokens=1024,
+        seed=42,
+    )
+    assert response == "json response"
+
+
+def test_handlerun_attaches_llm_metadata_and_saves_baseline(tmp_path):
+    """LLM metadata is attached to results and persisted by save-baseline."""
+    from hugegraph_llm.benchmark.cli import _handle_run
+
+    baseline_path = str(tmp_path / "baseline.json")
+    args = argparse.Namespace(
+        mode="retrieval",
+        data=_RETRIEVAL_DATA,
+        metrics="recall_at_k",
+        offline=False,
+        language="en",
+        max_workers=1,
+        smoke=False,
+        samples=None,
+        save_baseline=baseline_path,
+        format="json",
+        output=None,
+    )
+
+    fake_llm = MagicMock()
+    fake_meta = {"model": "gpt-4.1-mini", "temperature": 0.0, "seed": 42}
+
+    with patch("hugegraph_llm.benchmark.cli._create_llm_client", return_value=(fake_llm, fake_meta)):
+        _handle_run(args)
+
+    assert os.path.isfile(baseline_path)
+    data = json.loads(open(baseline_path, encoding="utf-8").read())
+    assert data["meta"]["model"] == "gpt-4.1-mini"
+    assert data["meta"]["temperature"] == 0.0
+    assert data["meta"]["seed"] == 42
+    assert "git_commit" in data["meta"]
+    assert "timestamp" in data["meta"]

@@ -21,6 +21,9 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Import the metrics package to trigger self-registration before querying directions.
+from hugegraph_llm.benchmark import metrics  # noqa: F401
+from hugegraph_llm.benchmark.metrics.registry import MetricRegistry
 from hugegraph_llm.benchmark.models.result import BenchmarkResult
 
 
@@ -55,6 +58,17 @@ def _is_llm_judge_metric(metric_name: str) -> bool:
     return metric_name in _LLM_JUDGE_METRICS or any(metric_name.startswith(prefix) for prefix in _LLM_JUDGE_PREFIXES)
 
 
+def _higher_is_better(metric_name: str) -> bool:
+    """Return metric direction using registered metric metadata."""
+    return MetricRegistry.is_higher_is_better(metric_name)
+
+
+def _semantic_delta(metric_name: str, baseline_value: float, candidate_value: float) -> float:
+    """Return a positive delta for improvement, negative for regression."""
+    raw_delta = candidate_value - baseline_value
+    return raw_delta if _higher_is_better(metric_name) else -raw_delta
+
+
 class BaselineComparator:
     """Compare candidate benchmark results against a baseline.
 
@@ -87,12 +101,12 @@ class BaselineComparator:
         """
         result = ComparisonResult(delta=delta)
 
-        # Overall diff: candidate - baseline for each metric
+        # Overall diff is direction-aware: positive means improvement.
         all_keys = set(baseline.overall.keys()) | set(candidate.overall.keys())
         for key in sorted(all_keys):
             base_val = baseline.overall.get(key, 0.0)
             cand_val = candidate.overall.get(key, 0.0)
-            result.overall_diff[key] = round(cand_val - base_val, 4)
+            result.overall_diff[key] = round(_semantic_delta(key, base_val, cand_val), 4)
 
         # Reference scores (if provided)
         if reference:
@@ -119,7 +133,7 @@ class BaselineComparator:
             for metric in sample_metrics:
                 base_val = base_sample.metrics.get(metric, 0.0)
                 cand_val = cand_sample.metrics.get(metric, 0.0)
-                diff = cand_val - base_val
+                diff = _semantic_delta(metric, base_val, cand_val)
 
                 # Determine effective delta for this metric
                 effective_delta = delta

@@ -26,12 +26,13 @@ from hugegraph_llm.benchmark.runners.retrieval_runner import RetrievalRunner
 pytestmark = pytest.mark.unit
 
 _SAMPLES_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'hugegraph_llm', 'benchmark', 'data', 'samples')
-_RETRIEVAL_DATA = os.path.join(_SAMPLES_DIR, 'retrieval_sample.json')
+_RETRIEVAL_DATA = os.path.join(_SAMPLES_DIR, 'retrieval_docid_sample.json')
+_RETRIEVAL_CONTEXT_DATA = os.path.join(_SAMPLES_DIR, 'retrieval_context_sample.json')
 _ZH_RETRIEVAL_DATA = os.path.join(_SAMPLES_DIR, 'chinese_retrieval_sample.json')
 
 
 def test_retrievalrunnerintegration_retrieval_runner_runs_successfully():
-    """Run RetrievalRunner on retrieval_sample.json with standard metrics."""
+    """Run RetrievalRunner on retrieval_docid_sample.json with standard metrics."""
     runner = RetrievalRunner()
     result = runner.run(data_path=_RETRIEVAL_DATA, metrics=['recall_at_k', 'hit_at_k', 'mrr'])
     assert len(result.samples) == 3
@@ -61,3 +62,10 @@ def test_retrievalrunnerintegration_chinese_sample_runs_successfully():
     assert len(result.samples) == 2
     assert result.overall['recall@1'] == 0.75
     assert result.overall['mrr'] == 1.0
+
+
+def test_retrievalrunnerintegration_context_metric_requires_llm():
+    """Context/LLM metrics fail fast instead of producing None-valued overall metrics."""
+    runner = RetrievalRunner()
+    with pytest.raises(ValueError, match='require an LLM client'):
+        runner.run(data_path=_RETRIEVAL_CONTEXT_DATA, metrics=['context_relevancy'])

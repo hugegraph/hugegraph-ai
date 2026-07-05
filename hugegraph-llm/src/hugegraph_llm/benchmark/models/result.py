@@ -29,7 +29,7 @@ class SampleResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     sample_id: str
-    metrics: Dict[str, float] = Field(default_factory=dict)
+    metrics: Dict[str, Optional[float]] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     reference_hit: Optional[bool] = None
     # Question-type tier, e.g. "Fact Retrieval" / "Complex Reasoning" /
@@ -90,10 +90,15 @@ class BenchmarkResult(BaseModel):
         all_keys: set = set()
         for s in self.samples:
             all_keys.update(s.metrics.keys())
+        skipped: List[str] = []
         for key in all_keys:
             values = [s.metrics[key] for s in self.samples if key in s.metrics and s.metrics[key] is not None]
             if values:
                 self.overall[key] = round(sum(values) / len(values), 4)
+            else:
+                skipped.append(key)
+        if skipped:
+            self.metadata.setdefault("skipped_metrics", []).extend(skipped)
 
     def compute_by_type(self) -> None:
         """Compute per-tier overall metrics, keyed by ``sample.question_type``.

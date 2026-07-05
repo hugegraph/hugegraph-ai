@@ -47,7 +47,7 @@ from hugegraph_llm.benchmark.metrics.registry import MetricRegistry
 logger = logging.getLogger(__name__)
 
 # Cap each input to avoid oversized prompts (GraphRAG-Bench uses 3000 chars).
-_MAX_CHARS = 3000
+_MAX_CHARS = 2000
 
 
 def _extract_facts(llm: Any, question: str, reference: str, language: str = "en") -> List[str]:

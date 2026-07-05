@@ -123,10 +123,9 @@ def test_triplef1_empty_inputs():
     assert result['triple_f1'] == 0.0
 
 
-def test_triplef1_outvlabel_invelabel_fields():
+def test_triplef1_source_target_fields():
     metric = TripleF1()
-    # Support outVLabel/inVLabel as alternative field names.
-    pred = [{'outVLabel': 'Alice', 'label': 'knows', 'inVLabel': 'Bob'}]
+    pred = [{'source': 'Alice', 'label': 'knows', 'target': 'Bob'}]
     ref = [{'outV': 'Alice', 'label': 'knows', 'inV': 'Bob'}]
     result = metric.calculate(pred, ref)
     assert result['triple_f1'] == 1.0

@@ -39,35 +39,30 @@ from hugegraph_llm.benchmark.metrics.registry import MetricRegistry
 logger = logging.getLogger(__name__)
 
 
-_CONTEXT_MAX_CHARS = 20000  # GraphRAG-Benchmark standard truncation limit
+_CONTEXT_MAX_CHARS = 6000  # Truncated for faster LLM-Judge calls
 
 
-def _score_context(llm: Any, question: str, ctx: str, language: str = "en") -> int:
-    """Score a single context for relevance (0-2 scale).
-
-    Calls LLM twice and averages (GraphRAG-Benchmark dual-rating pattern)
-    to reduce LLM variance.
-    """
+def _score_context(llm: Any, question: str, ctx: str, language: str = "en") -> float:
+    """Score a single context for relevance (0-2 scale)."""
     prompt = get_prompt("CONTEXT_RELEVANCE_PROMPT", language).format(
         question=question,
         context=str(ctx)[:_CONTEXT_MAX_CHARS],
     )
 
-    scores = []
-    for _ in range(2):  # Dual-rating for variance reduction
+    scores: List[int] = []
+    for _ in range(2):
         try:
             response = retry_llm_call(llm, prompt)
             data = _parse_json_response(response)
             if data and "score" in data:
-                score = max(0, min(2, int(data["score"])))
-                scores.append(score)
+                scores.append(max(0, min(2, int(data["score"]))))
             else:
                 scores.append(0)
         except Exception as e:
             logger.warning("Context relevancy scoring failed: %s", e)
             scores.append(0)
 
-    return round(sum(scores) / len(scores))
+    return sum(scores) / len(scores)
 
 
 @MetricRegistry.register
@@ -110,7 +105,7 @@ class ContextRelevancy(BaseMetric):
         if not contexts:
             return {"context_relevancy": 0.0}
 
-        scores: List[int] = []
+        scores: List[float] = []
         for ctx in contexts:
             ctx_str = str(ctx)
             # Exact-match guard: context == question is degenerate (GraphRAG-Benchmark)

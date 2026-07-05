@@ -4,7 +4,8 @@
       {
         "id": 1,
         "name": "person",
-        "properties": ["name", "age"]
+        "properties": ["name", "age"],
+        "primary_keys": ["name"]
       }
     ],
     "edgelabels": [

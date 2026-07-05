@@ -23,7 +23,7 @@ from typing import Any, Dict
 import pytest
 
 from hugegraph_llm.benchmark.metrics.base import BaseMetric
-from hugegraph_llm.benchmark.models.result import BenchmarkResult
+from hugegraph_llm.benchmark.models.result import BenchmarkResult, SampleResult
 from hugegraph_llm.benchmark.runners.base_runner import BaseRunner
 
 pytestmark = pytest.mark.unit
@@ -157,3 +157,13 @@ def test_baserunnerfinalizeresult_finalize_caps_errors_at_10():
     runner._finalize_result(result)
     assert result.metadata['error_count'] == 20
     assert len(result.metadata['errors']) == 10
+
+
+def test_benchmarkresult_compute_overall_records_skipped_metrics():
+    result = BenchmarkResult()
+    result.samples = [
+        SampleResult(sample_id='s1', metrics={'ok': 1.0, 'skipped': None}),
+    ]
+    result.compute_overall()
+    assert result.overall == {'ok': 1.0}
+    assert 'skipped' in result.metadata['skipped_metrics']

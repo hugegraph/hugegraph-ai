@@ -22,17 +22,17 @@ from typing import Any, Dict
 
 def _is_edge(item: Dict[str, Any]) -> bool:
     """Heuristic: an item is an edge if it has endpoint fields."""
-    return any(key in item for key in ("outV", "inV", "outVLabel", "inVLabel", "source", "target"))
+    return any(key in item for key in ("outV", "inV", "source", "target"))
 
 
 def _edge_out(item: Dict[str, Any]) -> Any:
     """Return an edge's source endpoint across supported sample formats."""
-    return item.get("outV") or item.get("outVLabel") or item.get("source") or ""
+    return item.get("outV") or item.get("source") or ""
 
 
 def _edge_in(item: Dict[str, Any]) -> Any:
     """Return an edge's target endpoint across supported sample formats."""
-    return item.get("inV") or item.get("inVLabel") or item.get("target") or ""
+    return item.get("inV") or item.get("target") or ""
 
 
 from hugegraph_llm.benchmark.metrics.extraction.conflict_detection import ConflictDetection  # noqa: E402

@@ -112,6 +112,21 @@ def test_baselinecomparator_improvement_detected():
     assert 'f1' in comparison.improved_samples[0]['improvements']
 
 
+def test_baselinecomparator_lower_is_better_metric_direction():
+    baseline = _make_result([{'illegal_edge_rate': 0.1}])
+    candidate = _make_result([{'illegal_edge_rate': 0.3}])
+    comparison = BaselineComparator.compare(baseline, candidate)
+    assert comparison.overall_diff['illegal_edge_rate'] == -0.2
+    assert len(comparison.regressed_samples) == 1
+    assert 'illegal_edge_rate' in comparison.regressed_samples[0]['regressions']
+
+    improved = _make_result([{'illegal_edge_rate': 0.05}])
+    improved_comparison = BaselineComparator.compare(baseline, improved)
+    assert improved_comparison.overall_diff['illegal_edge_rate'] == 0.05
+    assert len(improved_comparison.improved_samples) == 1
+    assert 'illegal_edge_rate' in improved_comparison.improved_samples[0]['improvements']
+
+
 def test_baselinecomparator_within_delta_not_flagged():
     """Small differences within delta should not be flagged."""
     baseline = _make_result([{'f1': 0.8}])

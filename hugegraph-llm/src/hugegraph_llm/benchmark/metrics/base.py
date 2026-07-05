@@ -22,17 +22,30 @@ Metrics are registered via MetricRegistry and invoked by name from runners.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 class BaseMetric(ABC):
     """Abstract base class for all benchmark metrics.
 
     Subclasses must implement `calculate()` and set `name` and `requires_llm`.
+    They may declare the optimization direction of the scores they produce via
+    `higher_is_better` or by overriding `is_higher_is_better()`.
     """
 
     name: str = ""
     requires_llm: bool = False
+    higher_is_better: bool = True
+
+    @classmethod
+    def is_higher_is_better(cls, score_name: str) -> Optional[bool]:
+        """Return whether a higher value is better for ``score_name``.
+
+        Return ``True``/``False`` if this metric claims the score, or ``None``
+        if the score is not produced by this metric. The default implementation
+        returns ``None`` so metrics must explicitly declare their scores.
+        """
+        return None
 
     @abstractmethod
     def calculate(self, prediction: Any, reference: Any, **kwargs: Any) -> Dict[str, float]:

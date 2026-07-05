@@ -31,7 +31,9 @@ from hugegraph_llm.benchmark.datasets.download import (
 )
 from hugegraph_llm.benchmark.datasets.prepare_external_datasets import (
     ExternalDatasetError,
+    _context_to_doc_ids,
     _context_to_docs,
+    _gold_doc_ids_from_supporting,
     _gold_docs_from_supporting,
     _load_json,
     _maybe_subset,
@@ -80,6 +82,12 @@ class TestContextToDocs:
         assert docs == ["Title C\nok"]
 
 
+class TestContextToDocIds:
+    def test_extracts_titles(self):
+        context = [["Title A", ["Sentence one."]], ["Title B", "Sentence two."]]
+        assert _context_to_doc_ids(context) == ["Title A", "Title B"]
+
+
 class TestGoldDocsFromSupporting:
     def test_prefers_context_doc(self):
         context = [["Earth", ["Earth is a planet."]]]
@@ -97,6 +105,13 @@ class TestGoldDocsFromSupporting:
         context = [["Earth", ["Earth is a planet."]]]
         supporting = [["Earth", 0], ["Earth", 1]]
         assert len(_gold_docs_from_supporting(supporting, context, {})) == 1
+
+
+class TestGoldDocIdsFromSupporting:
+    def test_deduplicates_titles(self):
+        context = [["Earth", ["Earth is a planet."]]]
+        supporting = [["Earth", 0], ["Earth", 1]]
+        assert _gold_doc_ids_from_supporting(supporting, context, {}) == ["Earth"]
 
 
 class TestParagraphsFromContext:
@@ -217,8 +232,10 @@ class TestPrepareHotpotqaLike:
         assert len(result["samples"]) == 1
         sample = result["samples"][0]
         assert sample["sample_id"] == "q1"
-        assert sample["gold_docs"] == ["Doc A\nDoc A content."]
-        assert len(sample["retrieved_docs"]) == 2
+        assert sample["gold_doc_ids"] == ["Doc A"]
+        assert sample["retrieved_doc_ids"] == ["Doc A", "Doc B"]
+        assert sample["gold_evidence"] == ["Doc A\nDoc A content."]
+        assert len(sample["retrieved_contexts"]) == 2
 
 
 class TestDatasetDownloadRegistry:

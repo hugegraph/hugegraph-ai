@@ -17,6 +17,7 @@
 
 """Integration tests for ablation benchmark runner."""
 
+import json
 import os
 
 import pytest
@@ -44,3 +45,27 @@ def test_ablationrunnerintegration_ablation_runner_four_modes_present():
     for mode in modes:
         assert f'{mode}_token_f1' in result.overall, f"Missing overall key '{mode}_token_f1'"
         assert f'{mode}_exact_match' in result.overall, f"Missing overall key '{mode}_exact_match'"
+
+
+def test_ablationrunnerintegration_missing_answer_mode_fails_fast(tmp_path):
+    data_path = tmp_path / 'bad_ablation.json'
+    data_path.write_text(
+        json.dumps(
+            {
+                'samples': [
+                    {
+                        'sample_id': 'bad_001',
+                        'question': 'Who?',
+                        'gold_answer': 'Alice',
+                        'raw_answer': 'Alice',
+                        'vector_only_answer': 'Alice',
+                        'graph_only_answer': 'Alice',
+                    }
+                ]
+            }
+        ),
+        encoding='utf-8',
+    )
+    runner = AblationRunner()
+    with pytest.raises(ValueError, match='graph_vector_answer'):
+        runner.run(data_path=str(data_path), answer_metrics=['token_f1'], language='en')

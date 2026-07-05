@@ -23,12 +23,15 @@ import logging
 import sys
 from typing import Any, Dict, List, Optional
 
+from openai import OpenAI
+
 # Ensure all metrics are registered before any runner is used. Importing the
 # package runs metrics/__init__.py, which imports every metric subpackage so
 # each metric self-registers via MetricRegistry.
 import hugegraph_llm.benchmark.metrics  # noqa: F401
 from hugegraph_llm.benchmark.baseline.compare import BaselineComparator
 from hugegraph_llm.benchmark.baseline.store import BaselineStore
+from hugegraph_llm.benchmark.metrics.registry import MetricRegistry
 from hugegraph_llm.benchmark.models.result import BenchmarkResult
 from hugegraph_llm.benchmark.reporters.markdown_reporter import MarkdownReporter
 from hugegraph_llm.benchmark.runners.ablation_runner import AblationRunner
@@ -85,6 +88,20 @@ def _resolve_metrics(mode: str, user_metrics: Optional[str]) -> List[str]:
     return list(_DEFAULT_METRICS.get(mode, []))
 
 
+def _unknown_metrics(metrics: List[str]) -> List[str]:
+    available = set(MetricRegistry.list_metrics())
+    return [metric for metric in metrics if metric not in available]
+
+
+def _llm_metrics(metrics: List[str]) -> List[str]:
+    selected = []
+    for metric in metrics:
+        metric_class = MetricRegistry.get(metric)
+        if metric_class is not None and metric_class.requires_llm:
+            selected.append(metric)
+    return selected
+
+
 def _configure_cli_logging() -> None:
     """Force benchmark logs to stderr so stdout stays JSON-clean.
 
@@ -109,11 +126,19 @@ def _configure_cli_logging() -> None:
     _llm_logger.propagate = True
 
 
-def _create_llm_client() -> Optional[Any]:
-    """Create an LLM client for LLM-Judge metrics.
+def _create_llm_client(settings: Optional[Any] = None) -> tuple[Optional[Any], Dict[str, Any]]:
+    """Create an OpenAI-compatible LLM client for LLM-Judge metrics.
 
-    Tries the project's standard config path first, then falls back
-    to direct OpenAI-compatible client via .env / environment variables.
+    Uses the project's LLMConfig only for endpoint / model / credentials.
+    Generation parameters (temperature, seed) are fixed inside the benchmark
+    module to ensure reproducible judge results.
+
+    Args:
+        settings: Optional LLM settings object (for testing). When omitted,
+                  ``llm_settings`` is imported from ``hugegraph_llm.config``.
+
+    Returns:
+        (llm_client, metadata_dict). If creation fails, returns (None, {}).
     """
     # Force logs to stderr before importing config: config's module-level
     # ``LLMConfig()`` may emit errors via the ``llm`` logger, whose default
@@ -122,52 +147,60 @@ def _create_llm_client() -> Optional[Any]:
 
     _configure_cli_logging()
 
-    # Path 1: Use project standard config (LLMConfig + get_chat_llm)
     try:
         from hugegraph_llm.config import llm_settings
-        from hugegraph_llm.models.llms.init_llm import get_chat_llm
 
-        llm = get_chat_llm(llm_settings)
-        logger.info("LLM client: config path, model=%s", llm_settings.openai_chat_language_model)
-        return llm
-    except Exception as e:
-        logger.debug("Config path failed: %s, trying direct OpenAI fallback", e)
-
-    # Path 2: Direct OpenAI-compatible client via .env
-    try:
-        import os
-
-        from dotenv import load_dotenv
-
-        load_dotenv()
-
-        from openai import OpenAI
-
+        cfg = settings if settings is not None else llm_settings
+        model = getattr(cfg, "openai_chat_language_model", None) or "gpt-4.1-mini"
         client = OpenAI(
-            api_key=os.getenv("OPENAI_CHAT_API_KEY", os.getenv("BENCHMARK_API_KEY")),
-            base_url=os.getenv("OPENAI_CHAT_API_BASE", os.getenv("BENCHMARK_BASE_URL")),
+            api_key=getattr(cfg, "openai_chat_api_key", None) or "",
+            base_url=getattr(cfg, "openai_chat_api_base", None),
         )
-        model = os.getenv("OPENAI_CHAT_LANGUAGE_MODEL", os.getenv("BENCHMARK_MODEL", "deepseek-chat"))
+        temperature = 0.0
+        seed = 42
+        max_tokens = getattr(cfg, "openai_chat_tokens", None) or 2048
 
-        class _LLMWrapper:
-            def __init__(self, c, m):
+        class _JudgeLLM:
+            """Thin wrapper exposing ``generate(prompt=...)`` over chat completions.
+
+            Uses standard OpenAI messages format (``[{role, content}]``) and
+            non-streaming chat completion calls.
+            """
+
+            def __init__(self, c, m, temp, s, mt):
                 self._c = c
                 self._m = m
+                self._temperature = temp
+                self._seed = s
+                self._max_tokens = mt
 
             def generate(self, prompt="", messages=None, **kw):
                 msgs = messages or [{"role": "user", "content": prompt}]
-                return (
-                    self._c.chat.completions.create(model=self._m, messages=msgs, max_tokens=kw.get("max_tokens", 2048))
-                    .choices[0]
-                    .message.content
+                response = self._c.chat.completions.create(
+                    model=self._m,
+                    messages=msgs,
+                    temperature=self._temperature,
+                    max_tokens=kw.get("max_tokens", self._max_tokens),
+                    seed=self._seed,
                 )
+                return response.choices[0].message.content
 
-        llm = _LLMWrapper(client, model)
-        logger.info("LLM client: direct OpenAI path, model=%s", model)
-        return llm
+        llm = _JudgeLLM(client, model, temperature, seed, max_tokens)
+        logger.info(
+            "LLM client: OpenAI-compatible, model=%s, temperature=%s, seed=%s",
+            model,
+            temperature,
+            seed,
+        )
+        meta = {
+            "model": model,
+            "temperature": temperature,
+            "seed": seed,
+        }
+        return llm, meta
     except Exception as e:
         logger.warning("LLM client creation failed: %s. LLM-Judge metrics will be skipped.", e)
-        return None
+        return None, {}
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +216,17 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     mode: str = args.mode
     metrics = _resolve_metrics(mode, args.metrics)
+    unknown = _unknown_metrics(metrics)
+    if unknown:
+        print(f"Error: unknown metric(s): {', '.join(unknown)}", file=sys.stderr)
+        raise SystemExit(2)
+    llm_metric_names = _llm_metrics(metrics)
+    if args.offline and llm_metric_names:
+        print(
+            "Error: LLM metric(s) require online mode and an LLM client: " + ", ".join(llm_metric_names),
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
     language: str = args.language
     data = _load_data_for_mode_detection(data_path)
     modes_to_run = _resolve_modes_to_run(mode, data)
@@ -195,8 +239,15 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     # Create LLM client for LLM-Judge metrics (unless offline mode)
     llm = None
+    llm_meta: Dict[str, Any] = {}
     if not args.offline:
-        llm = _create_llm_client()
+        llm, llm_meta = _create_llm_client()
+        if llm is None and llm_metric_names:
+            print(
+                "Error: LLM metric(s) require a configured LLM client: " + ", ".join(llm_metric_names),
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
 
     logger.info(
         "Mode=%s  Metrics=%s  Language=%s  LLM=%s  max_workers=%d",
@@ -210,9 +261,14 @@ def _handle_run(args: argparse.Namespace) -> None:
     results: List[BenchmarkResult] = []
     max_workers = args.max_workers
 
+    def metrics_for_mode(mode_key: str) -> List[str]:
+        if mode == "all" and not args.metrics:
+            return list(_DEFAULT_METRICS[mode_key])
+        return _select_metrics(metrics, mode_key)
+
     if "extraction" in modes_to_run:
         runner = ExtractionRunner(max_workers=max_workers)
-        r = runner.run(data_path=data_path, metrics=_filter_metrics(metrics, "extraction"), language=language, llm=llm)
+        r = runner.run(data_path=data_path, metrics=metrics_for_mode("extraction"), language=language, llm=llm)
         r.metadata["mode"] = "extraction"
         if skipped_modes:
             r.metadata["skipped_modes"] = skipped_modes
@@ -220,7 +276,7 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     if "retrieval" in modes_to_run:
         runner = RetrievalRunner(max_workers=max_workers)
-        r = runner.run(data_path=data_path, metrics=_filter_metrics(metrics, "retrieval"), language=language, llm=llm)
+        r = runner.run(data_path=data_path, metrics=metrics_for_mode("retrieval"), language=language, llm=llm)
         r.metadata["mode"] = "retrieval"
         if skipped_modes:
             r.metadata["skipped_modes"] = skipped_modes
@@ -228,13 +284,16 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     if "ablation" in modes_to_run:
         runner = AblationRunner(max_workers=max_workers)
-        r = runner.run(
-            data_path=data_path, answer_metrics=_filter_metrics(metrics, "ablation"), language=language, llm=llm
-        )
+        r = runner.run(data_path=data_path, answer_metrics=metrics_for_mode("ablation"), language=language, llm=llm)
         r.metadata["mode"] = "ablation"
         if skipped_modes:
             r.metadata["skipped_modes"] = skipped_modes
         results.append(r)
+
+    # Attach LLM generation metadata to every result for reproducibility.
+    if llm_meta:
+        for r in results:
+            r.metadata.update(llm_meta)
 
     # --smoke: keep only first 5 samples per result
     if args.smoke:
@@ -365,7 +424,11 @@ def _detect_supported_modes(data: Dict[str, Any]) -> List[str]:
         for sample in samples
     ):
         modes.append("extraction")
-    if any(isinstance(sample, dict) and _sample_has_any(sample, ["gold_docs", "retrieved_docs"]) for sample in samples):
+    if any(
+        isinstance(sample, dict)
+        and _sample_has_any(sample, ["gold_doc_ids", "retrieved_doc_ids", "retrieved_contexts"])
+        for sample in samples
+    ):
         modes.append("retrieval")
     if any(
         isinstance(sample, dict)
@@ -424,15 +487,22 @@ def _write_report(output: str, path: str) -> None:
         f.write(output)
 
 
-def _filter_metrics(metrics: List[str], mode_key: str) -> List[str]:
-    """Keep only metrics valid for *mode_key*.
+def _select_metrics(metrics: List[str], mode_key: str) -> List[str]:
+    """Validate and return metrics valid for *mode_key*.
 
     Defaults (used when --metrics is omitted) stay offline-friendly; the full
     allow-list in ``_MODE_ALLOWED_METRICS`` also covers opt-in LLM-Judge
     metrics so they can be selected explicitly, e.g. ``--metrics coverage``.
     """
     allowed = set(_MODE_ALLOWED_METRICS.get(mode_key, []))
-    return [m for m in metrics if m in allowed]
+    invalid = [m for m in metrics if m not in allowed]
+    if invalid:
+        print(
+            f"Error: metric(s) not valid for {mode_key} mode: {', '.join(invalid)}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    return list(metrics)
 
 
 # ---------------------------------------------------------------------------

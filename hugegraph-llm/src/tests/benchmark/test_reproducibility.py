@@ -29,7 +29,7 @@ pytestmark = pytest.mark.unit
 
 _SAMPLES_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'hugegraph_llm', 'benchmark', 'data', 'samples')
 _CAR_DATA = os.path.join(_SAMPLES_DIR, 'car_extraction_sample.json')
-_RETRIEVAL_DATA = os.path.join(_SAMPLES_DIR, 'retrieval_sample.json')
+_RETRIEVAL_DATA = os.path.join(_SAMPLES_DIR, 'retrieval_docid_sample.json')
 
 
 def test_reproducibilityextraction_same_input_same_output_extraction():

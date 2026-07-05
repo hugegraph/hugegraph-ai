@@ -49,6 +49,8 @@ def _build_nx_graph(prediction: Dict[str, Any]) -> nx.Graph:
     if not isinstance(edges, list):
         edges = []
 
+    name_to_node_id: Dict[str, str] = {}
+
     # Add nodes
     for v in vertices:
         name = v.get("name")
@@ -56,13 +58,21 @@ def _build_nx_graph(prediction: Dict[str, Any]) -> nx.Graph:
             name = v["properties"].get("name", "")
         if name:
             label = str(v.get("label", ""))
-            node_id = f"{label}:{name}" if label else str(name)
-            g.add_node(node_id, label=label, name=str(name))
+            name_str = str(name)
+            node_id = f"{label}:{name_str}" if label else name_str
+            name_to_node_id[name_str] = node_id
+            g.add_node(node_id, label=label, name=name_str)
+
+    def canonical_endpoint(endpoint: Any) -> str:
+        endpoint_id = str(endpoint)
+        if endpoint_id in g:
+            return endpoint_id
+        return name_to_node_id.get(endpoint_id, endpoint_id)
 
     # Add edges
     for e in edges:
-        out_v = str(_edge_out(e))
-        in_v = str(_edge_in(e))
+        out_v = canonical_endpoint(_edge_out(e))
+        in_v = canonical_endpoint(_edge_in(e))
         edge_label = str(e.get("label", ""))
         if out_v and in_v:
             g.add_edge(out_v, in_v, label=edge_label)

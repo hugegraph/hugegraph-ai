@@ -24,7 +24,7 @@ Detects contradictory claims within the extracted knowledge graph:
 """
 
 from collections import defaultdict
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from hugegraph_llm.benchmark.metrics.base import BaseMetric
 from hugegraph_llm.benchmark.metrics.extraction import _edge_in, _edge_out
@@ -138,6 +138,13 @@ class ConflictDetection(BaseMetric):
 
     name: str = "conflict_detection"
     requires_llm: bool = False
+    higher_is_better: bool = False
+
+    @classmethod
+    def is_higher_is_better(cls, score_name: str) -> Optional[bool]:
+        if score_name in {"conflict_rate", "num_conflicts"}:
+            return False
+        return None
 
     def calculate(
         self,

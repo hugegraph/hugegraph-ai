@@ -25,6 +25,48 @@ from hugegraph_llm.benchmark.runners.base_runner import BaseRunner
 
 logger = logging.getLogger(__name__)
 
+_RANKING_METRICS = {"recall_at_k", "hit_at_k", "mrr"}
+_CONTEXT_METRICS = {"context_precision", "context_relevancy", "evidence_recall_llm"}
+
+
+def _require_list(sample: Dict[str, Any], field: str, sample_id: str) -> List[Any]:
+    if field not in sample:
+        raise ValueError(f"Retrieval sample {sample_id!r} missing required field '{field}'")
+    value = sample[field]
+    if not isinstance(value, list):
+        raise ValueError(f"Retrieval sample {sample_id!r} field '{field}' must be a list")
+    return value
+
+
+def _doc_ids(sample: Dict[str, Any], field: str, sample_id: str) -> List[str]:
+    values = _require_list(sample, field, sample_id)
+    for value in values:
+        if isinstance(value, (dict, list)):
+            raise ValueError(f"Retrieval sample {sample_id!r} field '{field}' must contain document ids, not objects")
+    return [str(value) for value in values]
+
+
+def _texts(sample: Dict[str, Any], field: str, sample_id: str) -> List[str]:
+    values = _require_list(sample, field, sample_id)
+    for idx, value in enumerate(values):
+        if not isinstance(value, str):
+            raise ValueError(f"Retrieval sample {sample_id!r} field '{field}' item {idx} must be a string")
+    return values
+
+
+def _validate_sample_contract(sample: Dict[str, Any], metrics: List[str]) -> None:
+    sample_id = str(sample.get("sample_id", "unknown"))
+    metric_set = set(metrics)
+    if metric_set & _RANKING_METRICS:
+        _doc_ids(sample, "retrieved_doc_ids", sample_id)
+        _doc_ids(sample, "gold_doc_ids", sample_id)
+    if metric_set & _CONTEXT_METRICS:
+        _texts(sample, "retrieved_contexts", sample_id)
+    if "context_precision" in metric_set and "gold_answer" not in sample:
+        raise ValueError(f"Retrieval sample {sample_id!r} missing required field 'gold_answer'")
+    if "evidence_recall_llm" in metric_set:
+        _texts(sample, "gold_evidence", sample_id)
+
 
 class RetrievalRunner(BaseRunner):
     """Run retrieval evaluation against gold-standard document sets.
@@ -36,8 +78,11 @@ class RetrievalRunner(BaseRunner):
                 {
                     "sample_id": "ret_001",
                     "question": "...",
-                    "gold_docs": ["doc1", "doc2"],
-                    "retrieved_docs": ["doc1", "doc3", "doc4", ...]
+                    "gold_doc_ids": ["doc1", "doc2"],
+                    "retrieved_doc_ids": ["doc1", "doc3", "doc4", ...],
+                    "retrieved_contexts": ["context text", ...],
+                    "gold_evidence": ["gold evidence text", ...],
+                    "gold_answer": "..."
                 }
             ]
         }
@@ -64,9 +109,16 @@ class RetrievalRunner(BaseRunner):
             Aggregated BenchmarkResult.
         """
         self._errors.clear()
+        if set(metrics) & _CONTEXT_METRICS and llm is None:
+            raise ValueError("Retrieval context metrics require an LLM client")
         data = self._load_data(data_path)
 
         samples = data.get("samples", [])
+        for sample in samples:
+            if isinstance(sample, dict):
+                _validate_sample_contract(sample, metrics)
+            else:
+                raise ValueError("Retrieval samples must be JSON objects")
 
         metric_instances = self._create_metric_instances(metrics)
 
@@ -88,16 +140,35 @@ class RetrievalRunner(BaseRunner):
             kwargs: Dict[str, Any] = {"language": language}
             if k_list is not None:
                 kwargs["k_list"] = k_list
+            metric_set = set(metrics)
+            retrieved_doc_ids = (
+                _doc_ids(sample, "retrieved_doc_ids", sample_id) if metric_set & _RANKING_METRICS else []
+            )
+            gold_doc_ids = _doc_ids(sample, "gold_doc_ids", sample_id) if metric_set & _RANKING_METRICS else []
+            retrieved_contexts = (
+                _texts(sample, "retrieved_contexts", sample_id) if metric_set & _CONTEXT_METRICS else []
+            )
+            gold_evidence = _texts(sample, "gold_evidence", sample_id) if "evidence_recall_llm" in metrics else []
+            gold_answer = sample.get("gold_answer", "") if metric_set & _CONTEXT_METRICS else ""
 
             for name, metric in metric_instances.items():
+                if name in _RANKING_METRICS:
+                    prediction = retrieved_doc_ids
+                    reference = gold_doc_ids
+                elif name == "evidence_recall_llm":
+                    prediction = retrieved_contexts
+                    reference = gold_evidence
+                else:
+                    prediction = retrieved_contexts
+                    reference = gold_answer
                 scores = self._run_metric_safe(
                     metric=metric,
-                    prediction=sample.get("retrieved_docs", []),
-                    reference=sample.get("gold_docs", []),
+                    prediction=prediction,
+                    reference=reference,
                     sample_id=sample_id,
                     question=sample.get("question", ""),
-                    context=sample.get("retrieved_docs", []),
-                    ground_truth=sample.get("gold_answer", sample.get("gold_docs", [])),
+                    context=retrieved_contexts,
+                    ground_truth=gold_answer,
                     llm=llm,
                     **kwargs,
                 )

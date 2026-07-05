@@ -65,3 +65,17 @@ class MetricRegistry:
     def list_by_category(cls, category: str) -> List[str]:
         """List metrics whose name starts with the given category prefix."""
         return sorted(name for name in _METRIC_REGISTRY if name.startswith(category))
+
+    @classmethod
+    def is_higher_is_better(cls, score_name: str) -> bool:
+        """Return whether a higher value is better for ``score_name``.
+
+        Looks up the score in registered metrics. Defaults to ``True`` if no
+        metric claims the score, following the common convention that higher
+        scores are better.
+        """
+        for metric_class in _METRIC_REGISTRY.values():
+            direction = metric_class.is_higher_is_better(score_name)
+            if direction is not None:
+                return direction
+        return True

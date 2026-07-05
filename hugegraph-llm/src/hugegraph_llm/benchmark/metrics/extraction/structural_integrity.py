@@ -21,7 +21,7 @@ Checks for orphan edges (endpoints missing from vertex set) and
 duplicate entities/edges within the extracted graph.
 """
 
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from hugegraph_llm.benchmark.metrics.base import BaseMetric
 from hugegraph_llm.benchmark.metrics.extraction import _edge_in, _edge_out
@@ -63,6 +63,13 @@ class StructuralIntegrity(BaseMetric):
 
     name: str = "structural_integrity"
     requires_llm: bool = False
+    higher_is_better: bool = False
+
+    @classmethod
+    def is_higher_is_better(cls, score_name: str) -> Optional[bool]:
+        if score_name in {"orphan_edge_rate", "duplicate_entity_rate", "duplicate_edge_rate"}:
+            return False
+        return None
 
     def calculate(
         self,

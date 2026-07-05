@@ -38,7 +38,7 @@ from hugegraph_llm.benchmark.metrics.registry import MetricRegistry
 
 logger = logging.getLogger(__name__)
 
-_CONTEXT_MAX_CHARS = 20000
+_CONTEXT_MAX_CHARS = 6000
 
 
 def _validate_classifications(classifications: List) -> List[Dict]:

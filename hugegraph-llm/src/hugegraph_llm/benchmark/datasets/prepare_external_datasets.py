@@ -19,9 +19,10 @@
 
 Rules (aligned with the project requirement "do not invent data"):
 - Only fields already present in the original dataset are used.
-- For retrieval, ``gold_docs`` come from the dataset's own gold references
-  (supporting facts / evidence).  ``retrieved_docs`` come from the context or
-  corpus the dataset already provides, NOT from a synthetic perfect candidate.
+- For retrieval, ``gold_doc_ids`` / ``retrieved_doc_ids`` are used by rank metrics.
+  ``gold_evidence`` / ``retrieved_contexts`` are used by context and LLM metrics.
+  Both come from the context / evidence the dataset already provides, NOT from
+  a synthetic perfect candidate.
 - Ablation mode is NOT produced automatically because none of these datasets
   ships with the four answer variants required by ``AblationRunner``.
 - Extraction mode is produced for Text2KGBench; ``candidate_*`` fields are left
@@ -122,6 +123,15 @@ def _context_to_docs(context: List[Any]) -> List[str]:
     return docs
 
 
+def _context_to_doc_ids(context: List[Any]) -> List[str]:
+    doc_ids = []
+    for idx, item in enumerate(context):
+        if isinstance(item, list) and len(item) == 2:
+            title = str(item[0]).strip()
+            doc_ids.append(title or f"doc_{idx}")
+    return doc_ids
+
+
 def _gold_docs_from_supporting(
     supporting_facts: List[Any], context: List[Any], corpus_map: Dict[str, str]
 ) -> List[str]:
@@ -144,15 +154,30 @@ def _gold_docs_from_supporting(
     return gold
 
 
+def _gold_doc_ids_from_supporting(
+    supporting_facts: List[Any], context: List[Any], corpus_map: Dict[str, str]
+) -> List[str]:
+    available_titles = set(_context_to_doc_ids(context)) | set(corpus_map.keys())
+    gold = []
+    seen = set()
+    for fact in supporting_facts:
+        if isinstance(fact, (list, tuple)) and len(fact) >= 1:
+            title = str(fact[0])
+            if title in available_titles and title not in seen:
+                seen.add(title)
+                gold.append(title)
+    return gold
+
+
 def _qa_to_retrieval_sample(item: Dict[str, Any], corpus_map: Dict[str, str]) -> Dict[str, Any]:
     context = item.get("context", [])
-    retrieved_docs = _context_to_docs(context)
-    gold_docs = _gold_docs_from_supporting(item.get("supporting_facts", []), context, corpus_map)
     return {
         "sample_id": str(item.get("_id", item.get("id", "unknown"))),
         "question": item.get("question", ""),
-        "gold_docs": gold_docs,
-        "retrieved_docs": retrieved_docs,
+        "gold_doc_ids": _gold_doc_ids_from_supporting(item.get("supporting_facts", []), context, corpus_map),
+        "retrieved_doc_ids": _context_to_doc_ids(context),
+        "gold_evidence": _gold_docs_from_supporting(item.get("supporting_facts", []), context, corpus_map),
+        "retrieved_contexts": _context_to_docs(context),
         "gold_answer": str(item.get("answer", "")),
     }
 
@@ -181,6 +206,14 @@ def _musique_docs(item: Dict[str, Any]) -> List[str]:
     return docs
 
 
+def _musique_doc_ids(item: Dict[str, Any]) -> List[str]:
+    doc_ids = []
+    for idx, p in enumerate(item.get("paragraphs", [])):
+        title = str(p.get("title", "")).strip()
+        doc_ids.append(title or f"paragraph_{idx}")
+    return doc_ids
+
+
 def _musique_gold_docs(item: Dict[str, Any]) -> List[str]:
     gold = []
     seen = set()
@@ -190,6 +223,18 @@ def _musique_gold_docs(item: Dict[str, Any]) -> List[str]:
             if title not in seen:
                 seen.add(title)
                 gold.append(f"{title}\n{p.get('paragraph_text', '')}")
+    return gold
+
+
+def _musique_gold_doc_ids(item: Dict[str, Any]) -> List[str]:
+    gold = []
+    seen = set()
+    for idx, p in enumerate(item.get("paragraphs", [])):
+        if p.get("is_supporting"):
+            title = str(p.get("title", "")).strip() or f"paragraph_{idx}"
+            if title not in seen:
+                seen.add(title)
+                gold.append(title)
     return gold
 
 
@@ -205,8 +250,10 @@ def prepare_musique(subset_size: Optional[int], output_dir: Path, data_root: Pat
             {
                 "sample_id": str(item.get("id", "unknown")),
                 "question": item.get("question", ""),
-                "gold_docs": _musique_gold_docs(item),
-                "retrieved_docs": _musique_docs(item),
+                "gold_doc_ids": _musique_gold_doc_ids(item),
+                "retrieved_doc_ids": _musique_doc_ids(item),
+                "gold_evidence": _musique_gold_docs(item),
+                "retrieved_contexts": _musique_docs(item),
                 "gold_answer": str(item.get("answer", "")),
             }
         )
@@ -241,8 +288,10 @@ def prepare_anonyrag(language: str, subset_size: Optional[int], output_dir: Path
             {
                 "sample_id": f"anonyrag_{language}_{idx}",
                 "question": str(row.get("question", "")),
-                "gold_docs": [],
-                "retrieved_docs": [],
+                "gold_doc_ids": [],
+                "retrieved_doc_ids": [],
+                "gold_evidence": [],
+                "retrieved_contexts": [],
                 "gold_answer": str(row.get("answer", "")),
             }
         )
@@ -286,12 +335,15 @@ def prepare_graphrag_bench(
         source = item.get("source", "")
         context = corpus_map.get(source, "")
         evidence = str(item.get("evidence", "") or "").strip()
+        paragraphs = _paragraphs_from_context(context)
         samples.append(
             {
                 "sample_id": str(item.get("id", "unknown")),
                 "question": item.get("question", ""),
-                "gold_docs": [evidence] if evidence else [],
-                "retrieved_docs": _paragraphs_from_context(context),
+                "gold_doc_ids": [source] if evidence and source else [],
+                "retrieved_doc_ids": [source] if source else [],
+                "gold_evidence": [evidence] if evidence else [],
+                "retrieved_contexts": paragraphs,
                 "gold_answer": str(item.get("answer", "")),
                 "question_type": item.get("question_type"),
             }

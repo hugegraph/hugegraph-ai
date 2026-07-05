@@ -29,6 +29,14 @@ logger = logging.getLogger(__name__)
 _ANSWER_MODES = ("raw", "vector_only", "graph_only", "graph_vector")
 
 
+def _validate_sample_contract(sample: Dict[str, Any]) -> None:
+    sample_id = sample.get("sample_id", "unknown")
+    required_fields = ["gold_answer", *[f"{mode}_answer" for mode in _ANSWER_MODES]]
+    missing = [field for field in required_fields if field not in sample]
+    if missing:
+        raise ValueError(f"Ablation sample {sample_id!r} missing required field(s): {', '.join(missing)}")
+
+
 class AblationRunner(BaseRunner):
     """Run ablation experiment comparing four answer modes.
 
@@ -75,6 +83,10 @@ class AblationRunner(BaseRunner):
         data = self._load_data(data_path)
 
         samples = data.get("samples", [])
+        for sample in samples:
+            if not isinstance(sample, dict):
+                raise ValueError("Ablation samples must be JSON objects")
+            _validate_sample_contract(sample)
 
         metric_instances = self._create_metric_instances(answer_metrics)
 

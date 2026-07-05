@@ -22,7 +22,7 @@ checking type constraints, required property completeness, and edge
 endpoint legality.
 """
 
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from hugegraph_llm.benchmark.metrics.base import BaseMetric
 from hugegraph_llm.benchmark.metrics.extraction import _edge_in, _edge_out, _is_edge
@@ -61,6 +61,14 @@ class SchemaValidity(BaseMetric):
 
     name: str = "schema_validity"
     requires_llm: bool = False
+
+    @classmethod
+    def is_higher_is_better(cls, score_name: str) -> Optional[bool]:
+        if score_name == "illegal_edge_rate":
+            return False
+        if score_name in {"type_constraint_pass", "required_property_fill"}:
+            return True
+        return None
 
     def calculate(
         self,

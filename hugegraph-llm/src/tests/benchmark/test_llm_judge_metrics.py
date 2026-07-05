@@ -157,6 +157,17 @@ def test_contextrelevancywithfakellm_context_relevancy_with_fake_llm():
     assert result['context_relevancy'] == 1.0
 
 
+def test_contextrelevancywithfakellm_preserves_dual_rating_average():
+    metric = ContextRelevancy()
+    fake_llm = FakeLLM([json.dumps({'score': 2}), json.dumps({'score': 1})])
+    result = metric.calculate(
+        ['Paris is the capital of France'],
+        llm=fake_llm,
+        question='What is the capital of France?',
+    )
+    assert result['context_relevancy'] == 0.75
+
+
 def test_evidencerecallwithfakellm_evidence_recall_with_fake_llm():
     metric = EvidenceRecallLLM()
     # New batch format: single LLM call returns classifications list (GraphRAG-Benchmark pattern)
