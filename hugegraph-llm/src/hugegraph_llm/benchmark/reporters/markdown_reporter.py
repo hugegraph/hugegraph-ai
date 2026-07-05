@@ -17,10 +17,53 @@
 
 """Markdown reporter for benchmark results."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+# Import the metrics package to trigger self-registration before querying directions.
+from hugegraph_llm.benchmark import metrics  # noqa: F401
 from hugegraph_llm.benchmark.baseline.compare import ComparisonResult
+from hugegraph_llm.benchmark.metrics.registry import MetricRegistry
 from hugegraph_llm.benchmark.models.result import BenchmarkResult
+
+
+def _format_delta(value: float) -> str:
+    """Format a delta value with sign prefix."""
+    if value > 0:
+        return f"+{value:.4f}"
+    return f"{value:.4f}"
+
+
+def _is_degraded(metric_name: str, value: Optional[float]) -> bool:
+    """Return True when a metric value is at its worst bound.
+
+    Uses registered metric direction metadata. Higher-is-better metrics are
+    degraded at 0.0; lower-is-better metrics are degraded at 1.0. ``None``
+    values are also treated as degraded (metric failed or was skipped).
+    """
+    if value is None:
+        return True
+    if MetricRegistry.is_higher_is_better(metric_name):
+        return float(value) <= 0.0
+    return float(value) >= 1.0
+
+
+def _collect_degraded_samples(result: BenchmarkResult) -> List[Tuple[str, List[Tuple[str, Any]]]]:
+    """Return samples with degraded metrics, sorted by severity.
+
+    Each entry is ``(sample_id, [(metric, value), ...])``. Samples with more
+    degraded metrics come first.
+    """
+    degraded: List[Tuple[str, List[Tuple[str, Any]]]] = []
+    for sample in result.samples:
+        bad: List[Tuple[str, Any]] = []
+        for metric, value in sample.metrics.items():
+            if _is_degraded(metric, value):
+                bad.append((metric, value))
+        if bad:
+            bad.sort(key=lambda x: x[0])
+            degraded.append((sample.sample_id, bad))
+    degraded.sort(key=lambda item: (-len(item[1]), item[0]))
+    return degraded
 
 
 class MarkdownReporter:
@@ -57,6 +100,9 @@ class MarkdownReporter:
         lines.append(f"- **Git Commit**: {meta.get('git_commit', 'N/A')}")
         lines.append(f"- **Model**: {meta.get('model', 'N/A')}")
         lines.append(f"- **Sample Count**: {len(result.samples)}")
+        error_count = meta.get("error_count", 0)
+        if error_count:
+            lines.append(f"- **Error Count**: {error_count}")
         lines.append("")
 
         # Overall metrics table
@@ -92,6 +138,39 @@ class MarkdownReporter:
                 lines.append("|--------|-------|")
                 for key in sorted(tier_overall.keys()):
                     lines.append(f"| {key} | {tier_overall[key]:.4f} |")
+                lines.append("")
+
+        # Failed samples (single-run errors)
+        errors = meta.get("errors", [])
+        if errors:
+            lines.append("## Failed Samples")
+            lines.append("")
+            lines.append("| Sample ID | Metric | Error |")
+            lines.append("|-----------|--------|-------|")
+            for entry in errors:
+                sid = entry.get("sample_id", "N/A")
+                metric = entry.get("metric", "N/A")
+                error = str(entry.get("error", "")).replace("|", "\\|").replace("\n", " ")
+                # Truncate very long errors
+                display_error = error if len(error) <= 120 else error[:117] + "..."
+                lines.append(f"| {sid} | {metric} | {display_error} |")
+            lines.append("")
+
+        # Degraded samples (single-run worst-bound metrics)
+        if not comparison:
+            degraded = _collect_degraded_samples(result)
+            if degraded:
+                lines.append("## Degraded Samples")
+                lines.append("")
+                lines.append("| Sample ID | Degraded Metrics |")
+                lines.append("|-----------|------------------|")
+                for sid, bad_metrics in degraded:
+                    metric_cells = ", ".join(
+                        f"{name}={value if value is not None else 'N/A'}" for name, value in bad_metrics
+                    )
+                    # Escape pipe characters in metric names/values
+                    metric_cells = metric_cells.replace("|", "\\|")
+                    lines.append(f"| {sid} | {metric_cells} |")
                 lines.append("")
 
         # Regressed samples (if comparison available)
@@ -131,10 +210,3 @@ class MarkdownReporter:
             lines.append("")
 
         return "\n".join(lines)
-
-
-def _format_delta(value: float) -> str:
-    """Format a delta value with sign prefix."""
-    if value > 0:
-        return f"+{value:.4f}"
-    return f"{value:.4f}"
