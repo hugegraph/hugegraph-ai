@@ -41,7 +41,7 @@ def test_report_includes_failed_samples():
     assert "triple_f1" in report
 
 
-def test_report_includes_degraded_samples():
+def test_report_includes_low_performing_samples():
     result = BenchmarkResult(
         samples=[
             SampleResult(sample_id="good", metrics={"entity_f1": 1.0, "triple_f1": 1.0}),
@@ -51,11 +51,11 @@ def test_report_includes_degraded_samples():
         metadata={"mode": "extraction"},
     )
     report = MarkdownReporter.report(result)
-    assert "## Degraded Samples" in report
+    assert "## Low-performing Samples" in report
     assert "bad" in report
     assert "entity_f1=0.0" in report
-    # Non-primary metrics should not be flagged as degraded.
-    assert "clustering_coefficient" not in report.split("## Degraded Samples")[1].split("\n## ")[0]
+    # Non-primary metrics should not be flagged.
+    assert "clustering_coefficient" not in report.split("## Low-performing Samples")[1].split("\n## ")[0]
 
 
 def test_report_retrieval_mode_flags_low_recall():
@@ -68,31 +68,31 @@ def test_report_retrieval_mode_flags_low_recall():
         metadata={"mode": "retrieval"},
     )
     report = MarkdownReporter.report(result)
-    assert "## Degraded Samples" in report
+    assert "## Low-performing Samples" in report
     assert "q1" in report
     assert "recall@1=0.0" in report
-    assert "q2" not in report.split("## Degraded Samples")[1].split("\n## ")[0]
+    assert "q2" not in report.split("## Low-performing Samples")[1].split("\n## ")[0]
 
 
-def test_report_omits_degraded_section_when_all_perfect():
+def test_report_omits_low_performing_section_when_all_perfect():
     result = BenchmarkResult(
         samples=[SampleResult(sample_id="good", metrics={"entity_f1": 1.0})],
         overall={"entity_f1": 1.0},
         metadata={"mode": "extraction"},
     )
     report = MarkdownReporter.report(result)
-    assert "## Degraded Samples" not in report
+    assert "## Low-performing Samples" not in report
     assert "## Failed Samples" not in report
 
 
-def test_report_omits_degraded_section_for_unknown_mode():
+def test_report_omits_low_performing_section_for_unknown_mode():
     result = BenchmarkResult(
         samples=[SampleResult(sample_id="s1", metrics={"entity_f1": 0.0})],
         overall={"entity_f1": 0.0},
         metadata={},
     )
     report = MarkdownReporter.report(result)
-    assert "## Degraded Samples" not in report
+    assert "## Low-performing Samples" not in report
 
 
 def test_failed_samples_error_truncation():

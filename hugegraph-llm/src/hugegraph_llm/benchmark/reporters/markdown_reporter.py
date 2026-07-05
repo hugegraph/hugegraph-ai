@@ -33,10 +33,12 @@ def _format_delta(value: float) -> str:
     return f"{value:.4f}"
 
 
-# Threshold below/above which a primary metric is considered degraded.
-_DEGRADED_THRESHOLD = 0.5
+# Threshold below/above which a primary metric is considered low-performing in a
+# single-run report. True regression/degradation requires a baseline and is
+# handled by the `compare` command.
+_LOW_PERFORMANCE_THRESHOLD = 0.5
 
-# Primary quality metrics used to flag degraded samples per mode.
+# Primary quality metrics used to flag low-performing samples per mode.
 # Retrieval primary metrics are computed dynamically from metric names.
 _PRIMARY_METRICS_BY_MODE: Dict[str, frozenset] = {
     "extraction": frozenset({"entity_f1", "triple_f1", "property_f1"}),
@@ -47,7 +49,7 @@ _PRIMARY_METRICS_BY_MODE: Dict[str, frozenset] = {
 
 
 def _primary_metrics(mode: Optional[str], sample_metric_names: List[str]) -> set:
-    """Return the metric names considered primary for degradation detection."""
+    """Return the metric names considered primary for low-performance detection."""
     if mode == "retrieval":
         return {
             name
@@ -61,44 +63,47 @@ def _primary_metrics(mode: Optional[str], sample_metric_names: List[str]) -> set
     return set(_PRIMARY_METRICS_BY_MODE.get(mode or "", frozenset()))
 
 
-def _is_degraded(metric_name: str, value: float, threshold: float = _DEGRADED_THRESHOLD) -> bool:
-    """Return True when a metric value crosses the degradation threshold.
+def _is_low_performing(metric_name: str, value: float, threshold: float = _LOW_PERFORMANCE_THRESHOLD) -> bool:
+    """Return True when a metric value is at or below the low-performance threshold.
 
     Uses registered metric direction metadata. Higher-is-better metrics are
-    degraded when they fall at or below the threshold; lower-is-better metrics
-    are degraded when they rise to or above the threshold.
+    flagged when they fall at or below the threshold; lower-is-better metrics
+    are flagged when they rise to or above the threshold.
+
+    Note: this is a single-run quality signal, not a regression. Use the
+    ``compare`` command to detect true degradation against a baseline.
     """
     if MetricRegistry.is_higher_is_better(metric_name):
         return float(value) <= threshold
     return float(value) >= threshold
 
 
-def _collect_degraded_samples(
+def _collect_low_performing_samples(
     result: BenchmarkResult, mode: Optional[str]
 ) -> List[Tuple[str, List[Tuple[str, Any]]]]:
-    """Return samples with degraded primary metrics, sorted by severity.
+    """Return samples with low-performing primary metrics, sorted by severity.
 
     Each entry is ``(sample_id, [(metric, value), ...])``. Samples with more
-    degraded metrics come first.
+    flagged metrics come first.
     """
     all_metric_names = set()
     for sample in result.samples:
         all_metric_names.update(sample.metrics.keys())
     primary = _primary_metrics(mode, sorted(all_metric_names))
 
-    degraded: List[Tuple[str, List[Tuple[str, Any]]]] = []
+    flagged: List[Tuple[str, List[Tuple[str, Any]]]] = []
     for sample in result.samples:
         bad: List[Tuple[str, Any]] = []
         for metric, value in sample.metrics.items():
             if metric not in primary:
                 continue
-            if value is None or _is_degraded(metric, value):
+            if value is None or _is_low_performing(metric, value):
                 bad.append((metric, value))
         if bad:
             bad.sort(key=lambda x: x[0])
-            degraded.append((sample.sample_id, bad))
-    degraded.sort(key=lambda item: (-len(item[1]), item[0]))
-    return degraded
+            flagged.append((sample.sample_id, bad))
+    flagged.sort(key=lambda item: (-len(item[1]), item[0]))
+    return flagged
 
 
 class MarkdownReporter:
@@ -191,15 +196,21 @@ class MarkdownReporter:
                 lines.append(f"| {sid} | {metric} | {display_error} |")
             lines.append("")
 
-        # Degraded samples (single-run primary metrics below threshold)
+        # Low-performing samples (single-run primary metrics below threshold).
+        # True regression/degradation must be detected with the `compare` command.
         if not comparison:
-            degraded = _collect_degraded_samples(result, meta.get("mode"))
-            if degraded:
-                lines.append("## Degraded Samples")
+            low_performing = _collect_low_performing_samples(result, meta.get("mode"))
+            if low_performing:
+                lines.append("## Low-performing Samples")
                 lines.append("")
-                lines.append("| Sample ID | Degraded Metrics |")
-                lines.append("|-----------|------------------|")
-                for sid, bad_metrics in degraded:
+                lines.append(
+                    "_Single-run quality signal (threshold = 0.5). "
+                    "Use `compare` against a baseline to detect true regression._"
+                )
+                lines.append("")
+                lines.append("| Sample ID | Low-performing Metrics |")
+                lines.append("|-----------|------------------------|")
+                for sid, bad_metrics in low_performing:
                     metric_cells = ", ".join(
                         f"{name}={value if value is not None else 'N/A'}" for name, value in bad_metrics
                     )
