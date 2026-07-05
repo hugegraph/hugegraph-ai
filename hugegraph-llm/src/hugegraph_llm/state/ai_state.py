@@ -30,7 +30,6 @@ class WkFlowInput(GParam):
     graph_client_config: Optional[Dict[str, Any]] = None
     data_json: Optional[Dict[str, Any]] = None
     extract_type: Optional[str] = None
-    collect_trace: Optional[bool] = None
     query_examples: Optional[Any] = None
     few_shot_schema: Optional[Any] = None
     # Fields related to PromptGenerate
@@ -92,7 +91,6 @@ class WkFlowInput(GParam):
         self.graph_client_config = None
         self.data_json = None
         self.extract_type = None
-        self.collect_trace = None
         self.query_examples = None
         self.few_shot_schema = None
         # PromptGenerate related configuration
@@ -168,11 +166,6 @@ class WkFlowState(GParam):
     graph_only_answer: Optional[str] = None
     graph_vector_answer: Optional[str] = None
 
-    # Fields for benchmark syntax_validity metric
-    raw_responses: Optional[List[str]] = None
-    parse_results: Optional[List[Optional[Dict[str, Any]]]] = None
-    collect_trace: Optional[bool] = None
-
     merged_result: Optional[Any] = None
 
     vertex_num: Optional[int] = None
@@ -228,10 +221,6 @@ class WkFlowState(GParam):
         self.vector_only_answer = None
         self.graph_only_answer = None
         self.graph_vector_answer = None
-
-        self.raw_responses = None
-        self.parse_results = None
-        self.collect_trace = None
 
         self.merged_result = None
 

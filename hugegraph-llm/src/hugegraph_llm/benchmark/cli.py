@@ -148,9 +148,11 @@ def _create_llm_client(settings: Optional[Any] = None) -> tuple[Optional[Any], D
     _configure_cli_logging()
 
     try:
-        from hugegraph_llm.config import llm_settings
+        cfg = settings
+        if cfg is None:
+            from hugegraph_llm.config import llm_settings
 
-        cfg = settings if settings is not None else llm_settings
+            cfg = llm_settings
         model = getattr(cfg, "openai_chat_language_model", None) or "gpt-4.1-mini"
         client = OpenAI(
             api_key=getattr(cfg, "openai_chat_api_key", None) or "",

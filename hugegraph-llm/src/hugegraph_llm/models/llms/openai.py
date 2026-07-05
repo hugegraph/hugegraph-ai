@@ -15,7 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import os
 from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Optional
 
 import openai
@@ -44,27 +43,11 @@ class OpenAIClient(BaseLLM):
         temperature: float = 0.01,
     ) -> None:
         api_key = api_key or ""
-        timeout = float(os.getenv("OPENAI_TIMEOUT", "0")) or None
-        self.client = OpenAI(api_key=api_key, base_url=api_base, timeout=timeout)
-        self.aclient = AsyncOpenAI(api_key=api_key, base_url=api_base, timeout=timeout)
+        self.client = OpenAI(api_key=api_key, base_url=api_base)
+        self.aclient = AsyncOpenAI(api_key=api_key, base_url=api_base)
         self.model = model_name
         self.max_tokens = max_tokens
         self.temperature = temperature
-
-    def _extra_kwargs(self) -> Dict[str, Any]:
-        """Return model-specific kwargs to reduce reasoning overhead.
-
-        DeepSeek v4 models support a thinking mode toggle via
-        ``extra_body={"thinking": {"type": "disabled"}}`` in the OpenAI SDK.
-        ``reasoning_effort`` only controls effort when thinking is enabled, so we
-        pass both to minimize/eliminate reasoning tokens.
-        """
-        if self.model.startswith("deepseek-v4"):
-            return {
-                "reasoning_effort": "low",
-                "extra_body": {"thinking": {"type": "disabled"}},
-            }
-        return {}
 
     @retry(
         stop=stop_after_attempt(3),
@@ -86,7 +69,6 @@ class OpenAIClient(BaseLLM):
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 messages=messages,
-                **self._extra_kwargs(),
             )
             if not completions.choices:
                 raise RuntimeError(f"Empty choices in LLM response: {str(completions)[:200]}")
@@ -125,7 +107,6 @@ class OpenAIClient(BaseLLM):
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 messages=messages,
-                **self._extra_kwargs(),
             )
             if not completions.choices:
                 raise RuntimeError(f"Empty choices in LLM response: {str(completions)[:200]}")
