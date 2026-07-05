@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Import the metrics package to trigger self-registration before querying directions.
 from hugegraph_llm.benchmark import metrics  # noqa: F401
+from hugegraph_llm.benchmark.metrics.dimensions import get_dimension
 from hugegraph_llm.benchmark.metrics.registry import MetricRegistry
 from hugegraph_llm.benchmark.models.result import BenchmarkResult
 
@@ -34,10 +35,103 @@ class ComparisonResult(BaseModel):
 
     overall_diff: Dict[str, float] = Field(default_factory=dict)
     overall_reference: Dict[str, float] = Field(default_factory=dict)
+    # Raw overall scores for baseline and candidate, so the reporter can show
+    # true before/after values without reverse-engineering them from the delta.
+    baseline_overall: Dict[str, float] = Field(default_factory=dict)
+    candidate_overall: Dict[str, float] = Field(default_factory=dict)
     regressed_samples: List[Dict[str, Any]] = Field(default_factory=list)
     improved_samples: List[Dict[str, Any]] = Field(default_factory=list)
     delta: float = 0.0
 
+    def analyze(self) -> Dict[str, Any]:
+        """Produce an analyst-readable summary of the comparison.
+
+        Returns a dict with:
+          - ``counts``: {regressed, improved, unchanged} metric counts
+          - ``by_domain``: per top-level domain → verdict counts + worst
+            semantic delta, so the reporter can say "relation-extraction
+            regressed" instead of listing metrics.
+          - ``by_subdimension``: finer ``"domain / subdim"`` breakdown.
+          - ``by_question_type``: whether regressions cluster in a tier
+            (uses candidate samples' ``question_type``).
+          - ``concentration``: are regressions spread (systemic) or driven
+            by a few samples (outliers)? ``max_metrics_per_sample`` = the
+            most metrics any single regressed sample lost.
+          - ``metric_verdicts``: metric → {semantic_delta, verdict}.
+
+        All metrics are judged the same way; dimension is a presentation
+        grouping only. Pure function of self; safe to call repeatedly.
+        """
+        verdicts: Dict[str, Dict[str, Any]] = {}
+        regressed_metrics: List[str] = []
+        improved_metrics: List[str] = []
+        unchanged_metrics: List[str] = []
+
+        # Floor the threshold at DEFAULT_RATIO_DELTA so sub-1% wobble is
+        # treated as 持平 rather than 退化/改进 noise.
+        threshold = max(self.delta, DEFAULT_RATIO_DELTA)
+
+        for metric, sem_delta in self.overall_diff.items():
+            if sem_delta < -threshold - 1e-9:
+                verdict = "regressed"
+                regressed_metrics.append(metric)
+            elif sem_delta > threshold + 1e-9:
+                verdict = "improved"
+                improved_metrics.append(metric)
+            else:
+                verdict = "unchanged"
+                unchanged_metrics.append(metric)
+            verdicts[metric] = {"semantic_delta": sem_delta, "verdict": verdict}
+
+        # Roll up by domain / sub-dimension.
+        by_domain: Dict[str, Dict[str, Any]] = {}
+        by_subdim: Dict[str, Dict[str, Any]] = {}
+        for metric, v in verdicts.items():
+            domain, subdim = get_dimension(metric)
+            sem = v["semantic_delta"]
+            for bucket, key in ((by_domain, domain), (by_subdim, f"{domain} / {subdim}")):
+                slot = bucket.setdefault(
+                    key,
+                    {"regressed": 0, "improved": 0, "unchanged": 0, "total": 0, "worst_delta": 0.0},
+                )
+                slot[v["verdict"]] += 1
+                slot["total"] += 1
+                if sem < slot["worst_delta"]:
+                    slot["worst_delta"] = round(sem, 4)
+
+        # Question-type clustering: do regressions pile into one tier?
+        by_qtype: Dict[str, int] = {}
+        for entry in self.regressed_samples:
+            qt = entry.get("question_type")
+            if qt:
+                by_qtype[qt] = by_qtype.get(qt, 0) + 1
+
+        # Concentration: how many metrics does the worst single sample lose?
+        max_per_sample = 0
+        if self.regressed_samples:
+            max_per_sample = max(len(e.get("regressions", {})) for e in self.regressed_samples)
+
+        return {
+            "counts": {
+                "regressed": len(regressed_metrics),
+                "improved": len(improved_metrics),
+                "unchanged": len(unchanged_metrics),
+            },
+            "by_domain": by_domain,
+            "by_subdimension": by_subdim,
+            "by_question_type": by_qtype,
+            "concentration": {
+                "regressed_samples": len(self.regressed_samples),
+                "max_metrics_per_sample": max_per_sample,
+            },
+            "metric_verdicts": verdicts,
+        }
+
+
+# Minimum |delta| for a RATIO metric to count as 退化/改进. Below this the
+# change is treated as noise (抖动) and folded into "unchanged". Count and
+# structure metrics are exempt — they are reported as movement, not verdict.
+DEFAULT_RATIO_DELTA = 0.01
 
 # Metric names/prefixes that indicate LLM-Judge metrics (higher variance).
 _LLM_JUDGE_METRICS = {
@@ -101,6 +195,10 @@ class BaselineComparator:
         """
         result = ComparisonResult(delta=delta)
 
+        # Preserve raw overall scores for true before/after reporting.
+        result.baseline_overall = dict(baseline.overall)
+        result.candidate_overall = dict(candidate.overall)
+
         # Overall diff is direction-aware: positive means improvement.
         all_keys = set(baseline.overall.keys()) | set(candidate.overall.keys())
         for key in sorted(all_keys):
@@ -135,10 +233,12 @@ class BaselineComparator:
                 cand_val = cand_sample.metrics.get(metric, 0.0)
                 diff = _semantic_delta(metric, base_val, cand_val)
 
-                # Determine effective delta for this metric
-                effective_delta = delta
+                # Floor at DEFAULT_RATIO_DELTA so trivial wobble doesn't
+                # flood the regressed/improved sample lists. LLM-Judge
+                # metrics keep their higher variance tolerance.
+                effective_delta = max(delta, DEFAULT_RATIO_DELTA)
                 if _is_llm_judge_metric(metric):
-                    effective_delta = max(delta, cls.DEFAULT_LLM_JUDGE_DELTA)
+                    effective_delta = max(effective_delta, cls.DEFAULT_LLM_JUDGE_DELTA)
 
                 if diff < -effective_delta:
                     regressions[metric] = round(diff, 4)
@@ -149,6 +249,7 @@ class BaselineComparator:
                 result.regressed_samples.append(
                     {
                         "sample_id": sid,
+                        "question_type": cand_sample.question_type,
                         "regressions": regressions,
                         "baseline_metrics": dict(base_sample.metrics),
                         "candidate_metrics": dict(cand_sample.metrics),
@@ -159,6 +260,7 @@ class BaselineComparator:
                 result.improved_samples.append(
                     {
                         "sample_id": sid,
+                        "question_type": cand_sample.question_type,
                         "improvements": improvements,
                         "baseline_metrics": dict(base_sample.metrics),
                         "candidate_metrics": dict(cand_sample.metrics),
