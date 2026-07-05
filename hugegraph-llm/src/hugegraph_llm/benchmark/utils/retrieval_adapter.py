@@ -20,7 +20,6 @@
 import json
 from typing import Any, Dict, List, Optional, Union
 
-
 # Modes supported by the RAG flows. Each mode determines which retrieved
 # contexts are exported and which answer field is considered primary.
 _RETRIEVAL_MODES = {

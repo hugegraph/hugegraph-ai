@@ -21,7 +21,6 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Union
 
-
 _GRAPH_ID_PREFIX_RE = re.compile(r"^\d+:")
 
 
