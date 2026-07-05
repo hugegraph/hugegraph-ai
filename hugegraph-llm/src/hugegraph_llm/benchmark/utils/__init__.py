@@ -22,5 +22,11 @@ from hugegraph_llm.benchmark.utils.graph_extract import (
     normalize_graph_extract,
     normalize_schema,
 )
+from hugegraph_llm.benchmark.utils.retrieval_adapter import build_retrieval_sample_from_state
 
-__all__ = ["normalize_extraction_output", "normalize_graph_extract", "normalize_schema"]
+__all__ = [
+    "build_retrieval_sample_from_state",
+    "normalize_extraction_output",
+    "normalize_graph_extract",
+    "normalize_schema",
+]
