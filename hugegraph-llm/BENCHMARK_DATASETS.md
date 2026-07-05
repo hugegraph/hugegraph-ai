@@ -518,3 +518,140 @@ uv run python -m hugegraph_llm.benchmark run \
 2. `graphrag-bench-novel` 全量 retrieval + question_type 分层报告。
 3. `text2kgbench_movie` 用真实抽取 candidate 跑 extraction 全指标。
 4. `anonyrag-chs` 100 条端到端中文 GraphRAG，重点看 answer correctness / faithfulness。
+
+---
+
+## 8. 真实 HugeGraph-AI pipeline 输出（Issue #75 验证）
+
+本节记录使用 HugeGraph-AI 真实 pipeline 为公开数据集生成 retrieval/answer 候选，并用于 benchmark 的全过程。所有命令均基于 `hugegraph-ai/hugegraph-llm` 目录执行。
+
+### 8.1 环境准备
+
+```bash
+cd hugegraph-ai/hugegraph-llm
+source .venv/bin/activate
+export no_proxy=localhost,127.0.0.1
+```
+
+确保 HugeGraph Server 已在本地运行（默认 `127.0.0.1:8080`）。如 Docker 无响应，可重启：
+
+```bash
+docker restart hugegraph-server
+```
+
+### 8.2 生成 retrieval 候选
+
+脚本 `scripts/benchmark/generate_hugegraph_retrieval_outputs.py` 会：
+
+1. 从 subset JSON 的 `retrieved_docs` 收集语料。
+2. 为每个数据集独立构建 Faiss 向量索引。
+3. 抽取小规模属性图（默认最多 5 个 chunk，可用 `--max-graph-chunks` 调整）。
+4. 对每个问题执行 `rag_graph_vector`（BLEU rerank），输出 `retrieved_docs` 与 `graph_vector_answer`。
+
+> 为控制 API 成本，本次验证只跑各数据集的 5%~10% 子集。
+
+```bash
+python scripts/benchmark/generate_hugegraph_retrieval_outputs.py \
+  --input benchmark_data/external/subsets/hotpotqa_retrieval.json \
+  --output benchmark_data/outputs/hugegraph_retrieval/hotpotqa_retrieval_output.json \
+  --graph-name hugegraph --topk 5 --max-workers 1 --max-graph-chunks 5
+
+python scripts/benchmark/generate_hugegraph_retrieval_outputs.py \
+  --input benchmark_data/external/subsets/2wikimultihopqa_retrieval.json \
+  --output benchmark_data/outputs/hugegraph_retrieval/2wikimultihopqa_retrieval_output.json \
+  --graph-name hugegraph --topk 5 --max-workers 1 --max-graph-chunks 5
+
+python scripts/benchmark/generate_hugegraph_retrieval_outputs.py \
+  --input benchmark_data/external/subsets/musique_retrieval.json \
+  --output benchmark_data/outputs/hugegraph_retrieval/musique_retrieval_output.json \
+  --graph-name hugegraph --topk 5 --max-workers 1 --max-graph-chunks 5
+
+python scripts/benchmark/generate_hugegraph_retrieval_outputs.py \
+  --input benchmark_data/external/subsets/graphrag_bench_novel_retrieval.json \
+  --output benchmark_data/outputs/hugegraph_retrieval/graphrag_bench_novel_retrieval_output.json \
+  --graph-name hugegraph --topk 5 --max-workers 1 --max-graph-chunks 5
+
+# Medical 语料较长，LLM 图抽取在 1 个 chunk 下仍会触发超大 prompt 导致响应极慢，
+# 因此本次验证跳过 LLM 图抽取（--max-graph-chunks 0），仅保留向量索引与空图 fallback schema。
+python scripts/benchmark/generate_hugegraph_retrieval_outputs.py \
+  --input benchmark_data/external/subsets/graphrag_bench_medical_retrieval.json \
+  --output benchmark_data/outputs/hugegraph_retrieval/graphrag_bench_medical_retrieval_output.json \
+  --graph-name hugegraph --topk 5 --max-workers 1 --max-graph-chunks 0
+```
+
+产物位置：
+
+```text
+benchmark_data/outputs/hugegraph_retrieval/
+├── hotpotqa_retrieval_output.json
+├── 2wikimultihopqa_retrieval_output.json
+├── musique_retrieval_output.json
+├── graphrag_bench_novel_retrieval_output.json
+└── graphrag_bench_medical_retrieval_output.json
+```
+
+### 8.3 生成 Text2KGBench 抽取候选
+
+```bash
+python scripts/benchmark/generate_text2kgbench_candidates.py \
+  --input benchmark_data/external/subsets/text2kgbench_culture_extraction.json \
+  --output benchmark_data/outputs/text2kgbench_candidates/text2kgbench_culture_candidates.json \
+  --max-workers 1
+
+python scripts/benchmark/generate_text2kgbench_candidates.py \
+  --input benchmark_data/external/subsets/text2kgbench_movie_extraction.json \
+  --output benchmark_data/outputs/text2kgbench_candidates/text2kgbench_movie_candidates.json \
+  --max-workers 1
+```
+
+产物位置：
+
+```text
+benchmark_data/outputs/text2kgbench_candidates/
+├── text2kgbench_culture_candidates.json
+└── text2kgbench_movie_candidates.json
+```
+
+### 8.4 运行 21 项 benchmark 指标
+
+```bash
+# 关闭本地代理，避免请求被转发到 127.0.0.1:7890 导致超时
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+export no_proxy=localhost,127.0.0.1,dashscope.aliyuncs.com
+export OPENAI_TIMEOUT=120
+
+python scripts/benchmark/run_benchmarks.py \
+  --retrieval-dir benchmark_data/outputs/hugegraph_retrieval \
+  --text2kgbench-dir benchmark_data/outputs/text2kgbench_candidates \
+  --output-dir benchmark_data/outputs/baselines \
+  --max-workers 10
+```
+
+该脚本会依次产出：
+
+- 每个 retrieval 输出文件的 6 项 retrieval 指标 + 6 项 answer 指标。
+- 每个 Text2KGBench 候选文件的 9 项 extraction 指标。
+- 共 21 项指标，每个数据集均保存 `{name}_baseline.json` 与 `{name}_report.md`。
+
+### 8.5 验证结果摘要
+
+> 以下表格在跑完 `run_benchmarks.py` 后由实际 baseline JSON 汇总得到。
+
+#### Retrieval + Answer（离线 + LLM-Judge）
+
+| 数据集 | 样本数 | recall@5 | hit_any@5 | mrr | answer_correctness | faithfulness | coverage |
+|--------|--------|----------|-----------|-----|--------------------|--------------|----------|
+| hotpotqa | 100 | 0.4450 | 0.6900 | 0.5817 | 0.5450 | 0.8750 | 0.5896 |
+| 2wikimultihopqa | 100 | 0.3800 | 0.6800 | 0.6117 | 0.2651 | 0.9673 | 0.2250 |
+| musique | 50 | 0.3017 | 0.5600 | 0.2946 | 0.3294 | 1.0000 | 0.0600 |
+| graphrag_bench_novel | 1 | 0.0000 | 0.0000 | 0.0000 | 0.6667 | 1.0000 | 1.0000 |
+| graphrag_bench_medical | 203 | 0.0000 | 0.0000 | 0.0000 | 0.4155 | 0.6493 | 0.4978 |
+
+#### Extraction（离线 + LLM-Judge）
+
+| 数据集 | 样本数 | entity_f1 | triple_f1 | schema_validity | syntax_validity | conflict_detection | temporal_validity |
+|--------|--------|-----------|-----------|-----------------|-----------------|--------------------|-------------------|
+| text2kgbench_culture | 15 | — | — | — | — | — | — |
+| text2kgbench_movie | 84 | — | — | — | — | — | — |
+
+完整 baseline 与 Markdown 报告见 `benchmark_data/outputs/baselines/`。

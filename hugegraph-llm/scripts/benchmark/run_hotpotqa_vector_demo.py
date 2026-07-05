@@ -118,7 +118,7 @@ def _build_corpus(samples: List[Dict[str, Any]]) -> List[str]:
     seen = set()
     corpus = []
     for s in samples:
-        for doc in s.get("retrieved_docs", []):
+        for doc in s.get("retrieved_contexts", []):
             if doc not in seen:
                 seen.add(doc)
                 corpus.append(doc)
@@ -176,8 +176,10 @@ def main() -> int:
             {
                 "sample_id": sid,
                 "question": question,
-                "gold_docs": sample.get("gold_docs", []),
-                "retrieved_docs": retrieved,
+                "gold_doc_ids": sample.get("gold_doc_ids", []),
+                "retrieved_doc_ids": retrieved_titles,
+                "gold_evidence": sample.get("gold_evidence", []),
+                "retrieved_contexts": retrieved,
                 "gold_answer": sample.get("gold_answer", ""),
             }
         )

@@ -221,7 +221,7 @@ def main() -> int:
     for i, sample in enumerate(samples, 1):
         sid = sample["sample_id"]
         question = sample["question"]
-        docs = sample.get("retrieved_docs", [])
+        docs = sample.get("retrieved_contexts", [])
         logger.info("[%d/%d] Processing %s", i, len(samples), sid)
 
         selected_docs, selected_titles = _select_docs(question, docs)
@@ -234,8 +234,10 @@ def main() -> int:
             {
                 "sample_id": sid,
                 "question": question,
-                "gold_docs": sample.get("gold_docs", []),
-                "retrieved_docs": selected_docs,
+                "gold_doc_ids": sample.get("gold_doc_ids", []),
+                "retrieved_doc_ids": selected_titles,
+                "gold_evidence": sample.get("gold_evidence", []),
+                "retrieved_contexts": selected_docs,
                 "gold_answer": sample.get("gold_answer", ""),
             }
         )

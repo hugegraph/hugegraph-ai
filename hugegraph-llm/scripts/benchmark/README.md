@@ -3,8 +3,9 @@
 本目录的脚本把公开数据集转换为 HugeGraph-AI benchmark 的输入文件。
 转换原则：**只使用原始数据集中已有的字段，不额外生成候选结果**。
 
-- Retrieval：`gold_docs` 来自数据集自带的 supporting facts / evidence；
-  `retrieved_docs` 来自数据集自带的 context / corpus（不是完美的 gold candidate）。
+- Retrieval：`gold_doc_ids` / `retrieved_doc_ids` 用于 Recall@K、MRR 等排序指标；
+  `gold_evidence` / `retrieved_contexts` 用于 context 与 LLM-Judge 指标。字段均来自数据集自带
+  supporting facts / evidence / context / corpus（不是完美的 gold candidate）。
 - Extraction（仅 Text2KGBench）：`gold_vertices` / `gold_edges` 来自 ground truth；
   `candidate_*` 字段为空，需要接入真实抽取 pipeline 后再跑 benchmark。
 - Ablation：这些数据集均不提供 `raw / vector_only / graph_only / graph_vector` 四种答案，
@@ -75,7 +76,7 @@ python -m hugegraph_llm.benchmark.datasets.prepare_external_datasets \
 | `hotpotqa_retrieval.json` | HotpotQA | retrieval | en | 多跳 QA 召回评测 |
 | `2wikimultihopqa_retrieval.json` | 2WikiMultihopQA | retrieval | en | 多跳 QA 召回评测 |
 | `musique_retrieval.json` | MuSiQue | retrieval | en | 多跳 QA 召回评测 |
-| `anonyrag_chs_retrieval.json` | AnonyRAG | retrieval | zh | 中文匿名化推理（原始数据无 gold chunk/retrieved docs，均为空） |
+| `anonyrag_chs_retrieval.json` | AnonyRAG | retrieval | zh | 中文匿名化推理（原始数据无 gold chunk/retrieved contexts，均为空） |
 | `anonyrag_eng_retrieval.json` | AnonyRAG | retrieval | en | 英文匿名化推理（同上） |
 | `graphrag_bench_medical_retrieval.json` | GraphRAG-Bench | retrieval | en | 医学领域 QA |
 | `graphrag_bench_novel_retrieval.json` | GraphRAG-Bench | retrieval | en | 小说领域 QA |
@@ -121,12 +122,12 @@ python -m hugegraph_llm.benchmark.datasets.prepare_external_datasets --dataset g
 
 ## 接入真实 pipeline
 
-当前文件只做了格式转换，retrieval 的 `retrieved_docs` 和 extraction 的 `candidate_*`
+当前文件只做了格式转换，retrieval 的 `retrieved_contexts` / `retrieved_doc_ids` 和 extraction 的 `candidate_*`
 都是数据集原始内容或空列表。若要用 HugeGraph-AI pipeline 生成真实候选结果，可以：
 
 1. 读取 `benchmark_data/external/` 下生成的 JSON；
 2. 调用 `GraphExtractFlow` / `RAGGraphVectorFlow` 等节点生成 `candidate_vertices`、
-   `candidate_edges` 或 `retrieved_docs`；
+   `candidate_edges` 或 `retrieved_contexts` / `retrieved_doc_ids`；
 3. 写回 JSON 后再跑 `python -m hugegraph_llm.benchmark run`。
 
 这样即可在不改动 benchmark 代码的前提下完成端到端评测。

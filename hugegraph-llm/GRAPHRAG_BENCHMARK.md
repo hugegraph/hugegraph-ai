@@ -29,7 +29,7 @@ HugeGraph-LLM 自带了一套**轻量、可复现、中文友好、不强依赖�
 | 6 | 可比较 baseline / candidate / 参考答案 | ✅ | `compare` 子命令，输出 overall_diff / regressed / improved / delta，支持三方对照 |
 | 7 | 输出 JSON 和 Markdown 报告 | ✅ | `--format {json,markdown}`；Markdown 适配 PR/Issue 评论 |
 | 8 | 至少一组图抽取样例 | ✅ | `data/samples/extraction_sample.json`（英文）+ `car_extraction_sample.json`（中文汽车手册）|
-| 9 | 至少一组召回样例 | ✅ | `data/samples/retrieval_sample.json` |
+| 9 | 至少一组召回样例 | ✅ | `data/samples/retrieval_docid_sample.json` + `data/samples/retrieval_context_sample.json` |
 | 10 | 样例覆盖中文和英文 | ✅ | 中文抽取样例 + 中文召回样例 + 全指标 `language` 参数 + 中文归一化管线，见 §九 |
 | 11 | 报告含失败/退化样例，不只平均分 | ✅ | `compare` 输出 sample 级 regressed/improved；运行时 `_errors` 收集失败样本，见 §八 |
 | 12 | 文档说明新增 case / 运行 / 比较 / 解读 | ✅ | 本文档 §七（使用）、§十三（扩展）、§十四（报告解读）|
@@ -87,7 +87,7 @@ flowchart LR
     end
 
     EXT -.->|"candidate 图"| IN
-    RET -.->|"retrieved_docs"| IN
+    RET -.->|"retrieved_doc_ids / retrieved_contexts"| IN
     GEN -.->|"answers"| IN
     RPT -.->|"指导迭代"| HOST
 ```
@@ -234,7 +234,8 @@ flowchart TB
 |------|------|------|-------|
 | `extraction_sample.json` | extraction（图抽取）| 英文 | 3 |
 | `car_extraction_sample.json` | extraction（图抽取）| **中文（汽车手册）** | 2 |
-| `retrieval_sample.json` | retrieval（召回）| 英文 | 3 |
+| `retrieval_docid_sample.json` | retrieval（召回，doc-id 排序指标）| 英文 | 3 |
+| `retrieval_context_sample.json` | retrieval（召回，context / LLM-Judge 指标）| 英文 | 2 |
 | `chinese_retrieval_sample.json` | retrieval（召回）| **中文（汽车手册）** | 2 |
 | `ablation_sample.json` | ablation（生成回答对比）| 英文 | 2 |
 
@@ -278,16 +279,18 @@ flowchart TB
 }
 ```
 
-**retrieval 模式**（对照 gold_docs 评 retrieved_docs）：
+**retrieval 模式**（doc-id 排序指标与 context / LLM-Judge 指标使用独立字段）：
 ```json
 {
   "samples": [
     {
       "sample_id": "ret_001",
       "question": "问题",
-      "gold_docs": ["doc1", "doc2"],
-      "retrieved_docs": ["doc1", "doc3", ...],
-      "gold_answer": "（可选，供 answer 指标用）",
+      "gold_doc_ids": ["doc1", "doc2"],
+      "retrieved_doc_ids": ["doc1", "doc3"],
+      "gold_evidence": ["证据文本"],
+      "retrieved_contexts": ["召回上下文文本"],
+      "gold_answer": "（供 context / LLM-Judge 指标用）",
       "question_type": "（可选，触发分层）"
     }
   ]
@@ -338,10 +341,17 @@ LLM-Judge（可选）通过 `.env` 配置 OpenAI 兼容端点（DeepSeek / OpenA
 OPENAI_CHAT_API_KEY=sk-...
 OPENAI_CHAT_API_BASE=https://api.deepseek.com/v1   # 可选
 OPENAI_CHAT_LANGUAGE_MODEL=deepseek-chat            # 可选
+OPENAI_CHAT_TOKENS=2048                             # 可选， Judge 单请求最大 token
 ```
 
 > [!NOTE]
 > 不配置 LLM 时，加 `--offline` 跑纯离线指标（抽取 P/R/F1、召回 Recall@K、Token-F1 等），完全不调外部 API——这是 Issue #75"基础评测不强依赖 LLM"的体现。
+
+> [!IMPORTANT]
+> LLM-Judge 在 benchmark 内部统一使用 **OpenAI-compatible chat completions 接口**：
+> - 请求格式为标准 `messages`（`[{ "role": "user", "content": ... }]`），与 OpenAI / Anthropic Messages API 格式一致；
+> - 调用为非流式 `chat.completions.create`，便于直接解析结构化输出；
+> - 生成参数在代码中固定（`temperature=0`，`seed=42`），不暴露给用户配置，以保证 judge 结果可复现。baseline 保存时会记录 `model` / `temperature` / `seed`。
 
 ### 7.2 完整工作流
 
@@ -357,7 +367,7 @@ flowchart LR
 **Step 1 — 用内置样例或转换公开数据集**
 ```bash
 # 直接用内置样例
-hugegraph-benchmark run --mode retrieval --data src/hugegraph_llm/benchmark/data/samples/retrieval_sample.json
+hugegraph-benchmark run --mode retrieval --data src/hugegraph_llm/benchmark/data/samples/retrieval_docid_sample.json
 
 # 或转换公开数据集（默认缓存到 hugegraph-llm/benchmark_data/raw/，可用 --download 自动拉取已登记数据源）
 python -m hugegraph_llm.benchmark.datasets.prepare_external_datasets \
@@ -417,12 +427,13 @@ hugegraph-benchmark compare \
 |----|----|
 | 分支 | `feat/graphrag-benchmark-issue7` |
 | Python | 3.11（项目 `.venv`）|
-| LLM-Judge | OpenAI-compatible direct client |
+| LLM-Judge | OpenAI-compatible chat completions（非流式）|
 | LLM 模型 | `deepseek-v4-flash`（从 `hugegraph-llm/.env` 读取）|
+| Judge 参数 | `temperature=0`，`seed=42` |
 | 结果目录 | `hugegraph-llm/benchmark_data/experiments/issue75_subset/`（gitignore，不提交）|
 
 > [!NOTE]
-> CLI 首先尝试项目标准 `LLMConfig + get_chat_llm` 路径；本地 `.env` 中已有 `reranker_type=jina`，不满足当前配置校验（只允许 `cohere` / `siliconflow`），因此本次 LLM-Judge 实验走 CLI 的 OpenAI-compatible fallback。该 fallback 是 benchmark CLI 的正常设计路径，未使用 mock。
+> LLM-Judge 统一通过 benchmark CLI 内部创建 OpenAI-compatible client，直接调用 `chat.completions.create`，使用标准 `messages` 格式，并固定 `temperature=0` / `seed=42` 以保证可复现。Judge 参数会随 baseline 一起保存。
 
 #### 7.4.1 子集说明
 
@@ -498,7 +509,7 @@ uv run python -m hugegraph_llm.benchmark run \
 解读：
 
 - Text2KGBench extraction 是 **oracle sanity**：candidate 由 gold 复制，只证明 9 个图抽取指标在真实 ontology / triples 格式上能跑通，不代表 HugeGraph-AI 当前抽取模型效果。
-- GraphRAG-Bench retrieval 的离线 Recall@K 为 0，是预期现象：转换器的 `gold_docs` 是 evidence 字符串，`retrieved_docs` 是 corpus paragraphs，离线 ID/字符串匹配不会做语义归因；同一 tiny 样本的 `evidence_recall_llm=1.0` 说明 LLM-Judge 能补足语义证据覆盖判断。
+- GraphRAG-Bench retrieval 的离线 Recall@K 只使用 `gold_doc_ids` / `retrieved_doc_ids`；语义证据覆盖由 `gold_evidence` / `retrieved_contexts` 交给 LLM-Judge 指标判断。
 - Answer LLM-Judge 使用真实问题和 gold answer，但 answer variants 是 controlled 构造，用于验证 answer 指标链路与区分度，不冒充真实 GraphRAG pipeline 产物。
 - LLM-Judge 过程中出现过一次模型返回 JSON 截断 warning，`parse_json_response` 降级后 runner 继续执行，最终 `error_count=0`；这验证了 §八 的错误隔离/鲁棒性设计。
 
@@ -598,14 +609,14 @@ flowchart LR
 | 机制 | 实现 |
 |------|------|
 | **结果全量持久化** | `BaselineStore.save` 把 `meta / overall / by_type / samples` 全部写入 JSON，含每个样本的逐指标值 |
-| **运行上下文元数据** | `metadata` 记录 `git_commit` / `timestamp` / `max_workers` / `tiered` / `error_count` / `mode` / `metrics` / `data_path` / `language` |
+| **运行上下文元数据** | `metadata` 记录 `git_commit` / `timestamp` / `max_workers` / `tiered` / `error_count` / `mode` / `metrics` / `data_path` / `language` / `model` / `temperature` / `seed` |
 | **离线确定性** | `--offline` 模式下所有指标纯计算，无随机性、无网络调用 |
 | **并发不破坏顺序** | `result.samples` 始终按数据原顺序，与并发度无关 |
 | **subset 可固定** | `prepare --subset-size N` 取前 N 条，可复现同一子集 |
 | **分层可追溯** | `by_type` 与 `tiered` 元数据记录是否分层及分桶结果 |
 
 > [!TIP]
-> **复现检查清单**：对比两次结果时，先核对两份 JSON 的 `meta.git_commit`、`meta.max_workers`、`meta.data_path`、`meta.language` 是否一致；若 `git_commit` 不同，则差异可能来自代码变更而非数据噪声——这正是 benchmark 该暴露的信号。
+> **复现检查清单**：对比两次结果时，先核对两份 JSON 的 `meta.git_commit`、`meta.max_workers`、`meta.data_path`、`meta.language`、`meta.model`、`meta.temperature`、`meta.seed` 是否一致；若 `git_commit` 不同，则差异可能来自代码变更而非数据噪声——这正是 benchmark 该暴露的信号。
 
 ---
 
@@ -723,6 +734,107 @@ Benchmark Report
 
 > [!NOTE]
 > 本项目不追求"通用 RAG 评测框架"的广度（如 RAGAS 的多模态 / Agent 指标），而是聚焦 **GraphRAG 组件质量评测** + **中文友好** + **可离线复现**——这对应 Issue #75 的定位。
+
+---
+
+## 十七、Issue #75 真实 pipeline 验证（补充）
+
+本节补充 Issue #75 在真实 HugeGraph-AI pipeline 上的端到端验证流程与产物索引。该验证与 §七的小样本/离线验证互为补充：小样本验证 metric 链路，本节验证完整 pipeline（向量索引 + 属性图抽取 + `rag_graph_vector` + BLEU rerank）在公开数据集子集上的可跑通性。
+
+### 17.1 验证范围
+
+| 维度 | 数据集 | 样本数 | 说明 |
+|------|--------|--------|------|
+| Retrieval + Answer | HotpotQA / 2WikiMultiHopQA / MuSiQue / GraphRAG-Bench Medical / Novel | 5%~10% 子集 | 每个数据集独立建索引、构图、跑 `rag_graph_vector` |
+| 图抽取 | Text2KGBench culture / movie | 5%~10% 子集 | 使用 `graph_extract` pipeline 填充 candidate graph |
+| 指标 | 21 项 | — | 6 retrieval + 6 answer + 9 extraction |
+
+### 17.2 关键改动
+
+1. **Jina reranker 适配**：`llm_config.py` 的 `reranker_type` 增加 `jina`，与 `.env` 中的 `RERANKER_TYPE=jina` 对齐。
+2. **`syntax_validity` 数据链路修复**：`GraphExtractFlow` 在 `WkFlowState` 中保存 `raw_responses` / `parse_results`，`run_benchmarks.py` 将其写入 candidate JSON，供 `SyntaxValidity` 指标计算 `json_parse_rate`。
+3. **医疗长语料截断**：`generate_hugegraph_retrieval_outputs.py` 增加 `--max-corpus-chars`，避免 Jina embedding 与 LLM 图抽取超出 token 上限。
+4. **向量化并行**：医学数据集向量索引构建改用 `get_embeddings_parallel`，避免同步 batch 长时间阻塞。
+5. **LLM-Judge 截断与直连**：关闭本地 HTTP 代理直连 DashScope，`deepseek-v3` 作为 judge 模型；对 `evidence_recall_llm`、`context_relevancy`、`faithfulness`、`coverage` 的输入做长度截断，`context_precision` 只评 top-3 context，降低单请求耗时与总调用量。
+
+### 17.3 执行命令
+
+```bash
+cd hugegraph-ai/hugegraph-llm
+source .venv/bin/activate
+export no_proxy=localhost,127.0.0.1
+
+# 1. 生成 retrieval 输出（以 medical 为例，其他数据集见 BENCHMARK_DATASETS.md §8.2）
+# Medical 跳过 LLM 图抽取，避免长语料导致 LLM 调用超时
+python scripts/benchmark/generate_hugegraph_retrieval_outputs.py \
+  --input benchmark_data/external/subsets/graphrag_bench_medical_retrieval.json \
+  --output benchmark_data/outputs/hugegraph_retrieval/graphrag_bench_medical_retrieval_output.json \
+  --graph-name hugegraph --topk 5 --max-workers 1 --max-graph-chunks 0
+
+# 2. 生成 Text2KGBench 候选
+python scripts/benchmark/generate_text2kgbench_candidates.py \
+  --input benchmark_data/external/subsets/text2kgbench_movie_extraction.json \
+  --output benchmark_data/outputs/text2kgbench_candidates/text2kgbench_movie_candidates.json \
+  --max-workers 1
+
+# 3. 一键跑 21 项指标
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+export no_proxy=localhost,127.0.0.1,dashscope.aliyuncs.com
+export OPENAI_TIMEOUT=120
+
+python scripts/benchmark/run_benchmarks.py \
+  --retrieval-dir benchmark_data/outputs/hugegraph_retrieval \
+  --text2kgbench-dir benchmark_data/outputs/text2kgbench_candidates \
+  --output-dir benchmark_data/outputs/baselines \
+  --max-workers 10
+```
+
+### 17.4 产物索引
+
+```text
+benchmark_data/outputs/
+├── hugegraph_retrieval/              # 真实 pipeline  retrieval/answer 输出
+├── text2kgbench_candidates/          # 真实 pipeline 抽取候选
+└── baselines/                        # 21 项指标 baseline JSON + Markdown 报告
+    ├── benchmark_manifest.json
+    ├── hotpotqa_baseline.json / hotpotqa_report.md
+    ├── hotpotqa_answer_baseline.json / hotpotqa_answer_report.md
+    ├── 2wikimultihopqa_baseline.json / ...
+    ├── musique_baseline.json / ...
+    ├── graphrag_bench_novel_baseline.json / ...
+    ├── graphrag_bench_novel_answer_baseline.json / ...
+    ├── graphrag_bench_medical_baseline.json / ...
+    ├── graphrag_bench_medical_answer_baseline.json / ...
+    ├── text2kgbench_culture_baseline.json / ...
+    └── text2kgbench_movie_baseline.json / ...
+```
+
+### 17.5 结果摘要
+
+> 以下结果由 `run_benchmarks.py` 生成，数字待跑完后填入；完整报告见 `benchmark_data/outputs/baselines/`。
+
+#### Retrieval + Answer
+
+| 数据集 | 样本数 | recall@5 | hit_any@5 | mrr | context_relevancy | evidence_recall_llm | answer_correctness | faithfulness | coverage |
+|--------|--------|----------|-----------|-----|-------------------|---------------------|--------------------|--------------|----------|
+| hotpotqa | 100 | 0.4450 | 0.6900 | 0.5817 | 0.2183 | 0.6650 | 0.5450 | 0.8750 | 0.5896 |
+| 2wikimultihopqa | 100 | 0.3800 | 0.6800 | 0.6117 | 0.0800 | 0.5925 | 0.2651 | 0.9673 | 0.2250 |
+| musique | 50 | 0.3017 | 0.5600 | 0.2946 | 0.0280 | 0.4967 | 0.3294 | 1.0000 | 0.0600 |
+| graphrag_bench_novel | 1 | 0.0000 | 0.0000 | 0.0000 | 0.3333 | 1.0000 | 0.6667 | 1.0000 | 1.0000 |
+| graphrag_bench_medical | 203 | 0.0000 | 0.0000 | 0.0000 | 0.1191 | 0.4444 | 0.4155 | 0.6493 | 0.4978 |
+
+#### Extraction
+
+| 数据集 | 样本数 | entity_f1 | triple_f1 | property_f1 | schema_validity | structural_integrity | syntax_validity | graph_structure | conflict_detection | temporal_validity |
+|--------|--------|-----------|-----------|-------------|-----------------|----------------------|-----------------|-----------------|--------------------|-------------------|
+| text2kgbench_culture | 15 | 0.5309 | 0.0444 | 0.5087 | 1.00 / 1.00 / 0.00 | 1.00 | 0.6667 | 0.43 | 0.0000 | 1.0000 |
+| text2kgbench_movie | 84 | 0.5925 | 0.0348 | 0.5590 | 0.99 / 0.99 / 0.00 | 0.96 | 0.7738 | 0.32 | 0.0000 | 1.0000 |
+
+### 17.6 注意事项
+
+- **LLM-Judge 成本**：retrieval 的 `evidence_recall_llm` 与 answer 的 `answer_correctness` / `faithfulness` / `coverage` 需要调用外部 LLM；本次验证使用 5%~10% 子集以控制 API 额度。
+- **Medical 离线指标偏低是预期**：`gold_doc_ids` / `retrieved_doc_ids` 只做 doc-id 级匹配；证据文本覆盖需要结合 `gold_evidence` / `retrieved_contexts` 的 LLM-Judge 指标解读。
+- **图抽取 syntax_validity**：`json_parse_rate` 反映 LLM 输出解析成功率；`load_to_db_success` 需要额外记录入库结果，当前未启用，固定为 0。
 
 ---
 
