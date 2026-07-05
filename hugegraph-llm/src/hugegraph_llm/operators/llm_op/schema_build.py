@@ -73,43 +73,14 @@ class SchemaBuilder:
             return "None"
         return json.dumps(few_shot_schema, indent=2, ensure_ascii=False)
 
-    @staticmethod
-    def _extract_schema(response: str) -> Dict[str, Any]:
+    def _extract_schema(self, response: str) -> Dict[str, Any]:
         # Try to extract JSON from Markdown code block
-        if not response:
-            raise RuntimeError("Empty LLM response")
-
-        cleaned = response.strip()
-
-        # A fenced block that is closed: ```json ... ```
-        match = re.search(r"```(?:json)?\s*(.*?)```", cleaned, re.DOTALL)
+        match = re.search(r"```(?:json)?\s*(.*?)```", response, re.DOTALL)
         if match:
-            cleaned = match.group(1).strip()
-        else:
-            # Truncated fence: starts with ```json but never closes
-            if cleaned.startswith("```json") or cleaned.startswith("```"):
-                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE).strip()
-
-        # Some models emit a explanatory sentence before the JSON object.
-        # Find the first '{' or '[' and the matching last '}' or ']'.
-        if not cleaned.startswith(("{", "[")):
-            start_obj = cleaned.find("{")
-            start_arr = cleaned.find("[")
-            if start_obj == -1 and start_arr == -1:
-                log.error("Failed to parse LLM response as JSON: %s", response)
-                raise RuntimeError("Invalid JSON response from LLM")
-            start = min(x for x in (start_obj, start_arr) if x != -1)
-            cleaned = cleaned[start:]
-
-        # Trim trailing prose after the closing brace/bracket.
-        for end_char in ("}", "]"):
-            end_pos = cleaned.rfind(end_char)
-            if end_pos != -1:
-                cleaned = cleaned[: end_pos + 1]
-                break
+            response = match.group(1).strip()
 
         try:
-            return json.loads(cleaned)
+            return json.loads(response)
         except json.JSONDecodeError as e:
             log.error("Failed to parse LLM response as JSON: %s", response)
             raise RuntimeError("Invalid JSON response from LLM") from e

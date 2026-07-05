@@ -24,33 +24,46 @@ from tqdm import tqdm
 from hugegraph_llm.models.embeddings.base import BaseEmbedding
 
 
-async def _get_batch_with_progress(
-    embedding: BaseEmbedding, batch: list[str], pbar: tqdm, semaphore: asyncio.Semaphore
-) -> list[Any]:
-    async with semaphore:
-        result = await embedding.async_get_texts_embeddings(batch)
+async def _get_batch_with_progress(embedding: BaseEmbedding, batch: list[str], pbar: tqdm) -> list[Any]:
+    result = await embedding.async_get_texts_embeddings(batch)
     pbar.update(1)
     return result
 
 
 async def get_embeddings_parallel(embedding: BaseEmbedding, vids: list[str]) -> list[Any]:
-    """Get embeddings for texts in parallel with bounded concurrency.
+    """Get embeddings for texts in parallel.
 
-    This function processes text embeddings asynchronously, using batching and a
-    semaphore to control concurrency.  The OpenAIEmbedding client already paces
-    each batch to respect provider token-rate limits; the semaphore here prevents
-    too many large batches from running at once and overwhelming the API.
+    This function processes text embeddings asynchronously in parallel, using batching and semaphore
+    to control concurrency, improving processing efficiency while preventing resource overuse.
+
+    Args:
+        embedding (BaseEmbedding): The embedding model instance used to compute text embeddings.
+        vids (list[str]): List of texts to compute embeddings for.
+
+    Returns:
+        list[Any]: List of embedding vectors corresponding to the input texts, maintaining the same
+                  order as the input vids list.
+
+    Note:
+        - Note: Uses a semaphore to limit maximum concurrency if we need
+        - Processes texts in batches of 500
+        - Displays progress using a progress bar that updates as each batch completes
+        - Uses asyncio.gather() to preserve order correspondence between input and output
     """
     batch_size = 500
-    max_concurrency = 2
 
+    # Split vids into batches of size batch_size
     vid_batches = [vids[i : i + batch_size] for i in range(0, len(vids), batch_size)]
 
     embeddings = []
-    semaphore = asyncio.Semaphore(max_concurrency)
     with tqdm(total=len(vid_batches)) as pbar:
-        tasks = [_get_batch_with_progress(embedding, batch, pbar, semaphore) for batch in vid_batches]
+        # Create tasks for each batch with progress bar updates
+        tasks = [_get_batch_with_progress(embedding, batch, pbar) for batch in vid_batches]
+
+        # Use asyncio.gather() to preserve order
         batch_results = await asyncio.gather(*tasks)
+
+        # Combine all batch results in order
         for batch_embeddings in batch_results:
             embeddings.extend(batch_embeddings)
 

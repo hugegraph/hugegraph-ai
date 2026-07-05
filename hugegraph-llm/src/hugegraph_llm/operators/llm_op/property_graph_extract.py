@@ -54,41 +54,23 @@ def filter_item(schema, items) -> List[Dict[str, Any]]:
     # filter vertex and edge with invalid properties
     filtered_items = []
     properties_map = {"vertex": {}, "edge": {}}
-    for vertex in schema.get("vertexlabels", []):
+    for vertex in schema["vertexlabels"]:
         properties_map["vertex"][vertex["name"]] = {
-            "primary_keys": vertex.get("primary_keys", []),
-            "nullable_keys": vertex.get("nullable_keys", []),
-            "properties": vertex.get("properties", []),
+            "primary_keys": vertex["primary_keys"],
+            "nullable_keys": vertex["nullable_keys"],
+            "properties": vertex["properties"],
         }
-    for edge in schema.get("edgelabels", []):
-        properties_map["edge"][edge["name"]] = {"properties": edge.get("properties", [])}
+    for edge in schema["edgelabels"]:
+        properties_map["edge"][edge["name"]] = {"properties": edge["properties"]}
     log.info("properties_map: %s", properties_map)
     for item in items:
-        if not isinstance(item, dict):
-            continue
-        item_type = item.get("type")
-        label = item.get("label")
-
-        # LLM may return properties as a dict, a list of dicts, or a list of names.
-        properties = item.get("properties", {})
-        if isinstance(properties, list):
-            prop_dict: Dict[str, Any] = {}
-            for prop in properties:
-                if isinstance(prop, dict) and "name" in prop:
-                    prop_dict[prop["name"]] = prop.get("value", "")
-                elif isinstance(prop, str):
-                    prop_dict[prop] = ""
-            properties = prop_dict
-        elif not isinstance(properties, dict):
-            properties = {}
-        item["properties"] = properties
-
-        if item_type in properties_map and label in properties_map[item_type]:
-            allowed_props = properties_map[item_type][label]["properties"]
+        item_type = item["type"]
+        if item_type in properties_map:
+            label = item["label"]
             item["properties"] = {
                 key: value
-                for key, value in properties.items()
-                if key in allowed_props
+                for key, value in item["properties"].items()
+                if key in properties_map[item_type][label]["properties"]
             }
         filtered_items.append(item)
 
@@ -108,10 +90,6 @@ class PropertyGraphExtract:
             context["vertices"] = []
         if "edges" not in context:
             context["edges"] = []
-        collect_trace = bool(context.get("collect_trace"))
-        if collect_trace:
-            context.setdefault("raw_responses", [])
-            context.setdefault("parse_results", [])
         items = []
         for chunk in chunks:
             proceeded_chunk = self.extract_property_graph_by_llm(schema, chunk)
@@ -121,18 +99,7 @@ class PropertyGraphExtract:
                 chunk,
                 proceeded_chunk,
             )
-            parsed = self._extract_and_filter_label(schema, proceeded_chunk)
-            if collect_trace:
-                context["raw_responses"].append(proceeded_chunk)
-                context["parse_results"].append(
-                    {
-                        "vertices": [i for i in parsed if i.get("type") == "vertex"],
-                        "edges": [i for i in parsed if i.get("type") == "edge"],
-                    }
-                    if parsed
-                    else None
-                )
-            items.extend(parsed)
+            items.extend(self._extract_and_filter_label(schema, proceeded_chunk))
         items = filter_item(schema, items)
         for item in items:
             if item["type"] == "vertex":

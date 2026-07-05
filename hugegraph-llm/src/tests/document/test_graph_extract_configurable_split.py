@@ -40,29 +40,18 @@ class DummyScheduler:
 
 
 class DummyPipelineState:
-    def __init__(self, collect_trace=False):
-        self.collect_trace = collect_trace
-
     def to_json(self):
-        payload = {
+        return {
             "chunks": ["chunk one", "chunk two"],
             "vertices": [{"id": "person:alice"}],
             "edges": [],
         }
-        if self.collect_trace:
-            payload["collect_trace"] = True
-            payload["raw_responses"] = ["raw llm output"]
-            payload["parse_results"] = [{"vertices": [{"id": "person:alice"}], "edges": []}]
-        return payload
 
 
 class DummyPipeline:
-    def __init__(self, collect_trace=False):
-        self.collect_trace = collect_trace
-
     def getGParamWithNoEmpty(self, name):
         assert name == "wkflow_state"
-        return DummyPipelineState(collect_trace=self.collect_trace)
+        return DummyPipelineState()
 
 
 class CapturePipeline:
@@ -216,17 +205,7 @@ def test_graph_extract_post_deal_logs_chunk_count(monkeypatch):
     result_data = json.loads(result)
 
     assert result_data["vertices"] == [{"id": "person:alice"}]
-    assert "raw_responses" not in result_data
-    assert "parse_results" not in result_data
     assert any(message == "Graph extraction chunk_count: %s" and args == (2,) for message, args in log_calls)
-
-
-def test_graph_extract_post_deal_includes_trace_only_when_requested():
-    result = GraphExtractFlow().post_deal(DummyPipeline(collect_trace=True))
-    result_data = json.loads(result)
-
-    assert result_data["raw_responses"] == ["raw llm output"]
-    assert result_data["parse_results"] == [{"vertices": [{"id": "person:alice"}], "edges": []}]
 
 
 def test_sentence_split_returns_punctuation_delimited_sentences():

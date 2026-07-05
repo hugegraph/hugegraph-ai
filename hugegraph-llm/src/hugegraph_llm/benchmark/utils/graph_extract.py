@@ -270,9 +270,7 @@ def normalize_extraction_output(
     if isinstance(pipeline_output, str):
         pipeline_output = json.loads(pipeline_output)
     if not isinstance(pipeline_output, dict):
-        raise TypeError(
-            f"pipeline_output must be a dict or JSON string, got {type(pipeline_output).__name__}"
-        )
+        raise TypeError(f"pipeline_output must be a dict or JSON string, got {type(pipeline_output).__name__}")
 
     normalized: Dict[str, Any] = {}
     if "schema" in pipeline_output:

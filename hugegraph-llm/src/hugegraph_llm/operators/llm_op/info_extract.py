@@ -163,11 +163,6 @@ class InfoExtract:
         else:
             context["triples"] = []
 
-        collect_trace = bool(context.get("collect_trace"))
-        if collect_trace:
-            context.setdefault("raw_responses", [])
-            context.setdefault("parse_results", [])
-
         for sentence in chunks:
             proceeded_chunk = self.extract_triples_by_llm(schema, sentence)
             log.debug(
@@ -176,24 +171,10 @@ class InfoExtract:
                 sentence,
                 proceeded_chunk,
             )
-            if collect_trace:
-                context["raw_responses"].append(proceeded_chunk)
             if schema:
-                if collect_trace:
-                    prev_vertices = list(context.get("vertices", []))
-                    prev_edges = list(context.get("edges", []))
                 extract_triples_by_regex_with_schema(schema, proceeded_chunk, context)
-                if collect_trace:
-                    new_vertices = [v for v in context.get("vertices", []) if v not in prev_vertices]
-                    new_edges = [e for e in context.get("edges", []) if e not in prev_edges]
-                    context["parse_results"].append({"vertices": new_vertices, "edges": new_edges})
             else:
-                if collect_trace:
-                    triples_before = list(context.get("triples", []))
                 extract_triples_by_regex(proceeded_chunk, context)
-                if collect_trace:
-                    new_triples = [t for t in context.get("triples", []) if t not in triples_before]
-                    context["parse_results"].append({"triples": new_triples})
 
         context["call_count"] = context.get("call_count", 0) + len(chunks)
         return self._filter_long_id(context)
