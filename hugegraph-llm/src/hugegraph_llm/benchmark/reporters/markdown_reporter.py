@@ -33,31 +33,66 @@ def _format_delta(value: float) -> str:
     return f"{value:.4f}"
 
 
-def _is_degraded(metric_name: str, value: Optional[float]) -> bool:
-    """Return True when a metric value is at its worst bound.
+# Threshold below/above which a primary metric is considered degraded.
+_DEGRADED_THRESHOLD = 0.5
+
+# Primary quality metrics used to flag degraded samples per mode.
+# Retrieval primary metrics are computed dynamically from metric names.
+_PRIMARY_METRICS_BY_MODE: Dict[str, frozenset] = {
+    "extraction": frozenset({"entity_f1", "triple_f1", "property_f1"}),
+    "ablation": frozenset(
+        {"token_f1", "exact_match", "rouge_l", "answer_correctness", "faithfulness", "coverage"}
+    ),
+}
+
+
+def _primary_metrics(mode: Optional[str], sample_metric_names: List[str]) -> set:
+    """Return the metric names considered primary for degradation detection."""
+    if mode == "retrieval":
+        return {
+            name
+            for name in sample_metric_names
+            if name.startswith("recall@")
+            or name.startswith("hit_any@")
+            or name.startswith("hit_all@")
+            or name == "mrr"
+            or name in ("context_precision", "context_relevancy", "evidence_recall_llm")
+        }
+    return set(_PRIMARY_METRICS_BY_MODE.get(mode or "", frozenset()))
+
+
+def _is_degraded(metric_name: str, value: float, threshold: float = _DEGRADED_THRESHOLD) -> bool:
+    """Return True when a metric value crosses the degradation threshold.
 
     Uses registered metric direction metadata. Higher-is-better metrics are
-    degraded at 0.0; lower-is-better metrics are degraded at 1.0. ``None``
-    values are also treated as degraded (metric failed or was skipped).
+    degraded when they fall at or below the threshold; lower-is-better metrics
+    are degraded when they rise to or above the threshold.
     """
-    if value is None:
-        return True
     if MetricRegistry.is_higher_is_better(metric_name):
-        return float(value) <= 0.0
-    return float(value) >= 1.0
+        return float(value) <= threshold
+    return float(value) >= threshold
 
 
-def _collect_degraded_samples(result: BenchmarkResult) -> List[Tuple[str, List[Tuple[str, Any]]]]:
-    """Return samples with degraded metrics, sorted by severity.
+def _collect_degraded_samples(
+    result: BenchmarkResult, mode: Optional[str]
+) -> List[Tuple[str, List[Tuple[str, Any]]]]:
+    """Return samples with degraded primary metrics, sorted by severity.
 
     Each entry is ``(sample_id, [(metric, value), ...])``. Samples with more
     degraded metrics come first.
     """
+    all_metric_names = set()
+    for sample in result.samples:
+        all_metric_names.update(sample.metrics.keys())
+    primary = _primary_metrics(mode, sorted(all_metric_names))
+
     degraded: List[Tuple[str, List[Tuple[str, Any]]]] = []
     for sample in result.samples:
         bad: List[Tuple[str, Any]] = []
         for metric, value in sample.metrics.items():
-            if _is_degraded(metric, value):
+            if metric not in primary:
+                continue
+            if value is None or _is_degraded(metric, value):
                 bad.append((metric, value))
         if bad:
             bad.sort(key=lambda x: x[0])
@@ -156,9 +191,9 @@ class MarkdownReporter:
                 lines.append(f"| {sid} | {metric} | {display_error} |")
             lines.append("")
 
-        # Degraded samples (single-run worst-bound metrics)
+        # Degraded samples (single-run primary metrics below threshold)
         if not comparison:
-            degraded = _collect_degraded_samples(result)
+            degraded = _collect_degraded_samples(result, meta.get("mode"))
             if degraded:
                 lines.append("## Degraded Samples")
                 lines.append("")

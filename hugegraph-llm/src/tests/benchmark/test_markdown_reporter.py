@@ -45,7 +45,7 @@ def test_report_includes_degraded_samples():
     result = BenchmarkResult(
         samples=[
             SampleResult(sample_id="good", metrics={"entity_f1": 1.0, "triple_f1": 1.0}),
-            SampleResult(sample_id="bad", metrics={"entity_f1": 0.0, "triple_f1": 0.5}),
+            SampleResult(sample_id="bad", metrics={"entity_f1": 0.0, "triple_f1": 0.5, "clustering_coefficient": 0.0}),
         ],
         overall={"entity_f1": 0.5, "triple_f1": 0.75},
         metadata={"mode": "extraction"},
@@ -54,6 +54,24 @@ def test_report_includes_degraded_samples():
     assert "## Degraded Samples" in report
     assert "bad" in report
     assert "entity_f1=0.0" in report
+    # Non-primary metrics should not be flagged as degraded.
+    assert "clustering_coefficient" not in report.split("## Degraded Samples")[1].split("\n## ")[0]
+
+
+def test_report_retrieval_mode_flags_low_recall():
+    result = BenchmarkResult(
+        samples=[
+            SampleResult(sample_id="q1", metrics={"recall@1": 0.0, "recall@5": 0.2, "mrr": 0.1}),
+            SampleResult(sample_id="q2", metrics={"recall@1": 0.8, "recall@5": 0.9, "mrr": 0.85}),
+        ],
+        overall={"recall@1": 0.4, "recall@5": 0.55, "mrr": 0.475},
+        metadata={"mode": "retrieval"},
+    )
+    report = MarkdownReporter.report(result)
+    assert "## Degraded Samples" in report
+    assert "q1" in report
+    assert "recall@1=0.0" in report
+    assert "q2" not in report.split("## Degraded Samples")[1].split("\n## ")[0]
 
 
 def test_report_omits_degraded_section_when_all_perfect():
@@ -67,17 +85,14 @@ def test_report_omits_degraded_section_when_all_perfect():
     assert "## Failed Samples" not in report
 
 
-def test_report_respects_lower_is_better_direction():
+def test_report_omits_degraded_section_for_unknown_mode():
     result = BenchmarkResult(
-        samples=[
-            SampleResult(sample_id="s1", metrics={"orphan_edge_rate": 1.0}),
-        ],
-        overall={"orphan_edge_rate": 1.0},
-        metadata={"mode": "extraction"},
+        samples=[SampleResult(sample_id="s1", metrics={"entity_f1": 0.0})],
+        overall={"entity_f1": 0.0},
+        metadata={},
     )
     report = MarkdownReporter.report(result)
-    assert "## Degraded Samples" in report
-    assert "orphan_edge_rate=1.0" in report
+    assert "## Degraded Samples" not in report
 
 
 def test_failed_samples_error_truncation():
