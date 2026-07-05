@@ -21,7 +21,11 @@ import json
 
 import pytest
 
-from hugegraph_llm.benchmark.utils.graph_extract import normalize_graph_extract
+from hugegraph_llm.benchmark.utils.graph_extract import (
+    normalize_extraction_output,
+    normalize_graph_extract,
+    normalize_schema,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -138,3 +142,53 @@ def test_normalize_triples_without_vertices_falls_back_to_name_stripping():
     result = normalize_graph_extract(data)
     assert result["candidate_edges"][0]["outV"] == "Alice"
     assert result["candidate_edges"][0]["inV"] == "Bob"
+
+
+def test_normalize_schema_parses_json_string():
+    schema_str = json.dumps({"vertexlabels": [{"name": "person"}], "edgelabels": [{"name": "knows"}]})
+    assert normalize_schema(schema_str) == {"vertexlabels": [{"name": "person"}], "edgelabels": [{"name": "knows"}]}
+
+
+def test_normalize_schema_passes_through_dict():
+    schema = {"vertexlabels": [{"name": "person"}]}
+    assert normalize_schema(schema) is schema
+
+
+def test_normalize_schema_returns_empty_for_none():
+    assert normalize_schema(None) == {}
+
+
+def test_normalize_extraction_output_handles_schema_and_graph():
+    output = {
+        "schema": json.dumps({"vertexlabels": [{"name": "person"}]}),
+        "vertices": [{"id": "1:Alice", "label": "person", "properties": {"name": "Alice"}}],
+        "edges": [{"label": "knows", "outV": "1:Alice", "inV": "1:Bob"}],
+        "input_text": "Alice knows Bob.",
+        "sample_id": "ext_001",
+    }
+    result = normalize_extraction_output(output)
+    assert result["schema"] == {"vertexlabels": [{"name": "person"}]}
+    assert result["candidate_vertices"][0]["name"] == "Alice"
+    assert result["candidate_edges"][0]["inV"] == "Bob"
+    assert result["input_text"] == "Alice knows Bob."
+    assert result["sample_id"] == "ext_001"
+
+
+def test_normalize_extraction_output_preserves_trace_fields():
+    output = {
+        "vertices": [],
+        "edges": [],
+        "raw_responses": ["raw"],
+        "parse_results": [{"vertices": [], "edges": []}],
+    }
+    result = normalize_extraction_output(output)
+    assert result["raw_responses"] == ["raw"]
+    assert result["parse_results"] == [{"vertices": [], "edges": []}]
+
+
+def test_normalize_extraction_output_accepts_json_string():
+    output = json.dumps({"vertices": [], "edges": [], "input_text": "x"})
+    result = normalize_extraction_output(output)
+    assert result["input_text"] == "x"
+    assert result["candidate_vertices"] == []
+    assert result["candidate_edges"] == []

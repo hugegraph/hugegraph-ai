@@ -194,3 +194,95 @@ def normalize_graph_extract(
         )
 
     return {"candidate_vertices": candidate_vertices, "candidate_edges": candidate_edges}
+
+
+def normalize_schema(schema: Union[str, Dict[str, Any], None]) -> Dict[str, Any]:
+    """Convert a JSON-string schema into the object expected by ExtractionRunner.
+
+    The GraphExtractFlow pipeline may expose the graph schema as a JSON string.
+    This helper parses it once so that benchmark inputs have ``data["schema"]``
+    as a Python dict.
+
+    Args:
+        schema: A JSON string, an existing dict, or ``None``.
+
+    Returns:
+        Parsed schema dict (empty dict for ``None``).
+    """
+    if schema is None:
+        return {}
+    if isinstance(schema, str):
+        return json.loads(schema)
+    if isinstance(schema, dict):
+        return schema
+    raise TypeError(f"schema must be a dict, JSON string or None, got {type(schema).__name__}")
+
+
+# Fields that are produced by the pipeline and should be forwarded unchanged
+# to the benchmark sample (gold annotations, trace info, etc.).
+_PRESERVED_SAMPLE_FIELDS = {
+    "sample_id",
+    "input_text",
+    "question",
+    "gold_vertices",
+    "gold_edges",
+    "raw_responses",
+    "parse_results",
+}
+
+
+def normalize_extraction_output(
+    pipeline_output: Union[str, Dict[str, Any]],
+    extract_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Convert a HugeGraph-LLM extraction pipeline output to benchmark format.
+
+    Handles:
+
+    * ``schema`` JSON string -> dict (via :func:`normalize_schema`).
+    * ``vertices`` / ``edges`` -> ``candidate_vertices`` / ``candidate_edges``
+      (via :func:`normalize_graph_extract`).
+    * Preserves gold annotations and trace fields such as ``raw_responses`` /
+      ``parse_results`` when ``collect_trace=True`` was enabled locally.
+
+    Args:
+        pipeline_output: Pipeline output dict or JSON string.
+        extract_type: Optional extraction mode hint (``"property_graph"`` or
+            ``"triples"``). Passed through to :func:`normalize_graph_extract`.
+
+    Returns:
+        Benchmark-compatible extraction sample dict.
+
+    Example:
+        >>> output = {
+        ...     "schema": '{"vertexlabels": [...], "edgelabels": [...]}',
+        ...     "vertices": [{"id": "1:Alice", "label": "person", "properties": {"name": "Alice"}}],
+        ...     "edges": [{"label": "knows", "outV": "1:Alice", "inV": "1:Bob"}],
+        ...     "input_text": "Alice knows Bob.",
+        ... }
+        >>> normalize_extraction_output(output)
+        {
+            "schema": {"vertexlabels": [...], "edgelabels": [...]},
+            "candidate_vertices": [...],
+            "candidate_edges": [...],
+            "input_text": "Alice knows Bob.",
+        }
+    """
+    if isinstance(pipeline_output, str):
+        pipeline_output = json.loads(pipeline_output)
+    if not isinstance(pipeline_output, dict):
+        raise TypeError(
+            f"pipeline_output must be a dict or JSON string, got {type(pipeline_output).__name__}"
+        )
+
+    normalized: Dict[str, Any] = {}
+    if "schema" in pipeline_output:
+        normalized["schema"] = normalize_schema(pipeline_output["schema"])
+
+    normalized.update(normalize_graph_extract(pipeline_output, extract_type=extract_type))
+
+    for key in _PRESERVED_SAMPLE_FIELDS:
+        if key in pipeline_output:
+            normalized[key] = pipeline_output[key]
+
+    return normalized
