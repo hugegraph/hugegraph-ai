@@ -29,9 +29,18 @@ _RANKING_METRICS = {"recall_at_k", "hit_at_k", "mrr"}
 _CONTEXT_METRICS = {"context_precision", "context_relevancy", "evidence_recall_llm"}
 
 
-def _require_list(sample: Dict[str, Any], field: str, sample_id: str) -> List[Any]:
+class _RankingFieldMissingError(ValueError):
+    """Raised when ranking metrics are requested but doc IDs are absent."""
+
+    pass
+
+
+def _require_list(sample: Dict[str, Any], field: str, sample_id: str, *, context_help: str = "") -> List[Any]:
     if field not in sample:
-        raise ValueError(f"Retrieval sample {sample_id!r} missing required field '{field}'")
+        msg = f"Retrieval sample {sample_id!r} missing required field '{field}'"
+        if context_help:
+            msg += f". {context_help}"
+        raise ValueError(msg)
     value = sample[field]
     if not isinstance(value, list):
         raise ValueError(f"Retrieval sample {sample_id!r} field '{field}' must be a list")
@@ -39,7 +48,17 @@ def _require_list(sample: Dict[str, Any], field: str, sample_id: str) -> List[An
 
 
 def _doc_ids(sample: Dict[str, Any], field: str, sample_id: str) -> List[str]:
-    values = _require_list(sample, field, sample_id)
+    values = _require_list(
+        sample,
+        field,
+        sample_id,
+        context_help=(
+            "Document-id ranking metrics (recall_at_k, hit_at_k, mrr) require both "
+            "'gold_doc_ids' and 'retrieved_doc_ids'. If your pipeline only produces "
+            "text contexts, run context / LLM-Judge metrics instead: "
+            "context_precision, context_relevancy, evidence_recall_llm"
+        ),
+    )
     for value in values:
         if isinstance(value, (dict, list)):
             raise ValueError(f"Retrieval sample {sample_id!r} field '{field}' must contain document ids, not objects")
@@ -58,8 +77,11 @@ def _validate_sample_contract(sample: Dict[str, Any], metrics: List[str]) -> Non
     sample_id = str(sample.get("sample_id", "unknown"))
     metric_set = set(metrics)
     if metric_set & _RANKING_METRICS:
-        _doc_ids(sample, "retrieved_doc_ids", sample_id)
-        _doc_ids(sample, "gold_doc_ids", sample_id)
+        try:
+            _doc_ids(sample, "retrieved_doc_ids", sample_id)
+            _doc_ids(sample, "gold_doc_ids", sample_id)
+        except ValueError as exc:
+            raise _RankingFieldMissingError(str(exc)) from exc
     if metric_set & _CONTEXT_METRICS:
         _texts(sample, "retrieved_contexts", sample_id)
     if "context_precision" in metric_set and "gold_answer" not in sample:
@@ -70,6 +92,17 @@ def _validate_sample_contract(sample: Dict[str, Any], metrics: List[str]) -> Non
 
 class RetrievalRunner(BaseRunner):
     """Run retrieval evaluation against gold-standard document sets.
+
+    Two metric families are supported:
+
+    * Ranking metrics (``recall_at_k``, ``hit_at_k``, ``mrr``) require
+      document identifiers in ``gold_doc_ids`` and ``retrieved_doc_ids``.
+      If a sample produced by a pipeline does not contain doc IDs, these
+      metrics cannot be evaluated. In that case the runner fails fast with
+      a clear error and suggests running context / LLM-Judge metrics instead.
+    * Context / LLM-Judge metrics (``context_precision``,
+      ``context_relevancy``, ``evidence_recall_llm``) require text contexts
+      in ``retrieved_contexts``. They do not require document IDs.
 
     Expected data format::
 

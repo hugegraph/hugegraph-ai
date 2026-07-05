@@ -16,3 +16,7 @@
 # under the License.
 
 """Utility helpers for benchmark evaluation."""
+
+from hugegraph_llm.benchmark.utils.graph_extract import normalize_graph_extract
+
+__all__ = ["normalize_graph_extract"]
