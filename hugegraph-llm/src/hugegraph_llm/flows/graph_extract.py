@@ -56,6 +56,8 @@ class GraphExtractFlow(BaseFlow):
         prepared_input.example_prompt = example_prompt
         prepared_input.schema = schema
         prepared_input.extract_type = extract_type
+        prepared_input.collect_trace = bool(kwargs.get("collect_trace", False))
+        prepared_input.data_json = {"collect_trace": prepared_input.collect_trace}
         client_config = kwargs.get("client_config")
         if client_config:
             # URL stays server-controlled; only identity/graphspace are request-scoped.
@@ -110,19 +112,11 @@ class GraphExtractFlow(BaseFlow):
         edges = res.get("edges", [])
         chunk_count = len(res.get("chunks", []))
         log.info("Graph extraction chunk_count: %s", chunk_count)
+        payload = {"vertices": vertices, "edges": edges}
+        if res.get("collect_trace"):
+            payload["raw_responses"] = res.get("raw_responses", [])
+            payload["parse_results"] = res.get("parse_results", [])
         if not vertices and not edges:
             log.info("Please check the schema.(The schema may not match the Doc)")
-            return json.dumps(
-                {
-                    "vertices": vertices,
-                    "edges": edges,
-                    "warning": "The schema may not match the Doc",
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        return json.dumps(
-            {"vertices": vertices, "edges": edges},
-            ensure_ascii=False,
-            indent=2,
-        )
+            payload["warning"] = "The schema may not match the Doc"
+        return json.dumps(payload, ensure_ascii=False, indent=2)

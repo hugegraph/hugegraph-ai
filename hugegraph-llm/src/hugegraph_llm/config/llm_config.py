@@ -30,7 +30,7 @@ class LLMConfig(BaseConfig):
     extract_llm_type: Literal["openai", "litellm", "ollama/local"] = "openai"
     text2gql_llm_type: Literal["openai", "litellm", "ollama/local"] = "openai"
     embedding_type: Optional[Literal["openai", "litellm", "ollama/local"]] = "openai"
-    reranker_type: Optional[Literal["cohere", "siliconflow"]] = None
+    reranker_type: Optional[Literal["cohere", "siliconflow", "jina"]] = None
     keyword_extract_type: Literal["llm", "textrank", "hybrid"] = "llm"
     window_size: Optional[int] = 3
     hybrid_llm_weights: Optional[float] = 0.5

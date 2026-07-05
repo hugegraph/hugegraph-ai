@@ -70,7 +70,9 @@ def test_report_by_type_metrics_show_direction():
 
 def test_report_comparison_includes_direction_and_delta():
     result = BenchmarkResult(
-        samples=[SampleResult(sample_id="s1", metrics={"entity_f1": 0.6, "conflict_rate": 0.2})],
+        samples=[
+            SampleResult(sample_id="s1", metrics={"entity_f1": 0.6, "conflict_rate": 0.2})
+        ],
         overall={"entity_f1": 0.6, "conflict_rate": 0.2},
         metadata={"mode": "extraction"},
     )
