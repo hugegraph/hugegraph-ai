@@ -37,9 +37,12 @@ def _edge_in(item: Dict[str, Any]) -> Any:
 
 from hugegraph_llm.benchmark.metrics.extraction.conflict_detection import ConflictDetection  # noqa: E402
 from hugegraph_llm.benchmark.metrics.extraction.entity_f1 import EntityF1  # noqa: E402
+from hugegraph_llm.benchmark.metrics.extraction.extraction_faithfulness import ExtractionFaithfulness  # noqa: E402
 from hugegraph_llm.benchmark.metrics.extraction.graph_structure import GraphStructure  # noqa: E402
 from hugegraph_llm.benchmark.metrics.extraction.property_f1 import PropertyF1  # noqa: E402
 from hugegraph_llm.benchmark.metrics.extraction.schema_validity import SchemaValidity  # noqa: E402
+from hugegraph_llm.benchmark.metrics.extraction.semantic_entity_f1 import SemanticEntityF1  # noqa: E402
+from hugegraph_llm.benchmark.metrics.extraction.semantic_triple_f1 import SemanticTripleF1  # noqa: E402
 from hugegraph_llm.benchmark.metrics.extraction.structural_integrity import StructuralIntegrity  # noqa: E402
 from hugegraph_llm.benchmark.metrics.extraction.syntax_validity import SyntaxValidity  # noqa: E402
 from hugegraph_llm.benchmark.metrics.extraction.temporal_validity import TemporalValidity  # noqa: E402
@@ -55,4 +58,7 @@ __all__ = [
     "GraphStructure",
     "ConflictDetection",
     "TemporalValidity",
+    "SemanticEntityF1",
+    "SemanticTripleF1",
+    "ExtractionFaithfulness",
 ]

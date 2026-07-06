@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 _METRIC_DATA_MAPPING: Dict[str, Tuple[Optional[str], Optional[str]]] = {
     "entity_f1": ("candidate_vertices", "gold_vertices"),
     "triple_f1": ("candidate_edges", "gold_edges"),
+    "semantic_entity_f1": ("candidate_vertices", "gold_vertices"),
+    "semantic_triple_f1": ("candidate_edges", "gold_edges"),
     # Metrics below need a composite dict with vertices + edges
     "property_f1": (None, None),
     "schema_validity": (None, None),
@@ -38,6 +40,7 @@ _METRIC_DATA_MAPPING: Dict[str, Tuple[Optional[str], Optional[str]]] = {
     "graph_structure": (None, None),
     "conflict_detection": (None, None),
     "temporal_validity": (None, None),
+    "extraction_faithfulness": (None, None),
 }
 
 
@@ -47,6 +50,11 @@ def _build_composite_prediction(sample: Dict[str, Any], metric_name: str) -> Any
         return {
             "raw_responses": sample.get("raw_responses", []),
             "parse_results": sample.get("parse_results", []),
+        }
+    if metric_name == "extraction_faithfulness":
+        return {
+            "vertices": sample.get("candidate_vertices", []),
+            "edges": sample.get("candidate_edges", []),
         }
     if metric_name in {"property_f1", "schema_validity"}:
         return sample.get("candidate_vertices", []) + sample.get("candidate_edges", [])
@@ -146,6 +154,7 @@ class ExtractionRunner(BaseRunner):
                     sample_id=sample_id,
                     schema=schema,
                     language=language,
+                    input_text=sample.get("input_text", ""),
                     candidate_edges=sample.get("candidate_edges", []),
                     gold_edges=sample.get("gold_edges", []),
                     llm=llm,

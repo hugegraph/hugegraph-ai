@@ -68,7 +68,7 @@ _METRIC_DIMENSIONS: dict[str, Tuple[str, str]] = {
     "num_nodes": ("extraction", "图结构"),
     "num_edges": ("extraction", "图结构"),
     "num_components": ("extraction", "图结构"),
-    # --- extraction: syntax / conflict / temporal / load ---
+    # --- extraction: syntax / conflict / temporal / load / semantic ---
     "syntax_validity": ("extraction", "语法/冲突/时序"),
     "json_parse_rate": ("extraction", "语法/冲突/时序"),
     "conflict_detection": ("extraction", "语法/冲突/时序"),
@@ -78,6 +78,18 @@ _METRIC_DIMENSIONS: dict[str, Tuple[str, str]] = {
     "temporal_valid_rate": ("extraction", "语法/冲突/时序"),
     "num_temporal_attrs": ("extraction", "语法/冲突/时序"),
     "load_to_db_success": ("extraction", "语法/冲突/时序"),
+    # --- extraction: LLM-based semantic metrics ---
+    "semantic_entity_precision": ("extraction", "语义匹配"),
+    "semantic_entity_recall": ("extraction", "语义匹配"),
+    "semantic_entity_f1": ("extraction", "语义匹配"),
+    "semantic_entity_matched": ("extraction", "语义匹配"),
+    "semantic_triple_precision": ("extraction", "语义匹配"),
+    "semantic_triple_recall": ("extraction", "语义匹配"),
+    "semantic_triple_f1": ("extraction", "语义匹配"),
+    "semantic_triple_matched": ("extraction", "语义匹配"),
+    "extraction_faithfulness": ("extraction", "语义匹配"),
+    "extraction_faithful_items": ("extraction", "语义匹配"),
+    "extraction_total_items": ("extraction", "语义匹配"),
     # --- retrieval ---
     "recall_at_k": ("retrieval", "召回"),
     "hit_at_k": ("retrieval", "命中"),

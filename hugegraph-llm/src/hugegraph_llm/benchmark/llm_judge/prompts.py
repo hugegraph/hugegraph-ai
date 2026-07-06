@@ -660,6 +660,321 @@ _COVERAGE_CHECK_PROMPT_ZH = """\
 
 
 # ============================================================================
+# Entity Semantic Match (Graph Extraction — LLM-based)
+# Judges whether each candidate vertex semantically matches any gold vertex.
+# Reference: car33 评分规则.md §4.1 (entity normalization rules)
+# ============================================================================
+
+ENTITY_SEMANTIC_MATCH_PROMPT = """\
+Your task is to judge whether candidate entities (from an automated KG extractor)
+semantically match gold entities (from human annotation).
+
+For each candidate entity, determine if it is semantically equivalent to any
+gold entity of the SAME type. The gold entity list is the reference standard.
+
+Matching rules:
+- Entity TYPE (label) must match exactly. Component ≠ Function, Status ≠ Specification.
+- Entity NAME allows: synonym normalization, abbreviation expansion, phrasing variation.
+  Example: "制动液" matches "制动液检查/更换" (same core concept, different granularity).
+- Each gold entity can be matched at most once.
+- Each candidate entity can be matched at most once.
+- If two candidate entities match the same gold entity, the first one wins.
+- Special case: A warning-light Component in the gold that is expressed as
+  Status in the candidate may still match if the semantic signal is identical
+  (e.g., gold "Status(ABS故障警告灯)" ↔ candidate "Status(ABS系统故障指示)").
+
+Return a JSON object with:
+- "matches": list of [candidate_index, gold_index] pairs (0-indexed)
+- "reasoning": brief explanation (1-2 sentences)
+
+Example:
+Gold entities (indexed):
+[0] {"label": "Component", "name": "制动液"}
+[1] {"label": "Component", "name": "轮胎"}
+[2] {"label": "Status", "name": "ABS故障警告灯"}
+[3] {"label": "Specification", "name": "最高车速_205km/h"}
+
+Candidate entities (indexed):
+[0] {"label": "Component", "name": "制动液检查/更换"}
+[1] {"label": "Component", "name": "轮胎"}
+[2] {"label": "Status", "name": "ABS系统故障指示灯"}
+[3] {"label": "Component", "name": "保险丝"}
+
+Expected JSON:
+{{
+  "matches": [[0, 0], [1, 1], [2, 2]],
+  "reasoning": "制动液检查/更换 → 制动液 (core concept match); 轮胎 → 轮胎 (exact); ABS故障指示灯 → ABS故障警告灯 (semantic equivalent); 保险丝 has no gold match."
+}}
+
+Now evaluate the following:
+
+Gold entities:
+{gold_entities}
+
+Candidate entities:
+{candidate_entities}
+
+Return only the JSON object.
+"""
+
+_ENTITY_SEMANTIC_MATCH_PROMPT_ZH = """\
+你的任务是判断候选实体（由自动 KG 抽取器生成）是否与标准答案实体（人工标注）在语义上等价。
+
+针对每个候选实体，判断它是否与同类型的某个标准答案实体语义等价。标准答案实体列表是参考基准。
+
+匹配规则：
+- 实体类型（label）必须一致。Component ≠ Function，Status ≠ Specification。
+- 实体名称允许：同义词归一、简称展开、表述变化。
+  例如："制动液" 与 "制动液检查/更换" 可匹配（核心概念相同，粒度不同）。
+- 每个标准答案实体最多被匹配一次。
+- 每个候选实体最多被匹配一次。
+- 如果两个候选实体匹配同一个标准答案实体，取第一个。
+- 特殊情况：标准答案中的告警灯 Component 在候选答案中以 Status 表达，若语义信号一致可匹配。
+
+返回 JSON 对象，包含：
+- "matches"：[[候选索引, 标准答案索引], ...] 列表（从0开始索引）
+- "reasoning"：简要说明（1-2 句中文）
+
+示例：
+标准答案实体（带索引）：
+[0] {{"label": "Component", "name": "制动液"}}
+[1] {{"label": "Component", "name": "轮胎"}}
+[2] {{"label": "Status", "name": "ABS故障警告灯"}}
+[3] {{"label": "Specification", "name": "最高车速_205km/h"}}
+
+候选实体（带索引）：
+[0] {{"label": "Component", "name": "制动液检查/更换"}}
+[1] {{"label": "Component", "name": "轮胎"}}
+[2] {{"label": "Status", "name": "ABS系统故障指示灯"}}
+[3] {{"label": "Component", "name": "保险丝"}}
+
+期望输出：
+{{
+  "matches": [[0, 0], [1, 1], [2, 2]],
+  "reasoning": "制动液检查/更换→制动液（核心概念匹配）；轮胎→轮胎（完全匹配）；ABS故障指示灯→ABS故障警告灯（语义等价）；保险丝无对应标准答案。"
+}}
+
+现在请评估：
+
+标准答案实体：
+{gold_entities}
+
+候选实体：
+{candidate_entities}
+
+只返回 JSON 对象。
+"""
+
+
+# ============================================================================
+# Triple Semantic Match (Graph Extraction — LLM-based)
+# Judges whether each candidate triple (edge) semantically matches any gold triple.
+# Reference: car33 评分规则.md §4.2 (relation normalization rules)
+# ============================================================================
+
+TRIPLE_SEMANTIC_MATCH_PROMPT = """\
+Your task is to judge whether candidate triples (from an automated KG extractor)
+semantically match gold triples (from human annotation).
+
+Each triple is expressed as: [source_entity_name] --relation_type--> [target_entity_name].
+
+A triple match requires ALL of the following:
+1. Source entity: semantically equivalent (same rules as entity matching)
+2. Relation type: semantically equivalent. Allow synonym relations if clearly
+   expressing the same relationship (e.g., HAS_STATUS ≈ SYSTEM_HAS_STATUS).
+3. Target entity: semantically equivalent
+4. Direction: must be identical (source→target, not reversed)
+
+Matching rules:
+- Each gold triple can be matched at most once.
+- Each candidate triple can be matched at most once.
+- If the relation type differs but the semantic meaning is identical
+  (e.g., "HAS_STATUS" for a warning-light status carrier vs "HAS_COMPONENT"
+  for a physical part), judge based on whether the factual claim is the same.
+- Partial matches (e.g., source OK but relation wrong) are NOT counted as matches.
+
+Return a JSON object with:
+- "matches": list of [candidate_index, gold_index] pairs (0-indexed)
+- "reasoning": brief explanation (1-2 sentences)
+
+Example:
+Gold triples:
+[0] [组合仪表] --HAS_STATUS--> [ABS故障警告灯点亮]
+[1] [制动液] --HAS_SPEC--> [容量:1L]
+
+Candidate triples:
+[0] [组合仪表显示屏] --HAS_STATUS--> [ABS故障指示灯点亮]
+[1] [制动液] --HAS_COMPONENT--> [制动系统]
+
+Expected JSON:
+{{
+  "matches": [[0, 0]],
+  "reasoning": "[0] matches [0]: source and target are semantically equivalent, relation is identical HAS_STATUS. [1] does NOT match [1]: candidate has HA_COMPONENT where gold has HAS_SPEC — different factual claim."
+}}
+
+Now evaluate:
+
+Gold triples:
+{gold_triples}
+
+Candidate triples:
+{candidate_triples}
+
+Return only the JSON object.
+"""
+
+_TRIPLE_SEMANTIC_MATCH_PROMPT_ZH = """\
+你的任务是判断候选三元组（自动 KG 抽取结果）是否与标准答案三元组（人工标注）语义等价。
+
+每个三元组表示为：[源实体名] --关系类型--> [目标实体名]。
+
+一个三元组匹配必须同时满足以下全部条件：
+1. 源实体：语义等价（与实体匹配规则相同）
+2. 关系类型：语义等价。允许等价关系映射（如 HAS_STATUS ≈ SYSTEM_HAS_STATUS）。
+3. 目标实体：语义等价
+4. 方向：必须一致（源→目标，不可反向）
+
+匹配规则：
+- 每个标准答案三元组最多被匹配一次。
+- 每个候选三元组最多被匹配一次。
+- 关系类型不同但语义完全一致时，以事实声明是否相同为准。
+- 部分匹配（如源实体匹配但关系错误）不算命中。
+
+返回 JSON 对象，包含：
+- "matches"：[[候选索引, 标准答案索引], ...] 列表（从0开始索引）
+- "reasoning"：简要说明（1-2 句中文）
+
+示例：
+标准答案三元组：
+[0] [组合仪表] --HAS_STATUS--> [ABS故障警告灯点亮]
+[1] [制动液] --HAS_SPEC--> [容量:1L]
+
+候选三元组：
+[0] [组合仪表显示屏] --HAS_STATUS--> [ABS故障指示灯点亮]
+[1] [制动液] --HAS_COMPONENT--> [制动系统]
+
+期望输出：
+{{
+  "matches": [[0, 0]],
+  "reasoning": "[0]匹配[0]：源和目标语义等价，关系类型一致。 [1]不匹配[1]：候选为HAS_COMPONENT，标准答案为HAS_SPEC，事实声明不同。"
+}}
+
+现在请评估：
+
+标准答案三元组：
+{gold_triples}
+
+候选三元组：
+{candidate_triples}
+
+只返回 JSON 对象。
+"""
+
+
+# ============================================================================
+# Extraction Faithfulness (Graph Extraction — LLM-based, no GT required)
+# Judges whether each candidate vertex/edge has textual support in the input.
+# Reference: deepeval FaithfulnessMetric + ragas NLIStatementPrompt
+# ============================================================================
+
+EXTRACTION_FAITHFULNESS_PROMPT = """\
+Your task is to judge whether each item in a knowledge-graph extraction result
+is faithfully supported by the original input text.
+
+For each vertex (entity) or edge (triple), determine if the factual claim it
+makes can be directly or reasonably inferred from the input text.
+
+Rules:
+- verdict = 1: The item's factual content is clearly stated in or can be
+  directly inferred from the input text.
+- verdict = 0: The item's factual content is NOT supported by the input text
+  (hallucination, over-extrapolation, or contradiction).
+- If the input text mentions a concept but the item adds unsupported detail,
+  verdict = 0.
+- If the input text is empty or contains no relevant information for the item,
+  verdict = 0.
+
+Return a JSON object with:
+- "verdicts": list of {{"idx": <int>, "verdict": <0 or 1>, "reason": "<brief>"}}
+
+Example:
+Input text:
+"The vehicle uses DOT 4 brake fluid. The brake fluid reservoir is located in the engine compartment. Replace brake fluid every 2 years or 30,000 km."
+
+Extraction items:
+[0] {{"type": "vertex", "label": "Component", "name": "制动液"}}
+[1] {{"type": "vertex", "label": "Specification", "name": "制动液更换周期:2年"}}
+[2] {{"type": "edge", "label": "HAS_SPEC", "source": "制动液", "target": "制动液型号:DOT5"}}
+[3] {{"type": "vertex", "label": "Component", "name": "发动机机油"}}
+
+Expected JSON:
+{{
+  "verdicts": [
+    {{"idx": 0, "verdict": 1, "reason": "Text mentions 'DOT 4 brake fluid', supporting the Component 制动液."}},
+    {{"idx": 1, "verdict": 1, "reason": "Text states 'Replace brake fluid every 2 years', supporting the 2-year cycle."}},
+    {{"idx": 2, "verdict": 0, "reason": "Text specifies DOT 4, but item claims DOT 5 — contradicts the source."}},
+    {{"idx": 3, "verdict": 0, "reason": "Text never mentions engine oil — this is a hallucination."}}
+  ]
+}}
+
+Now evaluate:
+
+Input text:
+{input_text}
+
+Extraction items:
+{items}
+
+Return only the JSON object.
+"""
+
+_EXTRACTION_FAITHFULNESS_PROMPT_ZH = """\
+你的任务是判断知识图谱抽取结果中的每一项是否有原始输入文本作为依据。
+
+对每个顶点（实体）或边（三元组），判断它所声称的事实是否可以从输入文本中直接或合理推断出来。
+
+规则：
+- verdict = 1：该项的事实内容在输入文本中有明确陈述或可直接推断。
+- verdict = 0：该项的事实内容在输入文本中没有依据（幻觉、过度推断或矛盾）。
+- 若输入文本提到了某个概念但该项添加了无依据的细节，verdict = 0。
+- 若输入文本为空或不含该项相关信息，verdict = 0。
+
+返回 JSON 对象，包含：
+- "verdicts"：[{{"idx": <编号>, "verdict": <0或1>, "reason": "<简要原因>"}}, ...] 列表
+
+示例：
+输入文本：
+"本车使用 DOT 4 制动液。制动液储液罐位于发动机舱内。每 2 年或 30,000 公里更换制动液。"
+
+抽取项：
+[0] {{"type": "vertex", "label": "Component", "name": "制动液"}}
+[1] {{"type": "vertex", "label": "Specification", "name": "制动液更换周期:2年"}}
+[2] {{"type": "edge", "label": "HAS_SPEC", "source": "制动液", "target": "制动液型号:DOT5"}}
+[3] {{"type": "vertex", "label": "Component", "name": "发动机机油"}}
+
+期望输出：
+{{
+  "verdicts": [
+    {{"idx": 0, "verdict": 1, "reason": "文中提到'DOT 4 制动液'，支持 Component 制动液。"}},
+    {{"idx": 1, "verdict": 1, "reason": "文中说'每2年更换制动液'，支持2年更换周期。"}},
+    {{"idx": 2, "verdict": 0, "reason": "文中的是DOT 4，该项声称DOT 5，与原文矛盾。"}},
+    {{"idx": 3, "verdict": 0, "reason": "文中从未提及发动机机油，属于幻觉。"}}
+  ]
+}}
+
+现在请评估：
+
+输入文本：
+{input_text}
+
+抽取项：
+{items}
+
+只返回 JSON 对象。
+"""
+
+
+# ============================================================================
 # Prompt selection helper
 # ============================================================================
 
@@ -696,6 +1011,18 @@ _PROMPT_REGISTRY: Dict[str, Dict[str, str]] = {
         "en": COVERAGE_CHECK_PROMPT,
         "zh": _COVERAGE_CHECK_PROMPT_ZH,
     },
+    "ENTITY_SEMANTIC_MATCH_PROMPT": {
+        "en": ENTITY_SEMANTIC_MATCH_PROMPT,
+        "zh": _ENTITY_SEMANTIC_MATCH_PROMPT_ZH,
+    },
+    "TRIPLE_SEMANTIC_MATCH_PROMPT": {
+        "en": TRIPLE_SEMANTIC_MATCH_PROMPT,
+        "zh": _TRIPLE_SEMANTIC_MATCH_PROMPT_ZH,
+    },
+    "EXTRACTION_FAITHFULNESS_PROMPT": {
+        "en": EXTRACTION_FAITHFULNESS_PROMPT,
+        "zh": _EXTRACTION_FAITHFULNESS_PROMPT_ZH,
+    },
 }
 
 
@@ -706,7 +1033,9 @@ def get_prompt(name: str, language: str = "en") -> str:
     ``STATEMENT_DECOMPOSE_PROMPT``, ``NLI_STATEMENT_PROMPT``,
     ``CORRECTNESS_CLASSIFY_PROMPT``, ``CONTEXT_PRECISION_PROMPT``,
     ``CONTEXT_RELEVANCE_PROMPT``, ``EVIDENCE_RECALL_PROMPT``,
-    ``COVERAGE_FACT_EXTRACT_PROMPT``, ``COVERAGE_CHECK_PROMPT``.
+    ``COVERAGE_FACT_EXTRACT_PROMPT``, ``COVERAGE_CHECK_PROMPT``,
+    ``ENTITY_SEMANTIC_MATCH_PROMPT``, ``TRIPLE_SEMANTIC_MATCH_PROMPT``,
+    ``EXTRACTION_FAITHFULNESS_PROMPT``.
 
     Args:
         name: Prompt constant name.
