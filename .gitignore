@@ -140,6 +140,7 @@ celerybeat.pid
 config_prompt.yaml*
 
 # AI-IDE prompt files (generated from AGENTS.md)
+AGENTS.local.md
 
 # Claude Projects
 CLAUDE.md

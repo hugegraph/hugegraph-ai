@@ -154,6 +154,46 @@ def _gold_docs_from_supporting(
     return gold
 
 
+def _gold_evidence_from_supporting(
+    supporting_facts: List[Any], context: List[Any]
+) -> List[str]:
+    """Extract the exact evidence *sentences* referenced by supporting_facts.
+
+    supporting_facts is ``[[title, sent_id], ...]``; context is
+    ``[[title, [sent0, sent1, ...]], ...]``. We resolve each (title, sent_id)
+    to its source sentence so LLM-Judge evidence metrics (context_relevancy /
+    evidence_recall_llm) can compare against the precise gold span instead of
+    a whole document.
+    """
+    title_to_sents = {}
+    for ctx_item in context or []:
+        if isinstance(ctx_item, list) and len(ctx_item) == 2:
+            title, sents = ctx_item
+            if isinstance(sents, list):
+                title_to_sents.setdefault(str(title), sents)
+
+    evidence = []
+    seen = set()
+    for fact in supporting_facts or []:
+        if not isinstance(fact, (list, tuple)) or len(fact) < 2:
+            continue
+        title, sent_id = str(fact[0]), fact[1]
+        sents = title_to_sents.get(title)
+        if sents is None:
+            continue
+        try:
+            idx = int(sent_id)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= idx < len(sents):
+            span = str(sents[idx]).strip()
+            key = (title, span)
+            if span and key not in seen:
+                seen.add(key)
+                evidence.append(span)
+    return evidence
+
+
 def _gold_doc_ids_from_supporting(
     supporting_facts: List[Any], context: List[Any], corpus_map: Dict[str, str]
 ) -> List[str]:
@@ -176,7 +216,7 @@ def _qa_to_retrieval_sample(item: Dict[str, Any], corpus_map: Dict[str, str]) ->
         "question": item.get("question", ""),
         "gold_doc_ids": _gold_doc_ids_from_supporting(item.get("supporting_facts", []), context, corpus_map),
         "retrieved_doc_ids": _context_to_doc_ids(context),
-        "gold_evidence": _gold_docs_from_supporting(item.get("supporting_facts", []), context, corpus_map),
+        "gold_evidence": _gold_evidence_from_supporting(item.get("supporting_facts", []), context),
         "retrieved_contexts": _context_to_docs(context),
         "gold_answer": str(item.get("answer", "")),
     }
@@ -238,6 +278,17 @@ def _musique_gold_doc_ids(item: Dict[str, Any]) -> List[str]:
     return gold
 
 
+def _musique_gold_evidence(item: Dict[str, Any]) -> List[str]:
+    """Return the paragraph_text of supporting paragraphs as evidence spans."""
+    evidence = []
+    for p in item.get("paragraphs", []):
+        if p.get("is_supporting"):
+            text = str(p.get("paragraph_text", "")).strip()
+            if text:
+                evidence.append(text)
+    return evidence
+
+
 def prepare_musique(subset_size: Optional[int], output_dir: Path, data_root: Path = DATA_ROOT) -> None:
     qa_file = data_root / "musique" / "musique.json"
     qa = _load_json(qa_file)
@@ -252,7 +303,7 @@ def prepare_musique(subset_size: Optional[int], output_dir: Path, data_root: Pat
                 "question": item.get("question", ""),
                 "gold_doc_ids": _musique_gold_doc_ids(item),
                 "retrieved_doc_ids": _musique_doc_ids(item),
-                "gold_evidence": _musique_gold_docs(item),
+                "gold_evidence": _musique_gold_evidence(item),
                 "retrieved_contexts": _musique_docs(item),
                 "gold_answer": str(item.get("answer", "")),
             }
@@ -334,15 +385,25 @@ def prepare_graphrag_bench(
     for item in questions:
         source = item.get("source", "")
         context = corpus_map.get(source, "")
-        evidence = str(item.get("evidence", "") or "").strip()
+        # ``evidence`` is a list[str] of supporting sentences in GraphRAG-Bench.
+        # Normalize both list and (legacy) str forms into a flat list[str] so
+        # gold_evidence stays a proper list — never stringify the list, or
+        # gold_evidence collapses to ["['sent1', 'sent2']"] and breaks
+        # evidence-level comparison.
+        raw_evidence = item.get("evidence", "")
+        if isinstance(raw_evidence, list):
+            evidence_list = [str(e).strip() for e in raw_evidence if str(e).strip()]
+        else:
+            ev = str(raw_evidence or "").strip()
+            evidence_list = [ev] if ev else []
         paragraphs = _paragraphs_from_context(context)
         samples.append(
             {
                 "sample_id": str(item.get("id", "unknown")),
                 "question": item.get("question", ""),
-                "gold_doc_ids": [source] if evidence and source else [],
+                "gold_doc_ids": [source] if evidence_list and source else [],
                 "retrieved_doc_ids": [source] if source else [],
-                "gold_evidence": [evidence] if evidence else [],
+                "gold_evidence": evidence_list,
                 "retrieved_contexts": paragraphs,
                 "gold_answer": str(item.get("answer", "")),
                 "question_type": item.get("question_type"),

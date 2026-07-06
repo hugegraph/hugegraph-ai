@@ -60,16 +60,19 @@ DATASET_SPECS: Dict[str, DatasetSpec] = {
             "hotpotqa/hotpotqa.json",
             "hotpotqa/hotpotqa_corpus.json",
         ],
-        source_url="https://hotpotqa.github.io/",
+        source_url="https://huggingface.co/datasets/hotpotqa/hotpot_qa",
         downloadable=True,
         download_files=[
             DownloadFile(
-                url="http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json",
-                path="hotpotqa/hotpotqa.json",
+                url=_hf_url("hotpotqa/hotpot_qa", "distractor/validation-00000-of-00001.parquet"),
+                path="hotpotqa/hotpotqa_dev_distractor.parquet",
             )
         ],
-        postprocess="hotpotqa_corpus",
-        notes="Downloads the official dev-distractor split and derives hotpotqa_corpus.json from its context field.",
+        postprocess="hotpotqa",
+        notes=(
+            "Downloads the official dev-distractor split from the HuggingFace mirror (parquet) and "
+            "derives hotpotqa.json + hotpotqa_corpus.json in the list-of-dicts format expected by the converter."
+        ),
     ),
     "2wikimultihopqa": DatasetSpec(
         name="2wikimultihopqa",
@@ -78,10 +81,18 @@ DATASET_SPECS: Dict[str, DatasetSpec] = {
             "2wikimultihopqa/2wikimultihopqa.json",
             "2wikimultihopqa/2wikimultihopqa_corpus.json",
         ],
-        source_url="https://github.com/Alab-NII/2wikimultihop",
+        source_url="https://huggingface.co/datasets/xanhho/2WikiMultihopQA",
+        downloadable=True,
+        download_files=[
+            DownloadFile(
+                url=_hf_url("xanhho/2WikiMultihopQA", "dev.parquet"),
+                path="2wikimultihopqa/2wikimultihopqa_dev.parquet",
+            )
+        ],
+        postprocess="2wikimultihopqa",
         notes=(
-            "Automatic download is not enabled because public mirrors expose multiple schemas. "
-            "Place converted JSON files in the expected paths or use --data-root."
+            "Downloads the dev split from the HuggingFace mirror (parquet) and derives "
+            "2wikimultihopqa.json + 2wikimultihopqa_corpus.json in the list-of-dicts format expected by the converter."
         ),
     ),
     "musique": DatasetSpec(
@@ -90,10 +101,18 @@ DATASET_SPECS: Dict[str, DatasetSpec] = {
         expected_files=[
             "musique/musique.json",
         ],
-        source_url="https://github.com/stonybrooknlp/musique",
+        source_url="https://huggingface.co/datasets/dgslibisey/MuSiQue",
+        downloadable=True,
+        download_files=[
+            DownloadFile(
+                url=_hf_url("dgslibisey/MuSiQue", "musique_ans_v1.0_dev.jsonl"),
+                path="musique/musique_ans_v1.0_dev.jsonl",
+            )
+        ],
+        postprocess="musique",
         notes=(
-            "Automatic download is not enabled because the official release uses scripts and multiple splits. "
-            "Place converted JSON files in the expected paths or use --data-root."
+            "Downloads the answerable dev split (jsonl) from the HuggingFace mirror and derives "
+            "musique.json in the list-of-dicts format expected by the converter."
         ),
     ),
     "anonyrag-chs": DatasetSpec(

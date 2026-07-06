@@ -68,7 +68,26 @@ class SyntaxValidity(BaseMetric):
         if not isinstance(prediction, dict):
             return {"json_parse_rate": 0.0, "load_to_db_success": 0.0}
 
+        raw_responses: List[str] = prediction.get("raw_responses", [])
         parse_results: List[Optional[Dict[str, Any]]] = prediction.get("parse_results", [])
+
+        # ---------------------------------------------------------------
+        # Guard: when a sample has neither raw_responses nor parse_results
+        # (e.g. a reference system that only provides final graph output),
+        # syntax_validity is meaningless — there is nothing to parse.
+        # Silently returning 0.0 would falsely suggest "all parsing failed"
+        # when the truth is "no raw LLM output was recorded".
+        # ---------------------------------------------------------------
+        if not raw_responses and not parse_results:
+            raise ValueError(
+                "syntax_validity cannot be computed: sample has no raw_responses "
+                "and no parse_results. This metric requires LLM raw output to "
+                "measure parse success rate. If your data only contains final "
+                "graph structures (vertices/edges) without raw LLM responses, "
+                "skip syntax_validity and use entity_f1 / triple_f1 / "
+                "schema_validity instead."
+            )
+
         if not isinstance(parse_results, list):
             parse_results = []
 

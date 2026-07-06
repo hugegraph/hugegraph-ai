@@ -76,9 +76,22 @@ def download_dataset(dataset: str, data_root: Path, force: bool = False) -> None
         else:
             raise DatasetDownloadError(f"Unsupported download kind {file_spec.kind!r} for {spec.name}")
 
-    if spec.postprocess == "hotpotqa_corpus":
-        _derive_hotpotqa_corpus(
-            data_root / "hotpotqa" / "hotpotqa.json", data_root / "hotpotqa" / "hotpotqa_corpus.json"
+    if spec.postprocess == "hotpotqa":
+        _postprocess_hotpotqa_like(
+            data_root / "hotpotqa" / "hotpotqa_dev_distractor.parquet",
+            data_root / "hotpotqa" / "hotpotqa.json",
+            data_root / "hotpotqa" / "hotpotqa_corpus.json",
+        )
+    elif spec.postprocess == "2wikimultihopqa":
+        _postprocess_hotpotqa_like(
+            data_root / "2wikimultihopqa" / "2wikimultihopqa_dev.parquet",
+            data_root / "2wikimultihopqa" / "2wikimultihopqa.json",
+            data_root / "2wikimultihopqa" / "2wikimultihopqa_corpus.json",
+        )
+    elif spec.postprocess == "musique":
+        _postprocess_musique(
+            data_root / "musique" / "musique_ans_v1.0_dev.jsonl",
+            data_root / "musique" / "musique.json",
         )
 
 
@@ -150,38 +163,113 @@ def _stripped_zip_path(member_name: str, strip_components: int) -> Path | None:
     return Path(*parts)
 
 
-def _derive_hotpotqa_corpus(qa_file: Path, corpus_file: Path) -> None:
-    if corpus_file.exists():
-        logger.info("Derived corpus already exists: %s", corpus_file)
+def _postprocess_hotpotqa_like(
+    parquet_file: Path, qa_file: Path, corpus_file: Path
+) -> None:
+    """Convert a HotpotQA/2Wiki HF parquet into the list-of-dicts JSON the converter expects.
+
+    The converter reads ``qa_file`` as a list of items shaped like the original
+    HotpotQA release: ``{context: [[title, [sentences]], ...],
+    supporting_facts: [[title, sent_id], ...], _id, question, answer}``.
+    The HF parquet stores ``context``/``supporting_facts`` as struct-of-arrays,
+    so we expand them back. ``corpus_file`` is derived as ``[{title, text}]``.
+    """
+    if qa_file.exists() and corpus_file.exists():
+        logger.info("Derived HotpotQA-like files already exist: %s, %s", qa_file, corpus_file)
         return
     try:
-        with open(qa_file, "r", encoding="utf-8") as f:
-            qa_items = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        raise DatasetDownloadError(f"Failed to read HotpotQA file {qa_file}: {e}") from e
-    if not isinstance(qa_items, list):
-        raise DatasetDownloadError(f"Expected {qa_file} to contain a JSON list")
+        import pandas as pd
+    except ImportError as e:
+        raise DatasetDownloadError("pandas is required to parse downloaded parquet files") from e
 
+    try:
+        df = pd.read_parquet(parquet_file)
+    except Exception as e:
+        raise DatasetDownloadError(f"Failed to read parquet {parquet_file}: {e}") from e
+
+    qa_items = []
     title_to_text = {}
-    for item in qa_items:
-        if not isinstance(item, dict):
-            continue
-        for context_item in item.get("context", []):
-            if not isinstance(context_item, list) or len(context_item) != 2:
-                continue
-            title, sentences = context_item
-            text = " ".join(sentences) if isinstance(sentences, list) else str(sentences)
+    for _, row in df.iterrows():
+        ctx = row["context"]
+        # Some mirrors (2Wiki) store context/supporting_facts as JSON *strings*.
+        if isinstance(ctx, str):
+            try:
+                ctx = json.loads(ctx)
+            except json.JSONDecodeError:
+                ctx = []
+        # context struct: {"title": [str], "sentences": [[str]]} (HF) or list-of-lists (legacy)
+        if isinstance(ctx, dict):
+            titles = list(ctx.get("title", []))
+            sentences = list(ctx.get("sentences", []))
+            context_list = [
+                [str(t), list(s) if hasattr(s, "__iter__") else [str(s)]]
+                for t, s in zip(titles, sentences)
+            ]
+        else:
+            context_list = [list(c) for c in ctx]
+
+        sf = row["supporting_facts"]
+        if isinstance(sf, str):
+            try:
+                sf = json.loads(sf)
+            except json.JSONDecodeError:
+                sf = []
+        if isinstance(sf, dict):
+            sf_titles = list(sf.get("title", []))
+            sf_ids = list(sf.get("sent_id", sf.get("sentence_ids", [])))
+            supporting = [[str(t), int(i)] for t, i in zip(sf_titles, sf_ids)]
+        else:
+            supporting = [list(x) for x in sf]
+
+        item = {
+            "_id": str(row.get("id", row.get("_id", ""))),
+            "question": str(row.get("question", "")),
+            "answer": str(row.get("answer", "")),
+            "context": context_list,
+            "supporting_facts": supporting,
+        }
+        qa_items.append(item)
+        for title, sents in context_list:
+            text = " ".join(sents) if isinstance(sents, list) else str(sents)
             title_to_text.setdefault(str(title), text)
 
-    corpus_file.parent.mkdir(parents=True, exist_ok=True)
+    qa_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(qa_file, "w", encoding="utf-8") as f:
+        json.dump(qa_items, f, ensure_ascii=False)
     with open(corpus_file, "w", encoding="utf-8") as f:
         json.dump(
-            [{"title": title, "text": text} for title, text in sorted(title_to_text.items())],
+            [{"title": t, "text": txt} for t, txt in sorted(title_to_text.items())],
             f,
             indent=2,
             ensure_ascii=False,
         )
-    logger.info("Derived HotpotQA corpus: %s", corpus_file)
+    logger.info("Derived %s (%d items) and %s", qa_file, len(qa_items), corpus_file)
+
+
+def _postprocess_musique(jsonl_file: Path, qa_file: Path) -> None:
+    """Convert MuSiQue dev jsonl into the list-of-dicts JSON the converter expects.
+
+    The converter reads ``qa_file`` as a list of items with ``paragraphs`` (each
+    carrying ``title``/``paragraph_text``/``is_supporting``), ``id``, ``question``,
+    ``answer``. The HF jsonl already matches this shape, so we just rewrap it.
+    """
+    if qa_file.exists():
+        logger.info("Derived MuSiQue file already exists: %s", qa_file)
+        return
+    items = []
+    try:
+        with open(jsonl_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    items.append(json.loads(line))
+    except (OSError, json.JSONDecodeError) as e:
+        raise DatasetDownloadError(f"Failed to read MuSiQue jsonl {jsonl_file}: {e}") from e
+
+    qa_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(qa_file, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False)
+    logger.info("Derived %s (%d items)", qa_file, len(items))
 
 
 def _format_missing_files(spec: DatasetSpec, data_root: Path, missing: Iterable[str]) -> str:
