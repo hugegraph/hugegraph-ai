@@ -14,6 +14,7 @@
 from unittest.mock import Mock
 
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
+from hugegraph_mcp import gremlin_tools
 from hugegraph_mcp.tools import generate_gremlin as generate_gremlin_module
 
 
@@ -27,6 +28,11 @@ def _ai_ok(gremlin: str, **extra) -> dict:
     }
     data.update(extra)
     return envelope_ok(data)
+
+
+class FakeGremlinClient:
+    def exec(self, query: str):
+        return {"data": [{"query": query}], "meta": {}}
 
 
 def test_generate_gremlin_default_no_execute(monkeypatch):
@@ -108,7 +114,7 @@ def test_generate_gremlin_safe_execute(monkeypatch):
     assert result["data"]["executed"] is True
     assert result["data"]["execution_result"] == execution_data
     assert result["data"]["execution_meta"] == execution_result["meta"]
-    execute_read.assert_called_once_with("g.V().limit(2)")
+    execute_read.assert_called_once_with("g.V().limit(2)", limit_policy="warn")
 
 
 def test_generate_gremlin_unwraps_execution_envelope(monkeypatch):
@@ -126,6 +132,59 @@ def test_generate_gremlin_unwraps_execution_envelope(monkeypatch):
     assert result["ok"] is True
     assert result["data"]["executed"] is True
     assert "ok" not in result["data"]["execution_result"]
+
+
+def test_generate_gremlin_passes_limit_policy(monkeypatch):
+    post = Mock(return_value=_ai_ok("g.V()"))
+    execution_result = envelope_err(
+        ErrorType.VALIDATION_ERROR,
+        "unbounded",
+    )
+    execute_read = Mock(return_value=execution_result)
+    monkeypatch.setattr(generate_gremlin_module, "post", post)
+    monkeypatch.setattr(generate_gremlin_module, "execute_gremlin_read", execute_read)
+
+    result = generate_gremlin_module.generate_gremlin(
+        "show vertices",
+        execute=True,
+        limit_policy="reject_unbounded",
+    )
+
+    assert result["ok"] is False
+    execute_read.assert_called_once_with("g.V()", limit_policy="reject_unbounded")
+
+
+def test_generate_gremlin_reject_unbounded_limit_policy(monkeypatch):
+    post = Mock(return_value=_ai_ok("g.V()"))
+    monkeypatch.setattr(generate_gremlin_module, "post", post)
+
+    result = generate_gremlin_module.generate_gremlin(
+        "show vertices",
+        execute=True,
+        limit_policy="reject_unbounded",
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "VALIDATION_ERROR"
+    assert "unbounded" in result["error"]["message"]
+
+
+def test_generate_gremlin_auto_append_limit_policy(monkeypatch):
+    post = Mock(return_value=_ai_ok("g.V()"))
+    monkeypatch.setattr(generate_gremlin_module, "post", post)
+    monkeypatch.setattr(gremlin_tools, "_get_read_client", lambda: FakeGremlinClient())
+
+    result = generate_gremlin_module.generate_gremlin(
+        "show vertices",
+        execute=True,
+        limit_policy="auto_append",
+    )
+
+    assert result["ok"] is True
+    execution = result["data"]["execution_result"]
+    assert execution["original_gremlin"] == "g.V()"
+    assert execution["executed_gremlin"] == "g.V().limit(100)"
+    assert execution["rewrite_reason"]
 
 
 def test_generate_gremlin_propagates_execute_failure(monkeypatch):

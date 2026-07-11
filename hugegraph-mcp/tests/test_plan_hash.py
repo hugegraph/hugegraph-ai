@@ -220,6 +220,8 @@ def test_verify_plan_hash_rejects_mismatched_hash(monkeypatch):
 
     assert valid is False
     assert error_type == ErrorType.PLAN_HASH_MISMATCH
+    assert "expected_hash" not in details
+    assert details["provided_hash"] == "wrong_hash"
 
 
 def test_verify_plan_hash_rejects_mismatched_tool_name(monkeypatch):

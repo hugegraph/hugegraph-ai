@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-HugeGraph MCP 是 HugeGraph 的 Model Context Protocol Server。V1 的定位是安全、可控的薄适配层：对外暴露少量稳定工具，内部统一处理配置、权限、只读 Gremlin 校验、dry-run/confirm 写入安全链和统一响应格式。
+HugeGraph MCP 是 HugeGraph 的 Model Context Protocol Server。它的定位是安全、可控的薄适配层：对外暴露少量稳定工具，内部统一处理配置、权限、只读 Gremlin 校验、dry-run/confirm 写入安全链和统一响应格式。
 
 **要求 HugeGraph Server >= 1.7.0**（MCP 默认使用 `graphspace=DEFAULT` 并依赖 graphspace 路由 API，旧版本不支持）。
 
@@ -10,7 +10,7 @@ HugeGraph MCP 是 HugeGraph 的 Model Context Protocol Server。V1 的定位是�
 
 ### 设计边界
 
-V1 不把 MCP 做成另一套业务内核。MCP 层负责：
+HugeGraph MCP 不把 MCP 做成另一套业务内核。MCP 层负责：
 
 - 暴露稳定 MCP 工具接口
 - 读取运行时配置
@@ -24,26 +24,43 @@ V1 不把 MCP 做成另一套业务内核。MCP 层负责：
 
 ### 对外工具面
 
-V1 对用户暴露稳定工具：
+默认 `v2_core` 工具集注册 13 个 MCP 工具：其中 11 个是普通用户稳定工具，另外 2 个是管理/调试工具，默认注册但受 admin mode 阻断。
+
+普通用户稳定工具包括：
 
 - `inspect_graph_tool`
+- `inspect_schema_tool`
+- `query_graph_data_tool`
 - `generate_gremlin_tool`
 - `execute_gremlin_read_tool`
 - `extract_graph_data_tool`
-- `import_graph_data_tool`
-- `delete_graph_data_tool`
 - `design_schema_tool`
 - `apply_schema_tool`
+- `mutate_graph_properties_tool`
+- `import_graph_data_tool`
+- `delete_graph_data_tool`
 
 以下工具仍注册在 MCP 中，但属于管理/调试能力，默认受 `HUGEGRAPH_MCP_ADMIN_MODE=false` 阻断。具备写入能力的管理工具还要求 `HUGEGRAPH_MCP_READONLY=false`：
 
 - `execute_gremlin_write_tool`
 - `refresh_vid_embeddings_tool`
 
+### 工具集选择
+
+`HUGEGRAPH_MCP_TOOLSET` 控制对外工具契约：
+
+| 取值 | 工具数 | 用途 |
+|------|------:|------|
+| `v1` | 10 | 兼容旧客户端；只暴露原有稳定工具和管理/调试工具，隐藏三个 `v2_core` 新工具，并保持 `apply_schema_tool(mode="apply")` 禁用 |
+| `v2_core` | 13 | 新部署默认值；在 V1 工具基础上增加 `inspect_schema_tool`、`query_graph_data_tool`、`mutate_graph_properties_tool`，并启用 P0a 范围内的 schema create apply 路径 |
+
+未设置 `HUGEGRAPH_MCP_TOOLSET` 时，服务默认使用 `v2_core`。除精确的 `v1` 之外，其他取值都会按 `v2_core` 处理。
+工具集选择在 MCP server 启动并注册工具时生效；修改该变量后需要重启 MCP server。
+
 
 ### 统一响应格式
 
-V1 高层工具返回统一 envelope：
+高层工具返回统一 envelope：
 
 ```json
 {
@@ -82,14 +99,17 @@ V1 高层工具返回统一 envelope：
 
 | 工具 | 说明 |
 |------|------|
-| `inspect_graph_tool` | 查看 HugeGraph Server 状态、schema 摘要、点边计数、readonly 状态和 AI 可用性 |
+| `inspect_graph_tool` | 查看 HugeGraph Server 状态、schema 摘要、点边计数、readonly 状态、AI 可用性和当前 MCP 工具契约字段 |
+| `inspect_schema_tool` | 查看 schema 对象、关系和索引标签；支持按 property key、vertex label、edge label 或 index label 过滤 |
+| `query_graph_data_tool` | 通过类型化操作查询点或边（`get_by_id`、`get_by_ids`、`page`、`condition`），有显式 limit，不自动降级为 Gremlin 全图扫描 |
 | `generate_gremlin_tool` | 根据自然语言生成 Gremlin；默认只生成，不执行；`execute=true` 时也必须通过只读校验 |
-| `execute_gremlin_read_tool` | 执行只读 Gremlin 查询；无法确认安全时拒绝执行 |
+| `execute_gremlin_read_tool` | 执行只读 Gremlin 查询；无法确认安全时拒绝执行，并支持 `limit_policy` 处理无界读取 |
 | `extract_graph_data_tool` | 从自然语言文本抽取候选图数据，返回点和边结构，不写入 HugeGraph |
 | `import_graph_data_tool` | 结构化图数据导入入口；真实写入必须经过 `dry_run -> plan_hash -> confirm` |
 | `delete_graph_data_tool` | 受控删除入口；只支持精确删除点或边，不支持条件批量删除和级联删除 |
 | `design_schema_tool` | 根据 schema 操作草案给出设计建议，不修改数据库 |
-| `apply_schema_tool` | V1 只支持 schema `validate` 和 `dry_run`；真实 `apply` 当前禁用 |
+| `apply_schema_tool` | 校验和 dry-run schema 操作；`v2_core` 中确认后的 `apply` 只支持 `create_property_key`、`create_vertex_label`、`create_edge_label`；`v1` 中真实 `apply` 仍禁用 |
+| `mutate_graph_properties_tool` | 对单个精确点或边追加/淘汰属性；两种操作都必须经过 `dry_run -> plan_hash -> confirm`，目标变更时拒绝执行 |
 | `execute_gremlin_write_tool` | 直接执行 Gremlin 写语句；默认禁用，仅 `HUGEGRAPH_MCP_ADMIN_MODE=true` 且 `HUGEGRAPH_MCP_READONLY=false` 时可用 |
 | `refresh_vid_embeddings_tool` | 刷新 VID embeddings，会改变索引状态；默认禁用，仅 `HUGEGRAPH_MCP_ADMIN_MODE=true` 且 `HUGEGRAPH_MCP_READONLY=false` 时可用 |
 
@@ -117,7 +137,7 @@ dry_run=true
 - graph url
 - graph name
 - graph space
-- readonly/admin 等权限状态
+- MCP readonly 状态
 - 当前 schema hash
 - normalized payload digest
 - nonce
@@ -178,6 +198,7 @@ scalar 端点是 same-payload import 的便捷写法，但在单主键 live sche
 | `HUGEGRAPH_GRAPH` | 未设置 | 单独覆盖 graph name |
 | `HUGEGRAPH_USER` | `admin` | HugeGraph 用户名 |
 | `HUGEGRAPH_PASSWORD` | `""` | HugeGraph 密码 |
+| `HUGEGRAPH_MCP_TOOLSET` | `v2_core` | 对外工具契约：`v1` 为 10 工具兼容模式，`v2_core` 为 13 工具默认模式 |
 | `HUGEGRAPH_MCP_READONLY` | `true` | 是否启用只读模式 |
 | `HUGEGRAPH_MCP_ALLOW_AI` | `false` | 是否允许调用 HugeGraph-AI |
 | `HUGEGRAPH_MCP_ADMIN_MODE` | `false` | 是否启用管理/调试工具 |

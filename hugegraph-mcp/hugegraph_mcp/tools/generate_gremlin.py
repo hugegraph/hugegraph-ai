@@ -29,10 +29,12 @@ def generate_gremlin(
     query: str,
     execute: bool = False,
     output_types: list[str] | None = None,
+    limit_policy: str = "warn",
 ) -> dict[str, Any]:
     """将自然语言转为 Gremlin — 默认只生成不执行。
 
     execute=True 时通过 GremlinPolicy 检查安全性：只有 safe 的查询才会执行。
+    limit_policy 透传给 execute_gremlin_read，默认 warn 保持兼容。
     """
 
     payload: dict[str, Any] = {"query": query}
@@ -96,7 +98,7 @@ def generate_gremlin(
         )
 
     data["executed"] = True
-    execution_result = execute_gremlin_read(gremlin)
+    execution_result = execute_gremlin_read(gremlin, limit_policy=limit_policy)
     if isinstance(execution_result, dict) and execution_result.get("ok") is False:
         data["execution_result"] = execution_result
         error = execution_result.get("error") or {}

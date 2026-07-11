@@ -16,6 +16,18 @@
 from unittest.mock import Mock, patch
 
 import requests
+from hugegraph_mcp.confirmable_workflow import (
+    confirm_required_error,
+    mark_readonly_preview,
+    plan_hash_error,
+)
+from hugegraph_mcp.envelope import (
+    REDACTED_VALUE,
+    ErrorType,
+    envelope_err,
+    sanitize_for_response,
+)
+from hugegraph_mcp.error_mapping import classify_hugegraph_error_message
 from hugegraph_mcp.gremlin_tools import execute_gremlin_read, execute_gremlin_write
 
 
@@ -248,6 +260,180 @@ def test_no_index_exception_is_classified_as_no_index():
         assert result["error"]["details"]["error_type"] == "no_index_error"
         assert "Create an index" in result["error"]["suggestion"]
         assert result["error"]["retryable"] is False
+
+
+def test_hugegraph_error_mapping_recognizes_no_index_message_variants():
+    messages = [
+        "NoIndexException: no index",
+        "The property key 'name' is not indexed",
+        "may not match secondary condition without index",
+    ]
+
+    for message in messages:
+        classification = classify_hugegraph_error_message(message)
+        assert classification.error_type == "NO_INDEX"
+        assert classification.retryable is False
+        assert classification.reason == "no_index"
+
+
+def test_hugegraph_error_mapping_recognizes_schema_missing_messages():
+    messages = [
+        "Property key does not exist: age",
+        "Edge label does not exist: knows",
+    ]
+
+    for message in messages:
+        classification = classify_hugegraph_error_message(message)
+        assert classification.error_type == "SCHEMA_MISMATCH"
+        assert classification.retryable is False
+        assert classification.reason == "schema_missing"
+        assert "live schema" in classification.suggestion
+        assert "label" in classification.suggestion
+        assert "property key" in classification.suggestion
+
+
+def test_hugegraph_error_mapping_recognizes_not_found_message_variants():
+    messages = [
+        "404 Not Found",
+        "Vertex does not exist: 1",
+        "edge not found",
+    ]
+
+    for message in messages:
+        classification = classify_hugegraph_error_message(message)
+        assert classification.error_type == "NOT_FOUND"
+        assert classification.retryable is False
+        assert classification.reason == "not_found"
+
+
+def test_hugegraph_error_mapping_keeps_no_index_before_schema_missing():
+    messages = [
+        "NoIndexException: property key does not exist: age",
+        "The property key 'age' is not indexed",
+    ]
+
+    for message in messages:
+        classification = classify_hugegraph_error_message(message)
+        assert classification.error_type == "NO_INDEX"
+        assert classification.retryable is False
+        assert classification.reason == "no_index"
+
+
+def test_confirmable_workflow_helpers_preserve_standard_envelopes():
+    payload, warnings, next_actions = mark_readonly_preview(
+        {"confirmable": True},
+        warning="readonly warning",
+        next_action="rerun dry_run",
+    )
+    assert payload["confirmable"] is False
+    assert payload["readonly_preview_only"] is True
+    assert warnings == ["readonly warning"]
+    assert next_actions == ["rerun dry_run"]
+
+    confirm_error = confirm_required_error(
+        message="confirm required",
+        suggestion="run dry_run",
+        source="test_tool",
+    )
+    assert confirm_error["error"]["type"] == "CONFIRM_REQUIRED"
+    assert confirm_error["error"]["source"] == "test_tool"
+
+    expired_error = plan_hash_error(
+        error_type=ErrorType.PLAN_EXPIRED,
+        details={"reason": "expired"},
+        mismatch_message="mismatch",
+        expired_message="expired",
+        suggestion="rerun",
+    )
+    assert expired_error["error"]["type"] == "PLAN_EXPIRED"
+    assert expired_error["error"]["message"] == "expired"
+
+
+def test_error_envelope_redacts_sensitive_values():
+    result = envelope_err(
+        ErrorType.SERVER_ERROR,
+        "failed password=secret token=abc http://user:pass@example.com/path",
+        suggestion="Check Authorization header",
+        details={
+            "password": "secret",
+            "nested": {"access_token": "abc"},
+            "url": "http://user:pass@example.com/path?token=abc",
+        },
+    )
+
+    rendered = str(result)
+    assert "secret" not in rendered
+    assert "token=abc" not in rendered
+    assert "user:pass@" not in rendered
+    assert result["error"]["details"]["password"] == "***REDACTED***"
+    assert result["error"]["details"]["nested"]["access_token"] == "***REDACTED***"
+
+
+def test_sanitize_redacts_http_header_format():
+    message = "Authorization: Bearer abc123token"
+
+    redacted = sanitize_for_response(message)
+
+    assert "abc123token" not in redacted
+    assert redacted == f"Authorization: {REDACTED_VALUE}"
+
+
+def test_sanitize_redacts_python_dict_repr_format():
+    message = "{'Authorization': 'Bearer abc123', 'token': 'xyz'}"
+
+    redacted = sanitize_for_response(message)
+
+    assert "abc123" not in redacted
+    assert "xyz" not in redacted
+    assert redacted == (
+        "{'Authorization': '***REDACTED***', 'token': '***REDACTED***'}"
+    )
+
+
+def test_sanitize_redacts_bare_text_format():
+    message = "request failed, token abc123 rejected"
+
+    redacted = sanitize_for_response(message)
+
+    assert "abc123" not in redacted
+    assert "request failed" in redacted
+    assert "rejected" in redacted
+    assert redacted == f"request failed, token {REDACTED_VALUE} rejected"
+
+
+def test_sanitize_preserves_existing_quoted_json_format():
+    message = '{"api_key": "sk-xxx"}'
+
+    redacted = sanitize_for_response(message)
+
+    assert "sk-xxx" not in redacted
+    assert redacted == '{"api_key": "***REDACTED***"}'
+
+
+def test_sanitize_preserves_existing_query_string_format():
+    message = "token=abc123&other=1"
+
+    redacted = sanitize_for_response(message)
+
+    assert "abc123" not in redacted
+    assert redacted == f"token={REDACTED_VALUE}&other=1"
+
+
+def test_sanitize_does_not_redact_unrelated_text():
+    message = "vertex label already exists: person"
+
+    redacted = sanitize_for_response(message)
+
+    assert redacted == message
+
+
+def test_sanitize_bare_text_does_not_over_match_short_values():
+    message = "the token is invalid"
+
+    redacted = sanitize_for_response(message)
+
+    assert redacted == message
+    assert "token is invalid" in redacted
 
 
 def test_successful_execution_preserves_format():

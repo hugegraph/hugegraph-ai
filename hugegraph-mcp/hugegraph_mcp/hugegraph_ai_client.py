@@ -38,7 +38,7 @@ def request(
     """调用 HugeGraph-AI 并返回标准化信封。
 
     allow_ai=False 时直接拒绝，连接超时/HTTP 错误/JSON 解析失败均返回
-    HUGEGRAPH_AI_UNAVAILABLE 信封，不抛异常。
+    结构化错误信封，不抛异常。
     """
 
     start = time.perf_counter()
@@ -47,10 +47,16 @@ def request(
     url = _build_url(cfg.ai_url, path)
 
     if not cfg.allow_ai:
-        return _ai_error(
-            "AI calls are disabled",
+        return envelope_err(
+            ErrorType.FEATURE_DISABLED,
+            "AI calls are disabled by configuration",
+            suggestion=(
+                "Set HUGEGRAPH_MCP_ALLOW_AI=true and restart the MCP server, "
+                "or use tools that do not require HugeGraph-AI."
+            ),
+            retryable=False,
             duration_ms=_duration_ms(start),
-            details={"method": method, "url": url},
+            details={"method": method, "url": url, "reason": "allow_ai_false"},
         )
 
     try:

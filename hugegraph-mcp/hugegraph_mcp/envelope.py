@@ -17,10 +17,24 @@
 前端/Agent 无需猜测返回形状，始终可安全解析。"""
 
 from enum import Enum
+import json
+import re
 from typing import Any
 from uuid import uuid4
 
 from hugegraph_mcp.config import MCPConfig
+
+
+REDACTED_VALUE = "***REDACTED***"
+SENSITIVE_KEY_PARTS = (
+    "api_key",
+    "authorization",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+)
 
 
 class ErrorType(str, Enum):
@@ -34,6 +48,8 @@ class ErrorType(str, Enum):
     CONFIRM_REQUIRED = "CONFIRM_REQUIRED"
     PLAN_HASH_MISMATCH = "PLAN_HASH_MISMATCH"
     PLAN_EXPIRED = "PLAN_EXPIRED"
+    TARGET_CHANGED = "TARGET_CHANGED"
+    PARTIAL_APPLY = "PARTIAL_APPLY"
     NOT_FOUND = "NOT_FOUND"
     NO_INDEX = "NO_INDEX"
     UNSAFE_GREMLIN = "UNSAFE_GREMLIN"
@@ -51,6 +67,79 @@ class ErrorType(str, Enum):
 
 def generate_request_id() -> str:
     return f"req-{uuid4().hex[:12]}"
+
+
+def sanitize_for_response(value: Any) -> Any:
+    """Redact common secret shapes before returning MCP envelopes."""
+
+    if isinstance(value, dict):
+        return {
+            key: REDACTED_VALUE
+            if _is_sensitive_key(key)
+            else sanitize_for_response(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [sanitize_for_response(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(sanitize_for_response(item) for item in value)
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    if isinstance(value, str):
+        return _sanitize_text(value)
+    return value
+
+
+def _is_sensitive_key(key: Any) -> bool:
+    key_lower = str(key).lower()
+    return any(part in key_lower for part in SENSITIVE_KEY_PARTS)
+
+
+def _sanitize_text(value: str) -> str:
+    if not _may_contain_sensitive_marker(value):
+        return _redact_url_userinfo(value)
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        redacted = re.sub(
+            r'(?i)("?[a-z0-9_-]*(?:api_key|authorization|password|passwd|pwd|secret|token)[a-z0-9_-]*"?\s*[:=]\s*)"[^"]*"',
+            rf"\1\"{REDACTED_VALUE}\"",
+            value,
+        )
+        redacted = re.sub(
+            r"(?i)(api_key|authorization|password|passwd|pwd|secret|token)=([^&\s]+)",
+            rf"\1={REDACTED_VALUE}",
+            redacted,
+        )
+        redacted = re.sub(
+            r"(?i)((?:api_key|authorization|password|passwd|pwd|secret|token)\s*:\s*)"
+            r"([^,\"'\n]+)",
+            rf"\1{REDACTED_VALUE}",
+            redacted,
+        )
+        redacted = re.sub(
+            r"(?i)('[a-z0-9_-]*(?:api_key|authorization|password|passwd|pwd|secret|token)"
+            r"[a-z0-9_-]*'\s*:\s*)'[^']*'",
+            rf"\1'{REDACTED_VALUE}'",
+            redacted,
+        )
+        redacted = re.sub(
+            r"(?i)\b(api_key|authorization|password|passwd|pwd|secret|token)"
+            r"(\s*[:=]?\s+)([a-z0-9_.\-]{4,})\b",
+            rf"\1\2{REDACTED_VALUE}",
+            redacted,
+        )
+        return _redact_url_userinfo(redacted)
+    return json.dumps(sanitize_for_response(parsed), ensure_ascii=False)
+
+
+def _may_contain_sensitive_marker(value: str) -> bool:
+    lowered = value.lower()
+    return any(part in lowered for part in SENSITIVE_KEY_PARTS) or "://" in lowered
+
+
+def _redact_url_userinfo(value: str) -> str:
+    return re.sub(r"(https?://)([^/@\s]+)@", rf"\1{REDACTED_VALUE}@", value)
 
 
 def build_meta(
@@ -136,11 +225,11 @@ def envelope_err(
     )
     error: dict[str, Any] = {
         "type": error_value,
-        "message": message,
-        "suggestion": suggestion,
+        "message": sanitize_for_response(message),
+        "suggestion": sanitize_for_response(suggestion),
         "retryable": retryable,
         "source": source,
-        "details": details if details is not None else {},
+        "details": sanitize_for_response(details) if details is not None else {},
     }
 
     envelope_meta = build_meta(

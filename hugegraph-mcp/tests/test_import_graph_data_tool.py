@@ -172,4 +172,11 @@ def test_import_graph_data_tool_table_returns_feature_disabled():
     assert result["ok"] is False
     assert result["error"]["type"] == "FEATURE_DISABLED"
     assert result["error"]["source"] == "import_graph_data_tool"
+    assert (
+        result["error"]["message"]
+        == "Table import is not supported by the current MCP contract."
+    )
+    assert "import_graph_data_tool(mode='extract')" in result["error"]["suggestion"]
+    assert "import_graph_data_tool(mode='ingest')" in result["error"]["suggestion"]
+    assert "V1" not in result["error"]["message"]
     assert "duration_ms" in result["meta"]

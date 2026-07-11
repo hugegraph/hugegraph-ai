@@ -74,7 +74,7 @@ def test_envelope_err_defaults():
 
 
 def test_envelope_err_all_error_types():
-    assert len(ErrorType) == 21
+    assert len(ErrorType) == 23
     assert ErrorType.VALIDATION_ERROR.value == "VALIDATION_ERROR"
     assert ErrorType.PLAN_EXPIRED.value == "PLAN_EXPIRED"
     assert ErrorType.NOT_FOUND.value == "NOT_FOUND"

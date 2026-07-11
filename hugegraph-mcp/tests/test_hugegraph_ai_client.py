@@ -172,8 +172,11 @@ def test_request_allow_ai_disabled(monkeypatch):
     result = request("GET", "/health", cfg=_cfg(allow_ai=False))
 
     assert result["ok"] is False
-    assert result["error"]["type"] == "HUGEGRAPH_AI_UNAVAILABLE"
-    assert result["error"]["message"] == "AI calls are disabled"
+    assert result["error"]["type"] == "FEATURE_DISABLED"
+    assert result["error"]["message"] == "AI calls are disabled by configuration"
+    assert "HUGEGRAPH_MCP_ALLOW_AI=true" in result["error"]["suggestion"]
+    assert result["error"]["retryable"] is False
+    assert result["error"]["details"]["reason"] == "allow_ai_false"
     http_request.assert_not_called()
 
 

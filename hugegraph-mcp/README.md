@@ -2,7 +2,7 @@
 
 [中文文档](README.zh-CN.md)
 
-HugeGraph MCP is a Model Context Protocol server for HugeGraph. V1 is designed as a safe, controlled, thin adapter layer: it exposes a small set of stable tools and centralizes configuration, permission checks, read-only Gremlin validation, the dry-run/confirm write safety chain, and the unified response envelope.
+HugeGraph MCP is a Model Context Protocol server for HugeGraph. It is designed as a safe, controlled, thin adapter layer: it exposes a small set of stable tools and centralizes configuration, permission checks, read-only Gremlin validation, the dry-run/confirm write safety chain, and the unified response envelope.
 
 **Requires HugeGraph Server >= 1.7.0** (MCP defaults to `graphspace=DEFAULT` and relies on graphspace-scoped API routes that are not available in older versions).
 
@@ -10,7 +10,7 @@ HugeGraph MCP is a Model Context Protocol server for HugeGraph. V1 is designed a
 
 ### Design Boundary
 
-V1 does not turn MCP into a second business kernel. The MCP layer is responsible for:
+HugeGraph MCP does not turn MCP into a second business kernel. The MCP layer is responsible for:
 
 - Exposing stable MCP tool interfaces
 - Reading runtime configuration
@@ -22,25 +22,42 @@ V1 does not turn MCP into a second business kernel. The MCP layer is responsible
 
 ### Public Tool Surface
 
-V1 exposes these stable tools to users:
+The default `v2_core` toolset registers 13 MCP tools: 11 normal user-facing stable tools plus 2 admin/debug tools that are registered but blocked by default.
+
+The normal user-facing stable tools are:
 
 - `inspect_graph_tool`
+- `inspect_schema_tool`
+- `query_graph_data_tool`
 - `generate_gremlin_tool`
 - `execute_gremlin_read_tool`
 - `extract_graph_data_tool`
-- `import_graph_data_tool`
-- `delete_graph_data_tool`
 - `design_schema_tool`
 - `apply_schema_tool`
+- `mutate_graph_properties_tool`
+- `import_graph_data_tool`
+- `delete_graph_data_tool`
 
 These tools are still registered in MCP, but they are admin/debug capabilities and are blocked by default when `HUGEGRAPH_MCP_ADMIN_MODE=false`. Write-capable admin tools also require `HUGEGRAPH_MCP_READONLY=false`:
 
 - `execute_gremlin_write_tool`
 - `refresh_vid_embeddings_tool`
 
+### Toolset Selection
+
+`HUGEGRAPH_MCP_TOOLSET` controls the public tool contract:
+
+| Value | Tools | Intended use |
+|-------|------:|--------------|
+| `v1` | 10 | Compatibility mode for old clients; exposes the original stable tools and admin/debug tools, hides the three `v2_core` tools, and keeps `apply_schema_tool(mode="apply")` disabled |
+| `v2_core` | 13 | New deployment default; exposes the V1 tools plus `inspect_schema_tool`, `query_graph_data_tool`, and `mutate_graph_properties_tool`, and enables the P0a schema create apply path |
+
+When `HUGEGRAPH_MCP_TOOLSET` is unset, the server defaults to `v2_core`. Any value other than exact `v1` is treated as `v2_core`.
+Toolset selection is applied when the MCP server starts and registers tools; restart the MCP server after changing this variable.
+
 ### Unified Response Envelope
 
-V1 high-level tools return a unified envelope:
+High-level tools return a unified envelope:
 
 ```json
 {
@@ -78,14 +95,17 @@ When a call fails, `ok=false` and `error` uses this structure:
 
 | Tool | Description |
 |------|-------------|
-| `inspect_graph_tool` | Inspect HugeGraph Server status, schema summary, vertex/edge counts, readonly state, and AI availability |
+| `inspect_graph_tool` | Inspect HugeGraph Server status, schema summary, vertex/edge counts, readonly state, AI availability, and current MCP tool contract fields |
+| `inspect_schema_tool` | Inspect schema objects, relations, and index labels; supports filtering by property key, vertex label, edge label, or index label |
+| `query_graph_data_tool` | Query vertices or edges by typed operations (`get_by_id`, `get_by_ids`, `page`, `condition`) with explicit limits and no Gremlin full-scan fallback |
 | `generate_gremlin_tool` | Generate Gremlin from natural language; defaults to generation only; `execute=true` still requires read-only validation |
-| `execute_gremlin_read_tool` | Execute read-only Gremlin queries; rejects queries whose safety cannot be confirmed |
+| `execute_gremlin_read_tool` | Execute read-only Gremlin queries; rejects queries whose safety cannot be confirmed and supports `limit_policy` for unbounded reads |
 | `extract_graph_data_tool` | Extract candidate graph data from natural language text and return vertex/edge structures without writing to HugeGraph |
 | `import_graph_data_tool` | Structured graph data import entrypoint; real writes must pass `dry_run -> plan_hash -> confirm` |
 | `delete_graph_data_tool` | Controlled delete entrypoint; supports only exact vertex or edge deletion, not conditional bulk delete or cascade delete |
 | `design_schema_tool` | Provide schema design guidance from proposed schema operations without modifying the database |
-| `apply_schema_tool` | V1 supports only schema `validate` and `dry_run`; real `apply` is currently disabled |
+| `apply_schema_tool` | Validate and dry-run schema operations; in `v2_core`, confirmed `apply` supports only `create_property_key`, `create_vertex_label`, and `create_edge_label`; in `v1`, real `apply` remains disabled |
+| `mutate_graph_properties_tool` | Append or eliminate properties on one exact vertex or edge; both operations require `dry_run -> plan_hash -> confirm` and reject stale targets |
 | `execute_gremlin_write_tool` | Execute direct Gremlin writes; disabled by default and available only when `HUGEGRAPH_MCP_ADMIN_MODE=true` and `HUGEGRAPH_MCP_READONLY=false` |
 | `refresh_vid_embeddings_tool` | Refresh VID embeddings and mutate index state; disabled by default and available only when `HUGEGRAPH_MCP_ADMIN_MODE=true` and `HUGEGRAPH_MCP_READONLY=false` |
 
@@ -112,7 +132,7 @@ dry_run=true
 - Graph URL
 - Graph name
 - Graph space
-- Permission state such as readonly/admin flags
+- MCP readonly state
 - Current schema hash
 - Normalized payload digest
 - Nonce
@@ -175,6 +195,7 @@ All configuration is read from environment variables.
 | `HUGEGRAPH_GRAPH` | unset | Override graph name separately |
 | `HUGEGRAPH_USER` | `admin` | HugeGraph username |
 | `HUGEGRAPH_PASSWORD` | `""` | HugeGraph password |
+| `HUGEGRAPH_MCP_TOOLSET` | `v2_core` | Public tool contract: `v1` for 10-tool compatibility mode, `v2_core` for the 13-tool default |
 | `HUGEGRAPH_MCP_READONLY` | `true` | Whether readonly mode is enabled |
 | `HUGEGRAPH_MCP_ALLOW_AI` | `false` | Whether HugeGraph-AI calls are allowed |
 | `HUGEGRAPH_MCP_ADMIN_MODE` | `false` | Whether admin/debug tools are enabled |

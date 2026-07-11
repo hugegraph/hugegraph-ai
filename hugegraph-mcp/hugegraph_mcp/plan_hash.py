@@ -169,7 +169,6 @@ def verify_plan_hash(
             False,
             ErrorType.PLAN_HASH_MISMATCH,
             {
-                "expected_hash": expected_hash,
                 "provided_hash": submitted_hash,
                 "reason": "Plan context has changed since dry_run.",
             },

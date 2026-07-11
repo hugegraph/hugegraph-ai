@@ -61,6 +61,7 @@ _GREMLIN_ERROR_TYPE_MAP = {
     "not_found_error": ErrorType.NOT_FOUND,
     "unknown_error": ErrorType.SERVER_ERROR,
 }
+LIMIT_POLICIES = frozenset({"warn", "reject_unbounded", "auto_append"})
 
 
 def _get_read_client():
@@ -319,13 +320,28 @@ def _execute_gremlin_with_error_handling(
         }
 
 
-def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
+def execute_gremlin_read(
+    gremlin_query: str,
+    *,
+    limit_policy: str = "warn",
+) -> dict[str, Any]:
     """执行只读 Gremlin 查询。
 
     通过 GremlinPolicy.check_read() 做安全检查，
     拒绝写入类和无法确定的查询，只放行明确安全的遍历。
+    limit_policy:
+    - warn: 兼容默认，仅返回 unbounded warning。
+    - reject_unbounded: 安全但无界时拒绝执行。
+    - auto_append: 对简单无界遍历追加 .limit(100)，并返回原始/实际查询。
     返回 {data, total, duration_ms, is_read}。
     """
+    if limit_policy not in LIMIT_POLICIES:
+        return envelope_err(
+            ErrorType.VALIDATION_ERROR,
+            f"Unsupported limit_policy: {limit_policy!r}.",
+            suggestion="Use one of: warn, reject_unbounded, auto_append.",
+            details={"limit_policy": limit_policy},
+        )
 
     decision = check_gremlin_read(gremlin_query)
     if not decision.allowed:
@@ -335,6 +351,34 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
             suggestion=decision.suggestion,
             details={"classification": decision.classification},
         )
+
+    original_gremlin = gremlin_query
+    rewrite_reason = None
+    cost_warnings = gremlin_cost_warnings(gremlin_query)
+    unbounded = _has_unbounded_warning(cost_warnings)
+    if limit_policy == "reject_unbounded" and unbounded:
+        return envelope_err(
+            ErrorType.VALIDATION_ERROR,
+            "Gremlin read query is unbounded and limit_policy='reject_unbounded'.",
+            suggestion="Add .limit(n) or .range(start, end), or use limit_policy='warn'.",
+            details={"gremlin_query": gremlin_query, "warnings": cost_warnings},
+            warnings=cost_warnings,
+        )
+    if limit_policy == "auto_append" and unbounded:
+        rewritten = _auto_append_limit(gremlin_query)
+        if rewritten is None:
+            return envelope_err(
+                ErrorType.VALIDATION_ERROR,
+                "Cannot safely auto-append limit to this Gremlin query.",
+                suggestion=(
+                    "Add an explicit .limit(n) yourself, or use limit_policy='warn'."
+                ),
+                details={"gremlin_query": gremlin_query, "warnings": cost_warnings},
+                warnings=cost_warnings,
+            )
+        gremlin_query = rewritten
+        rewrite_reason = "limit_policy='auto_append' added .limit(100) to an unbounded read traversal."
+        cost_warnings = gremlin_cost_warnings(gremlin_query)
 
     result = _execute_gremlin_with_error_handling(
         _get_read_client, gremlin_query, "read"
@@ -348,12 +392,30 @@ def execute_gremlin_read(gremlin_query: str) -> dict[str, Any]:
                 "total": result["count"],
                 "duration_ms": duration_ms,
                 "is_read": True,
+                "limit_policy": limit_policy,
+                "original_gremlin": original_gremlin,
+                "executed_gremlin": gremlin_query,
+                "rewrite_reason": rewrite_reason,
             },
             duration_ms=duration_ms,
-            warnings=gremlin_cost_warnings(gremlin_query),
+            warnings=cost_warnings,
         )
     else:
         return _gremlin_error_envelope(result)
+
+
+def _has_unbounded_warning(warnings: list[str]) -> bool:
+    return any("Unbounded traversal" in warning for warning in warnings)
+
+
+def _auto_append_limit(gremlin_query: str) -> str | None:
+    stripped = gremlin_query.strip()
+    if not stripped.endswith(")"):
+        return None
+    lowered = stripped.lower()
+    if any(step in lowered for step in (".group(", ".path(", ".profile(", ".repeat(")):
+        return None
+    return f"{stripped}.limit(100)"
 
 
 def execute_gremlin_write(

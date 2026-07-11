@@ -22,6 +22,11 @@ from typing import Any
 
 from hugegraph_mcp import gremlin_tools, schema_tools
 from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.confirmable_workflow import (
+    confirm_required_error,
+    mark_readonly_preview,
+    plan_hash_error,
+)
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.plan_hash import (
@@ -189,16 +194,19 @@ def manage_graph_data(
         warnings = list(dry_run_result.get("warnings", []))
         next_actions: list[str] = []
         if MCPConfig.from_env().is_readonly():
-            dry_run_result["confirmable"] = False
-            dry_run_result["readonly_preview_only"] = True
-            warnings.append(
-                "This dry-run was generated while HUGEGRAPH_MCP_READONLY=true. "
-                "Its plan_hash is preview-only; set HUGEGRAPH_MCP_READONLY=false "
-                "and rerun dry_run before confirming writes."
+            dry_run_result, readonly_warnings, readonly_next_actions = (
+                mark_readonly_preview(
+                    dry_run_result,
+                    warning=(
+                        "This dry-run was generated while HUGEGRAPH_MCP_READONLY=true. "
+                        "Its plan_hash is preview-only; set HUGEGRAPH_MCP_READONLY=false "
+                        "and rerun dry_run before confirming writes."
+                    ),
+                    next_action="Set HUGEGRAPH_MCP_READONLY=false and rerun dry_run before confirm.",
+                )
             )
-            next_actions.append(
-                "Set HUGEGRAPH_MCP_READONLY=false and rerun dry_run before confirm."
-            )
+            warnings.extend(readonly_warnings)
+            next_actions.extend(readonly_next_actions)
         return envelope_ok(
             dry_run_result,
             warnings=warnings,
@@ -212,9 +220,8 @@ def manage_graph_data(
         return violation
 
     if not confirm:
-        return envelope_err(
-            ErrorType.CONFIRM_REQUIRED,
-            "Graph data changes require confirm=True after a dry_run.",
+        return confirm_required_error(
+            message="Graph data changes require confirm=True after a dry_run.",
             suggestion="Run dry_run=True, review preview and warnings, then pass confirm=True with the returned plan_hash.",
         )
 
@@ -233,16 +240,12 @@ def manage_graph_data(
         extra_context={"extra_hash_context": extra_hash_context or {}},
     )
     if not valid:
-        message = (
-            "Graph data change plan has expired."
-            if error_type == ErrorType.PLAN_EXPIRED
-            else "Provided plan_hash does not match the current graph data change plan."
-        )
-        return envelope_err(
-            error_type or ErrorType.PLAN_HASH_MISMATCH,
-            message,
-            suggestion="Run dry_run=True again and use the returned plan_hash.",
+        return plan_hash_error(
+            error_type=error_type,
             details=details,
+            mismatch_message="Provided plan_hash does not match the current graph data change plan.",
+            expired_message="Graph data change plan has expired.",
+            suggestion="Run dry_run=True again and use the returned plan_hash.",
         )
 
     execute_result = execute_graph_change_plan(plan, live_schema=live_schema)
