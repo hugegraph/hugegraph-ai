@@ -73,6 +73,7 @@ def query_graph_data(
         label=label,
         properties=properties,
         limit=limit,
+        page=page,
         vertex_id=vertex_id,
         direction=direction,
     )
@@ -133,6 +134,7 @@ def _validate_inputs(
     label: str | None,
     properties: dict[str, Any] | None,
     limit: int | None,
+    page: str | None,
     vertex_id: Any,
     direction: str | None,
 ) -> dict[str, Any] | None:
@@ -205,6 +207,15 @@ def _validate_inputs(
         if limit_error is not None:
             return limit_error
     if target == "edge" and operation in {"page", "condition"}:
+        if operation == "page" and vertex_id is not None and not _is_blank(page):
+            return _validation_error(
+                "vertex_id and page cannot be combined for edge page queries.",
+                (
+                    "For a vertex-scoped query, pass vertex_id and direction without "
+                    "page. For ordinary pagination, pass page without vertex_id."
+                ),
+                {"vertex_id": vertex_id, "page": page},
+            )
         if vertex_id is not None and direction is None:
             return _validation_error(
                 "direction is required when querying edges by vertex_id.",

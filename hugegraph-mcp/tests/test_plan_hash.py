@@ -11,7 +11,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for plan_hash module (Milestone 4)."""
+"""Tests for plan hash verification and persistent single-use confirmation."""
+
+from concurrent.futures import ThreadPoolExecutor
+import hashlib
+import os
+import sqlite3
+
+from hugegraph_mcp.confirmable_workflow import verify_and_consume_plan
+from hugegraph_mcp.confirmation_store import (
+    ConfirmationAlreadyUsedError,
+    ConfirmationStore,
+)
 
 from hugegraph_mcp.envelope import ErrorType
 from hugegraph_mcp.plan_hash import (
@@ -21,6 +32,21 @@ from hugegraph_mcp.plan_hash import (
     compute_plan_hash,
     verify_plan_hash,
 )
+
+
+def _confirmation_args(context, plan_hash, **overrides):
+    args = {
+        "submitted_hash": plan_hash,
+        "tool_name": context.tool_name,
+        "mode": context.mode,
+        "payload_digest": context.payload_digest,
+        "schema_hash": context.schema_hash,
+        "nonce": context.nonce,
+        "expires_at": context.expires_at,
+        "extra_context": context.extra_context,
+    }
+    args.update(overrides)
+    return args
 
 
 def test_plan_hash_changes_when_graph_url_changes(monkeypatch):
@@ -358,3 +384,212 @@ def test_verify_plan_hash_rejects_extended_expires_at(monkeypatch):
 
     assert valid is False
     assert error_type == ErrorType.PLAN_HASH_MISMATCH
+
+
+def test_verify_and_consume_rejects_replay_across_store_instances(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    context, plan_hash = build_plan_context(
+        tool_name="test", mode="import", payload_digest="abc123", nonce="once"
+    )
+
+    first = verify_and_consume_plan(**_confirmation_args(context, plan_hash))
+    second = verify_and_consume_plan(**_confirmation_args(context, plan_hash))
+
+    assert first == (True, None, None)
+    assert second[0] is False
+    assert second[1] == ErrorType.PLAN_ALREADY_USED
+    assert "path" not in str(second[2]).lower()
+    assert "sql" not in str(second[2]).lower()
+
+
+def test_confirmation_nonce_is_global_across_payloads(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    first_context, first_hash = build_plan_context(
+        tool_name="first", mode="import", payload_digest="payload-a", nonce="shared"
+    )
+    second_context, second_hash = build_plan_context(
+        tool_name="second", mode="delete", payload_digest="payload-b", nonce="shared"
+    )
+
+    assert verify_and_consume_plan(**_confirmation_args(first_context, first_hash))[0]
+    replay = verify_and_consume_plan(**_confirmation_args(second_context, second_hash))
+
+    assert replay[0] is False
+    assert replay[1] == ErrorType.PLAN_ALREADY_USED
+
+
+def test_concurrent_confirmation_has_exactly_one_winner(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    context, plan_hash = build_plan_context(
+        tool_name="test", mode="import", payload_digest="abc123", nonce="race"
+    )
+    args = _confirmation_args(context, plan_hash)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(
+            executor.map(lambda _: verify_and_consume_plan(**args), range(8))
+        )
+
+    assert sum(result[0] for result in results) == 1
+    assert sum(result[1] == ErrorType.PLAN_ALREADY_USED for result in results) == 7
+
+
+def test_invalid_plan_does_not_consume_nonce(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    context, plan_hash = build_plan_context(
+        tool_name="test", mode="import", payload_digest="abc123", nonce="retry-valid"
+    )
+
+    invalid = verify_and_consume_plan(**_confirmation_args(context, "wrong-plan-hash"))
+    valid = verify_and_consume_plan(**_confirmation_args(context, plan_hash))
+
+    assert invalid[1] == ErrorType.PLAN_HASH_MISMATCH
+    assert valid == (True, None, None)
+
+
+def test_expired_plan_does_not_consume_nonce(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    monkeypatch.setattr("hugegraph_mcp.plan_hash.time.time", lambda: 1000)
+    expired_context, expired_hash = build_plan_context(
+        tool_name="test",
+        mode="import",
+        payload_digest="expired",
+        nonce="after-expired",
+        ttl_seconds=-1,
+    )
+    expired = verify_and_consume_plan(
+        **_confirmation_args(expired_context, expired_hash)
+    )
+
+    valid_context, valid_hash = build_plan_context(
+        tool_name="test",
+        mode="import",
+        payload_digest="valid",
+        nonce="after-expired",
+    )
+    valid = verify_and_consume_plan(**_confirmation_args(valid_context, valid_hash))
+
+    assert expired[1] == ErrorType.PLAN_EXPIRED
+    assert valid == (True, None, None)
+
+
+def test_readonly_plan_does_not_consume_nonce(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "true")
+    readonly_context, readonly_hash = build_plan_context(
+        tool_name="test", mode="import", payload_digest="abc123", nonce="after-readonly"
+    )
+
+    blocked = verify_and_consume_plan(
+        **_confirmation_args(readonly_context, readonly_hash)
+    )
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    writable_context, writable_hash = build_plan_context(
+        tool_name="test", mode="import", payload_digest="abc123", nonce="after-readonly"
+    )
+    allowed = verify_and_consume_plan(
+        **_confirmation_args(writable_context, writable_hash)
+    )
+
+    assert blocked[1] == ErrorType.READONLY_VIOLATION
+    assert allowed == (True, None, None)
+
+
+def test_confirmation_store_permissions(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    context, plan_hash = build_plan_context(
+        tool_name="test", mode="import", payload_digest="abc123", nonce="permissions"
+    )
+    assert verify_and_consume_plan(**_confirmation_args(context, plan_hash))[0]
+
+    store = ConfirmationStore.from_config()
+    if os.name == "posix":
+        assert store.state_dir.stat().st_mode & 0o777 == 0o700
+        assert store.database_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_confirmation_store_persists_nonce_digest_not_plaintext(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    nonce = "sensitive-confirmation-nonce"
+    store = ConfirmationStore.from_config()
+    store.consume(nonce=nonce, plan_hash="plan", expires_at=9999999999)
+
+    with sqlite3.connect(store.database_path) as connection:
+        row = connection.execute(
+            """
+            SELECT nonce_digest, plan_hash, expires_at, consumed_at
+            FROM consumed_confirmations
+            """
+        ).fetchone()
+
+    assert row is not None
+    assert row[0] == hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+    assert nonce.encode("utf-8") not in store.database_path.read_bytes()
+    assert row[1:] == ("plan", 9999999999, row[3])
+
+
+def test_confirmation_store_has_consumed_is_read_only(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    store = ConfirmationStore.from_config()
+
+    assert store.has_consumed("not-consumed") is False
+    assert store.database_path.exists() is False
+
+    store.consume(nonce="consumed", plan_hash="plan", expires_at=9999999999)
+    assert store.has_consumed("consumed") is True
+    assert store.has_consumed("not-consumed") is False
+
+
+def test_confirmation_store_lazily_cleans_expired_records(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    store = ConfirmationStore.from_config()
+    store.consume(nonce="expired-row", plan_hash="old", expires_at=0)
+    store.consume(nonce="current-row", plan_hash="new", expires_at=9999999999)
+
+    with sqlite3.connect(store.database_path) as connection:
+        rows = connection.execute(
+            "SELECT plan_hash FROM consumed_confirmations ORDER BY plan_hash"
+        ).fetchall()
+
+    assert rows == [("new",)]
+
+
+def test_confirmation_cleanup_failure_does_not_block_current_nonce(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    store = ConfirmationStore.from_config()
+
+    def fail_cleanup(_connection, _current_time):
+        raise sqlite3.OperationalError("cleanup unavailable")
+
+    monkeypatch.setattr(store, "_cleanup_expired", fail_cleanup)
+
+    store.consume(
+        nonce="cleanup-failure-current", plan_hash="current", expires_at=9999999999
+    )
+    try:
+        store.consume(
+            nonce="cleanup-failure-current",
+            plan_hash="current",
+            expires_at=9999999999,
+        )
+        assert False, "The current nonce must remain globally single-use"
+    except ConfirmationAlreadyUsedError:
+        pass
+
+
+def test_unavailable_confirmation_store_fails_closed_without_internal_details(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    unusable = tmp_path / "not-a-directory"
+    unusable.write_text("occupied", encoding="utf-8")
+    monkeypatch.setenv("HUGEGRAPH_MCP_STATE_DIR", str(unusable))
+    context, plan_hash = build_plan_context(
+        tool_name="test", mode="import", payload_digest="abc123", nonce="unavailable"
+    )
+
+    result = verify_and_consume_plan(**_confirmation_args(context, plan_hash))
+
+    assert result[0] is False
+    assert result[1] == ErrorType.SERVER_ERROR
+    assert str(unusable) not in str(result[2])
+    assert "sql" not in str(result[2]).lower()

@@ -39,13 +39,15 @@ def test_readonly_env_parsing():
         ("true", True),
         ("1", True),
         ("yes", True),
+        ("on", True),
         ("TRUE", True),
         ("True", True),
         ("false", False),
         ("0", False),
         ("no", False),
-        ("", False),
-        ("invalid", False),
+        ("off", False),
+        ("", True),
+        ("invalid", True),
     ]
 
     for env_value, expected in test_cases:

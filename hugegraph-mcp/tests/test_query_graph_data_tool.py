@@ -249,7 +249,7 @@ def test_query_edge_page_requires_direction_with_vertex_id():
     assert "direction is required" in result["error"]["message"]
 
 
-def test_query_edge_page(monkeypatch):
+def test_query_edge_page_rejects_vertex_id_with_nonempty_page(monkeypatch):
     manager = FakeGraphManager()
     monkeypatch.setattr(query_module, "_graph_manager", lambda: manager)
 
@@ -263,11 +263,64 @@ def test_query_edge_page(monkeypatch):
         page="p1",
     )
 
+    assert result["ok"] is False
+    assert result["error"]["type"] == "VALIDATION_ERROR"
+    assert "vertex_id" in result["error"]["suggestion"]
+    assert "page" in result["error"]["suggestion"]
+    assert manager.calls == []
+
+
+def test_query_edge_page_by_vertex_without_page(monkeypatch):
+    manager = FakeGraphManager()
+    monkeypatch.setattr(query_module, "_graph_manager", lambda: manager)
+
+    result = query_module.query_graph_data(
+        target="edge",
+        operation="page",
+        label="knows",
+        vertex_id="1:alice",
+        direction="out",
+        limit=5,
+    )
+
     assert result["ok"] is True
     assert result["data"]["next_page"] == "edge-next"
     assert manager.calls == [
-        ("getEdgeByPage", "knows", "1:alice", "OUT", 5, "p1", None)
+        ("getEdgeByPage", "knows", "1:alice", "OUT", 5, None, None)
     ]
+
+
+def test_query_edge_page_by_vertex_allows_empty_page(monkeypatch):
+    manager = FakeGraphManager()
+    monkeypatch.setattr(query_module, "_graph_manager", lambda: manager)
+
+    result = query_module.query_graph_data(
+        target="edge",
+        operation="page",
+        vertex_id="1:alice",
+        direction="both",
+        page="",
+    )
+
+    assert result["ok"] is True
+    assert manager.calls == [("getEdgeByPage", None, "1:alice", "BOTH", 100, "", None)]
+
+
+def test_query_edge_page_cursor_without_vertex_id(monkeypatch):
+    manager = FakeGraphManager()
+    monkeypatch.setattr(query_module, "_graph_manager", lambda: manager)
+
+    result = query_module.query_graph_data(
+        target="edge",
+        operation="page",
+        label="knows",
+        limit=5,
+        page="p1",
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["next_page"] == "edge-next"
+    assert manager.calls == [("getEdgeByPage", "knows", None, None, 5, "p1", None)]
 
 
 def test_query_vertex_condition_returns_next_page(monkeypatch):

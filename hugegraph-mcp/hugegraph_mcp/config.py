@@ -18,9 +18,11 @@
 import logging
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Mapping
 
-TRUE_VALUES = {"1", "true", "yes"}
+TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 LOGGER = logging.getLogger("hugegraph_mcp.config")
 CONFIG_ENV_NAMES = (
     "HUGEGRAPH_URL",
@@ -35,6 +37,8 @@ CONFIG_ENV_NAMES = (
     "HUGEGRAPH_MCP_ALLOW_AI",
     "HUGEGRAPH_MCP_ADMIN_MODE",
     "HUGEGRAPH_MCP_TIMEOUT_SECONDS",
+    "HUGEGRAPH_MCP_STATE_DIR",
+    "XDG_STATE_HOME",
 )
 _CONFIG_CACHE_KEY: tuple[tuple[str, str | None], ...] | None = None
 _CONFIG_CACHE_VALUE = None
@@ -55,6 +59,9 @@ class MCPConfig:
     allow_ai: bool = False
     admin_mode: bool = False
     timeout_seconds: int = 30
+    state_dir: Path = field(
+        default_factory=lambda: Path.home() / ".local" / "state" / "hugegraph-mcp"
+    )
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
     @classmethod
@@ -93,18 +100,38 @@ class MCPConfig:
         if split_graph is not None:
             graph = _non_empty(split_graph, "hugegraph")
 
+        readonly = _parse_bool(
+            env.get("HUGEGRAPH_MCP_READONLY"),
+            "HUGEGRAPH_MCP_READONLY",
+            True,
+            warnings,
+        )
+        allow_ai = _parse_bool(
+            env.get("HUGEGRAPH_MCP_ALLOW_AI"),
+            "HUGEGRAPH_MCP_ALLOW_AI",
+            False,
+            warnings,
+        )
+        admin_mode = _parse_bool(
+            env.get("HUGEGRAPH_MCP_ADMIN_MODE"),
+            "HUGEGRAPH_MCP_ADMIN_MODE",
+            False,
+            warnings,
+        )
+
         config = cls(
             url=env.get("HUGEGRAPH_URL", "http://127.0.0.1:8080"),
             graph=graph,
             graphspace=graphspace,
             user=env.get("HUGEGRAPH_USER", "admin"),
             password=env.get("HUGEGRAPH_PASSWORD", ""),
-            readonly=_parse_bool(env.get("HUGEGRAPH_MCP_READONLY", "true")),
+            readonly=readonly,
             ai_url=env.get("HUGEGRAPH_AI_URL", "http://127.0.0.1:8001"),
             ai_graph_url=_optional_non_empty(env.get("HUGEGRAPH_AI_GRAPH_URL")),
-            allow_ai=_parse_bool(env.get("HUGEGRAPH_MCP_ALLOW_AI", "")),
-            admin_mode=_parse_bool(env.get("HUGEGRAPH_MCP_ADMIN_MODE", "")),
+            allow_ai=allow_ai,
+            admin_mode=admin_mode,
             timeout_seconds=_parse_int(env.get("HUGEGRAPH_MCP_TIMEOUT_SECONDS"), 30),
+            state_dir=_state_dir(env),
             warnings=tuple(warnings),
         )
         for warning in config.warnings:
@@ -127,8 +154,21 @@ def _parse_graph_path(graph_path: str) -> tuple[str, str]:
     return _non_empty(graphspace, "DEFAULT"), _non_empty(graph, "hugegraph")
 
 
-def _parse_bool(value: str) -> bool:
-    return value.strip().lower() in TRUE_VALUES
+def _parse_bool(
+    value: str | None,
+    env_name: str,
+    safe_default: bool,
+    warnings: list[str],
+) -> bool:
+    if value is None:
+        return safe_default
+    normalized = value.strip().lower()
+    if normalized in TRUE_VALUES:
+        return True
+    if normalized in FALSE_VALUES:
+        return False
+    warnings.append(f"Invalid boolean configuration: {env_name}; using safe default")
+    return safe_default
 
 
 def _parse_int(value: str | None, default: int) -> int:
@@ -158,6 +198,16 @@ def _optional_non_empty(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _state_dir(env: Mapping[str, str]) -> Path:
+    explicit = env.get("HUGEGRAPH_MCP_STATE_DIR")
+    if explicit is not None and explicit.strip():
+        return Path(explicit).expanduser()
+    xdg_state_home = env.get("XDG_STATE_HOME")
+    if xdg_state_home is not None and xdg_state_home.strip():
+        return Path(xdg_state_home).expanduser() / "hugegraph-mcp"
+    return Path.home() / ".local" / "state" / "hugegraph-mcp"
 
 
 def _env_cache_key(env: Mapping[str, str]) -> tuple[tuple[str, str | None], ...]:

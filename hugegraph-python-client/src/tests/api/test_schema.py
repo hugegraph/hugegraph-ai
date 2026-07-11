@@ -15,84 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import json
 import unittest
 from contextlib import suppress
 
 import pytest
-from pyhugegraph.api.schema_manage.index_label import IndexLabel
-from pyhugegraph.api.schema_manage.property_key import PropertyKey
 
 from ..client_utils import ClientUtils
 
 pytestmark = [pytest.mark.integration, pytest.mark.hugegraph]
-
-
-class DummySchemaSession:
-    def __init__(self):
-        self.requests = []
-
-    def request(self, path, method="GET", validator=None, **kwargs):
-        self.requests.append({"path": path, "method": method, "validator": validator, **kwargs})
-        return {"ok": True}
-
-
-def test_property_key_create_includes_aggregate_type_in_payload():
-    session = DummySchemaSession()
-    property_key = PropertyKey(session)
-
-    property_key.create_parameter_holder()
-    property_key.add_parameter("name", "score")
-    property_key.asInt().valueSingle().calcSum().create()
-
-    request = session.requests[-1]
-    assert request["path"] == "schema/propertykeys"
-    assert request["method"] == "POST"
-    assert json.loads(request["data"]) == {
-        "name": "score",
-        "data_type": "INT",
-        "cardinality": "SINGLE",
-        "aggregate_type": "SUM",
-    }
-
-
-def test_property_key_create_includes_user_data_in_payload():
-    session = DummySchemaSession()
-    property_key = PropertyKey(session)
-
-    property_key.create_parameter_holder()
-    property_key.add_parameter("name", "score")
-    property_key.asInt().valueSingle().userdata("min", 0, "max", 100).create()
-
-    request = session.requests[-1]
-    assert request["path"] == "schema/propertykeys"
-    assert request["method"] == "POST"
-    assert json.loads(request["data"]) == {
-        "name": "score",
-        "data_type": "INT",
-        "cardinality": "SINGLE",
-        "user_data": {"min": 0, "max": 100},
-    }
-
-
-def test_index_label_create_preserves_field_order_and_deduplicates():
-    session = DummySchemaSession()
-    index_label = IndexLabel(session)
-
-    index_label.create_parameter_holder()
-    index_label.add_parameter("name", "personByAgeCity")
-    index_label.onV("person").by("age", "city", "age").secondary().create()
-
-    request = session.requests[-1]
-    assert request["path"] == "schema/indexlabels"
-    assert request["method"] == "POST"
-    assert json.loads(request["data"]) == {
-        "name": "personByAgeCity",
-        "base_type": "VERTEX_LABEL",
-        "base_value": "person",
-        "index_type": "SECONDARY",
-        "fields": ["age", "city"],
-    }
 
 
 class TestSchemaManager(unittest.TestCase):

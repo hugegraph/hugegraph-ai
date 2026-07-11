@@ -1637,6 +1637,121 @@ def test_manage_graph_data_partial_write_returns_error_envelope(monkeypatch):
     assert len(writes) == 2
 
 
+def test_manage_graph_data_replayed_confirmation_does_not_execute_twice(
+    monkeypatch,
+):
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    state = {"target_exists": True}
+    read_calls = []
+
+    def fake_read(query):
+        read_calls.append(query)
+        count = 0 if "bothE()" in query else int(state["target_exists"])
+        return {
+            "data": [count],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        }
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools,
+        "execute_gremlin_read",
+        fake_read,
+    )
+    execute_calls = []
+
+    def fake_execute(plan, *, live_schema):
+        execute_calls.append((plan, live_schema))
+        state["target_exists"] = False
+        return {"success": True, "results": [{"success": True}]}
+
+    monkeypatch.setattr(
+        manage_graph_data_module, "execute_graph_change_plan", fake_execute
+    )
+    dry_run = manage_graph_data_module.manage_graph_data(
+        mode="delete", change_plan=_delete_vertex_plan(), nonce="data-replay"
+    )
+    context = dry_run["data"]["plan_context"]
+    arguments = {
+        "mode": "delete",
+        "change_plan": _delete_vertex_plan(),
+        "dry_run": False,
+        "confirm": True,
+        "plan_hash": dry_run["data"]["plan_hash"],
+        "nonce": context["nonce"],
+        "expires_at": context["expires_at"],
+    }
+
+    first = manage_graph_data_module.manage_graph_data(**arguments)
+    second = manage_graph_data_module.manage_graph_data(**arguments)
+
+    assert first["ok"] is True
+    assert second["ok"] is False
+    assert second["error"]["type"] == "PLAN_ALREADY_USED"
+    assert state["target_exists"] is False
+    assert len(execute_calls) == 1
+    assert len(read_calls) == 4
+
+
+def test_manage_graph_data_unconsumed_target_drift_does_not_consume_nonce(
+    monkeypatch,
+):
+    from hugegraph_mcp.confirmation_store import ConfirmationStore
+
+    _mock_schema(monkeypatch)
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    state = {"target_exists": True}
+
+    def fake_read(query):
+        count = 0 if "bothE()" in query else int(state["target_exists"])
+        return {
+            "data": [count],
+            "total": 1,
+            "duration_ms": 1,
+            "is_read": True,
+        }
+
+    monkeypatch.setattr(
+        manage_graph_data_module.gremlin_tools, "execute_gremlin_read", fake_read
+    )
+    execute_calls = []
+
+    def fake_execute(plan, *, live_schema):
+        execute_calls.append((plan, live_schema))
+        return {"success": True, "results": [{"success": True}]}
+
+    monkeypatch.setattr(
+        manage_graph_data_module, "execute_graph_change_plan", fake_execute
+    )
+    dry_run = manage_graph_data_module.manage_graph_data(
+        mode="delete", change_plan=_delete_vertex_plan(), nonce="data-stale"
+    )
+    context = dry_run["data"]["plan_context"]
+    arguments = {
+        "mode": "delete",
+        "change_plan": _delete_vertex_plan(),
+        "dry_run": False,
+        "confirm": True,
+        "plan_hash": dry_run["data"]["plan_hash"],
+        "nonce": context["nonce"],
+        "expires_at": context["expires_at"],
+    }
+
+    state["target_exists"] = False
+    stale = manage_graph_data_module.manage_graph_data(**arguments)
+
+    assert stale["ok"] is False
+    assert ConfirmationStore.from_config().has_consumed(context["nonce"]) is False
+    assert execute_calls == []
+
+    state["target_exists"] = True
+    restored = manage_graph_data_module.manage_graph_data(**arguments)
+    assert restored["ok"] is True
+    assert len(execute_calls) == 1
+
+
 def test_manage_graph_data_import_validates_graph_payload(monkeypatch):
     _mock_schema(monkeypatch)
 

@@ -203,8 +203,13 @@ All configuration is read from environment variables.
 | `HUGEGRAPH_AI_GRAPH_URL` | unset | Graph URL used by HugeGraph-AI; defaults to `HUGEGRAPH_URL` when unset |
 | `HUGEGRAPH_MCP_TIMEOUT_SECONDS` | `30` | AI call timeout in seconds |
 | `HUGEGRAPH_MCP_MAX_REPEAT_TIMES` | `10` | Recommended maximum for read-cost warnings on `repeat().times(n)` |
+| `HUGEGRAPH_MCP_STATE_DIR` | `$XDG_STATE_HOME/hugegraph-mcp`, or `~/.local/state/hugegraph-mcp` when `XDG_STATE_HOME` is unset | Local state directory for the persistent single-use confirmation ledger |
 
 `HUGEGRAPH_MCP_TIMEOUT_SECONDS` only applies to HugeGraph-AI HTTP calls; it does not apply to PyHugeClient Gremlin queries. Read-only Gremlin cost boundaries are reported as non-blocking read cost guard warnings for bare full-graph scans, `repeat()` without a `times()` bound, and `path` / `group` / `profile` without `limit` or `range`.
+
+Boolean configuration accepts `1`, `true`, `yes`, or `on` and `0`, `false`, `no`, or `off`, ignoring case and surrounding whitespace. Empty or invalid values fail closed: `HUGEGRAPH_MCP_READONLY` remains enabled, while `HUGEGRAPH_MCP_ALLOW_AI` and `HUGEGRAPH_MCP_ADMIN_MODE` remain disabled.
+
+The confirmation ledger persists consumed nonce digests so a confirmed write plan can be used only once across local process restarts and workers sharing the same state directory. On POSIX platforms, HugeGraph MCP restricts the state directory to mode `0700` and the ledger database to mode `0600`.
 
 Recommended safe defaults:
 

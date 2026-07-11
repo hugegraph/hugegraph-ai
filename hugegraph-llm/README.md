@@ -60,6 +60,8 @@ docker-compose -f docker-compose-network.yml ps
 # RAG Service: http://localhost:8001
 ```
 
+The Compose configuration publishes the RAG service only on the host loopback interface by default.
+
 ### Option 2: Individual Docker Containers
 
 For more control over individual components:
@@ -80,7 +82,7 @@ docker run -itd --name=server -p 8080:8080 --network hugegraph-net hugegraph/hug
 docker pull hugegraph/rag:latest
 docker run -itd --name rag \
   -v /path/to/your/hugegraph-llm/.env:/home/work/hugegraph-llm/.env \
-  -p 8001:8001 --network hugegraph-net hugegraph/rag
+  -p 127.0.0.1:8001:8001 --network hugegraph-net hugegraph/rag
 
 # 4. Monitor logs
 docker logs -f rag
@@ -116,6 +118,10 @@ python -m hugegraph_llm.demo.rag_demo.app
 # 6. (Optional) Custom host/port
 python -m hugegraph_llm.demo.rag_demo.app --host 127.0.0.1 --port 18001
 ```
+
+The source launcher also binds to `127.0.0.1` by default. Publishing the Docker port on a non-loopback interface or
+passing a non-loopback `--host` is an explicit deployment choice. The HTTP API has no unified authentication, so use
+reverse proxy authentication, a firewall, or a trusted network before exposing it to other machines.
 
 #### Additional Setup (Optional)
 

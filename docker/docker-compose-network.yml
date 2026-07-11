@@ -28,7 +28,7 @@ services:
     container_name: rag
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     volumes:
       # Mount .env file, please modify according to actual path
       - ${PROJECT_PATH}/hugegraph-llm/.env:/home/work/hugegraph-llm/.env

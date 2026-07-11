@@ -15,7 +15,103 @@
 
 from typing import Any
 
+from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.confirmation_store import (
+    ConfirmationAlreadyUsedError,
+    ConfirmationStore,
+    ConfirmationStoreUnavailableError,
+)
 from hugegraph_mcp.envelope import ErrorType, envelope_err
+from hugegraph_mcp.plan_hash import verify_plan_hash
+
+
+def replayed_plan_error(
+    nonce: str | None, *, source: str | None = None
+) -> dict[str, Any] | None:
+    """Return a replay error before live-state validation when already consumed."""
+    try:
+        consumed = ConfirmationStore.from_config().has_consumed(nonce)
+    except ConfirmationStoreUnavailableError:
+        # Unknown state is not treated as unused. Full validation continues and
+        # the atomic consume remains fail-closed before the first write.
+        return None
+    if not consumed:
+        return None
+    return plan_hash_error(
+        error_type=ErrorType.PLAN_ALREADY_USED,
+        details={
+            "reason": (
+                "This confirmation has already been used. Inspect the target "
+                "state and run dry_run again."
+            )
+        },
+        mismatch_message="This confirmation plan has already been used.",
+        suggestion="Inspect the current target state, then run dry_run again.",
+        source=source,
+    )
+
+
+def verify_and_consume_plan(
+    *,
+    submitted_hash: str,
+    tool_name: str,
+    mode: str,
+    payload_digest: str,
+    schema_hash: str | None = None,
+    nonce: str | None = None,
+    expires_at: float | int | None = None,
+    extra_context: dict[str, Any] | None = None,
+) -> tuple[bool, ErrorType | None, dict[str, Any] | None]:
+    """Validate a plan without side effects, then atomically consume its nonce."""
+    valid, error_type, details = verify_plan_hash(
+        submitted_hash=submitted_hash,
+        tool_name=tool_name,
+        mode=mode,
+        payload_digest=payload_digest,
+        schema_hash=schema_hash,
+        nonce=nonce,
+        expires_at=expires_at,
+        extra_context=extra_context,
+    )
+    if not valid:
+        return False, error_type, details
+
+    if MCPConfig.from_env().is_readonly():
+        return (
+            False,
+            ErrorType.READONLY_VIOLATION,
+            {"reason": "Write confirmation is disabled in readonly mode."},
+        )
+
+    try:
+        ConfirmationStore.from_config().consume(
+            nonce=nonce or "",
+            plan_hash=submitted_hash,
+            expires_at=int(expires_at or 0),
+        )
+    except ConfirmationAlreadyUsedError:
+        return (
+            False,
+            ErrorType.PLAN_ALREADY_USED,
+            {
+                "reason": (
+                    "This confirmation has already been used. Inspect the target "
+                    "state and run dry_run again."
+                )
+            },
+        )
+    except ConfirmationStoreUnavailableError:
+        return (
+            False,
+            ErrorType.SERVER_ERROR,
+            {
+                "reason": (
+                    "Confirmation state is unavailable. The write was blocked "
+                    "before execution."
+                )
+            },
+        )
+    return True, None, None
 
 
 def mark_readonly_preview(
@@ -53,11 +149,21 @@ def plan_hash_error(
     source: str | None = None,
 ) -> dict[str, Any]:
     resolved_error_type = error_type or ErrorType.PLAN_HASH_MISMATCH
-    message = (
-        expired_message
-        if resolved_error_type == ErrorType.PLAN_EXPIRED and expired_message
-        else mismatch_message
-    )
+    if resolved_error_type == ErrorType.PLAN_EXPIRED and expired_message:
+        message = expired_message
+    elif resolved_error_type == ErrorType.PLAN_ALREADY_USED:
+        message = "This confirmation plan has already been used."
+        suggestion = (
+            "Inspect the current target state, then run dry_run again and use the "
+            "new confirmation plan."
+        )
+    elif resolved_error_type == ErrorType.SERVER_ERROR:
+        message = "Confirmation state could not be recorded safely."
+        suggestion = (
+            "Restore writable persistent confirmation state, then run dry_run again."
+        )
+    else:
+        message = mismatch_message
     return envelope_err(
         resolved_error_type,
         message,

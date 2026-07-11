@@ -469,6 +469,76 @@ def test_edge_by_id_query_and_mutate_handles_real_hugegraph_edge_id(
     assert names.name_key not in query_result["data"]["items"][0]["properties"]
 
 
+def test_collection_append_matches_real_vertex_list_and_edge_set(hugegraph_client):
+    names = _schema_names("collection_append")
+    _ensure_collection_schema(hugegraph_client, names)
+    graph = hugegraph_client.graph()
+    alice = graph.addVertex(
+        names.vertex_label,
+        {names.name_key: "Alice", names.list_key: ["a"]},
+    )
+    bob = graph.addVertex(
+        names.vertex_label,
+        {names.name_key: "Bob"},
+    )
+    edge = graph.addEdge(
+        names.edge_label,
+        alice.id,
+        bob.id,
+        {names.set_key: ["a"]},
+    )
+
+    vertex_dry_run = server.mutate_graph_properties_tool(
+        target="vertex",
+        operation="append",
+        id=alice.id,
+        properties={names.list_key: ["b", "b"]},
+    )
+    assert vertex_dry_run["ok"] is True
+    assert vertex_dry_run["data"]["after"]["properties"][names.list_key] == [
+        "a",
+        "b",
+        "b",
+    ]
+    vertex_context = vertex_dry_run["data"]["plan_context"]
+    vertex_result = server.mutate_graph_properties_tool(
+        target="vertex",
+        operation="append",
+        id=alice.id,
+        properties={names.list_key: ["b", "b"]},
+        dry_run=False,
+        confirm=True,
+        plan_hash=vertex_dry_run["data"]["plan_hash"],
+        nonce=vertex_context["nonce"],
+        expires_at=vertex_context["expires_at"],
+    )
+    assert vertex_result["ok"] is True
+    assert graph.getVertexById(alice.id).properties[names.list_key] == ["a", "b", "b"]
+
+    edge_dry_run = server.mutate_graph_properties_tool(
+        target="edge",
+        operation="append",
+        id=edge.id,
+        properties={names.set_key: ["b", "a"]},
+    )
+    assert edge_dry_run["ok"] is True
+    assert edge_dry_run["data"]["after"]["properties"][names.set_key] == ["a", "b"]
+    edge_context = edge_dry_run["data"]["plan_context"]
+    edge_result = server.mutate_graph_properties_tool(
+        target="edge",
+        operation="append",
+        id=edge.id,
+        properties={names.set_key: ["b", "a"]},
+        dry_run=False,
+        confirm=True,
+        plan_hash=edge_dry_run["data"]["plan_hash"],
+        nonce=edge_context["nonce"],
+        expires_at=edge_context["expires_at"],
+    )
+    assert edge_result["ok"] is True
+    assert set(graph.getEdgeById(edge.id).properties[names.set_key]) == {"a", "b"}
+
+
 def test_partial_write_returns_error_envelope_and_real_graph_state_matches(
     hugegraph_client,
 ):
@@ -619,6 +689,8 @@ class _Names:
     def __init__(self, prefix: str) -> None:
         suffix = uuid4().hex[:8]
         self.name_key = f"{prefix}_name_{suffix}"
+        self.list_key = f"{prefix}_list_{suffix}"
+        self.set_key = f"{prefix}_set_{suffix}"
         self.vertex_label = f"{prefix}_v_{suffix}"
         self.edge_label = f"{prefix}_e_{suffix}"
         self.name_index = f"{prefix}_name_idx_{suffix}"
@@ -664,6 +736,24 @@ def _ensure_primary_key_schema(client, names: _Names) -> None:
     _wait_for_schema_visibility(client, names)
 
 
+def _ensure_collection_schema(client, names: _Names) -> None:
+    schema = client.schema()
+    schema.propertyKey(names.name_key).asText().ifNotExist().create()
+    schema.propertyKey(names.list_key).asText().valueList().ifNotExist().create()
+    schema.propertyKey(names.set_key).asText().valueSet().ifNotExist().create()
+    schema.vertexLabel(names.vertex_label).properties(
+        names.name_key, names.list_key
+    ).primaryKeys(names.name_key).nullableKeys(names.list_key).ifNotExist().create()
+    schema.edgeLabel(names.edge_label).sourceLabel(names.vertex_label).targetLabel(
+        names.vertex_label
+    ).properties(names.set_key).nullableKeys(names.set_key).ifNotExist().create()
+    _wait_for_schema_visibility(
+        client,
+        names,
+        required_property_keys={names.name_key, names.list_key, names.set_key},
+    )
+
+
 def _exec(client, query: str):
     return client.gremlin().exec(query)
 
@@ -680,7 +770,11 @@ def _edge_id(client, names: _Names) -> str:
 
 
 def _wait_for_schema_visibility(
-    client, names: _Names, *, custom_id: bool = False
+    client,
+    names: _Names,
+    *,
+    custom_id: bool = False,
+    required_property_keys: set[str] | None = None,
 ) -> None:
     deadline = time.monotonic() + 5.0
     last_error: Exception | None = None
@@ -706,7 +800,7 @@ def _wait_for_schema_visibility(
                 if isinstance(item, dict)
             }
             if (
-                names.name_key in property_keys
+                (required_property_keys or {names.name_key}) <= property_keys
                 and names.vertex_label in vertex_labels
                 and names.edge_label in edge_labels
             ):

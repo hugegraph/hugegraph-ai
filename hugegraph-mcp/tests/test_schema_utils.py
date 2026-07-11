@@ -14,7 +14,11 @@
 import inspect
 
 from hugegraph_mcp.tools import graph_data_validate
-from hugegraph_mcp.tools.schema_utils import normalized_schema_summary, schema_payload
+from hugegraph_mcp.tools.schema_utils import (
+    normalized_schema_summary,
+    property_cardinalities,
+    schema_payload,
+)
 
 
 def test_normalized_schema_summary_uses_shared_canonical_shape():
@@ -91,6 +95,42 @@ def test_normalized_schema_summary_uses_shared_canonical_shape():
 
 def test_schema_payload_preserves_explicit_empty_schema():
     assert schema_payload({"schema": {}}) == {}
+
+
+def test_property_cardinalities_supports_wrappers_and_field_aliases():
+    assert property_cardinalities(
+        {
+            "schema": {
+                "propertyKeys": [
+                    {"name": "name"},
+                    {"propertyName": "aliases", "cardinalityType": "list"},
+                    {"property_name": "tags", "cardinality_type": "set"},
+                ]
+            }
+        }
+    ) == {"name": "SINGLE", "aliases": "LIST", "tags": "SET"}
+
+    assert property_cardinalities(
+        {"propertykeys": [{"name": "values", "cardinality": "LIST"}]}
+    ) == {"values": "LIST"}
+
+
+def test_normalized_schema_summary_binds_property_key_cardinality_aliases():
+    assert normalized_schema_summary(
+        {
+            "schema": {
+                "propertyKeys": [
+                    {
+                        "propertyName": "aliases",
+                        "dataType": "TEXT",
+                        "cardinalityType": "LIST",
+                    }
+                ]
+            }
+        }
+    )["propertykeys"] == [
+        {"name": "aliases", "data_type": "TEXT", "cardinality": "LIST"}
+    ]
 
 
 def test_graph_data_validate_does_not_reverse_import_ingest_module():

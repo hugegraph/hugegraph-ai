@@ -25,7 +25,12 @@ from pyhugegraph.client import PyHugeClient
 
 from hugegraph_mcp import schema_tools
 from hugegraph_mcp.config import MCPConfig
-from hugegraph_mcp.confirmable_workflow import confirm_required_error, plan_hash_error
+from hugegraph_mcp.confirmable_workflow import (
+    confirm_required_error,
+    plan_hash_error,
+    replayed_plan_error,
+    verify_and_consume_plan,
+)
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.hugegraph_client import build_hugegraph_client
@@ -34,7 +39,6 @@ from hugegraph_mcp.plan_hash import (
     build_plan_context,
     compute_payload_digest,
     compute_plan_hash,
-    verify_plan_hash,
 )
 from hugegraph_mcp.tools.live_schema import current_live_schema
 from hugegraph_mcp.tools.schema_utils import normalized_schema_summary
@@ -1484,6 +1488,10 @@ def manage_schema(
         )
 
     if mode == "apply":
+        if confirm:
+            replay_error = replayed_plan_error(nonce)
+            if replay_error is not None:
+                return replay_error
         live_schema, error = _safe_fetch_live_schema()
         if error:
             return error
@@ -1509,7 +1517,7 @@ def manage_schema(
                     "with plan_hash, nonce, and expires_at."
                 ),
             )
-        valid, error_type, details = verify_plan_hash(
+        valid, error_type, details = verify_and_consume_plan(
             submitted_hash=plan_hash,
             tool_name="apply_schema_tool",
             mode="apply",

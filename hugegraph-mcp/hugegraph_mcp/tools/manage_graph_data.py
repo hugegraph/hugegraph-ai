@@ -26,6 +26,8 @@ from hugegraph_mcp.confirmable_workflow import (
     confirm_required_error,
     mark_readonly_preview,
     plan_hash_error,
+    replayed_plan_error,
+    verify_and_consume_plan,
 )
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
@@ -33,7 +35,6 @@ from hugegraph_mcp.plan_hash import (
     build_plan_context,
     compute_payload_digest,
     compute_plan_hash,
-    verify_plan_hash,
 )
 from hugegraph_mcp.tools import ingest_graph_data
 from hugegraph_mcp.tools.graph_data_execute import (
@@ -118,6 +119,11 @@ def manage_graph_data(
             f"Unknown mode: {mode!r}. Use 'import' or 'delete'.",
             details={"mode": mode},
         )
+
+    if not dry_run and confirm:
+        replay_error = replayed_plan_error(nonce)
+        if replay_error is not None:
+            return replay_error
 
     # 写入前必须读取 live schema。这里不允许在 schema 缺失时降级执行，
     # 因为主键、端点和属性合法性都依赖当前图的真实 schema。
@@ -226,7 +232,7 @@ def manage_graph_data(
         )
 
     schema_summary = _schema_summary(live_schema)
-    valid, error_type, details = verify_plan_hash(
+    valid, error_type, details = verify_and_consume_plan(
         submitted_hash=plan_hash,
         tool_name=plan_tool_name,
         mode=mode,

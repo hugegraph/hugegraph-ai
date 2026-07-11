@@ -20,6 +20,7 @@ __all__ = [
     "edge_schema_endpoint_label",
     "normalized_schema_summary",
     "primary_key_names",
+    "property_cardinalities",
     "property_names",
     "schema_name",
     "schema_payload",
@@ -39,6 +40,39 @@ def property_names(properties: Any) -> set[str]:
     if not isinstance(properties, list):
         return set()
     return {name for prop in properties if (name := schema_name(prop))}
+
+
+def property_cardinalities(
+    live_schema: dict[str, Any] | None,
+) -> dict[str, str]:
+    """Return property-key cardinalities from supported live-schema shapes."""
+    raw = schema_payload(live_schema)
+    if raw is None:
+        return {}
+    property_keys = _property_key_items(raw)
+    if not isinstance(property_keys, list):
+        return {}
+
+    cardinalities: dict[str, str] = {}
+    for item in property_keys:
+        if not isinstance(item, dict):
+            continue
+        name = _field_value(item, "name", "property_name", "propertyName")
+        cardinality = _field_value(
+            item,
+            "cardinality",
+            "cardinality_type",
+            "cardinalityType",
+        )
+        if not isinstance(name, str):
+            continue
+        normalized = str(cardinality or "SINGLE").strip().upper()
+        cardinalities[name] = normalized
+    return cardinalities
+
+
+def _property_key_items(raw_schema: dict[str, Any]) -> Any:
+    return _field_value(raw_schema, "propertykeys", "property_keys", "propertyKeys")
 
 
 def primary_key_names(vertex_label: dict[str, Any]) -> list[str]:
@@ -85,6 +119,8 @@ def _normalize_named_list(values: Any) -> list[str]:
 def _normalize_schema_items(
     items: Any,
     field_aliases: list[tuple[str, tuple[str, ...]]],
+    *,
+    name_aliases: tuple[str, ...] = ("name",),
 ) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     if not isinstance(items, list):
@@ -93,7 +129,7 @@ def _normalize_schema_items(
     for item in items:
         if not isinstance(item, dict):
             continue
-        name = item.get("name")
+        name = _field_value(item, *name_aliases)
         if not isinstance(name, str):
             continue
         result: dict[str, Any] = {"name": name}
@@ -127,11 +163,15 @@ def normalized_schema_summary(
     # 元数据被刻意忽略，防止无关字段变化导致 confirm 阶段误拒。
     return {
         "propertykeys": _normalize_schema_items(
-            raw.get("propertykeys"),
+            _property_key_items(raw),
             [
                 ("data_type", ("data_type", "dataType")),
-                ("cardinality", ("cardinality",)),
+                (
+                    "cardinality",
+                    ("cardinality", "cardinality_type", "cardinalityType"),
+                ),
             ],
+            name_aliases=("name", "property_name", "propertyName"),
         ),
         "vertexlabels": _normalize_schema_items(
             raw.get("vertexlabels"),

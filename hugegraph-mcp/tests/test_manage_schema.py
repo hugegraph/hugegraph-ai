@@ -1565,6 +1565,93 @@ def test_manage_schema_apply_happy_path(monkeypatch):
     assert result["data"]["applied_operations"] == [_property_key()]
 
 
+def test_manage_schema_replayed_confirmation_does_not_apply_twice(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    state = _empty_schema()
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", lambda: state
+    )
+    apply_calls = []
+
+    def fake_apply(operations, *, live_schema):
+        apply_calls.append((operations, live_schema))
+        state["schema"]["propertykeys"].append(_live_pk("age"))
+        return {
+            "status": "applied",
+            "valid": True,
+            "applied_operations": operations,
+        }
+
+    monkeypatch.setattr(manage_schema_module, "apply_schema_operations", fake_apply)
+    dry_run = manage_schema(
+        mode="dry_run", operations=[_property_key()], nonce="schema-replay"
+    )
+    context = dry_run["data"]["plan_context"]
+    arguments = {
+        "mode": "apply",
+        "operations": [_property_key()],
+        "confirm": True,
+        "plan_hash": dry_run["data"]["plan_hash"],
+        "nonce": context["nonce"],
+        "expires_at": context["expires_at"],
+    }
+
+    first = manage_schema(**arguments)
+    second = manage_schema(**arguments)
+
+    assert first["ok"] is True
+    assert second["ok"] is False
+    assert second["error"]["type"] == "PLAN_ALREADY_USED"
+    assert state["schema"]["propertykeys"] == [_live_pk("age")]
+    assert len(apply_calls) == 1
+
+
+def test_manage_schema_unconsumed_schema_drift_does_not_consume_nonce(monkeypatch):
+    from hugegraph_mcp.confirmation_store import ConfirmationStore
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
+    state = _empty_schema()
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", lambda: state
+    )
+    apply_calls = []
+
+    def fake_apply(operations, *, live_schema):
+        apply_calls.append((operations, live_schema))
+        return {
+            "status": "applied",
+            "valid": True,
+            "applied_operations": operations,
+        }
+
+    monkeypatch.setattr(manage_schema_module, "apply_schema_operations", fake_apply)
+    dry_run = manage_schema(
+        mode="dry_run", operations=[_property_key()], nonce="schema-stale"
+    )
+    context = dry_run["data"]["plan_context"]
+    arguments = {
+        "mode": "apply",
+        "operations": [_property_key()],
+        "confirm": True,
+        "plan_hash": dry_run["data"]["plan_hash"],
+        "nonce": context["nonce"],
+        "expires_at": context["expires_at"],
+    }
+
+    state["schema"]["propertykeys"].append(_live_pk("other"))
+    stale = manage_schema(**arguments)
+
+    assert stale["ok"] is False
+    assert stale["error"]["type"] == "PLAN_HASH_MISMATCH"
+    assert ConfirmationStore.from_config().has_consumed(context["nonce"]) is False
+    assert apply_calls == []
+
+    state["schema"]["propertykeys"].clear()
+    restored = manage_schema(**arguments)
+    assert restored["ok"] is True
+    assert len(apply_calls) == 1
+
+
 def test_manage_schema_apply_canonicalizes_property_key_post_read_enums(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     state = _empty_schema()

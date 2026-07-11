@@ -43,6 +43,11 @@ from typing import Any
 from uuid import uuid4
 
 from hugegraph_mcp.config import MCPConfig
+from hugegraph_mcp.confirmable_workflow import (
+    plan_hash_error,
+    replayed_plan_error,
+    verify_and_consume_plan,
+)
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.guard import Capability, guard
 from hugegraph_mcp.hugegraph_ai_client import post
@@ -56,16 +61,38 @@ from hugegraph_mcp.tools.schema_utils import (
 from hugegraph_mcp.tools.live_schema import fetch_live_schema_or_none
 
 
-def _property_types(raw_schema: dict[str, Any]) -> dict[str, str]:
-    types: dict[str, str] = {}
-    for prop in raw_schema.get("propertykeys", []):
+_DATA_TYPE_ALIASES = {"INTEGER": "INT", "BOOL": "BOOLEAN"}
+_SUPPORTED_DATA_TYPES = {
+    "TEXT",
+    "INT",
+    "LONG",
+    "DOUBLE",
+    "FLOAT",
+    "BOOLEAN",
+    "DATE",
+    "BYTE",
+    "BLOB",
+    "OBJECT",
+}
+_SUPPORTED_CARDINALITIES = {"SINGLE", "LIST", "SET"}
+
+
+def _property_specs(raw_schema: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    specs: dict[str, tuple[str, str]] = {}
+    normalized_schema = normalized_schema_summary(raw_schema) or {}
+    for prop in normalized_schema.get("propertykeys", []):
         if not isinstance(prop, dict):
             continue
         name = prop.get("name")
         data_type = prop.get("data_type")
         if isinstance(name, str) and isinstance(data_type, str):
-            types[name] = data_type.upper()
-    return types
+            cardinality = prop.get("cardinality") or "SINGLE"
+            normalized_data_type = data_type.strip().upper()
+            specs[name] = (
+                _DATA_TYPE_ALIASES.get(normalized_data_type, normalized_data_type),
+                str(cardinality).strip().upper(),
+            )
+    return specs
 
 
 def _value_matches_type(value: Any, data_type: str) -> bool:
@@ -81,7 +108,47 @@ def _value_matches_type(value: Any, data_type: str) -> bool:
         return isinstance(value, bool)
     if data_type in {"DATE", "BLOB"}:
         return isinstance(value, str)
-    return True
+    if data_type == "OBJECT":
+        return isinstance(value, dict)
+    return False
+
+
+def _property_value_error(
+    *,
+    item_kind: str,
+    item_index: int,
+    property_name: str,
+    value: Any,
+    spec: tuple[str, str] | None,
+) -> str | None:
+    if spec is None:
+        return None
+
+    data_type, cardinality = spec
+    prefix = f"{item_kind} {item_index} property '{property_name}'"
+    if data_type not in _SUPPORTED_DATA_TYPES:
+        return f"{prefix} unsupported data_type '{data_type}'"
+    if cardinality not in _SUPPORTED_CARDINALITIES:
+        return f"{prefix} unsupported cardinality '{cardinality}'"
+    if cardinality in {"LIST", "SET"}:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            return (
+                f"{prefix} expects {cardinality} of {data_type}, "
+                f"got {type(value).__name__}"
+            )
+        for element_index, element in enumerate(value):
+            if element is None or not _value_matches_type(element, data_type):
+                return (
+                    f"{prefix} element {element_index} expects {data_type}, "
+                    f"got {type(element).__name__}"
+                )
+        return None
+
+    if not _value_matches_type(value, data_type):
+        return f"{prefix} expects {data_type}, got {type(value).__name__}"
+    return None
 
 
 def _indexed_labels(raw_schema: dict[str, Any]) -> dict[str, set[str]]:
@@ -473,7 +540,7 @@ def validate_graph_payload(
     schema_vlabels: set[str] = set()
     schema_props: dict[str, set[str]] = {}
     schema_primary_keys: dict[str, list[str]] = {}
-    schema_property_types: dict[str, str] = {}
+    schema_property_specs: dict[str, tuple[str, str]] = {}
     schema_elabels: dict[str, dict[str, Any]] = {}
     schema_eprops: dict[str, set[str]] = {}
     indexed_labels = {"VERTEX": set(), "EDGE": set()}
@@ -482,7 +549,7 @@ def validate_graph_payload(
     if schema_available:
         # 把 live schema 摘成 label -> 属性/主键/类型表，后续校验只依赖这份快照。
         # 这避免遍历过程中 schema 被重复读取导致前后判断不一致。
-        schema_property_types = _property_types(raw)
+        schema_property_specs = _property_specs(raw)
         for vl in raw.get("vertexlabels", []):
             if not isinstance(vl, dict):
                 continue
@@ -531,11 +598,15 @@ def validate_graph_payload(
                         errors.append(
                             f"vertex {idx} property '{prop_name}' does not exist on label '{label}'"
                         )
-                    data_type = schema_property_types.get(prop_name)
-                    if data_type and not _value_matches_type(prop_value, data_type):
-                        errors.append(
-                            f"vertex {idx} property '{prop_name}' expects {data_type}, got {type(prop_value).__name__}"
-                        )
+                    value_error = _property_value_error(
+                        item_kind="vertex",
+                        item_index=idx,
+                        property_name=prop_name,
+                        value=prop_value,
+                        spec=schema_property_specs.get(prop_name),
+                    )
+                    if value_error:
+                        errors.append(value_error)
             primary_keys = schema_primary_keys.get(label, [])
             if primary_keys:
                 # PRIMARY_KEY label 必须提供完整主键；否则 HugeGraph 无法构造稳定 id，
@@ -642,11 +713,15 @@ def validate_graph_payload(
                         errors.append(
                             f"edge {idx} property '{prop_name}' does not exist on label '{label}'"
                         )
-                    data_type = schema_property_types.get(prop_name)
-                    if data_type and not _value_matches_type(prop_value, data_type):
-                        errors.append(
-                            f"edge {idx} property '{prop_name}' expects {data_type}, got {type(prop_value).__name__}"
-                        )
+                    value_error = _property_value_error(
+                        item_kind="edge",
+                        item_index=idx,
+                        property_name=prop_name,
+                        value=prop_value,
+                        spec=schema_property_specs.get(prop_name),
+                    )
+                    if value_error:
+                        errors.append(value_error)
             if source is None and target is None:
                 continue
             if source is None:
@@ -785,6 +860,11 @@ def ingest_graph_data_via_ai(
     dry_run=False + confirm=True + plan_hash 匹配: 执行写入
     nonce/expires_at: dry_run 返回的 plan_context 中的字段，confirm 时必须传回
     """
+    if not dry_run and confirm:
+        replay_error = replayed_plan_error(nonce)
+        if replay_error is not None:
+            return replay_error
+
     live_schema = _fetch_live_schema()
     if live_schema is None:
         return envelope_err(
@@ -863,9 +943,7 @@ def ingest_graph_data_via_ai(
 
     # 使用目标绑定验证：重新读取 config 和 schema，重新计算哈希
     # nonce 必须从 dry_run 返回的 plan_context 中传回
-    from hugegraph_mcp.plan_hash import verify_plan_hash
-
-    valid, error_type, details = verify_plan_hash(
+    valid, error_type, details = verify_and_consume_plan(
         submitted_hash=plan_hash,
         tool_name="ingest_graph_data",
         mode="import",
@@ -875,16 +953,16 @@ def ingest_graph_data_via_ai(
         expires_at=expires_at,
     )
     if not valid:
-        message = (
-            "Plan has expired. Run dry_run=True again and use the returned plan_hash."
-            if error_type == ErrorType.PLAN_EXPIRED
-            else "Plan hash mismatch: config, schema, or payload has changed since dry_run."
-        )
-        return envelope_err(
-            error_type or ErrorType.PLAN_HASH_MISMATCH,
-            message,
-            suggestion="Run dry_run=True again and use the returned plan_hash.",
+        return plan_hash_error(
+            error_type=error_type,
             details=details,
+            mismatch_message=(
+                "Plan hash mismatch: config, schema, or payload has changed since dry_run."
+            ),
+            expired_message=(
+                "Plan has expired. Run dry_run=True again and use the returned plan_hash."
+            ),
+            suggestion="Run dry_run=True again and use the returned plan_hash.",
         )
 
     batch_id = f"batch-{uuid4().hex[:12]}"

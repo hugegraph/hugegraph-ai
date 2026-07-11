@@ -29,6 +29,8 @@ CONFIG_ENV_VARS = (
     "HUGEGRAPH_MCP_ALLOW_AI",
     "HUGEGRAPH_MCP_ADMIN_MODE",
     "HUGEGRAPH_MCP_TIMEOUT_SECONDS",
+    "HUGEGRAPH_MCP_STATE_DIR",
+    "XDG_STATE_HOME",
 )
 
 
@@ -178,9 +180,9 @@ def test_admin_mode_reads_current_env(monkeypatch):
     assert MCPConfig.from_env().admin_mode is True
 
 
-def test_readonly_parsing(monkeypatch):
-    true_values = ("true", "1", "yes", "TRUE")
-    false_values = ("false", "0", "no", "")
+def test_strict_boolean_parsing(monkeypatch):
+    true_values = ("true", "1", "yes", "on", "TRUE", " On ")
+    false_values = ("false", "0", "no", "off", "FALSE", " Off ")
 
     for value in true_values:
         clear_config_env(monkeypatch)
@@ -191,6 +193,51 @@ def test_readonly_parsing(monkeypatch):
         clear_config_env(monkeypatch)
         monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", value)
         assert MCPConfig.from_env().is_readonly() is False
+
+
+def test_invalid_boolean_values_fail_closed_without_leaking_value(monkeypatch, caplog):
+    clear_config_env(monkeypatch)
+    secret_like_value = "treu-secret-token"
+    monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", secret_like_value)
+    monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "")
+    monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "junk")
+
+    with caplog.at_level(logging.WARNING, logger="hugegraph_mcp.config"):
+        cfg = MCPConfig.from_env()
+
+    assert cfg.readonly is True
+    assert cfg.allow_ai is False
+    assert cfg.admin_mode is False
+    assert secret_like_value not in caplog.text
+    assert "HUGEGRAPH_MCP_READONLY" in caplog.text
+    assert "HUGEGRAPH_MCP_ALLOW_AI" in caplog.text
+    assert "HUGEGRAPH_MCP_ADMIN_MODE" in caplog.text
+
+
+def test_unset_boolean_values_use_defaults_without_warning(monkeypatch, caplog):
+    clear_config_env(monkeypatch)
+
+    with caplog.at_level(logging.WARNING, logger="hugegraph_mcp.config"):
+        cfg = MCPConfig.from_env()
+
+    assert cfg.readonly is True
+    assert cfg.allow_ai is False
+    assert cfg.admin_mode is False
+    assert "HUGEGRAPH_MCP_READONLY" not in caplog.text
+    assert "HUGEGRAPH_MCP_ALLOW_AI" not in caplog.text
+    assert "HUGEGRAPH_MCP_ADMIN_MODE" not in caplog.text
+
+
+def test_state_dir_priority_and_defaults(monkeypatch, tmp_path):
+    clear_config_env(monkeypatch)
+    explicit = tmp_path / "explicit-state"
+    monkeypatch.setenv("HUGEGRAPH_MCP_STATE_DIR", str(explicit))
+    assert MCPConfig.from_env().state_dir == explicit
+
+    monkeypatch.delenv("HUGEGRAPH_MCP_STATE_DIR")
+    xdg = tmp_path / "xdg-state"
+    monkeypatch.setenv("XDG_STATE_HOME", str(xdg))
+    assert MCPConfig.from_env().state_dir == xdg / "hugegraph-mcp"
 
 
 def test_default_password_is_empty_but_explicit_xxx_is_accepted(monkeypatch):

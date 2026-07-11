@@ -9,7 +9,7 @@ services:
     container_name: hugegraph-llm-rag
     restart: always
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     # If you want to mount local configs to the container, uncomment the following lines
     #volumes:
       # Mount local '.env' file, could use ${ENV_FILE_PATH:-/dev/null} to avoid error

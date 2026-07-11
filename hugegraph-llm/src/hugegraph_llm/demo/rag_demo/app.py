@@ -16,6 +16,7 @@
 # under the License.
 
 import argparse
+import ipaddress
 import os
 
 import gradio as gr
@@ -196,11 +197,31 @@ def create_app():
     return app
 
 
-if __name__ == "__main__":
+def is_loopback_host(host: str) -> bool:
+    normalized_host = host.strip()
+    if normalized_host.lower() == "localhost":
+        return True
+
+    try:
+        return ipaddress.ip_address(normalized_host).is_loopback
+    except ValueError:
+        return False
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="host")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="host")
     parser.add_argument("--port", type=int, default=8001, help="port")
-    args = parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def run_server(args: argparse.Namespace) -> None:
+    if not is_loopback_host(args.host):
+        log.warning(
+            "SECURITY WARNING: The HugeGraph RAG HTTP API has no unified authentication. "
+            "Binding to a non-loopback host can expose it to other machines. Configure reverse proxy authentication, "
+            "a firewall, or a trusted network before continuing."
+        )
 
     uvicorn.run(
         "hugegraph_llm.demo.rag_demo.app:create_app",
@@ -209,3 +230,11 @@ if __name__ == "__main__":
         factory=True,
         reload=os.getenv("HG_DEV_RELOAD") == "1",
     )
+
+
+def main(argv: list[str] | None = None) -> None:
+    run_server(parse_args(argv))
+
+
+if __name__ == "__main__":
+    main()

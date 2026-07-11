@@ -44,6 +44,10 @@ docker compose -f docker-compose-network.yml up -d
 # - RAG Service: http://localhost:8001
 ```
 
+The RAG service is published only on the host loopback interface by default. Exposing it on a non-loopback interface is
+an explicit deployment choice: the HTTP API has no unified authentication, so configure reverse proxy authentication,
+a firewall, or a trusted network first.
+
 ### Option 2: Source Installation
 
 ```bash
@@ -69,6 +73,8 @@ cd hugegraph-llm
 python -m hugegraph_llm.demo.rag_demo.app
 # Visit http://127.0.0.1:8001
 ```
+
+The source launcher binds to `127.0.0.1` by default and warns when a non-loopback `--host` is selected.
 
 ### Basic Usage Examples
 

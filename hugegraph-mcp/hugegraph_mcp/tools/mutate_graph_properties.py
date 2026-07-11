@@ -23,6 +23,8 @@ from hugegraph_mcp.confirmable_workflow import (
     confirm_required_error,
     mark_readonly_preview,
     plan_hash_error,
+    replayed_plan_error,
+    verify_and_consume_plan,
 )
 from hugegraph_mcp.envelope import (
     ErrorType,
@@ -37,11 +39,11 @@ from hugegraph_mcp.plan_hash import (
     build_plan_context,
     compute_payload_digest,
     compute_plan_hash,
-    verify_plan_hash,
 )
 from hugegraph_mcp.tools.live_schema import current_live_schema
 from hugegraph_mcp.tools.schema_utils import (
     normalized_schema_summary,
+    property_cardinalities,
     property_names,
     schema_payload,
 )
@@ -91,15 +93,23 @@ def mutate_graph_properties(
     if validation_error is not None:
         return validation_error
 
+    if not dry_run and confirm:
+        replay_error = replayed_plan_error(nonce, source="mutate_graph_properties_tool")
+        if replay_error is not None:
+            return replay_error
+
     live_schema, target_item, read_error = _read_schema_and_target(target=target, id=id)
     if read_error is not None:
         return read_error
 
+    cardinalities = property_cardinalities(live_schema)
     schema_error = _validate_properties_against_schema(
         target=target,
         target_item=target_item,
+        operation=operation,
         properties=properties,
         live_schema=live_schema,
+        cardinalities=cardinalities,
     )
     if schema_error is not None:
         return schema_error
@@ -110,6 +120,7 @@ def mutate_graph_properties(
         id=id,
         properties=properties,
         before=target_item,
+        cardinalities=cardinalities,
     )
     nonce = _nonce_with_snapshot(nonce, preview["target_snapshot_digest"])
     plan_context = _build_mutation_plan_context(
@@ -184,7 +195,7 @@ def mutate_graph_properties(
             next_actions=["Call query_graph_data_tool to inspect the current target."],
         )
 
-    valid, error_type, details = verify_plan_hash(
+    valid, error_type, details = verify_and_consume_plan(
         submitted_hash=plan_hash,
         tool_name="mutate_graph_properties_tool",
         mode="mutate",
@@ -214,6 +225,7 @@ def mutate_graph_properties(
         properties=properties,
         before=target_item,
         planned_after=preview["after"],
+        cardinalities=cardinalities,
         payload=payload,
     )
 
@@ -326,8 +338,10 @@ def _validate_properties_against_schema(
     *,
     target: str,
     target_item: dict[str, Any],
+    operation: str,
     properties: dict[str, Any],
     live_schema: dict[str, Any] | None,
+    cardinalities: dict[str, str],
 ) -> dict[str, Any] | None:
     raw_schema = schema_payload(live_schema)
     if raw_schema is None:
@@ -364,6 +378,19 @@ def _validate_properties_against_schema(
             source="mutate_graph_properties_tool",
             details={"label": label, "unknown_properties": unknown},
         )
+    if operation == "append":
+        for name, value in properties.items():
+            cardinality = cardinalities.get(name, "SINGLE")
+            if cardinality in {"LIST", "SET"} and not isinstance(value, list):
+                return _validation_error(
+                    f"Property {name!r} requires a collection value for append.",
+                    f"Pass a JSON array for {cardinality} property {name!r}.",
+                    {
+                        "property": name,
+                        "cardinality": cardinality,
+                        "value_type": type(value).__name__,
+                    },
+                )
     return None
 
 
@@ -374,9 +401,15 @@ def _preview_mutation(
     id: Any,
     properties: dict[str, Any],
     before: dict[str, Any],
+    cardinalities: dict[str, str],
 ) -> dict[str, Any]:
     before_properties = dict(before.get("properties") or {})
-    after_properties = _apply_property_preview(before_properties, operation, properties)
+    after_properties = _apply_property_preview(
+        before_properties,
+        operation,
+        properties,
+        cardinalities,
+    )
     after = dict(before)
     after["properties"] = after_properties
     return {
@@ -396,10 +429,20 @@ def _apply_property_preview(
     before: dict[str, Any],
     operation: str,
     properties: dict[str, Any],
+    cardinalities: dict[str, str],
 ) -> dict[str, Any]:
     after = dict(before)
     if operation == "append":
-        after.update(properties)
+        for name, value in properties.items():
+            cardinality = cardinalities.get(name, "SINGLE")
+            if cardinality == "LIST":
+                after[name] = [*_existing_collection(after.get(name)), *value]
+            elif cardinality == "SET":
+                after[name] = _stable_unique(
+                    [*_existing_collection(after.get(name)), *value]
+                )
+            else:
+                after[name] = value
         return after
     for key in properties:
         after.pop(key, None)
@@ -414,6 +457,7 @@ def _execute_and_verify(
     properties: dict[str, Any],
     before: dict[str, Any],
     planned_after: dict[str, Any],
+    cardinalities: dict[str, str],
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     try:
@@ -498,7 +542,7 @@ def _execute_and_verify(
             ],
         )
 
-    if not _properties_match(post_read, planned_after):
+    if not _properties_match(post_read, planned_after, cardinalities):
         return _post_write_verification_error(
             message="Post-read state did not match the planned preview.",
             details={
@@ -633,9 +677,47 @@ def _find_label_schema(labels: Any, label_name: str) -> dict[str, Any] | None:
     return None
 
 
-def _properties_match(post_read: dict[str, Any], planned_after: dict[str, Any]) -> bool:
-    return (post_read.get("properties") or {}) == (
-        planned_after.get("properties") or {}
+def _properties_match(
+    post_read: dict[str, Any],
+    planned_after: dict[str, Any],
+    cardinalities: dict[str, str],
+) -> bool:
+    observed = post_read.get("properties") or {}
+    expected = planned_after.get("properties") or {}
+    if observed.keys() != expected.keys():
+        return False
+    for name, expected_value in expected.items():
+        observed_value = observed[name]
+        if cardinalities.get(name, "SINGLE") == "SET":
+            if not _set_values_match(observed_value, expected_value):
+                return False
+        elif observed_value != expected_value:
+            return False
+    return True
+
+
+def _existing_collection(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    return list(value) if isinstance(value, list) else [value]
+
+
+def _stable_unique(values: list[Any]) -> list[Any]:
+    result: list[Any] = []
+    for value in values:
+        if not any(existing == value for existing in result):
+            result.append(value)
+    return result
+
+
+def _set_values_match(observed: Any, expected: Any) -> bool:
+    if not isinstance(observed, list) or not isinstance(expected, list):
+        return observed == expected
+    observed_unique = _stable_unique(observed)
+    expected_unique = _stable_unique(expected)
+    return len(observed_unique) == len(expected_unique) and all(
+        any(observed_value == expected_value for observed_value in observed_unique)
+        for expected_value in expected_unique
     )
 
 

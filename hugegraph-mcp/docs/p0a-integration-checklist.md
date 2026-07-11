@@ -45,6 +45,12 @@ Start the MCP server with the same environment:
 uv run hugegraph-mcp
 ```
 
+Confirmed write plans are single-use. The server persists only a SHA-256 digest
+of each nonce and atomically consumes it before the first write side effect. A
+second call with the same confirmation returns `PLAN_ALREADY_USED`, including
+after an execution timeout, failure, or partial apply. Inspect the target state
+and run a new dry-run instead of retrying an already submitted confirmation.
+
 The request examples below show MCP `tools/call` payloads. Paste the `name` and `arguments` into your MCP client. Replace every `<RUN_ID>` with one short unique suffix, for example `20260705a`, and keep the same suffix through all steps. Replace `<EXPIRES_AT_...>` placeholders with the numeric `expires_at` value from the dry-run response, not a quoted string.
 
 ## Step 1: Inspect Tool Contract
@@ -767,6 +773,7 @@ Expected bounded-read fields:
 | `READONLY_VIOLATION` | Any confirm call for schema/data/property writes | `HUGEGRAPH_MCP_READONLY=true` at confirm time. Dry-run may be preview-only in readonly mode. | Set `HUGEGRAPH_MCP_READONLY=false`, restart or reconfigure the MCP process, rerun dry-run, then confirm with the new `plan_hash`. |
 | `PLAN_HASH_MISMATCH` | Confirm calls for schema/data/property writes | The submitted payload, graph target, schema hash, readonly state, principal, `nonce`, or `expires_at` no longer matches the dry-run plan. | Do not edit the payload between dry-run and confirm. Rerun dry-run and copy the new `plan_hash`, `nonce`, and `expires_at`. |
 | `PLAN_EXPIRED` | Confirm calls after waiting too long | The dry-run plan expired. Default plan TTL is 10 minutes. | Rerun dry-run and confirm within the returned `expires_at` window. |
+| `PLAN_ALREADY_USED` | A confirm call repeats a nonce that already entered execution | Confirmation nonces are globally single-use. A prior call may have succeeded, failed, timed out, or partially applied. | Inspect the current graph or schema state, then rerun dry-run and use its new `plan_hash`, `nonce`, and `expires_at`. Do not retry the old confirmation. |
 | `TARGET_CHANGED` | Step 5 stale eliminate confirm | The vertex or edge was changed after dry-run and before confirm. | Treat this as a successful stale-plan rejection in Step 5. For real work, rerun `query_graph_data_tool`, review current state, then create a new dry-run plan. |
 | `NO_INDEX` | `query_graph_data_tool(operation="condition")` or Gremlin `has()` filters | HugeGraph requires an index for that property query, and P0a does not create indexes. | Use `get_by_id` or bounded `page` for this checklist. Index create/rebuild belongs to the P0b workflow. |
 | `PARTIAL_APPLY` | `apply_schema_tool(mode="apply")` | At least one schema operation may have been applied before a later operation failed. | Call `inspect_schema_tool`, remove already-applied operations, rerun dry-run for the remaining operations only. Do not blindly retry the original full batch. |
