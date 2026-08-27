@@ -15,6 +15,11 @@
 
 from typing import Any
 
+from hugegraph_mcp.tools.schema_contract import (
+    SchemaFieldSpec,
+    field_specs_for_kind,
+)
+
 __all__ = [
     "edge_schema_endpoint_label",
     "normalized_schema_summary",
@@ -23,6 +28,7 @@ __all__ = [
     "property_names",
     "schema_name",
     "schema_payload",
+    "user_data_without_server_metadata",
 ]
 
 
@@ -95,6 +101,22 @@ def schema_payload(live_schema: dict[str, Any] | None) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
+def user_data_without_server_metadata(value: Any) -> dict[Any, Any] | None:
+    """Remove HugeGraph's reserved metadata keys from user-data mappings.
+
+    HugeGraph adds keys such as ``~create_time`` when a schema object is
+    created.  Those keys describe the server-side object and are not part of
+    the caller's requested user data.
+    """
+    if not isinstance(value, dict):
+        return None
+    return {
+        key: item
+        for key, item in value.items()
+        if not (isinstance(key, str) and key.startswith("~"))
+    }
+
+
 def edge_schema_endpoint_label(edge_schema: dict[str, Any], endpoint: str) -> Any:
     if endpoint == "source":
         return edge_schema.get("source_label") or edge_schema.get("sourceLabel")
@@ -117,10 +139,45 @@ def _normalize_named_list(values: Any) -> list[str]:
 
 def _normalize_schema_items(
     items: Any,
-    field_aliases: list[tuple[str, tuple[str, ...]]],
+    field_aliases: list[tuple[str, tuple[str, ...]]] | None = None,
     *,
     name_aliases: tuple[str, ...] = ("name",),
+    field_specs: dict[str, SchemaFieldSpec] | None = None,
+    include_user_data: bool = False,
 ) -> list[dict[str, Any]]:
+    if field_specs is not None:
+        field_aliases = [
+            (field, spec.aliases)
+            for field, spec in field_specs.items()
+            if spec.include_in_summary
+            and field not in {"type", "name"}
+            and (include_user_data or spec.kind != "mapping")
+        ]
+        name_spec = field_specs.get("name")
+        if name_spec is not None:
+            name_aliases = name_spec.aliases
+
+    field_aliases = field_aliases or []
+    if field_specs is None:
+        list_fields = {
+            "fields",
+            "index_labels",
+            "nullable_keys",
+            "primary_keys",
+            "properties",
+            "sort_keys",
+        }
+    else:
+        list_fields = {
+            field
+            for field, spec in field_specs.items()
+            if (
+                spec.include_in_summary
+                and spec.kind == "list"
+                and (include_user_data or spec.kind != "mapping")
+            )
+        }
+
     normalized: list[dict[str, Any]] = []
     if not isinstance(items, list):
         return normalized
@@ -136,23 +193,37 @@ def _normalize_schema_items(
             value = _field_value(item, *aliases)
             if value is None:
                 continue
-            if output_name in {
-                "fields",
-                "nullable_keys",
-                "primary_keys",
-                "properties",
-            }:
+            if output_name in list_fields:
                 value = _normalize_named_list(value)
+            elif output_name == "user_data":
+                value = user_data_without_server_metadata(value)
             result[output_name] = value
         normalized.append(result)
 
     return sorted(normalized, key=lambda value: value["name"])
 
 
+def _schema_collection_items(raw_schema: dict[str, Any], kind: str) -> Any:
+    aliases: dict[str, tuple[str, ...]] = {
+        "property_key": ("propertykeys", "property_keys", "propertyKeys"),
+        "vertex_label": ("vertexlabels", "vertex_labels", "vertexLabels"),
+        "edge_label": ("edgelabels", "edge_labels", "edgeLabels"),
+        "index_label": ("indexlabels", "index_labels", "indexLabels"),
+    }
+    return _field_value(raw_schema, *aliases.get(kind, ()))
+
+
 def normalized_schema_summary(
     live_schema: dict[str, Any] | None,
+    *,
+    include_user_data: bool = False,
 ) -> dict[str, Any] | None:
-    """Return the security-relevant schema subset used for plan hashes."""
+    """Return the schema subset used for plan hashes.
+
+    Data-write plans intentionally ignore schema metadata.  Schema-apply plans
+    pass ``include_user_data=True`` because ``user_data`` is an explicitly
+    supported field that must be bound to their confirmation hash.
+    """
     raw = schema_payload(live_schema)
     if raw is None:
         return None
@@ -164,42 +235,22 @@ def normalized_schema_summary(
     return {
         "propertykeys": _normalize_schema_items(
             _property_key_items(raw),
-            [
-                ("data_type", ("data_type", "dataType")),
-                (
-                    "cardinality",
-                    ("cardinality", "cardinality_type", "cardinalityType"),
-                ),
-            ],
-            name_aliases=("name", "property_name", "propertyName"),
+            field_specs=field_specs_for_kind("property_key"),
+            include_user_data=include_user_data,
         ),
         "vertexlabels": _normalize_schema_items(
-            raw.get("vertexlabels"),
-            [
-                ("id_strategy", ("id_strategy", "idStrategy")),
-                ("properties", ("properties",)),
-                ("primary_keys", ("primary_keys", "primaryKeys")),
-                ("nullable_keys", ("nullable_keys", "nullableKeys")),
-            ],
+            _schema_collection_items(raw, "vertex_label"),
+            field_specs=field_specs_for_kind("vertex_label"),
+            include_user_data=include_user_data,
         ),
         "edgelabels": _normalize_schema_items(
-            raw.get("edgelabels"),
-            [
-                ("source_label", ("source_label", "sourceLabel")),
-                ("target_label", ("target_label", "targetLabel")),
-                ("properties", ("properties",)),
-                ("nullable_keys", ("nullable_keys", "nullableKeys")),
-                ("frequency", ("frequency",)),
-            ],
+            _schema_collection_items(raw, "edge_label"),
+            field_specs=field_specs_for_kind("edge_label"),
+            include_user_data=include_user_data,
         ),
         "indexlabels": _normalize_schema_items(
-            raw.get("indexlabels"),
-            [
-                ("base_type", ("base_type", "baseType")),
-                ("base_label", ("base_label", "baseLabel")),
-                ("index_type", ("index_type", "indexType")),
-                ("fields", ("fields",)),
-                ("unique", ("unique",)),
-            ],
+            _schema_collection_items(raw, "index_label"),
+            field_specs=field_specs_for_kind("index_label"),
+            include_user_data=include_user_data,
         ),
     }

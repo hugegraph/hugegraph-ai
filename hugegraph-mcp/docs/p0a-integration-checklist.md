@@ -113,11 +113,17 @@ Expected key fields:
 }
 ```
 
-Continue only when `data.toolset` is `v2_core` and `data.readonly` is `false`. If `hugegraph_ai_status` is `unavailable`, ignore it for this P0a checklist.
+Continue only when `data.toolset` is `v2_core` and `data.readonly` is `false`. If `hugegraph_ai_status` is `unavailable`, ignore it for this P0a checklist. Default inspect leaves `vertex_count` and `edge_count` as `null`; pass `include_counts=true` only when a real count is required.
 
 ## Step 2: Create Minimal Schema Through Dry-Run And Confirm
 
 Safety decision verified: `apply_schema_tool(mode="apply")` is unlocked only for P0a create operations, and real schema writes must use the `dry_run -> plan_hash -> confirm` chain. The confirm step also verifies by post-reading live schema.
+
+Schema create operations use a closed field contract. `enable_label_index`,
+`index_labels`, and `user_data` are forwarded and checked when supplied;
+unimplemented fields such as `ttl*` must fail validation before a plan is
+issued. Keep any optional fields identical between the dry-run and confirm
+requests.
 
 Dry-run call:
 

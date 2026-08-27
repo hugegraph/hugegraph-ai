@@ -1509,7 +1509,36 @@ def test_manage_schema_plan_hash_schema_primary_key_change_different_hash():
     assert first != second
 
 
-def test_manage_schema_plan_hash_schema_metadata_ignored_same_hash():
+def test_manage_schema_plan_hash_schema_label_index_change_different_hash():
+    operations = [_property_key()]
+    schema = _schema(
+        vertexlabels=[
+            {
+                "name": "person",
+                "properties": ["name"],
+                "primary_keys": ["name"],
+                "enable_label_index": False,
+            }
+        ],
+    )
+    changed_schema = _schema(
+        vertexlabels=[
+            {
+                "name": "person",
+                "properties": ["name"],
+                "primary_keys": ["name"],
+                "enable_label_index": True,
+            }
+        ],
+    )
+
+    first = manage_schema_module.calculate_plan_hash(operations, schema)
+    second = manage_schema_module.calculate_plan_hash(operations, changed_schema)
+
+    assert first != second
+
+
+def test_manage_schema_plan_hash_changes_when_supported_user_data_changes():
     operations = [_property_key()]
     schema = _schema(
         propertykeys=[{"name": "name", "data_type": "TEXT"}],
@@ -1533,6 +1562,33 @@ def test_manage_schema_plan_hash_schema_metadata_ignored_same_hash():
                 "properties": ["name"],
                 "primary_keys": ["name"],
                 "user_data": {"x": "y"},
+            }
+        ],
+    )
+    schema_with_metadata["server_time"] = "2026-05-26T00:00:00Z"
+
+    first = manage_schema_module.calculate_plan_hash(operations, schema)
+    second = manage_schema_module.calculate_plan_hash(operations, schema_with_metadata)
+
+    assert first != second
+
+
+def test_manage_schema_plan_hash_ignores_unrelated_schema_metadata():
+    operations = [_property_key()]
+    schema = _schema(
+        propertykeys=[{"name": "name", "data_type": "TEXT"}],
+        vertexlabels=[
+            {"name": "person", "properties": ["name"], "primary_keys": ["name"]}
+        ],
+    )
+    schema_with_metadata = _schema(
+        propertykeys=[{"id": 1, "name": "name", "data_type": "TEXT"}],
+        vertexlabels=[
+            {
+                "id": 99,
+                "name": "person",
+                "properties": ["name"],
+                "primary_keys": ["name"],
             }
         ],
     )
@@ -1873,6 +1929,361 @@ def test_operation_observed_checks_vertex_and_edge_declared_fields():
     assert not manage_schema_module._operation_observed(mismatched_edge, schema)
 
 
+def test_operation_observed_checks_apply_defaults_for_omitted_fields():
+    property_operation = _property_key("age")
+    property_schema = _schema(
+        propertykeys=[{"name": "age", "data_type": "INT", "cardinality": "LIST"}]
+    )
+    assert not manage_schema_module._operation_observed(
+        property_operation, property_schema
+    )
+
+    vertex_operation = _vertex_label(
+        "person", properties=["name"], primary_keys=["name"]
+    )
+    vertex_schema = _schema(
+        vertexlabels=[
+            {
+                "name": "person",
+                "id_strategy": "AUTOMATIC",
+                "properties": ["name"],
+                "primary_keys": ["name"],
+            }
+        ]
+    )
+    assert not manage_schema_module._operation_observed(vertex_operation, vertex_schema)
+
+
+def test_operation_observed_rejects_fields_outside_contract():
+    operation = dict(
+        _property_key("age"),
+        ttl=3600,
+    )
+    schema = _schema(
+        propertykeys=[{"name": "age", "data_type": "INT", "cardinality": "SINGLE"}]
+    )
+
+    assert not manage_schema_module._operation_observed(operation, schema)
+
+
+def test_schema_field_table_rejects_unimplemented_fields_before_dry_run(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="dry_run",
+        operations=[
+            {
+                "type": "create_vertex_label",
+                "name": "person",
+                "id_strategy": "AUTOMATIC",
+                "ttl": 3600,
+            }
+        ],
+    )
+
+    _assert_dry_run_invalid(result)
+    assert any(
+        error["reason"] == "unsupported field(s) for create_vertex_label: ttl"
+        for error in result["data"]["errors"]
+    )
+
+
+def test_schema_field_table_rejects_non_object_property_key_user_data(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+
+    result = manage_schema(
+        mode="dry_run",
+        operations=[
+            {
+                "type": "create_property_key",
+                "name": "score",
+                "data_type": "INT",
+                "user_data": "silently-dropped",
+            }
+        ],
+    )
+
+    _assert_dry_run_invalid(result)
+    assert any(
+        error["reason"] == "user_data must be an object"
+        for error in result["data"]["errors"]
+    )
+
+
+def test_schema_field_table_rejects_non_object_user_data_before_plan_for_all_supported_operations(
+    monkeypatch,
+):
+    cases = [
+        (
+            _empty_schema(),
+            {
+                "type": "create_property_key",
+                "name": "score",
+                "data_type": "INT",
+                "user_data": "invalid",
+            },
+        ),
+        (
+            _empty_schema(),
+            {
+                "type": "create_vertex_label",
+                "name": "person",
+                "id_strategy": "AUTOMATIC",
+                "user_data": ["invalid"],
+            },
+        ),
+        (
+            _schema(vertexlabels=[_live_vertex("person")]),
+            {
+                "type": "create_edge_label",
+                "name": "knows",
+                "source_label": "person",
+                "target_label": "person",
+                "user_data": 1,
+            },
+        ),
+    ]
+
+    for live_schema, operation in cases:
+        monkeypatch.setattr(
+            manage_schema_module.schema_tools,
+            "get_live_schema",
+            lambda live_schema=live_schema: live_schema,
+        )
+        result = manage_schema(mode="dry_run", operations=[operation])
+
+        _assert_dry_run_invalid(result)
+        assert any(
+            error["reason"] == "user_data must be an object"
+            for error in result["data"]["errors"]
+        )
+
+
+def test_schema_field_table_forwards_and_matches_label_options():
+    builder = Mock()
+    operation = {
+        "type": "create_vertex_label",
+        "name": "person",
+        "id_strategy": "AUTOMATIC",
+        "properties": [],
+        "index_labels": ["person_by_name"],
+        "enable_label_index": False,
+        "user_data": {"owner": "mcp"},
+    }
+
+    manage_schema_module._apply_vertex_label_options(builder, operation)
+
+    builder.enableLabelIndex.assert_called_once_with(False)
+    builder.add_parameter.assert_any_call("index_labels", ["person_by_name"])
+    builder.add_parameter.assert_any_call("user_data", {"owner": "mcp"})
+
+    observed = _schema(
+        vertexlabels=[
+            {
+                "name": "person",
+                "id_strategy": "AUTOMATIC",
+                "properties": [],
+                "index_labels": ["person_by_name"],
+                "enable_label_index": False,
+                "user_data": {"owner": "mcp"},
+            }
+        ]
+    )
+    assert manage_schema_module._operation_observed(operation, observed)
+
+
+def test_schema_field_table_forwards_and_matches_edge_label_options():
+    builder = Mock()
+    operation = {
+        "type": "create_edge_label",
+        "name": "knows",
+        "source_label": "person",
+        "target_label": "person",
+        "properties": [],
+        "nullable_keys": [],
+        "sort_keys": [],
+        "frequency": "MULTIPLE",
+        "enable_label_index": True,
+        "user_data": {"owner": "mcp"},
+    }
+
+    manage_schema_module._apply_edge_label_options(builder, operation)
+
+    builder.link.assert_called_once_with("person", "person")
+    builder.multiTimes.assert_called_once_with()
+    builder.enableLabelIndex.assert_called_once_with(True)
+    builder.add_parameter.assert_called_once_with("user_data", {"owner": "mcp"})
+
+    observed = _schema(
+        edgelabels=[
+            {
+                "name": "knows",
+                "source_label": "person",
+                "target_label": "person",
+                "properties": [],
+                "nullable_keys": [],
+                "sort_keys": [],
+                "frequency": "MULTIPLE",
+                "enable_label_index": True,
+                "user_data": {"owner": "mcp"},
+            }
+        ]
+    )
+    assert manage_schema_module._operation_observed(operation, observed)
+
+
+def test_schema_field_table_forwards_property_key_user_data():
+    builder = Mock()
+    operation = {
+        "type": "create_property_key",
+        "name": "score",
+        "data_type": "INT",
+        "user_data": {"unit": "points"},
+    }
+
+    manage_schema_module._apply_property_key_options(builder, operation)
+
+    builder.add_parameter.assert_called_once_with("user_data", {"unit": "points"})
+
+    observed = _schema(
+        propertykeys=[
+            {
+                "name": "score",
+                "data_type": "INT",
+                "cardinality": "SINGLE",
+                "user_data": {"unit": "points"},
+            }
+        ]
+    )
+    assert manage_schema_module._operation_observed(operation, observed)
+
+
+def test_schema_field_table_post_read_rejects_supported_field_loss():
+    cases = [
+        (
+            {
+                "type": "create_property_key",
+                "name": "score",
+                "data_type": "INT",
+                "user_data": {"unit": "points"},
+            },
+            _schema(
+                propertykeys=[
+                    {
+                        "name": "score",
+                        "data_type": "INT",
+                        "cardinality": "SINGLE",
+                        "user_data": {},
+                    }
+                ]
+            ),
+        ),
+        (
+            {
+                "type": "create_vertex_label",
+                "name": "person",
+                "id_strategy": "AUTOMATIC",
+                "enable_label_index": True,
+                "user_data": {"owner": "mcp"},
+            },
+            _schema(
+                vertexlabels=[
+                    {
+                        "name": "person",
+                        "id_strategy": "AUTOMATIC",
+                        "enable_label_index": False,
+                        "user_data": {"owner": "mcp"},
+                    }
+                ]
+            ),
+        ),
+        (
+            {
+                "type": "create_edge_label",
+                "name": "knows",
+                "source_label": "person",
+                "target_label": "person",
+                "enable_label_index": True,
+                "user_data": {"owner": "mcp"},
+            },
+            _schema(
+                edgelabels=[
+                    {
+                        "name": "knows",
+                        "source_label": "person",
+                        "target_label": "person",
+                        "enable_label_index": True,
+                        "user_data": {},
+                    }
+                ]
+            ),
+        ),
+        (
+            {
+                "type": "create_vertex_label",
+                "name": "person",
+                "id_strategy": "AUTOMATIC",
+                "properties": [],
+            },
+            _schema(
+                vertexlabels=[
+                    {
+                        "name": "person",
+                        "id_strategy": "AUTOMATIC",
+                    }
+                ]
+            ),
+        ),
+    ]
+
+    for operation, observed in cases:
+        assert not manage_schema_module._operation_observed(operation, observed)
+
+
+def test_schema_field_table_post_read_ignores_server_managed_user_data():
+    operation = {
+        "type": "create_property_key",
+        "name": "score",
+        "data_type": "INT",
+        "user_data": {"unit": "points"},
+    }
+    observed = _schema(
+        propertykeys=[
+            {
+                "name": "score",
+                "data_type": "INT",
+                "cardinality": "SINGLE",
+                "user_data": {
+                    "unit": "points",
+                    "~create_time": "2026-08-27 03:00:00.000",
+                },
+            }
+        ]
+    )
+
+    assert manage_schema_module._operation_observed(operation, observed)
+
+
+def test_schema_field_table_forwards_property_key_aggregate_and_user_data():
+    builder = Mock()
+    operation = {
+        "type": "create_property_key",
+        "name": "score",
+        "data_type": "INT",
+        "aggregate_type": "NONE",
+        "user_data": {"unit": "points"},
+    }
+
+    manage_schema_module._apply_property_key_options(builder, operation)
+
+    builder.add_parameter.assert_any_call("aggregate_type", "NONE")
+    builder.add_parameter.assert_any_call("user_data", {"unit": "points"})
+
+
 def test_manage_schema_apply_partial_failure(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_MCP_READONLY", "false")
     state = _empty_schema()
@@ -1996,3 +2407,44 @@ def test_manage_schema_apply_readonly_blocks_after_valid_plan(monkeypatch):
 
     assert result["ok"] is False
     assert result["error"]["type"] == "READONLY_VIOLATION"
+
+
+def test_manage_schema_dry_run_rejects_too_many_operations_before_plan(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+    issue = Mock()
+    monkeypatch.setattr(manage_schema_module, "issue_plan", issue)
+    operations = [_property_key(f"pk_{idx}") for idx in range(201)]
+
+    result = manage_schema(mode="dry_run", operations=operations)
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "VALIDATION_ERROR"
+    assert "MAX_OPERATIONS" in result["error"]["details"]["errors"][0]["reason"]
+    assert "plan_hash" not in (result.get("data") or {})
+    issue.assert_not_called()
+
+
+def test_manage_schema_dry_run_rejects_oversized_payload_before_plan(monkeypatch):
+    monkeypatch.setattr(
+        manage_schema_module.schema_tools, "get_live_schema", _empty_schema
+    )
+    issue = Mock()
+    monkeypatch.setattr(manage_schema_module, "issue_plan", issue)
+    operations = [
+        {
+            "type": "create_property_key",
+            "name": "age",
+            "data_type": "TEXT",
+            "user_data": {"blob": "x" * 1_048_576},
+        }
+    ]
+
+    result = manage_schema(mode="dry_run", operations=operations)
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "VALIDATION_ERROR"
+    assert "MAX_PAYLOAD_BYTES" in result["error"]["details"]["errors"][0]["reason"]
+    assert "plan_hash" not in (result.get("data") or {})
+    issue.assert_not_called()
