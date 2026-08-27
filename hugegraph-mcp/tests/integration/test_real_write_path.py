@@ -48,10 +48,17 @@ def hugegraph_client(monkeypatch):
     monkeypatch.setenv("HUGEGRAPH_MCP_ADMIN_MODE", "false")
 
     client = build_hugegraph_client(MCPConfig.from_env(), client_cls=PyHugeClient)
-    try:
-        client.schema().getSchema()
-    except Exception as exc:  # noqa: BLE001 - depends on external service
-        pytest.fail(f"HugeGraph Server is not available: {exc}")
+    deadline = time.monotonic() + 60.0
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            client.schema().getSchema()
+            break
+        except Exception as exc:  # noqa: BLE001 - service startup is asynchronous
+            last_error = exc
+            time.sleep(1.0)
+    else:
+        pytest.fail(f"HugeGraph Server is not available: {last_error}")
     return client
 
 
@@ -105,6 +112,78 @@ def test_id_based_ingest_writes_the_intended_edge(hugegraph_client):
         )
         == 0
     )
+
+
+def test_apply_schema_forwards_and_verifies_supported_fields(hugegraph_client):
+    suffix = uuid4().hex[:8]
+    property_name = f"mcp_schema_property_{suffix}"
+    label_name = f"mcp_schema_vertex_{suffix}"
+    operations = [
+        {
+            "type": "create_property_key",
+            "name": property_name,
+            "data_type": "TEXT",
+            "user_data": {"owner": "mcp-integration"},
+        },
+        {
+            "type": "create_vertex_label",
+            "name": label_name,
+            "id_strategy": "PRIMARY_KEY",
+            "properties": [property_name],
+            "primary_keys": [property_name],
+            "enable_label_index": False,
+            "user_data": {"owner": "mcp-integration"},
+        },
+        {
+            "type": "create_edge_label",
+            "name": f"mcp_schema_edge_{suffix}",
+            "source_label": label_name,
+            "target_label": label_name,
+            "enable_label_index": True,
+            "user_data": {"owner": "mcp-integration-edge"},
+        },
+    ]
+
+    dry_run = server.apply_schema_tool(mode="dry_run", operations=operations)
+    assert dry_run["ok"] is True
+    assert dry_run["data"]["valid"] is True
+    context = dry_run["data"]["plan_context"]
+
+    applied = server.apply_schema_tool(
+        mode="apply",
+        operations=operations,
+        confirm=True,
+        plan_hash=dry_run["data"]["plan_hash"],
+        nonce=context["nonce"],
+        expires_at=context["expires_at"],
+    )
+    assert applied["ok"] is True
+    assert applied["data"]["status"] == "applied"
+
+    schema = hugegraph_client.schema().getSchema()
+    raw_schema = schema.get("schema", schema)
+    property_key = next(
+        item for item in raw_schema["propertykeys"] if item.get("name") == property_name
+    )
+    vertex_label = next(
+        item for item in raw_schema["vertexlabels"] if item.get("name") == label_name
+    )
+    edge_label = next(
+        item
+        for item in raw_schema["edgelabels"]
+        if item.get("name") == f"mcp_schema_edge_{suffix}"
+    )
+    assert _user_data_without_server_metadata(property_key.get("user_data")) == {
+        "owner": "mcp-integration"
+    }
+    assert vertex_label.get("enable_label_index") is False
+    assert _user_data_without_server_metadata(vertex_label.get("user_data")) == {
+        "owner": "mcp-integration"
+    }
+    assert edge_label.get("enable_label_index") is True
+    assert _user_data_without_server_metadata(edge_label.get("user_data")) == {
+        "owner": "mcp-integration-edge"
+    }
 
 
 def test_create_edge_rejects_missing_endpoint(hugegraph_client):
@@ -836,6 +915,16 @@ def _extract_count(data):
     if isinstance(data, list):
         return _extract_count(data[0]) if data else 0
     return data
+
+
+def _user_data_without_server_metadata(value):
+    if not isinstance(value, dict):
+        return None
+    return {
+        key: item
+        for key, item in value.items()
+        if not (isinstance(key, str) and key.startswith("~"))
+    }
 
 
 def _env(name: str, default: str | None = None) -> str | None:

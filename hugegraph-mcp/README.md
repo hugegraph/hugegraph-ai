@@ -146,7 +146,7 @@ When a call fails, `ok=false` and `error` uses this structure:
 
 | Tool | Description |
 |------|-------------|
-| `inspect_graph_tool` | Inspect HugeGraph Server status, schema summary, vertex/edge counts, readonly state, AI availability, and current MCP tool contract fields |
+| `inspect_graph_tool` | Inspect HugeGraph Server status, schema summary, readonly state, AI availability, and current MCP tool contract fields. Vertex/edge counts stay `null` unless `include_counts=true` |
 | `inspect_schema_tool` | Inspect schema objects, relations, and index labels; supports filtering by property key, vertex label, edge label, or index label |
 | `query_graph_data_tool` | Query vertices or edges by typed operations (`get_by_id`, `get_by_ids`, `page`, `condition`) with explicit limits and no Gremlin full-scan fallback |
 | `generate_gremlin_tool` | Generate Gremlin from natural language; defaults to generation only; `execute=true` still requires read-only validation |
@@ -159,6 +159,16 @@ When a call fails, `ok=false` and `error` uses this structure:
 | `mutate_graph_properties_tool` | Append or eliminate properties on one exact vertex or edge; both operations require `dry_run -> plan_hash -> confirm` and reject stale targets |
 | `execute_gremlin_write_tool` | Execute direct Gremlin writes; disabled by default and available only when `HUGEGRAPH_MCP_ADMIN_MODE=true` and `HUGEGRAPH_MCP_READONLY=false` |
 | `refresh_vid_embeddings_tool` | Refresh VID embeddings and mutate index state; disabled by default and available only when `HUGEGRAPH_MCP_ADMIN_MODE=true` and `HUGEGRAPH_MCP_READONLY=false` |
+
+Schema apply uses a closed operation-field contract. The supported create fields
+are `data_type`, `cardinality`, `aggregate_type`, and `user_data` for property
+keys; `id_strategy`, `properties`, `primary_keys`, `nullable_keys`,
+`index_labels`, `enable_label_index`, and `user_data` for vertex labels; and
+`source_label`, `target_label`, `properties`, `nullable_keys`, `sort_keys`,
+`frequency`, `enable_label_index`, and `user_data` for edge labels. Fields not
+listed here, including `ttl*`, are rejected during validation before a plan is
+issued. Supported fields are forwarded to HugeGraph and checked by a post-read
+of the live schema.
 
 The old `query_graph_tool`, `manage_schema_tool`, and `manage_graph_data_tool` are no longer exposed as user interfaces. New integrations should use the stable tools listed above.
 
@@ -193,7 +203,9 @@ The confirm phase must fully revalidate the plan. If the dry-run result expires,
 
 ### Import Semantics
 
-`import_graph_data_tool(mode="ingest")` is the structured import path shared by `v2_core` and the `v1` compatibility toolset. It uses local schema validation, dry-run/hash/confirm, and direct Gremlin writes through `manage_graph_data()`; it does not call the HugeGraph-AI `/graph-import` HTTP path. The legacy/internal AI-backed function is named `ingest_graph_data_via_ai()`.
+`import_graph_data_tool(mode="ingest")` is the structured import path shared by `v2_core` and the `v1` compatibility toolset. It uses local schema validation, dry-run/hash/confirm, and direct Gremlin writes through `manage_graph_data()`; it does not call the HugeGraph-AI `/graph-import` HTTP path. The legacy/internal AI-backed function is named `ingest_graph_data_via_ai()`. This PR keeps both write kernels: public MCP import uses local Gremlin writes, while `ingest_graph_data_via_ai()` remains the leftover HugeGraph-AI `/graph-import` dual-write path and is not closed here.
+
+Schema and graph-data dry-run share hard limits of `MAX_OPERATIONS = 200` and `MAX_PAYLOAD_BYTES = 1048576` (1 MiB). Exceeding either limit returns `VALIDATION_ERROR` before `plan_hash` is generated. The limits are not configurable in this release.
 
 When `import_graph_data_tool(mode="ingest")` executes a create operation, it returns one of three states:
 
