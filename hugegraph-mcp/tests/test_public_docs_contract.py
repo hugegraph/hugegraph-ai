@@ -101,8 +101,6 @@ def test_source_launch_contract_binds_both_checkout_packages():
         assert ".venv-mcp/bin/python -m hugegraph_mcp.server" in section
         assert "/Users/" not in section
 
-    assert "has not published" in _text(README)
-    assert "尚未发布" in _text(README_ZH)
     for path in PUBLIC_DOCS:
         assert "/Users/" not in _text(path)
 

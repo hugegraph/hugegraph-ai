@@ -13,7 +13,7 @@
 
 [project]
 name = "hugegraph-mcp"
-version = "1.7.0"
+version = "1.7.1"
 description = "FastMCP server that exposes HugeGraph schema & Gremlin tools over MCP/STDIO"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -35,7 +35,7 @@ authors = [
 
 dependencies = [
     "fastmcp==3.2.4",
-    "hugegraph-python>=1.7.0,<2",
+    "hugegraph-python>=1.7.1,<2",
 ]
 
 [project.urls]

@@ -8,17 +8,9 @@ HugeGraph MCP is a safe, controlled Model Context Protocol adapter for HugeGraph
 
 ## Quick Start
 
-From the repository root, run MCP and the Python client from the same checkout:
-
-```bash
-uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-mcp hugegraph-mcp
-```
-
-Configure the server environment variables below before starting. An [isolated development environment](#developer-notes) is also available.
-
-### Future PyPI Release
-
-**This PR has not published `hugegraph-mcp` to PyPI.** The commands and JSON configuration below require a published release.
+Installing a published package does not require cloning this repository. The
+commands below target `1.7.1` on PyPI; until it is published, use the
+[developer setup](#developer-notes). See the [release workflow](docs/releasing.md).
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then start the server in read-only mode:
 
@@ -29,7 +21,7 @@ export HUGEGRAPH_USER=admin
 export HUGEGRAPH_PASSWORD=admin
 export HUGEGRAPH_MCP_READONLY=true
 
-uvx --from hugegraph-mcp==1.7.0 hugegraph-mcp
+uvx hugegraph-mcp@1.7.1
 ```
 
 The process speaks MCP JSON-RPC on stdout. Keep `HUGEGRAPH_MCP_READONLY=true` unless controlled writes are required. The default toolset is `v2_core`; set `HUGEGRAPH_MCP_TOOLSET=v1` before startup only for the legacy 10-tool contract.
@@ -41,7 +33,7 @@ For MCP clients that accept JSON server configuration:
   "mcpServers": {
     "hugegraph": {
       "command": "uvx",
-      "args": ["--from", "hugegraph-mcp==1.7.0", "hugegraph-mcp"],
+      "args": ["hugegraph-mcp@1.7.1"],
       "env": {
         "HUGEGRAPH_URL": "http://hugegraph.example.com:8080",
         "HUGEGRAPH_GRAPH_PATH": "DEFAULT/hugegraph",
@@ -55,6 +47,12 @@ For MCP clients that accept JSON server configuration:
 ```
 
 ## Developer Notes
+
+To try both packages from the same checkout, run from the repository root:
+
+```bash
+uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-mcp hugegraph-mcp
+```
 
 From the root of the PR checkout, install uv, then create an isolated environment and install both packages from this branch:
 

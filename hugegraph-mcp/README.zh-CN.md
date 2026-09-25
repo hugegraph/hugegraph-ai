@@ -8,17 +8,8 @@ HugeGraph MCP 是 HugeGraph Server 的安全、可控 Model Context Protocol 适
 
 ## 快速开始
 
-当前从仓库根目录运行同一 checkout 的 MCP 和 Python 客户端：
-
-```bash
-uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-mcp hugegraph-mcp
-```
-
-先按下方配置实际服务的环境变量。也可使用[独立开发环境](#开发者说明)。
-
-### 未来的 PyPI 发行版
-
-**当前 PR 尚未发布 `hugegraph-mcp` 到 PyPI。** 以下命令与 JSON 配置仅适用于发布后。
+安装已发布版本不需要克隆仓库。以下命令面向 PyPI 的 `1.7.1` 包；
+发布前请使用[开发者说明](#开发者说明)，发布步骤见[发布流程](docs/releasing.md)。
 
 安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)，然后以只读模式启动：
 
@@ -29,7 +20,7 @@ export HUGEGRAPH_USER=admin
 export HUGEGRAPH_PASSWORD=admin
 export HUGEGRAPH_MCP_READONLY=true
 
-uvx --from hugegraph-mcp==1.7.0 hugegraph-mcp
+uvx hugegraph-mcp@1.7.1
 ```
 
 进程通过 stdout 提供 MCP JSON-RPC。除非明确需要受控写入，请保持 `HUGEGRAPH_MCP_READONLY=true`。默认工具集为 `v2_core`；只有旧客户端需要 10 工具契约时才在启动前设置 `HUGEGRAPH_MCP_TOOLSET=v1`。
@@ -41,7 +32,7 @@ uvx --from hugegraph-mcp==1.7.0 hugegraph-mcp
   "mcpServers": {
     "hugegraph": {
       "command": "uvx",
-      "args": ["--from", "hugegraph-mcp==1.7.0", "hugegraph-mcp"],
+      "args": ["hugegraph-mcp@1.7.1"],
       "env": {
         "HUGEGRAPH_URL": "http://hugegraph.example.com:8080",
         "HUGEGRAPH_GRAPH_PATH": "DEFAULT/hugegraph",
@@ -55,6 +46,12 @@ uvx --from hugegraph-mcp==1.7.0 hugegraph-mcp
 ```
 
 ## 开发者说明
+
+源码试用可在仓库根目录运行同一 checkout 的两个包：
+
+```bash
+uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-mcp hugegraph-mcp
+```
 
 从 PR checkout 的仓库根目录执行。安装 uv 后，创建独立环境并安装同分支的 MCP 与客户端：
 
