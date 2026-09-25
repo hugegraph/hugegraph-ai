@@ -62,7 +62,7 @@ jobs:
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Cache dependencies
         uses: actions/cache@v4
@@ -95,7 +95,7 @@ jobs:
           isolated-mcp-venv/bin/python -m pip install \
             --find-links wheelhouse \
             wheelhouse/hugegraph_python-*.whl \
-            wheelhouse/hugegraph_mcp-*.whl
+            wheelhouse/hugegraph_mcp-*.whl "tomli>=2"
           isolated-mcp-venv/bin/python - <<'PY'
           from importlib.metadata import requires, version
           from types import SimpleNamespace
@@ -110,8 +110,12 @@ jobs:
           from pyhugegraph.utils.huge_config import HGraphConfig
           from pyhugegraph.utils.huge_requests import HGraphSession
 
-          assert version("hugegraph-python") == "1.7.0"
-          assert version("hugegraph-mcp") == "1.7.0"
+          import tomli
+          from pathlib import Path
+
+          for name, directory in (("hugegraph-python", "hugegraph-python-client"), ("hugegraph-mcp", "hugegraph-mcp")):
+              expected = tomli.loads(Path(directory, "pyproject.toml").read_text())["project"]["version"]
+              assert version(name) == expected
           dependencies = [Requirement(value) for value in requires("hugegraph-mcp")]
           client_dependency = next(dep for dep in dependencies if dep.name == "hugegraph-python")
           assert version("hugegraph-python") in client_dependency.specifier
@@ -136,6 +140,16 @@ jobs:
               "http://127.0.0.1:8080/graphspaces/GS/graphs/g/schema"
           )
           PY
+
+      - name: Verify uvx distribution startup
+        if: matrix.python-version == '3.10'
+        run: |
+          mcp_wheel=$(realpath wheelhouse/hugegraph_mcp-*.whl)
+          client_wheel=$(realpath wheelhouse/hugegraph_python-*.whl)
+          python hugegraph-mcp/tests/distribution_smoke.py -- \
+            uvx --no-config --no-cache --python "$(command -v python)" \
+            --index-url https://pypi.org/simple \
+            --with "$client_wheel" --from "$mcp_wheel" hugegraph-mcp
 
       - name: Check MCP formatting
         run: |
@@ -176,7 +190,7 @@ jobs:
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Cache dependencies
         uses: actions/cache@v4

@@ -1,62 +1,85 @@
 # Publishing HugeGraph MCP
 
-HugeGraph MCP is distributed from PyPI and launched with `uvx`. It depends on
-`hugegraph-python`, so release the client before the MCP package.
+Python packages are published through the shared
+[`hugegraph/actions` workflow](https://github.com/hugegraph/actions/blob/master/.github/workflows/publish_python.yml).
+This repository owns package versions, dependencies, and tests. The actions
+repository owns building, artifact verification, and uploading. There is no
+second tag-triggered publisher in this repository.
 
-## Repository Setup
+## Package Versions
 
-Configure PyPI Trusted Publishers for these GitHub environments and workflows:
+The intermediate client and MCP packages use `1.7.1`. MCP requires
+`hugegraph-python>=1.7.1,<2`; the published `1.7.0` client does not include all
+client fixes required by MCP. Publish the client before the MCP package.
 
-| PyPI project | GitHub environment | Workflow |
-| --- | --- | --- |
-| `hugegraph-python` | `pypi-hugegraph-python-client` | `publish-hugegraph-python-client.yml` |
-| `hugegraph-mcp` | `pypi-hugegraph-mcp` | `publish-hugegraph-mcp.yml` |
+For the planned `1.8.0` release, update the repository's package versions together
+and raise the MCP client dependency to `>=1.8.0,<2`. Already uploaded `1.7.1`
+artifacts remain available; do not overwrite or delete them.
 
-Require reviewer approval on both GitHub environments. The workflows request
-short-lived OIDC credentials and do not use long-lived PyPI API tokens.
+`hugegraph-python` is the client distribution name, `pyhugegraph` is its import
+name, and `hugegraph-python-client/` is its source directory. `hugegraph-mcp`
+contains the MCP adapter and console entry point, not the entire AI workspace.
+Users need neither a Git checkout nor a manual client installation.
 
-## Release Order
+## Shared Workflow
 
-1. Merge the client fixes required by MCP.
-2. Set a new, unpublished client version and publish it by pushing
-   `client-v<version>`.
-3. Confirm that the client version is available from PyPI, then update the MCP
-   minimum client dependency to that version and verify the published-client contracts.
-4. Update and verify the MCP package version, then publish it by pushing
-   `mcp-v<version>`, for example `mcp-v1.7.0`.
-5. Verify the public installation:
+Select `component=client` or `component=mcp`. Select the source repository
+(`apache/hugegraph-ai` or `hugegraph/hugegraph-ai`) and a branch, tag, or commit via
+`source_ref`; the workflow resolves it to one immutable commit before building.
+Public PyPI uploads require the Apache source repository; fork sources are
+limited to validation and TestPyPI. The source commit must contain the requested
+component and its tests. Fork
+validation can therefore run before the PR is merged into ASF `main`.
+
+The workflow defaults to `publish=false`: it builds, tests, and records artifacts
+without uploading a package. With `publish=true`, `target` selects the `testpypi`
+or `pypi` GitHub environment and its `PYPI_API_TOKEN`. The PyPI token must have
+permission for the selected project; a token scoped only to `hugegraph-python`
+cannot create or upload `hugegraph-mcp`. Follow the environment approval rules in
+the actions repository.
+
+For PyPI, the version comes from the selected component's `pyproject.toml`.
+TestPyPI uses the workflow's explicit test version; see the actions README for
+its format and the staged-client selection when testing MCP. TestPyPI validation
+does not establish compatibility with a client published only on public PyPI.
+
+## Publish and Validate
+
+1. Select a source commit containing both client fixes and MCP. Confirm package
+   versions, the MCP client dependency, and passing unit/contract tests.
+2. Build and validate the client with `publish=false`. Publish it to the selected
+   index when ready, then confirm its wheel and sdist are available.
+3. Build and validate MCP against the published client. Production validation
+   installs dependencies from public PyPI, never from the sibling source tree or
+   a locally built client wheel. Stop if the required client is unavailable or
+   the published-client contract tests fail.
+4. Publish MCP, then verify public installation from outside the checkout:
 
    ```bash
-   uvx --from hugegraph-mcp==1.7.0 hugegraph-mcp
+   uvx --no-cache hugegraph-mcp@1.7.1
    ```
 
-The MCP build job resolves its wheel only against published dependencies, so it
-stops before upload when the required client release is unavailable or fails the
-client ID and schema contract tests. The tests run outside the checkout to prevent
-local source imports from masking an incompatible published wheel.
+5. Configure the HugeGraph URL and credentials, connect an MCP client, and verify
+   initialization, `tools/list`, `inspect_graph_tool`, and a bounded
+   `query_graph_data_tool` request against a real HugeGraph Server >= 1.7.0.
 
-The distribution name is `hugegraph-python`; Python imports remain `pyhugegraph`
-and the source directory remains `hugegraph-python-client/`. The GitHub environment
-and workflow identifiers above are deployment configuration, not PyPI package names;
-keep them aligned with the configured Trusted Publisher.
+The shared workflow tests wheel/sdist installation and uses
+`tests/distribution_smoke.py` to exercise MCP stdio with a local HTTP fixture.
+The script starts the installed command in a temporary directory, removes source
+import overrides, and verifies initialization, 16 v2 tools, inspection, and a
+structured query. This checks packaging and protocol wiring; it does not replace
+real-server integration tests.
 
-Before releasing MCP, also verify the required client behavior (including graphspace
-and auth routing) against the published client wheel. Installing successfully alone
-does not prove that the published client contains the fixes in this branch.
-
-For local wheel validation with uv, create a clean environment and run:
+To repeat the distribution smoke locally, build a wheel and pass its absolute
+path (the client must already be on PyPI):
 
 ```bash
-uv --no-config pip install --python <isolated-python> <mcp-wheel> <client-wheel>
+uv build --no-sources hugegraph-mcp --out-dir /tmp/mcp-dist
+python hugegraph-mcp/tests/distribution_smoke.py -- \
+  uvx --no-config --no-cache --index-url https://pypi.org/simple \
+  --from /tmp/mcp-dist/hugegraph_mcp-1.7.1-py3-none-any.whl hugegraph-mcp
 ```
 
-This avoids applying the root LLM workspace constraints to the standalone MCP
-distribution. To check published dependencies, omit `<client-wheel>` and use
-`--index-url https://pypi.org/simple` without local `--find-links`.
-
-During PR development, the published client is expected to exclude client fixes
-that have not yet been merged and released. Package-name migration is verified by
-installing the renamed distribution and starting MCP; full branch compatibility is
-verified with the client built from the same checkout. The published-client
-contract check is a release prerequisite and runs in the tag-triggered publishing
-workflow. Follow the release order above once the client fixes are merged.
+PR CI separately tests wheels for both packages from the same checkout. That
+check may pass before the client is published and is not a substitute for the
+published-client gate above.
