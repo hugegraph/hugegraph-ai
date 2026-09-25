@@ -50,6 +50,7 @@ def _schema_result(readonly: bool = False):
 
 
 def _patch_ai_available(monkeypatch, inspect_graph_module):
+    monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "true")
     monkeypatch.setattr(
         inspect_graph_module,
         "health_check",
@@ -132,6 +133,7 @@ def test_inspect_graph_ai_status_uses_unified_health_check_config(monkeypatch):
         captured.append(cfg)
         return {"ok": True, "data": {"status": "available"}, "warnings": []}
 
+    monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "true")
     monkeypatch.setattr(inspect_graph_module, "health_check", fake_health_check)
 
     result = inspect_graph_module.inspect_graph()
@@ -227,6 +229,7 @@ def test_inspect_graph_ai_unavailable(monkeypatch):
         "execute_gremlin_read",
         Mock(return_value={"data": [1], "total": 1, "duration_ms": 1, "is_read": True}),
     )
+    monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "true")
     monkeypatch.setattr(
         inspect_graph_module,
         "health_check",
@@ -258,6 +261,7 @@ def test_inspect_graph_ai_available_when_openapi_fallback_works(monkeypatch):
         Mock(return_value={"data": [1], "total": 1, "duration_ms": 1, "is_read": True}),
     )
 
+    monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "true")
     monkeypatch.setattr(
         inspect_graph_module,
         "health_check",
@@ -291,6 +295,7 @@ def test_inspect_graph_requires_explicit_vid_index_status(monkeypatch):
         "execute_gremlin_read",
         Mock(return_value={"data": [1], "total": 1, "duration_ms": 1, "is_read": True}),
     )
+    monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "true")
     monkeypatch.setattr(
         inspect_graph_module,
         "health_check",
@@ -329,7 +334,8 @@ def test_inspect_graph_includes_next_actions(monkeypatch):
     assert result["next_actions"]
     assert any("inspect_graph_tool with include_raw_schema=true" in action for action in result["next_actions"])
     assert any("inspect_graph_tool with include_counts=true" in action for action in result["next_actions"])
-    assert any("execute_gremlin_read_tool" in action for action in result["next_actions"])
+    assert any("query_graph_data_tool" in action for action in result["next_actions"])
+    assert not any("execute_gremlin_read_tool" in action for action in result["next_actions"])
     assert not any("query_graph_tool" in action for action in result["next_actions"])
 
 
@@ -365,3 +371,28 @@ def test_inspect_graph_include_counts_failure_keeps_null(monkeypatch):
     assert result["data"]["edge_count"] is None
     assert any("Failed to fetch vertex count" in w for w in result["warnings"])
     assert any("Failed to fetch edge count" in w for w in result["warnings"])
+
+
+def test_inspect_graph_disabled_ai_is_quiet_and_skips_health_check(monkeypatch):
+    from hugegraph_mcp.tools import inspect_graph as inspect_graph_module
+
+    monkeypatch.setenv("HUGEGRAPH_MCP_ALLOW_AI", "false")
+    monkeypatch.setattr(inspect_graph_module, "get_live_schema", lambda: _schema_result())
+    health = Mock(side_effect=AssertionError("Disabled AI must not be probed"))
+    monkeypatch.setattr(inspect_graph_module, "health_check", health)
+    result = inspect_graph_module.inspect_graph()
+    assert result["ok"] is True
+    assert result["data"]["hugegraph_ai_status"] == "disabled"
+    assert result["warnings"] == []
+    assert not any("HugeGraph-AI URL" in action for action in result["next_actions"])
+    health.assert_not_called()
+
+
+def test_inspect_graph_v1_does_not_recommend_unavailable_tools(monkeypatch):
+    from hugegraph_mcp.tools import inspect_graph as inspect_graph_module
+
+    monkeypatch.setattr(inspect_graph_module, "get_live_schema", lambda: _schema_result())
+    result = inspect_graph_module.inspect_graph(toolset="v1")
+    assert any("HUGEGRAPH_MCP_TOOLSET=v2_core" in action for action in result["next_actions"])
+    assert not any("query_graph_data_tool" in action for action in result["next_actions"])
+    assert not any("execute_gremlin_read_tool" in action for action in result["next_actions"])

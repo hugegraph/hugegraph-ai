@@ -33,7 +33,7 @@ def get_registered_tools():
     return asyncio.run(_get_tools())
 
 
-def test_readonly_env_parsing():
+def test_readonly_env_parsing(tmp_path):
     """Test that various readonly env values are parsed correctly."""
     test_cases = [
         ("true", True),
@@ -51,7 +51,11 @@ def test_readonly_env_parsing():
     ]
 
     for env_value, expected in test_cases:
-        with patch.dict(os.environ, {"HUGEGRAPH_MCP_READONLY": env_value}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"HUGEGRAPH_MCP_READONLY": env_value, "HUGEGRAPH_MCP_STATE_DIR": str(tmp_path)},
+            clear=True,
+        ):
             # Import and check READONLY value
             import importlib
 

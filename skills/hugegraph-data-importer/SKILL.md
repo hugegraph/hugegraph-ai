@@ -12,12 +12,12 @@ description: Route HugeGraph MCP graph data extraction and controlled import/del
 | Inspect schema, primary keys, or edge endpoints | `inspect_graph_tool(include_raw_schema=true)` |
 | Extract candidate graph data from text | `extract_graph_data_tool(text, graph_schema?, example_prompt?)` |
 | Preview structured vertex/edge import | `import_graph_data_tool(mode="ingest", graph_data, dry_run=true)` |
-| Execute confirmed import | `import_graph_data_tool(mode="ingest", graph_data, dry_run=false, confirm=true, plan_hash, nonce, expires_at)` |
+| Execute confirmed import | Unavailable: preview-only, no `plan_id`; confirmation returns `FEATURE_DISABLED` |
 | Preview controlled vertex/edge delete | `delete_graph_data_tool(change_plan, dry_run=true)` |
-| Execute confirmed controlled delete | `delete_graph_data_tool(change_plan, dry_run=false, confirm=true, plan_hash, nonce, expires_at)` |
-| Verify imported data | `execute_gremlin_read_tool(gremlin_query)` |
+| Execute confirmed controlled delete | `confirm_write_tool(plan_id)` for a confirmable exact edge delete only |
+| Verify imported data | `query_graph_data_tool` (bounded page or exact ID query) |
 
-`change_plan` must contain exact operations. For example, a vertex delete is:
+`change_plan` must contain exact operations. For example, a vertex delete preview (not executable) is:
 
 ```json
 {"operations":[{"op":"delete_vertex","label":"person","match":{"name":"Alice"}}]}
@@ -32,8 +32,7 @@ to exactly one target during dry-run; bulk and cascade deletes are not supported
 ```text
 inspect_graph_tool -> extract_graph_data_tool or prepare graph_data
 -> import_graph_data_tool(dry_run=true)
--> import_graph_data_tool(dry_run=false, confirm=true, plan_hash, nonce, expires_at)
--> execute_gremlin_read_tool
+-> review preview (stop: no executable import plan)
 ```
 
 For controlled deletes:
@@ -41,6 +40,8 @@ For controlled deletes:
 ```text
 inspect_graph_tool(include_raw_schema=true)
 -> delete_graph_data_tool(dry_run=true)
--> delete_graph_data_tool(dry_run=false, confirm=true, plan_hash, nonce, expires_at)
--> execute_gremlin_read_tool
+-> confirm_write_tool(plan_id), only for confirmable exact edge deletes
+-> get_write_status_tool(plan_id) -> query_graph_data_tool
 ```
+
+Structured query and plan lifecycle tools require the default `v2_core` toolset. For a `v1` deployment, enable `HUGEGRAPH_MCP_TOOLSET=v2_core` and restart before using them.

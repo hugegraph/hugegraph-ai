@@ -97,6 +97,9 @@ def _warning_from_exception(prefix: str, exc: Exception) -> str:
 def _check_ai_status(cfg: MCPConfig) -> tuple[str, Any, list[str]]:
     """探测 HugeGraph-AI 是否可用 — 复用统一客户端的认证、超时和回退逻辑。"""
 
+    if not cfg.allow_ai:
+        return "disabled", None, []
+
     result = health_check(cfg=cfg)
     warnings = list(result.get("warnings") or [])
     if result.get("ok"):
@@ -110,6 +113,7 @@ def _check_ai_status(cfg: MCPConfig) -> tuple[str, Any, list[str]]:
 def inspect_graph(
     include_raw_schema: bool = False,
     include_counts: bool = False,
+    toolset: str = "v2_core",
 ) -> dict[str, Any]:
     """检视 HugeGraph 服务器状态、schema 摘要和 AI 状态。
 
@@ -168,7 +172,7 @@ def inspect_graph(
         data,
         duration_ms=duration_ms,
         warnings=warnings,
-        next_actions=_next_actions(data),
+        next_actions=_next_actions(data, toolset=toolset),
         readonly=data["readonly"],
     )
 
@@ -185,16 +189,19 @@ def _run_count_query(query: str, label: str, warnings: list[str]) -> int | None:
         return None
 
 
-def _next_actions(data: dict[str, Any]) -> list[str]:
+def _next_actions(data: dict[str, Any], *, toolset: str = "v2_core") -> list[str]:
     """根据当前状态给出下一步建议，引导 Agent 使用正确的后续工具。"""
     actions = [
         "Use inspect_graph_tool with include_raw_schema=true for full schema details",
         "Use inspect_graph_tool with include_counts=true to fetch vertex/edge counts",
     ]
     if data.get("hugegraph_server_status") == "available":
-        actions.append("Use execute_gremlin_read_tool for read-only graph exploration")
+        if toolset == "v2_core":
+            actions.append("Use query_graph_data_tool for bounded structured graph queries")
+        else:
+            actions.append("Set HUGEGRAPH_MCP_TOOLSET=v2_core and restart to enable structured graph queries")
     else:
         actions.append("Check HugeGraph Server URL, graph name, and credentials")
-    if data.get("hugegraph_ai_status") != "available":
+    if data.get("hugegraph_ai_status") == "unavailable":
         actions.append("Check HugeGraph-AI URL if embedding or graph index features are needed")
     return actions

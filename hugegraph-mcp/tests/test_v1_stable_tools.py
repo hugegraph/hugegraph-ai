@@ -212,10 +212,10 @@ def test_inspect_graph_tool_adds_contract_fields(monkeypatch):
     assert result["data"]["toolset"] == "v2_core"
     assert result["meta"]["mcp_tool_contract_version"] == "2.0"
     assert result["meta"]["toolset"] == "v2_core"
-    mock.assert_called_once_with(include_raw_schema=False, include_counts=False)
+    mock.assert_called_once_with(include_raw_schema=False, include_counts=False, toolset="v2_core")
 
     server.inspect_graph_tool(include_counts=True)
-    mock.assert_called_with(include_raw_schema=False, include_counts=True)
+    mock.assert_called_with(include_raw_schema=False, include_counts=True, toolset="v2_core")
 
 
 def test_execute_gremlin_read_tool_fails_closed_even_for_admin(monkeypatch):
@@ -635,3 +635,10 @@ def test_refresh_vid_embeddings_tool_wraps_unexpected_exceptions(monkeypatch):
     assert result["error"]["type"] == "FLOW_EXECUTION_FAILED"
     assert result["error"]["source"] == "refresh_vid_embeddings_tool"
     assert "boom" in result["error"]["message"]
+
+
+def test_import_tool_description_matches_preview_only_behavior():
+    tools = asyncio.run(_list_mcp_tools())
+    tool = next(item for item in tools if item.name == "import_graph_data_tool")
+    assert "no plan_id" in tool.description
+    assert "FEATURE_DISABLED" in tool.description

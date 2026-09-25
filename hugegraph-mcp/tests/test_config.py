@@ -432,7 +432,7 @@ def test_cached_config_is_immutable(monkeypatch):
     assert MCPConfig.from_env().graph == "hugegraph"
 
 
-def test_cached_config_uses_same_environment_snapshot_for_key_and_value(monkeypatch):
+def test_cached_config_uses_same_environment_snapshot_for_key_and_value(monkeypatch, tmp_path):
     class ChangingEnvironment(dict):
         readonly_reads = 0
 
@@ -442,7 +442,9 @@ def test_cached_config_uses_same_environment_snapshot_for_key_and_value(monkeypa
                 return "false" if self.readonly_reads == 1 else "true"
             return super().get(key, default)
 
-    environment = ChangingEnvironment(HUGEGRAPH_URL="http://snapshot.example:8080")
+    environment = ChangingEnvironment(
+        HUGEGRAPH_URL="http://snapshot.example:8080", HUGEGRAPH_MCP_STATE_DIR=str(tmp_path)
+    )
     monkeypatch.setattr(config_module.os, "environ", environment)
 
     cfg = MCPConfig.from_env()

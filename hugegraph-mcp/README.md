@@ -8,6 +8,18 @@ HugeGraph MCP is a safe, controlled Model Context Protocol adapter for HugeGraph
 
 ## Quick Start
 
+From the repository root, run MCP and the Python client from the same checkout:
+
+```bash
+uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-mcp hugegraph-mcp
+```
+
+Configure the server environment variables below before starting. An [isolated development environment](#developer-notes) is also available.
+
+### Future PyPI Release
+
+**This PR has not published `hugegraph-mcp` to PyPI.** The commands and JSON configuration below require a published release.
+
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then start the server in read-only mode:
 
 ```bash
@@ -44,20 +56,38 @@ For MCP clients that accept JSON server configuration:
 
 ## Developer Notes
 
-Run from the repository checkout while keeping the repository path explicit:
+From the root of the PR checkout, install uv, then create an isolated environment and install both packages from this branch:
 
 ```bash
-export PYTHONPATH=/Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-mcp:/Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-python-client/src
-/Users/uleng/Code/hugegraph-ai-pr73-mcp/.venv/bin/python -m hugegraph_mcp.server
+uv venv --python 3.10 .venv-mcp
+uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 ```
 
-This command uses the checkout's existing root virtual environment and forces both
-`hugegraph-mcp` and its sibling Python client to resolve from the current checkout.
-It does not ask uv to solve the standalone `hugegraph-mcp` subproject, which would
-try to satisfy `hugegraph-python-client>=1.7.0` from a package index instead of the
-sibling source tree.
+Set the HugeGraph URL and credentials shown above for your server, then start on macOS/Linux:
 
-The MCP layer exposes stable tools, reads runtime configuration, enforces permissions, validates structured requests, persists write plans and receipts, and delegates graph operations to HugeGraph Server or enabled AI operations to HugeGraph-AI.
+```bash
+.venv-mcp/bin/python -m hugegraph_mcp.server
+```
+
+On Windows PowerShell (set variables with `$env:NAME="value"`):
+
+```powershell
+.\.venv-mcp\Scripts\python.exe -m hugegraph_mcp.server
+```
+
+Both packages load from this checkout; no author-specific path or pre-existing environment is required. `--no-config` keeps root LLM dependency constraints out of the standalone MCP environment.
+
+For an MCP client, set `command` to the absolute path of this Python interpreter in your own checkout and `args` to `["-m", "hugegraph_mcp.server"]`.
+
+After connecting, call `inspect_graph_tool(include_raw_schema=true)` and check that `hugegraph_server_status="available"`. Then run a bounded structured query, replacing `person` with an existing label:
+
+```json
+{"name":"query_graph_data_tool","arguments":{"target":"vertex","operation":"page","label":"person","limit":5}}
+```
+
+[Integration checklist](docs/p0a-integration-checklist.md) · [Release order](docs/releasing.md)
+
+Structured queries cap the requested page size at `HUGEGRAPH_MCP_MAX_RESULT_ITEMS` and the tool maximum of 500. ID batches exceeding the effective limit are rejected before querying. Responses exceeding the item or byte limit are rejected without truncation or a continuation cursor; these checks do not bound backend execution or transport memory.
 
 ## Public Tool Surface
 

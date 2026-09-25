@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       - name: Verify release tag
         if: github.event_name == 'push'
@@ -55,7 +55,15 @@ jobs:
       - name: Verify published dependencies and console script
         run: |
           wheel=$(find dist -name '*.whl' -print -quit)
-          uvx --from "$wheel" hugegraph-mcp < /dev/null
+          python -m venv published-mcp-venv
+          published-mcp-venv/bin/python -m pip install --index-url https://pypi.org/simple "$wheel" "pytest~=8.0.0"
+          # Copy tests outside the checkout so pytest cannot import the sibling client source.
+          contract_dir=$(mktemp -d)
+          cp hugegraph-python-client/src/tests/api/test_vertex_id_format.py "$contract_dir/"
+          cp hugegraph-python-client/src/tests/api/test_schema_contract.py "$contract_dir/"
+          cp hugegraph-python-client/src/tests/test_distribution.py "$contract_dir/"
+          published-mcp-venv/bin/python -m pytest "$contract_dir" --confcutdir "$contract_dir" -q
+          published-mcp-venv/bin/hugegraph-mcp < /dev/null
 
       - uses: actions/upload-artifact@v4
         with:

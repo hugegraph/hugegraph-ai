@@ -13,7 +13,7 @@ description: Route HugeGraph MCP operational checks to status, schema, permissio
 | Fetch vertex/edge counts | `inspect_graph_tool(include_counts=true)` |
 | Inspect full schema, primary keys, indexes, edge endpoints | `inspect_graph_tool(include_raw_schema=true)` |
 | Check readonly, graph, or graphspace | `inspect_graph_tool(include_raw_schema=false)` |
-| Verify whether graph data exists | `execute_gremlin_read_tool(gremlin_query)` |
+| Verify whether graph data exists | `query_graph_data_tool` (bounded page or exact ID query) |
 | Get schema context before query | `inspect_graph_tool(include_raw_schema=true)` |
 | Check schema before import | `inspect_graph_tool(include_raw_schema=true)` |
 | Check schema before schema design | `inspect_graph_tool(include_raw_schema=true)` |
@@ -29,5 +29,9 @@ disabled AI call or an admin-gated tool.
 ```text
 Status check: inspect_graph_tool
 Schema audit: inspect_graph_tool(include_raw_schema=true)
-Data verification: inspect_graph_tool(include_counts=true) -> execute_gremlin_read_tool
+Data verification: inspect_graph_tool(include_counts=true) -> query_graph_data_tool
 ```
+
+When AI is disabled by configuration, `hugegraph_ai_status="disabled"` is normal; no AI service check is needed. `unavailable` means an enabled AI service check failed.
+
+Structured query and plan lifecycle tools require the default `v2_core` toolset. For a `v1` deployment, enable `HUGEGRAPH_MCP_TOOLSET=v2_core` and restart before using them.
