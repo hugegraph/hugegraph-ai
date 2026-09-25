@@ -455,6 +455,9 @@ def test_dry_run_delete_vertex_rejects_edges_when_not_cascade(monkeypatch):
 
     assert result["valid"] is False
     assert "cascade=false" in result["errors"][0]["reason"]
+    assert "Delete associated edges explicitly" in result["errors"][0]["suggestion"]
+    assert "confirmation remains disabled" in result["errors"][0]["suggestion"]
+    assert "Set cascade=true" not in result["errors"][0]["suggestion"]
     assert result["preview"][0]["associated_edge_count"] == 3
 
 

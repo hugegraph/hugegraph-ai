@@ -400,7 +400,9 @@ def test_query_no_index_returns_no_index(monkeypatch):
 
     assert result["ok"] is False
     assert result["error"]["type"] == "NO_INDEX"
-    assert any("P0b" in action for action in result["next_actions"])
+    assert any("get_by_id" in action for action in result["next_actions"])
+    assert any("outside MCP" in action for action in result["next_actions"])
+    assert not any("P0b" in action for action in result["next_actions"])
 
 
 def test_query_not_indexed_message_returns_no_index(monkeypatch):
@@ -421,3 +423,50 @@ def test_query_not_indexed_message_returns_no_index(monkeypatch):
     assert result["error"]["type"] == "NO_INDEX"
     assert result["error"]["retryable"] is False
     assert result["error"]["details"]["reason"] == "no_index"
+
+
+@pytest.mark.parametrize("limit", [None, 5])
+def test_page_respects_configured_item_limit(monkeypatch, limit):
+    monkeypatch.setenv("HUGEGRAPH_MCP_MAX_RESULT_ITEMS", "2")
+    manager = FakeGraphManager()
+    monkeypatch.setattr(query_module, "_graph_manager", lambda: manager)
+    result = query_module.query_graph_data(target="vertex", operation="page", label="person", limit=limit)
+    assert result["ok"] is True
+    assert manager.calls[0][2] == 2
+    assert result["data"]["limit"] == 2
+    assert result["data"]["next_page"] == "next-page"
+
+
+def test_backend_over_limit_page_is_rejected_without_cursor(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_MAX_RESULT_ITEMS", "2")
+    manager = Mock()
+    manager.getVertexByPage.return_value = ([Vertex()] * 3, "would-skip-records")
+    monkeypatch.setattr(query_module, "_graph_manager", lambda: manager)
+    result = query_module.query_graph_data(target="vertex", operation="page", label="person")
+    assert result["ok"] is False
+    assert result["data"] is None
+    assert result["error"]["details"]["truncated"] is False
+    assert "max_result_items" in result["error"]["details"]["exceeded"]
+
+
+def test_single_edge_respects_byte_limit(monkeypatch):
+    monkeypatch.setenv("HUGEGRAPH_MCP_MAX_RESULT_BYTES", "1024")
+    manager = Mock()
+    manager.getEdgeById.return_value = {"id": "edge-1", "properties": {"text": "x" * 2048}}
+    monkeypatch.setattr(query_module, "_graph_manager", lambda: manager)
+    result = query_module.query_graph_data(target="edge", operation="get_by_id", id="edge-1")
+    assert result["ok"] is False
+    assert result["data"] is None
+    assert result["error"]["details"]["hard_budget"] is False
+    assert "max_result_bytes" in result["error"]["details"]["exceeded"]
+
+
+@pytest.mark.parametrize("limit,configured", [(1, "100"), (None, "1")])
+def test_id_batch_exceeding_effective_limit_rejected_before_request(monkeypatch, limit, configured):
+    monkeypatch.setenv("HUGEGRAPH_MCP_MAX_RESULT_ITEMS", configured)
+    manager_factory = Mock()
+    monkeypatch.setattr(query_module, "_graph_manager", manager_factory)
+    result = query_module.query_graph_data(target="edge", operation="get_by_ids", ids=["e1", "e2"], limit=limit)
+    assert result["ok"] is False
+    assert result["error"]["type"] == "VALIDATION_ERROR"
+    manager_factory.assert_not_called()

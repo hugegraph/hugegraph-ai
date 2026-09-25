@@ -4,9 +4,12 @@ Use this checklist to validate the current write-safety contract against a dispo
 
 ## 1. Start an Isolated Server
 
-Run from `/Users/uleng/Code` (replace the checkout path if needed):
+Run from the repository root in a POSIX shell. Create the MCP environment first:
 
 ```bash
+uv venv --python 3.10 .venv-mcp
+uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
+
 docker pull hugegraph/hugegraph:1.7.0
 docker run --rm -d --name hg-p0a-check -p 127.0.0.1:18080:8080 hugegraph/hugegraph:1.7.0
 until curl -fsS http://127.0.0.1:18080/versions >/dev/null; do sleep 1; done
@@ -26,15 +29,12 @@ export HUGEGRAPH_CONNECT_TIMEOUT_SECONDS=0.5
 export HUGEGRAPH_READ_TIMEOUT_SECONDS=15
 export HUGEGRAPH_WRITE_TIMEOUT_SECONDS=15
 
-export PYTHONPATH=/Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-mcp:/Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-python-client/src
-/Users/uleng/Code/hugegraph-ai-pr73-mcp/.venv/bin/python -m hugegraph_mcp.server
+.venv-mcp/bin/python -m hugegraph_mcp.server
 ```
 
-The launch command deliberately uses the checkout's root virtual environment and
-binds both source trees through `PYTHONPATH`. Do not replace it with
-`uv run --project .../hugegraph-mcp`: resolving that standalone subproject can
-request the unavailable package-index release `hugegraph-python-client==0.1.1`
-instead of loading the sibling client checkout.
+The environment installs both packages from this checkout. Keep commands relative
+to the repository root. For Windows setup, see the [README](../README.md#developer-notes);
+the shell and Docker examples in this checklist use POSIX syntax.
 
 Use a second MCP client process for the calls below. Replace `<RUN_ID>` with one unique suffix and preserve exact IDs returned by the server. Each JSON block is the `tools/call` name and arguments payload.
 
@@ -193,8 +193,7 @@ preview-only assertion:
 
 ```bash
 export RUN_ID=<RUN_ID>
-PYTHONPATH=/Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-python-client/src \
-  /Users/uleng/Code/hugegraph-ai-pr73-mcp/.venv/bin/python - <<'PY'
+.venv-mcp/bin/python - <<'PY'
 import os
 
 from pyhugegraph.client import PyHugeClient
@@ -272,29 +271,6 @@ Require `ok=true`, `data.confirmable=false`, and a warning that atomic condition
 
 Pass `expires_at` as a JSON number, without quotes. Require `FEATURE_DISABLED` and verify Alice remains unchanged.
 
-### Isolated vertex deletion
-
-```json
-{
-  "name": "delete_graph_data_tool",
-  "arguments": {
-    "change_plan": {
-      "operations": [
-        {
-          "op": "delete_vertex",
-          "label": "p0a_person_<RUN_ID>",
-          "match": {"p0a_name_<RUN_ID>": "Alice"},
-          "cascade": false
-        }
-      ]
-    },
-    "dry_run": true
-  }
-}
-```
-
-Require `ok=true`, `data.confirmable=false`, `data.preview_only=true`, and no `plan_id`. Confirmation must return `FEATURE_DISABLED`. This is required even when the preview reports zero incident edges: Docker concurrency testing demonstrated that HugeGraph 1.7.0 cannot atomically exclude a concurrently added edge.
-
 ## 6. Delete an Exact Edge
 
 Dry-run an edge delete whose label and endpoint primary keys resolve exactly one edge. The persisted plan binds the resulting edge ID:
@@ -322,6 +298,32 @@ Dry-run an edge delete whose label and endpoint primary keys resolve exactly one
 
 Require a `plan_id`, confirm it through `confirm_write_tool`, and require `APPLIED`. A bounded edge page for `p0a_knows_<RUN_ID>` must then return no edge.
 
+### Isolated vertex deletion
+
+After the edge deletion above reaches `APPLIED` and the edge page is empty,
+Alice has no incident edges. Preview her deletion:
+
+```json
+{
+  "name": "delete_graph_data_tool",
+  "arguments": {
+    "change_plan": {
+      "operations": [
+        {
+          "op": "delete_vertex",
+          "label": "p0a_person_<RUN_ID>",
+          "match": {"p0a_name_<RUN_ID>": "Alice"},
+          "cascade": false
+        }
+      ]
+    },
+    "dry_run": true
+  }
+}
+```
+
+Require `ok=true`, `data.confirmable=false`, `data.preview_only=true`, and no `plan_id`. Confirmation must return `FEATURE_DISABLED`. This is required even when the preview reports zero incident edges: Docker concurrency testing demonstrated that HugeGraph 1.7.0 cannot atomically exclude a concurrently added edge.
+
 ## 7. Verify Failure-State Semantics
 
 For every submitted plan:
@@ -330,11 +332,11 @@ For every submitted plan:
 - `PARTIAL` means at least one operation applied and the workflow did not completely apply. It must never be reported as `REJECTED`.
 - `UNKNOWN` means the commit outcome cannot be proven. Do not repeat the original write or create an equivalent replacement plan.
 
-The public tools intentionally provide no fault-injection switch. Run the automated durable-executor fault suite from `/Users/uleng/Code`:
+The public tools intentionally provide no fault-injection switch. Run the automated durable-executor fault suite from the repository root:
 
 ```bash
-/Users/uleng/Code/hugegraph-ai-pr73-mcp/.venv/bin/pytest \
-  /Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-mcp/tests/test_write_executor_faults.py -q
+uv --no-config pip install --python .venv-mcp "pytest~=8.0.0"
+.venv-mcp/bin/python -m pytest hugegraph-mcp/tests/test_write_executor_faults.py -q
 ```
 
 The suite must cover failures before claim, after claim, before write, after write, and during receipt persistence. When a controlled test produces `PARTIAL` or `UNKNOWN`, call:

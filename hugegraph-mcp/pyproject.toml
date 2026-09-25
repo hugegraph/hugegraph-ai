@@ -35,7 +35,7 @@ authors = [
 
 dependencies = [
     "fastmcp==3.2.4",
-    "hugegraph-python-client>=1.7.0,<2",
+    "hugegraph-python>=1.7.0,<2",
 ]
 
 [project.urls]

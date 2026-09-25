@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       - name: Verify release tag
         run: |
@@ -46,7 +46,7 @@ jobs:
           test "${GITHUB_REF_NAME}" = "client-v${package_version}"
 
       - name: Build distributions
-        run: uv build --package hugegraph-python-client --out-dir dist
+        run: uv build --package hugegraph-python --out-dir dist
 
       - name: Verify distributions
         run: uvx --from twine twine check dist/*
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi-hugegraph-python-client
-      url: https://pypi.org/p/hugegraph-python-client
+      url: https://pypi.org/p/hugegraph-python
     permissions:
       id-token: write
     steps:

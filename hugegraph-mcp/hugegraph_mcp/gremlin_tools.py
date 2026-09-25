@@ -142,7 +142,15 @@ def _gremlin_result_byte_size(data: Any) -> int:
     return len(encoded)
 
 
-def _gremlin_output_guard_error(data: Any, count: int, duration_ms: float) -> dict[str, Any] | None:
+def _gremlin_output_guard_error(
+    data: Any,
+    count: int,
+    duration_ms: float,
+    *,
+    max_items: int | None = None,
+    result_name: str = "Gremlin",
+    source: str | None = None,
+) -> dict[str, Any] | None:
     """Reject an already-materialized result that is too large to return.
 
     This is deliberately an output guard, not an execution or transport budget:
@@ -151,7 +159,8 @@ def _gremlin_output_guard_error(data: Any, count: int, duration_ms: float) -> di
     cfg = MCPConfig.from_env()
     byte_size = _gremlin_result_byte_size(data)
     exceeded = []
-    if count > cfg.max_result_items:
+    item_limit = cfg.max_result_items if max_items is None else min(cfg.max_result_items, max_items)
+    if count > item_limit:
         exceeded.append("max_result_items")
     if byte_size > cfg.max_result_bytes:
         exceeded.append("max_result_bytes")
@@ -159,7 +168,8 @@ def _gremlin_output_guard_error(data: Any, count: int, duration_ms: float) -> di
         return None
     return envelope_err(
         ErrorType.VALIDATION_ERROR,
-        "Gremlin result exceeds the configured post-materialization output guard.",
+        f"{result_name} result exceeds the configured post-materialization output guard.",
+        source=source,
         suggestion="Use a smaller limit or return fewer/smaller properties.",
         details={
             "truncated": False,
@@ -167,7 +177,7 @@ def _gremlin_output_guard_error(data: Any, count: int, duration_ms: float) -> di
             "hard_budget": False,
             "exceeded": exceeded,
             "result_items": count,
-            "max_result_items": cfg.max_result_items,
+            "max_result_items": item_limit,
             "result_bytes": byte_size,
             "max_result_bytes": cfg.max_result_bytes,
         },

@@ -95,12 +95,16 @@ def test_source_launch_contract_binds_both_checkout_packages():
     checklist = _section(_text(CHECKLIST), "## 1. Start an Isolated Server", next_level=2)
 
     for section in (english, chinese, checklist):
-        assert "/hugegraph-mcp:/Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-python-client/src" in section
-        assert ("/Users/uleng/Code/hugegraph-ai-pr73-mcp/.venv/bin/python -m hugegraph_mcp.server") in section
-        assert "uv run --project hugegraph-mcp hugegraph-mcp" not in section
+        assert "uv venv --python 3.10 .venv-mcp" in section
+        assert "uv --no-config pip install --python .venv-mcp" in section
+        assert "-e ./hugegraph-python-client -e ./hugegraph-mcp" in section
+        assert ".venv-mcp/bin/python -m hugegraph_mcp.server" in section
+        assert "/Users/" not in section
 
-    assert "uv run --project .../hugegraph-mcp" in checklist
-    assert "Do not replace it with" in checklist
+    assert "has not published" in _text(README)
+    assert "尚未发布" in _text(README_ZH)
+    for path in PUBLIC_DOCS:
+        assert "/Users/" not in _text(path)
 
 
 def test_public_docs_fail_closed_for_other_unproved_write_boundaries():

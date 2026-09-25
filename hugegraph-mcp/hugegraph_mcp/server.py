@@ -252,6 +252,7 @@ def inspect_graph_tool(
         inspect_graph,
         include_raw_schema=include_raw_schema,
         include_counts=include_counts,
+        toolset=_active_toolset(),
     )
     if result.get("ok") and isinstance(result.get("data"), dict):
         result["data"]["mcp_tool_contract_version"] = MCP_TOOL_CONTRACT_VERSION
@@ -342,7 +343,8 @@ def query_graph_data_tool(
     - get_by_ids: requires non-empty ids.
     - page: vertex requires label; edge may use label and/or vertex_id+direction.
     - condition: exact-match properties only; no Gremlin full-scan fallback.
-    limit defaults to 100 and rejects values above 500. For edge page/condition,
+    limit defaults to 100, rejects values above 500, and respects configured result
+    limits. Oversized ID batches/results are rejected, not truncated. For edge page/condition,
     direction is required when vertex_id is provided.
     """
     return _call_public_tool(
@@ -548,8 +550,9 @@ def import_graph_data_tool(
     """Extract or plan structured graph data import.
 
     mode="extract" returns candidate graph_data without writing.
-    mode="ingest" validates locally and issues an immutable plan_id; confirm it
-    with confirm_write_tool. mode="table" returns FEATURE_DISABLED.
+    mode="ingest" only previews validated graph data: confirmable=false,
+    preview_only=true, and no plan_id. Confirmation returns FEATURE_DISABLED
+    without writing. mode="table" also returns FEATURE_DISABLED.
     """
     start = time.perf_counter()
 

@@ -22,6 +22,7 @@ from pyhugegraph.utils.id_format import format_vertex_id
 from hugegraph_mcp.config import MCPConfig
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.error_mapping import classify_hugegraph_exception
+from hugegraph_mcp.gremlin_tools import _gremlin_output_guard_error
 from hugegraph_mcp.hugegraph_client import build_hugegraph_client
 
 TARGETS = frozenset({"vertex", "edge"})
@@ -59,7 +60,9 @@ def query_graph_data(
     - page: vertex requires label; edge may use label and/or vertex_id+direction.
     - condition: exact-match properties only; no full graph Gremlin fallback.
 
-    limit defaults to 100 and rejects values above 500.
+    limit defaults to 100, rejects values above 500, and is capped by the configured
+    result item limit. ID batches larger than the effective limit are rejected.
+    Oversized results are rejected without truncation or a continuation cursor.
     Edge page/condition with vertex_id must also pass direction=OUT|IN|BOTH.
     """
 
@@ -79,11 +82,18 @@ def query_graph_data(
     if validation_error is not None:
         return validation_error
 
-    bounded_limit = DEFAULT_LIMIT if limit is None else int(limit)
+    cfg = MCPConfig.from_env()
+    bounded_limit = min(DEFAULT_LIMIT if limit is None else int(limit), MAX_LIMIT, cfg.max_result_items)
     normalized_direction = _normalize_direction(direction)
 
     try:
         normalized_ids = _normalize_ids(ids, warnings, target=target) if operation == "get_by_ids" else []
+        if operation == "get_by_ids" and len(normalized_ids) > bounded_limit:
+            return _validation_error(
+                "The number of distinct IDs exceeds the effective limit.",
+                "Split the IDs into smaller batches or increase limit within configured bounds.",
+                {"ids_length": len(normalized_ids), "limit": bounded_limit},
+            )
         manager = _graph_manager()
         result, next_page = _execute_query(
             manager=manager,
@@ -102,20 +112,32 @@ def query_graph_data(
         return _query_error(exc)
 
     items = _normalize_items(result)
+    data = {
+        "target": target,
+        "operation": operation,
+        "items": items,
+        "count": len(items),
+        "page": page,
+        "next_page": next_page,
+        "limit": bounded_limit,
+    }
+    guard_error = _gremlin_output_guard_error(
+        data,
+        len(items),
+        0.0,
+        max_items=bounded_limit,
+        result_name="Structured query",
+        source="query_graph_data_tool",
+    )
+    if guard_error is not None:
+        return guard_error
     return envelope_ok(
-        {
-            "target": target,
-            "operation": operation,
-            "items": items,
-            "count": len(items),
-            "page": page,
-            "next_page": next_page,
-            "limit": bounded_limit,
-        },
+        data,
         warnings=warnings,
         next_actions=[
             "Use mutate_graph_properties_tool dry_run before changing returned items.",
-            "If HugeGraph reports no index for condition queries, create indexes in the P0b index workflow.",
+            "If a condition query needs an index, use operation='get_by_id' with an exact ID, "
+            "or ask an administrator to create the index outside MCP.",
         ],
     )
 
@@ -383,7 +405,8 @@ def _query_error(exc: Exception) -> dict[str, Any]:
     classification = classify_hugegraph_exception(exc)
     next_actions = [
         "Retry with exact id lookup if possible.",
-        "For no-index condition queries, create an index in the P0b index workflow.",
+        "If a condition query needs an index, use operation='get_by_id' with an exact ID, "
+        "or ask an administrator to create the index outside MCP.",
     ]
     return envelope_err(
         classification.error_type,

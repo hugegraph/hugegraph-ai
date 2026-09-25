@@ -8,6 +8,18 @@ HugeGraph MCP 是 HugeGraph Server 的安全、可控 Model Context Protocol 适
 
 ## 快速开始
 
+当前从仓库根目录运行同一 checkout 的 MCP 和 Python 客户端：
+
+```bash
+uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-mcp hugegraph-mcp
+```
+
+先按下方配置实际服务的环境变量。也可使用[独立开发环境](#开发者说明)。
+
+### 未来的 PyPI 发行版
+
+**当前 PR 尚未发布 `hugegraph-mcp` 到 PyPI。** 以下命令与 JSON 配置仅适用于发布后。
+
 安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)，然后以只读模式启动：
 
 ```bash
@@ -44,19 +56,38 @@ uvx --from hugegraph-mcp==1.7.0 hugegraph-mcp
 
 ## 开发者说明
 
-从代码仓运行：
+从 PR checkout 的仓库根目录执行。安装 uv 后，创建独立环境并安装同分支的 MCP 与客户端：
 
 ```bash
-export PYTHONPATH=/Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-mcp:/Users/uleng/Code/hugegraph-ai-pr73-mcp/hugegraph-python-client/src
-/Users/uleng/Code/hugegraph-ai-pr73-mcp/.venv/bin/python -m hugegraph_mcp.server
+uv venv --python 3.10 .venv-mcp
+uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 ```
 
-此命令使用代码仓已有的根目录虚拟环境，并强制从当前 checkout 加载
-`hugegraph-mcp` 和同仓的 Python client。它不会让 uv 单独解析
-`hugegraph-mcp` 子项目，因此不会错误地从包索引解析
-`hugegraph-python-client>=1.7.0`，而会直接使用相邻源码。
+使用上方环境变量配置实际的 HugeGraph 地址和凭据，然后启动（macOS/Linux）：
 
-MCP 层负责稳定工具、运行时配置、权限、结构化请求校验、写入计划及回执持久化，并把图操作交给 HugeGraph Server，把已启用的 AI 操作交给 HugeGraph-AI。
+```bash
+.venv-mcp/bin/python -m hugegraph_mcp.server
+```
+
+Windows PowerShell：
+
+```powershell
+.\.venv-mcp\Scripts\python.exe -m hugegraph_mcp.server
+```
+
+此安装使用当前 checkout 的两个包，不依赖作者机器上的路径或已有虚拟环境。`--no-config` 避免把根目录的 LLM 依赖约束应用于独立 MCP 环境。
+
+在 MCP 客户端配置中，将 `command` 设为自己 checkout 下此 Python 解释器的绝对路径，`args` 设为 `["-m", "hugegraph_mcp.server"]`。
+
+连接后先调用 `inspect_graph_tool(include_raw_schema=true)`，确认 `hugegraph_server_status="available"`，再对已有标签执行有界结构化查询（将 `person` 替换为实际标签）：
+
+```json
+{"name":"query_graph_data_tool","arguments":{"target":"vertex","operation":"page","label":"person","limit":5}}
+```
+
+[完整集成检查](docs/p0a-integration-checklist.md) · [发布顺序](docs/releasing.md)
+
+结构化查询会将分页大小限制在 `HUGEGRAPH_MCP_MAX_RESULT_ITEMS` 和工具上限 500 以内。超过有效上限的 ID 批次会在查询前被拒绝。返回结果超过条数或字节上限时整体拒绝，不截断结果或返回后续游标；这些检查不限制服务端执行量或传输期间的内存占用。
 
 ## 对外工具面
 

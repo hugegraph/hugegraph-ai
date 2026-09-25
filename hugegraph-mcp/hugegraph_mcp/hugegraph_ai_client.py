@@ -249,6 +249,8 @@ def _ai_error(
 def _normalize_response(data: Any, *, duration_ms: float) -> dict[str, Any]:
     """Convert a Thin API envelope without wrapping it in a second envelope."""
     if not _is_thin_api_envelope(data):
+        if _looks_like_thin_api_envelope(data):
+            return _invalid_upstream_response("malformed_envelope", duration_ms=duration_ms)
         return envelope_ok(data, duration_ms=duration_ms)
 
     current = data
@@ -339,7 +341,14 @@ def _invalid_upstream_response(
 
 
 def _looks_like_thin_api_envelope(data: Any) -> bool:
-    return isinstance(data, dict) and _THIN_ENVELOPE_KEYS.issubset(data)
+    return isinstance(data, dict) and (
+        _THIN_ENVELOPE_KEYS.issubset(data)
+        or (
+            isinstance(data.get("ok"), bool)
+            and ("error" in data or "data" in data)
+            and (data["ok"] is False or "warnings" in data or "next_actions" in data)
+        )
+    )
 
 
 def _is_thin_api_envelope(data: Any) -> bool:

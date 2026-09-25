@@ -94,12 +94,14 @@ jobs:
           python -m venv isolated-mcp-venv
           isolated-mcp-venv/bin/python -m pip install \
             --find-links wheelhouse \
-            wheelhouse/hugegraph_python_client-*.whl \
+            wheelhouse/hugegraph_python-*.whl \
             wheelhouse/hugegraph_mcp-*.whl
           isolated-mcp-venv/bin/python - <<'PY'
-          from importlib.metadata import version
+          from importlib.metadata import requires, version
           from types import SimpleNamespace
           from unittest.mock import Mock
+
+          from packaging.requirements import Requirement
 
           import hugegraph_mcp
           import pyhugegraph
@@ -108,8 +110,12 @@ jobs:
           from pyhugegraph.utils.huge_config import HGraphConfig
           from pyhugegraph.utils.huge_requests import HGraphSession
 
-          assert version("hugegraph-python-client") == "1.7.0"
+          assert version("hugegraph-python") == "1.7.0"
           assert version("hugegraph-mcp") == "1.7.0"
+          dependencies = [Requirement(value) for value in requires("hugegraph-mcp")]
+          client_dependency = next(dep for dep in dependencies if dep.name == "hugegraph-python")
+          assert version("hugegraph-python") in client_dependency.specifier
+          assert all(dep.name != "hugegraph-python-client" for dep in dependencies)
 
           class CaptureSession:
               cfg = SimpleNamespace(graphspace="GS", gs_supported=True)

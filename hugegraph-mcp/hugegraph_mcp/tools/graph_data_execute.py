@@ -300,7 +300,8 @@ def dry_run_graph_change_plan(
                             idx,
                             operation,
                             "delete_vertex cascade=false but vertex has associated edges",
-                            "Set cascade=true or delete associated edges first.",
+                            "Delete associated edges explicitly, then preview again. "
+                            "Vertex deletion confirmation remains disabled.",
                             "BLOCKED_BY_RELATIONSHIPS",
                         )
                     )

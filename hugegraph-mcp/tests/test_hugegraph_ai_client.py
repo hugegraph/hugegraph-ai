@@ -598,3 +598,79 @@ def test_health_check_does_not_report_inner_failure_as_available(monkeypatch):
     assert result["data"]["health_endpoint"] == "/openapi.json"
     assert "index inspection failed" in result["warnings"][0]
     assert http_request.call_count == 2
+
+
+@pytest.mark.parametrize("missing", [None, "meta", "warnings", "next_actions"])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("ok", [False, True])
+def test_malformed_top_level_envelope_is_protocol_error(monkeypatch, ok, missing, nested):
+    payload = {
+        "ok": ok,
+        "data": None,
+        "error": None if ok else {"type": "LLM_FAILED", "message": "provider unavailable"},
+        "warnings": [],
+        "next_actions": [],
+        "meta": {},
+    }
+    if missing:
+        payload["meta"] = {"request_id": "req-incomplete", "duration_ms": 1}
+        del payload[missing]
+    if nested:
+        payload = {
+            "ok": True,
+            "data": payload,
+            "error": None,
+            "warnings": [],
+            "next_actions": [],
+            "meta": {"request_id": "req-outer", "duration_ms": 1},
+        }
+    monkeypatch.setattr("hugegraph_mcp.hugegraph_ai_client.requests.request", Mock(return_value=FakeResponse(payload)))
+    result = request("GET", "/health", cfg=_cfg())
+    assert result["ok"] is False
+    assert result["error"]["retryable"] is False
+    assert result["error"]["details"]["issue"] == ("malformed_nested_envelope" if nested else "malformed_envelope")
+
+
+@pytest.mark.parametrize("missing", [None, "meta", "warnings", "next_actions"])
+def test_health_check_rejects_malformed_envelope_over_http(monkeypatch, missing):
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    body = {
+        "ok": False,
+        "data": None,
+        "error": {"type": "LLM_FAILED", "message": "provider unavailable"},
+        "warnings": [],
+        "next_actions": [],
+        "meta": {},
+    }
+    if missing:
+        body["meta"] = {"request_id": "req-incomplete", "duration_ms": 1}
+        del body[missing]
+    payload = json.dumps(body).encode()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args):
+            pass
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as http_server:
+        worker = Thread(target=http_server.serve_forever, daemon=True)
+        worker.start()
+        monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+        try:
+            result = health_check(cfg=_cfg(ai_url=f"http://127.0.0.1:{http_server.server_port}"))
+        finally:
+            http_server.shutdown()
+            worker.join(timeout=5)
+    assert result["ok"] is False
+    assert result["data"] is None
+    assert result["error"]["retryable"] is False
+    assert result["error"]["details"]["reason"] == "invalid_upstream_response"
