@@ -15,6 +15,8 @@ import re
 from copy import deepcopy
 from unittest.mock import Mock
 
+import pytest
+
 from hugegraph_mcp.tools import manage_graph_data as manage_graph_data_module
 from hugegraph_mcp.tools.graph_data_gremlin import (
     _create_edge_query,
@@ -2143,3 +2145,46 @@ def test_manage_graph_data_dry_run_rejects_oversized_payload_before_plan(monkeyp
     assert "MAX_PAYLOAD_BYTES" in result["error"]["details"]["errors"][0]["reason"]
     assert "plan_hash" not in (result.get("data") or {})
     execute_read.assert_not_called()
+
+
+@pytest.mark.parametrize("identity_kind", ["id", "primary_key"])
+def test_dry_run_rejects_duplicate_vertex_identity_before_graph_reads(monkeypatch, identity_kind):
+    read = Mock()
+    write = Mock()
+    monkeypatch.setattr(manage_graph_data_module.gremlin_tools, "execute_gremlin_read", read)
+    monkeypatch.setattr(manage_graph_data_module.gremlin_tools, "execute_gremlin_write", write)
+    schema = _customize_schema("CUSTOMIZE_STRING") if identity_kind == "id" else _live_schema()
+    vertex = {"op": "create_vertex", "label": "person", "properties": {"name": "Alice", "age": 31}}
+    if identity_kind == "id":
+        vertex["id"] = "alice-id"
+    else:
+        schema["schema"]["vertexlabels"][0]["primary_keys"] = ["name", "age"]
+    duplicate = deepcopy(vertex)
+    duplicate["properties"] = {"age": 31, "name": "Alice"}
+
+    result = manage_graph_data_module.dry_run_graph_change_plan({"operations": [vertex, duplicate]}, schema)
+
+    assert result["valid"] is False
+    assert result["errors"][0]["operation_index"] == 1
+    assert result["errors"][0]["reason"] == f"duplicate create_vertex {identity_kind} identity with operation 0"
+    assert "plan_hash" not in result
+    read.assert_not_called()
+    write.assert_not_called()
+
+
+def test_validate_vertex_identities_distinguishes_labels_and_complete_primary_keys():
+    schema = _live_schema()
+    person = schema["schema"]["vertexlabels"][0]
+    person["primary_keys"] = ["name", "age"]
+    schema["schema"]["vertexlabels"].append({**person, "name": "employee"})
+    operations = [
+        {"op": "create_vertex", "label": "person", "id": "same-id", "properties": {"name": "Alice", "age": 31}},
+        {"op": "create_vertex", "label": "employee", "id": "same-id", "properties": {"name": "Alice", "age": 31}},
+        {"op": "create_vertex", "label": "person", "properties": {"name": "Alice", "age": 32}},
+        {"op": "create_vertex", "label": "person", "properties": {"name": "Alice"}},
+        {"op": "create_vertex", "label": "person", "properties": {"name": "Alice"}},
+    ]
+
+    result = manage_graph_data_module.validate_graph_change_plan({"operations": operations}, schema)
+
+    assert result["valid"] is True

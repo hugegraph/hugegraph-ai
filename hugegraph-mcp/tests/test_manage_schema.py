@@ -200,6 +200,8 @@ def test_manage_schema_design():
         operations=[
             {
                 "thought": "Need a graph for users",
+                "is_revision": True,
+                "revision_of": 1,
                 "thought_number": 2,
                 "total_thoughts": 5,
                 "next_thought_needed": True,
@@ -208,6 +210,11 @@ def test_manage_schema_design():
     )
 
     assert result["ok"] is True
+    assert result["data"]["thought"] == "Need a graph for users"
+    assert result["data"]["is_revision"] is True
+    assert result["data"]["revision_of"] == 1
+    guidance = " ".join(result["data"]["guidance"])
+    assert all(topic in guidance for topic in ("property keys", "vertex labels", "edge labels", "indexes"))
     assert result["data"]["thought_number"] == 2
     assert result["data"]["total_thoughts"] == 5
     assert result["data"]["next_thought_needed"] is True

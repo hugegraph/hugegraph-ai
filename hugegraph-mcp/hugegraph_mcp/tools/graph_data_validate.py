@@ -16,6 +16,7 @@
 Schema checks, property field validation, primary key match verification.
 """
 
+import json
 from typing import Any
 
 from hugegraph_mcp.tools.graph_data_mapping import GraphChangePlan
@@ -281,6 +282,7 @@ def validate_graph_change_plan(
     edge_properties = {label: _property_names(schema.get("properties")) for label, schema in edge_labels.items()}
     primary_keys = {label: _primary_key_names(schema) for label, schema in vertex_labels.items()}
     specs = property_specs(raw_schema)
+    vertex_identities: dict[tuple[str, str, str], int] = {}
 
     for idx, operation in enumerate(operations):
         if not isinstance(operation, dict):
@@ -339,6 +341,7 @@ def validate_graph_change_plan(
                     )
                 )
                 continue
+            errors_before = len(errors)
             allowed = vertex_properties.get(label, set())
             pks = primary_keys.get(label, [])
             if not pks:
@@ -368,6 +371,27 @@ def validate_graph_change_plan(
                 errors=errors,
                 allow_id=True,
             )
+            if op == "create_vertex" and len(errors) == errors_before:
+                identities: dict[str, Any] = {}
+                if operation.get("id") not in (None, ""):
+                    identities["id"] = operation["id"]
+                properties = operation.get("properties")
+                if pks and isinstance(properties, dict) and all(properties.get(pk) not in (None, "") for pk in pks):
+                    identities["primary_key"] = [properties[pk] for pk in pks]
+                for kind, value in identities.items():
+                    identity = (label, kind, json.dumps(value, sort_keys=True))
+                    if identity in vertex_identities:
+                        errors.append(
+                            _validation_error(
+                                idx,
+                                operation,
+                                f"duplicate create_vertex {kind} identity with operation {vertex_identities[identity]}",
+                                "Keep one create_vertex operation per identity in the batch.",
+                                "INVALID_GRAPH_DATA",
+                            )
+                        )
+                    else:
+                        vertex_identities[identity] = idx
             if op == "delete_vertex":
                 _validate_primary_key_match(
                     idx=idx,
