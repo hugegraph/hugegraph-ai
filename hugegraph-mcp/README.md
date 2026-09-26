@@ -83,7 +83,7 @@ After connecting, call `inspect_graph_tool(include_raw_schema=true)` and check t
 {"name":"query_graph_data_tool","arguments":{"target":"vertex","operation":"page","label":"person","limit":5}}
 ```
 
-[Integration checklist](docs/p0a-integration-checklist.md) · [Release order](docs/releasing.md)
+[Architecture and roadmap](docs/architecture.md) · [Integration checklist](docs/integration.md) · [Release order](docs/releasing.md)
 
 Structured queries cap the requested page size at `HUGEGRAPH_MCP_MAX_RESULT_ITEMS` and the tool maximum of 500. ID batches exceeding the effective limit are rejected before querying. Responses exceeding the item or byte limit are rejected without truncation or a continuation cursor; these checks do not bound backend execution or transport memory.
 
