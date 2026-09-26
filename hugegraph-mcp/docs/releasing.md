@@ -23,7 +23,8 @@ Users need neither a Git checkout nor a manual client installation.
 
 ## Shared Workflow
 
-Select `component=client` or `component=mcp`. Select the source repository
+Select `component=both` (the default) to process client and MCP in order. Keep
+`client` and `mcp` for individual validation or retry. Select the source repository
 (`apache/hugegraph-ai` or `hugegraph/hugegraph-ai`) and a branch, tag, or commit via
 `source_ref`; the workflow resolves it to one immutable commit before building.
 Public PyPI uploads require the Apache source repository; fork sources are
@@ -32,28 +33,32 @@ component and its tests. Fork
 validation can therefore run before the PR is merged into ASF `main`.
 
 The workflow defaults to `publish=false`: it builds, tests, and records artifacts
-without uploading a package. With `publish=true`, `target` selects the `testpypi`
+without uploading a package. In `both` mode, MCP uses the verified client artifact
+from the same run; this validates the package pair, not registry installation.
+Both packages must have matching source versions and use the same resolved commit.
+With `publish=true`, `target` selects the `testpypi`
 or `pypi` GitHub environment and its `PYPI_API_TOKEN`. The PyPI token must have
 permission for the selected project; a token scoped only to `hugegraph-python`
 cannot create or upload `hugegraph-mcp`. Follow the environment approval rules in
 the actions repository.
 
 For PyPI, the version comes from the selected component's `pyproject.toml`.
-TestPyPI uses the workflow's explicit test version; see the actions README for
-its format and the staged-client selection when testing MCP. TestPyPI validation
+TestPyPI uses one shared `test_version` for client and MCP; see the actions
+README for its format. Leave it empty for public PyPI. TestPyPI validation
 does not establish compatibility with a client published only on public PyPI.
 
 ## Publish and Validate
 
 1. Select a source commit containing both client fixes and MCP. Confirm package
    versions, the MCP client dependency, and passing unit/contract tests.
-2. Build and validate the client with `publish=false`. Publish it to the selected
-   index when ready, then confirm its wheel and sdist are available.
-3. Build and validate MCP against the published client. Production validation
-   installs dependencies from public PyPI, never from the sibling source tree or
-   a locally built client wheel. Stop if the required client is unavailable or
-   the published-client contract tests fail.
-4. Publish MCP, then verify public installation from outside the checkout:
+2. Run `component=both` with `publish=false` to validate both packages from the
+   selected source commit without uploading.
+3. Run the same inputs with `publish=true`. The workflow publishes the client,
+   verifies registry availability, then validates MCP using that exact client
+   version from the selected index before publishing MCP. If MCP fails after the
+   client is published, fix the cause and use `component=mcp` to retry; do not
+   re-upload an existing client version.
+4. Verify installation from outside the checkout:
 
    ```bash
    uvx --no-cache hugegraph-mcp@1.7.1

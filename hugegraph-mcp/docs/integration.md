@@ -1,4 +1,4 @@
-# P0a Integration Checklist
+# Integration Checklist
 
 Use this checklist to validate the current write-safety contract against a disposable HugeGraph 1.7.0 Docker instance. Never use a production graph.
 
@@ -11,7 +11,7 @@ uv venv --python 3.10 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 
 docker pull hugegraph/hugegraph:1.7.0
-docker run --rm -d --name hg-p0a-check -p 127.0.0.1:18080:8080 hugegraph/hugegraph:1.7.0
+docker run --rm -d --name hg-mcp-check -p 127.0.0.1:18080:8080 hugegraph/hugegraph:1.7.0
 until curl -fsS http://127.0.0.1:18080/versions >/dev/null; do sleep 1; done
 
 export HUGEGRAPH_URL=http://127.0.0.1:18080
@@ -24,7 +24,7 @@ export HUGEGRAPH_MCP_ALLOW_AI=false
 export HUGEGRAPH_MCP_ADMIN_MODE=false
 export HUGEGRAPH_MCP_PLAN_STORE=sqlite
 export HUGEGRAPH_MCP_WRITE_INSTANCE_COUNT=1
-export HUGEGRAPH_MCP_STATE_DIR=/tmp/hg-p0a-plan-store
+export HUGEGRAPH_MCP_STATE_DIR=/tmp/hg-mcp-plan-store
 export HUGEGRAPH_CONNECT_TIMEOUT_SECONDS=0.5
 export HUGEGRAPH_READ_TIMEOUT_SECONDS=15
 export HUGEGRAPH_WRITE_TIMEOUT_SECONDS=15
@@ -41,8 +41,8 @@ Use a second MCP client process for the calls below. Replace `<RUN_ID>` with one
 Clean up after validation:
 
 ```bash
-docker stop hg-p0a-check
-rm -rf -- /tmp/hg-p0a-plan-store
+docker stop hg-mcp-check
+rm -rf -- /tmp/hg-mcp-plan-store
 ```
 
 ## 2. Inspect the Contract
@@ -60,10 +60,10 @@ Require `ok=true`, `data.readonly=false`, `data.toolset="v2_core"`, and `data.mc
 
 A confirmable schema plan contains exactly one create operation. Repeat the dry-run and confirmation sequence below in dependency order:
 
-1. `create_property_key` for `p0a_name_<RUN_ID>`.
-2. `create_property_key` for `p0a_note_<RUN_ID>`.
-3. `create_vertex_label` for `p0a_person_<RUN_ID>`.
-4. `create_edge_label` for `p0a_knows_<RUN_ID>`.
+1. `create_property_key` for `mcp_check_name_<RUN_ID>`.
+2. `create_property_key` for `mcp_check_note_<RUN_ID>`.
+3. `create_vertex_label` for `mcp_check_person_<RUN_ID>`.
+4. `create_edge_label` for `mcp_check_knows_<RUN_ID>`.
 
 Example dry-run for the first object:
 
@@ -75,7 +75,7 @@ Example dry-run for the first object:
     "operations": [
       {
         "type": "create_property_key",
-        "name": "p0a_name_<RUN_ID>",
+        "name": "mcp_check_name_<RUN_ID>",
         "data_type": "TEXT",
         "cardinality": "SINGLE"
       }
@@ -107,15 +107,15 @@ Require `data.status="APPLIED"`. Repeating `confirm_write_tool` with the same ID
 Use the same sequence for the remaining schema objects. Their operation bodies are:
 
 ```json
-{"type":"create_property_key","name":"p0a_note_<RUN_ID>","data_type":"TEXT","cardinality":"SINGLE"}
+{"type":"create_property_key","name":"mcp_check_note_<RUN_ID>","data_type":"TEXT","cardinality":"SINGLE"}
 ```
 
 ```json
-{"type":"create_vertex_label","name":"p0a_person_<RUN_ID>","properties":["p0a_name_<RUN_ID>","p0a_note_<RUN_ID>"],"primary_keys":["p0a_name_<RUN_ID>"],"nullable_keys":["p0a_note_<RUN_ID>"]}
+{"type":"create_vertex_label","name":"mcp_check_person_<RUN_ID>","properties":["mcp_check_name_<RUN_ID>","mcp_check_note_<RUN_ID>"],"primary_keys":["mcp_check_name_<RUN_ID>"],"nullable_keys":["mcp_check_note_<RUN_ID>"]}
 ```
 
 ```json
-{"type":"create_edge_label","name":"p0a_knows_<RUN_ID>","source_label":"p0a_person_<RUN_ID>","target_label":"p0a_person_<RUN_ID>"}
+{"type":"create_edge_label","name":"mcp_check_knows_<RUN_ID>","source_label":"mcp_check_person_<RUN_ID>","target_label":"mcp_check_person_<RUN_ID>"}
 ```
 
 Verify the final vertex label:
@@ -125,7 +125,7 @@ Verify the final vertex label:
   "name": "inspect_schema_tool",
   "arguments": {
     "filter_kind": "vertex_label",
-    "filter_name": "p0a_person_<RUN_ID>",
+    "filter_name": "mcp_check_person_<RUN_ID>",
     "include_relations": true,
     "include_index_labels": true
   }
@@ -140,8 +140,8 @@ Also submit a dry-run containing two schema operations:
   "arguments": {
     "mode": "dry_run",
     "operations": [
-      {"type":"create_property_key","name":"p0a_extra_a_<RUN_ID>","data_type":"TEXT","cardinality":"SINGLE"},
-      {"type":"create_property_key","name":"p0a_extra_b_<RUN_ID>","data_type":"TEXT","cardinality":"SINGLE"}
+      {"type":"create_property_key","name":"mcp_check_extra_a_<RUN_ID>","data_type":"TEXT","cardinality":"SINGLE"},
+      {"type":"create_property_key","name":"mcp_check_extra_b_<RUN_ID>","data_type":"TEXT","cardinality":"SINGLE"}
     ]
   }
 }
@@ -160,16 +160,16 @@ Dry-run:
     "mode": "ingest",
     "graph_data": {
       "vertices": [
-        {"label":"p0a_person_<RUN_ID>","properties":{"p0a_name_<RUN_ID>":"Alice"}},
-        {"label":"p0a_person_<RUN_ID>","properties":{"p0a_name_<RUN_ID>":"Bob"}}
+        {"label":"mcp_check_person_<RUN_ID>","properties":{"mcp_check_name_<RUN_ID>":"Alice"}},
+        {"label":"mcp_check_person_<RUN_ID>","properties":{"mcp_check_name_<RUN_ID>":"Bob"}}
       ],
       "edges": [
         {
-          "label":"p0a_knows_<RUN_ID>",
-          "source_label":"p0a_person_<RUN_ID>",
-          "source":{"p0a_name_<RUN_ID>":"Alice"},
-          "target_label":"p0a_person_<RUN_ID>",
-          "target":{"p0a_name_<RUN_ID>":"Bob"}
+          "label":"mcp_check_knows_<RUN_ID>",
+          "source_label":"mcp_check_person_<RUN_ID>",
+          "source":{"mcp_check_name_<RUN_ID>":"Alice"},
+          "target_label":"mcp_check_person_<RUN_ID>",
+          "target":{"mcp_check_name_<RUN_ID>":"Bob"}
         }
       ]
     }
@@ -199,9 +199,9 @@ import os
 from pyhugegraph.client import PyHugeClient
 
 suffix = os.environ["RUN_ID"]
-name_key = f"p0a_name_{suffix}"
-person_label = f"p0a_person_{suffix}"
-knows_label = f"p0a_knows_{suffix}"
+name_key = f"mcp_check_name_{suffix}"
+person_label = f"mcp_check_person_{suffix}"
+knows_label = f"mcp_check_knows_{suffix}"
 client = PyHugeClient(
     url="http://127.0.0.1:18080",
     graph="hugegraph",
@@ -225,7 +225,7 @@ Locate Alice and preserve the returned backend ID:
   "arguments": {
     "target": "vertex",
     "operation": "page",
-    "label": "p0a_person_<RUN_ID>",
+    "label": "mcp_check_person_<RUN_ID>",
     "limit": 10
   }
 }
@@ -244,7 +244,7 @@ Require two vertices and copy Alice's exact `items[].id` value. Do not construct
     "target": "vertex",
     "operation": "append",
     "id": "<ALICE_VERTEX_ID>",
-    "properties": {"p0a_note_<RUN_ID>": "preview-only"},
+    "properties": {"mcp_check_note_<RUN_ID>": "preview-only"},
     "dry_run": true
   }
 }
@@ -259,7 +259,7 @@ Require `ok=true`, `data.confirmable=false`, and a warning that atomic condition
     "target": "vertex",
     "operation": "append",
     "id": "<ALICE_VERTEX_ID>",
-    "properties": {"p0a_note_<RUN_ID>": "preview-only"},
+    "properties": {"mcp_check_note_<RUN_ID>": "preview-only"},
     "dry_run": false,
     "confirm": true,
     "plan_hash": "<PLAN_HASH_FROM_PREVIEW>",
@@ -283,11 +283,11 @@ Dry-run an edge delete whose label and endpoint primary keys resolve exactly one
       "operations": [
         {
           "op":"delete_edge",
-          "label":"p0a_knows_<RUN_ID>",
-          "source_label":"p0a_person_<RUN_ID>",
-          "source_match":{"p0a_name_<RUN_ID>":"Alice"},
-          "target_label":"p0a_person_<RUN_ID>",
-          "target_match":{"p0a_name_<RUN_ID>":"Bob"}
+          "label":"mcp_check_knows_<RUN_ID>",
+          "source_label":"mcp_check_person_<RUN_ID>",
+          "source_match":{"mcp_check_name_<RUN_ID>":"Alice"},
+          "target_label":"mcp_check_person_<RUN_ID>",
+          "target_match":{"mcp_check_name_<RUN_ID>":"Bob"}
         }
       ]
     },
@@ -296,7 +296,7 @@ Dry-run an edge delete whose label and endpoint primary keys resolve exactly one
 }
 ```
 
-Require a `plan_id`, confirm it through `confirm_write_tool`, and require `APPLIED`. A bounded edge page for `p0a_knows_<RUN_ID>` must then return no edge.
+Require a `plan_id`, confirm it through `confirm_write_tool`, and require `APPLIED`. A bounded edge page for `mcp_check_knows_<RUN_ID>` must then return no edge.
 
 ### Isolated vertex deletion
 
@@ -311,8 +311,8 @@ Alice has no incident edges. Preview her deletion:
       "operations": [
         {
           "op": "delete_vertex",
-          "label": "p0a_person_<RUN_ID>",
-          "match": {"p0a_name_<RUN_ID>": "Alice"},
+          "label": "mcp_check_person_<RUN_ID>",
+          "match": {"mcp_check_name_<RUN_ID>": "Alice"},
           "cascade": false
         }
       ]

@@ -17,7 +17,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 README = PROJECT_ROOT / "README.md"
 README_ZH = PROJECT_ROOT / "README.zh-CN.md"
-CHECKLIST = PROJECT_ROOT / "docs" / "p0a-integration-checklist.md"
+CHECKLIST = PROJECT_ROOT / "docs" / "integration.md"
 PUBLIC_DOCS = (README, README_ZH, CHECKLIST)
 
 

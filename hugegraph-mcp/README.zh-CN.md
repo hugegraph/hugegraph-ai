@@ -82,7 +82,7 @@ Windows PowerShell：
 {"name":"query_graph_data_tool","arguments":{"target":"vertex","operation":"page","label":"person","limit":5}}
 ```
 
-[完整集成检查](docs/p0a-integration-checklist.md) · [发布顺序](docs/releasing.md)
+[架构与规划](docs/architecture.md) · [完整集成检查](docs/integration.md) · [发布顺序](docs/releasing.md)
 
 结构化查询会将分页大小限制在 `HUGEGRAPH_MCP_MAX_RESULT_ITEMS` 和工具上限 500 以内。超过有效上限的 ID 批次会在查询前被拒绝。返回结果超过条数或字节上限时整体拒绝，不截断结果或返回后续游标；这些检查不限制服务端执行量或传输期间的内存占用。
 
