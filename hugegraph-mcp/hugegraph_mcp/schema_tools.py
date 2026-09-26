@@ -92,13 +92,12 @@ def design_schema(
     VertexLabels、EdgeLabels、IndexLabels。本函数提供分步引导框架。
 
     Args:
-        thought: reserved for future use (no-op, accepted for Sequential Thinking
-            protocol compatibility)
+        thought: caller-provided design rationale for this step
         thought_number: current thought step number
         total_thoughts: estimated total thought steps
         next_thought_needed: whether the caller expects another step
-        is_revision: reserved for future use (no-op)
-        revision_of: reserved for future use (no-op)
+        is_revision: whether this step revises an earlier step
+        revision_of: earlier step being revised
 
     【最佳实践】
     1. 先定义 PropertyKeys — 所有属性必须在 VertexLabel/EdgeLabel 中预定义
@@ -111,7 +110,16 @@ def design_schema(
     """
 
     return {
+        "thought": thought,
         "thought_number": thought_number,
         "total_thoughts": total_thoughts,
         "next_thought_needed": next_thought_needed,
+        "is_revision": is_revision,
+        "revision_of": revision_of,
+        "guidance": [
+            "Define property keys first, choosing data types and SINGLE, SET, or LIST cardinality.",
+            "Define vertex labels with their properties, ID strategy, primary keys, and nullable keys.",
+            "Define edge labels with source/target labels; choose SINGLE or MULTIPLE frequency and sort keys.",
+            "Choose secondary, range, or search indexes from query needs, then validate the schema operations.",
+        ],
     }

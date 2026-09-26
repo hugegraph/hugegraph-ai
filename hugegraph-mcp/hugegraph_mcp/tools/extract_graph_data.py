@@ -171,7 +171,9 @@ def _unwrap_ai_payload(data: Any) -> Any:
 
 def _extract_graph_data(data: Any) -> dict[str, Any] | None:
     parsed = _parse_json_if_needed(data)
+    outer_metadata = {}
     if isinstance(parsed, dict) and "graph_data" in parsed:
+        outer_metadata = parsed
         parsed = _parse_json_if_needed(parsed.get("graph_data"))
 
     if not isinstance(parsed, dict):
@@ -185,10 +187,10 @@ def _extract_graph_data(data: Any) -> dict[str, Any] | None:
     return {
         "vertices": vertices,
         "edges": edges,
-        "warnings": parsed.get("warnings", []),
+        "warnings": parsed.get("warnings", outer_metadata.get("warnings", [])),
         "raw": parsed.get("raw"),
-        "raw_summary": parsed.get("raw_summary"),
-        "schema_warnings": parsed.get("schema_warnings", []),
+        "raw_summary": parsed.get("raw_summary", outer_metadata.get("raw_summary")),
+        "schema_warnings": parsed.get("schema_warnings", outer_metadata.get("schema_warnings", [])),
     }
 
 

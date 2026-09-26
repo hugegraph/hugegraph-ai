@@ -78,8 +78,7 @@ def inspect_schema(
 
     raw_payload = schema_payload(raw_schema) or raw_schema
     summary = _build_summary(raw_payload, include_index_labels=include_index_labels)
-    all_summary = summary if include_index_labels else _build_summary(raw_payload, include_index_labels=True)
-    filtered = _filter_schema(raw_payload, filter_kind, filter_name, all_summary)
+    filtered = _filter_schema(raw_payload, filter_kind, filter_name, summary)
     if filtered is None:
         return envelope_err(
             ErrorType.NOT_FOUND,

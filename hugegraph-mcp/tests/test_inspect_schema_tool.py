@@ -11,6 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
+
 from hugegraph_mcp.tools import inspect_schema as inspect_schema_module
 
 
@@ -76,6 +78,32 @@ def test_inspect_schema_filter_one_vertex_label(monkeypatch):
     assert result["ok"] is True
     assert result["data"]["filtered"]["name"] == "person"
     assert result["data"]["filtered"]["primary_keys"] == ["name"]
+
+
+def test_inspect_schema_omits_indexes_without_filter(monkeypatch):
+    monkeypatch.setattr(inspect_schema_module, "_schema_manager", FakeSchemaManager)
+
+    result = inspect_schema_module.inspect_schema(include_index_labels=False)
+
+    assert result["ok"] is True
+    data = result["data"]
+    assert data["index_labels"] == []
+    assert data["summary"]["index_labels"] == []
+    assert data["summary"]["index_label_count"] == 1
+    assert data["filtered"]["index_labels"] == []
+
+
+@pytest.mark.parametrize("filter_name", [None, "personByName"])
+def test_inspect_schema_explicit_index_filter_overrides_omission(monkeypatch, filter_name):
+    monkeypatch.setattr(inspect_schema_module, "_schema_manager", FakeSchemaManager)
+
+    result = inspect_schema_module.inspect_schema(
+        include_index_labels=False, filter_kind="index_label", filter_name=filter_name
+    )
+
+    assert result["ok"] is True
+    indexes = _raw_schema()["indexlabels"]
+    assert result["data"]["filtered"] == (indexes if filter_name is None else indexes[0])
 
 
 def test_inspect_schema_rejects_filter_name_without_kind():

@@ -22,6 +22,7 @@ import json
 import os
 import sqlite3
 import time
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +70,7 @@ class ConfirmationStore:
             return False
         nonce_digest = hashlib.sha256(nonce.encode("utf-8")).hexdigest()
         try:
-            with sqlite3.connect(self.database_path, timeout=30) as connection:
+            with closing(sqlite3.connect(self.database_path, timeout=30)) as connection, connection:
                 row = connection.execute(
                     """
                     SELECT 1 FROM consumed_confirmations
@@ -110,7 +111,7 @@ class ConfirmationStore:
                 sort_keys=True,
             )
             self._prepare_storage()
-            with sqlite3.connect(self.database_path, timeout=30) as connection:
+            with closing(sqlite3.connect(self.database_path, timeout=30)) as connection, connection:
                 connection.execute("PRAGMA synchronous = FULL")
                 self._ensure_schema(connection)
                 updated = connection.execute(
@@ -156,7 +157,7 @@ class ConfirmationStore:
 
         try:
             self._prepare_storage()
-            with sqlite3.connect(self.database_path, timeout=30) as connection:
+            with closing(sqlite3.connect(self.database_path, timeout=30)) as connection, connection:
                 connection.execute("PRAGMA synchronous = FULL")
                 self._ensure_schema(connection)
                 self._cleanup_expired(connection, issued_at)
@@ -196,7 +197,7 @@ class ConfirmationStore:
         try:
             if not self.database_path.exists():
                 raise ConfirmationNotIssuedError
-            with sqlite3.connect(self.database_path, timeout=30) as connection:
+            with closing(sqlite3.connect(self.database_path, timeout=30)) as connection, connection:
                 self._ensure_schema(connection)
                 row = connection.execute(
                     """
@@ -229,7 +230,7 @@ class ConfirmationStore:
 
         try:
             self._prepare_storage()
-            with sqlite3.connect(self.database_path, timeout=30) as connection:
+            with closing(sqlite3.connect(self.database_path, timeout=30)) as connection, connection:
                 connection.execute("PRAGMA synchronous = FULL")
                 self._ensure_schema(connection)
                 try:
@@ -362,7 +363,7 @@ class ConfirmationStore:
             f"FROM write_operations WHERE {field} = ?"
         )
         try:
-            with sqlite3.connect(self.database_path, timeout=30) as connection:
+            with closing(sqlite3.connect(self.database_path, timeout=30)) as connection, connection:
                 self._ensure_schema(connection)
                 row = connection.execute(query, (value,)).fetchone()
             if row is None:

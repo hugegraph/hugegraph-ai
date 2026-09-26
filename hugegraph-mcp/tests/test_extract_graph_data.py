@@ -14,6 +14,8 @@
 import json
 from unittest.mock import Mock
 
+import pytest
+
 from hugegraph_mcp.envelope import ErrorType, envelope_err, envelope_ok
 from hugegraph_mcp.tools import extract_graph_data as extract_graph_data_module
 
@@ -58,6 +60,32 @@ def test_extract_graph_data_basic(monkeypatch):
             "language": "zh",
         },
     )
+
+
+@pytest.mark.parametrize("encode_graph_data", [False, True])
+@pytest.mark.parametrize("inner_metadata", [False, True])
+def test_extract_graph_data_preserves_wrapped_metadata(monkeypatch, encode_graph_data, inner_metadata):
+    graph_data = {"vertices": [], "edges": []}
+    metadata = {
+        "warnings": ["Some candidates were dropped"],
+        "raw_summary": {"vertices": 2},
+        "schema_warnings": ["Unknown vertex label"],
+    }
+    expected = {"warnings": [], "raw_summary": None, "schema_warnings": []} if inner_metadata else metadata
+    if inner_metadata:
+        graph_data.update(expected)
+    payload = {
+        "graph_data": json.dumps(graph_data) if encode_graph_data else graph_data,
+        **metadata,
+    }
+    monkeypatch.setattr(extract_graph_data_module, "post", Mock(return_value=envelope_ok(payload)))
+
+    result = extract_graph_data_module.extract_graph_data("Alice knows Bob.", schema={"vertexlabels": ["person"]})
+
+    assert result["ok"] is True
+    assert result["data"]["graph_data"]["warnings"] == expected["warnings"]
+    assert result["data"]["raw_summary"] == expected["raw_summary"]
+    assert result["data"]["schema_warnings"] == expected["schema_warnings"]
 
 
 def test_extract_graph_data_uses_graph_schema_by_default(monkeypatch):
