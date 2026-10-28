@@ -1,4 +1,4 @@
-# HugeGraph-LLM [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/apache/hugegraph-ai)
+# HugeGraph-LLM [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue)](https://deepwiki.com/apache/hugegraph-ai)
 
 > **Bridge the gap between Graph Databases and Large Language Models**
 
@@ -41,15 +41,17 @@ editable source installation and offline examples.
 > - **HugeGraph Server**: 1.3+ (recommended: 1.5+)
 > - **UV Package Manager**: 0.7+
 
-### Code Quality (ruff + pre-commit)
+### Code Quality (uv + Ruff + ty)
 
 - Ruff is used for linting and formatting:
-  - `ruff format .`
-  - `ruff check .`
+  - `uv run ruff format --check .`
+  - `uv run ruff check .`
+- Type checking: `uv run ty check hugegraph-llm/src/hugegraph_llm` from the repository root.
+  CI runs it for affected modules in the existing test runner; existing diagnostics are advisory.
 - Enable Git hooks via pre-commit:
   - `pre-commit install` (in the root dir)
   - `pre-commit run --all-files`
-- Config: [../.pre-commit-config.yaml](../.pre-commit-config.yaml)
+- Tool versions: root `pyproject.toml`. Run `python3.11 scripts/version.py sync` after updating them to keep the [Ruff hook](../.pre-commit-config.yaml) aligned.
 
 ## 🚀 Quick Start
 
@@ -58,6 +60,12 @@ Choose your preferred deployment method:
 ### Option 1: Docker Compose (Recommended)
 
 The fastest way to get started with both HugeGraph Server and RAG Service:
+
+The image tags in these examples target the release prepared by this checkout.
+They become available after publication. Before publication, build the image
+from the repository root with `bash scripts/build_llm_image.sh` (Python 3.11+
+is required; set `PYTHON_FOR_RELEASE=python3.11` if needed), or use
+[Build from Source](#option-3-build-from-source).
 
 ```bash
 # 1. Set up environment
@@ -95,13 +103,13 @@ For more control over individual components:
 docker network create -d bridge hugegraph-net
 
 # 2. Start HugeGraph Server
-docker run -itd --name=server -p 8080:8080 --network hugegraph-net hugegraph/hugegraph
+docker run -itd --name=server -p 8080:8080 --network hugegraph-net hugegraph/hugegraph:latest
 
 # 3. Start RAG Service
-docker pull hugegraph/rag:latest
+docker pull hugegraph/rag:1.8.0
 docker run -itd --name rag \
   -v /path/to/your/hugegraph-llm/.env:/home/work/hugegraph-llm/.env \
-  -p 127.0.0.1:8001:8001 --network hugegraph-net hugegraph/rag
+  -p 127.0.0.1:8001:8001 --network hugegraph-net hugegraph/rag:1.8.0
 
 # 4. Monitor logs
 docker logs -f rag
@@ -113,7 +121,7 @@ For development and customization:
 
 ```bash
 # 1. Start HugeGraph Server
-docker run -itd --name=server -p 8080:8080 hugegraph/hugegraph
+docker run -itd --name=server -p 8080:8080 hugegraph/hugegraph:latest
 
 # 2. Install UV package manager (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh

@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Select affected CI suites; share the preflight runner and configuration."""
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+from version import release_config
+
+ROOT = Path(__file__).resolve().parents[1]
+MODULES = {"client": "hugegraph-python-client", "llm": "hugegraph-llm", "mcp": "hugegraph-mcp"}
+SHARED = {
+    "pyproject.toml",
+    "uv.lock",
+    ".github/workflows/ci.yml",
+    "scripts/ci.py",
+    "scripts/version.py",
+    "scripts/check_hugegraph.sh",
+}
+
+
+def select(paths: list[str], *, full: bool = False, test_set: str = "mainline") -> dict[str, bool]:
+    flags = dict.fromkeys((*MODULES, "quality", "dependencies", "codeql", "license"), False)
+    if full:
+        return dict.fromkeys(flags, True)
+    if test_set in ("codeql", "dependencies"):
+        flags[test_set] = True
+        return flags
+    for path in paths:
+        # Documentation changes do not require runtime environments or Docker.
+        if Path(path).suffix.lower() in (".md", ".rst") or "/docs/" in path:
+            continue
+        flags["license"] = True
+        if path in SHARED or path.startswith(".github/actions/"):
+            for key in (*MODULES, "quality"):
+                flags[key] = True
+        for key, module in MODULES.items():
+            if path.startswith(module + "/") or path == f".github/workflows/{module}.yml":
+                flags[key] = True
+        if path.startswith("docker/") or path == "scripts/build_llm_image.sh":
+            flags["llm"] = True
+        if path.endswith(".py") or path in (".pre-commit-config.yaml", ".github/workflows/ruff.yml"):
+            flags["quality"] = True
+        if Path(path).name in ("pyproject.toml", "uv.lock") or Path(path).name.startswith("requirements"):
+            flags["dependencies"] = True
+        if path == ".github/workflows/codeql.yml":
+            flags["codeql"] = True
+        if path == ".github/workflows/check-dependencies.yml":
+            flags["dependencies"] = True
+    if flags["client"]:
+        flags["llm"] = flags["mcp"] = True
+    return flags
+
+
+def changed_paths(event: dict, event_name: str) -> list[str]:
+    base = event["pull_request"]["base"]["sha"] if event_name == "pull_request" else event.get("before")
+    if not base or set(base) == {"0"}:
+        # Manual/new-branch runs validate the current tree instead of guessing.
+        result = subprocess.run(["git", "ls-files", "-z"], check=True, capture_output=True)
+    else:
+        # Include both sides of renames, and fail rather than silently skip on a bad diff.
+        result = subprocess.run(
+            ["git", "diff", "--no-renames", "--name-only", "-z", base, "HEAD"], check=True, capture_output=True
+        )
+    return [path for path in result.stdout.decode().split("\0") if path]
+
+
+def main() -> None:
+    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+    event_name = os.environ["GITHUB_EVENT_NAME"]
+    test_set = os.environ.get("TEST_SET", "mainline")
+    full = (
+        event_name == "schedule"
+        or test_set == "full"
+        or (event_name == "push" and os.environ.get("GITHUB_REF", "").startswith("refs/heads/release-"))
+    )
+    paths = changed_paths(event, event_name)
+    selected = select(paths, full=full, test_set=test_set)
+    config = release_config(ROOT)
+    outputs = {key: str(value).lower() for key, value in selected.items()}
+    outputs.update(config)
+    outputs["full"] = str(full).lower()
+    for key in MODULES:
+        versions = ["3.10", "3.11", "3.12"] if key == "mcp" else ["3.10", "3.11"]
+        outputs[key + "-pythons"] = json.dumps(versions if full else [config["python-version"]])
+    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:
+        for key, value in outputs.items():
+            stream.write(f"{key}={value}\n")
+    summary = json.dumps({"full": full, "suites": selected, "changed_files": paths}, indent=2)
+    Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(f"### CI selection\n\n```json\n{summary}\n```\n")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Synchronize release metadata from the root pyproject.toml (Python 3.11+)."""
+
+import argparse
+import difflib
+import re
+import sys
+from pathlib import Path
+
+import tomllib
+
+ROOT = Path(__file__).resolve().parents[1]
+MODULES = (
+    "hugegraph-llm",
+    "hugegraph-python-client",
+    "hugegraph-mcp",
+    "hugegraph-ml",
+    "vermeer-python-client",
+)
+DOCS = (
+    "hugegraph-mcp/README.md",
+    "hugegraph-mcp/README.zh-CN.md",
+    "hugegraph-mcp/docs/releasing.md",
+    "hugegraph-llm/README.md",
+    "hugegraph-mcp/docs/integration.md",
+    "docs/quality/hugegraph-integration.md",
+    "docs/quality/test-taxonomy.md",
+)
+DEPLOYMENT = (
+    "docker/charts/hg-llm/Chart.yaml",
+    "docker/charts/hg-llm/values.yaml",
+    "docker/docker-compose-network.yml",
+)
+TOOLING = (".pre-commit-config.yaml",)
+VERSION_PATTERN = r"\d+\.\d+\.\d+"
+
+
+def release_config(root: Path) -> dict[str, str]:
+    data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    config = {"version": data["project"]["version"], **data["tool"]["hugegraph"]["release"]}
+    config.update(data["tool"]["hugegraph"]["ci"])
+    for tool in ("ruff", "ty"):
+        requirement = next(
+            (value for value in data["project"]["optional-dependencies"]["dev"] if value.startswith(f"{tool}==")),
+            None,
+        )
+        if requirement is None:
+            raise ValueError(f"Pin {tool} with == in root project.optional-dependencies.dev")
+        config[f"{tool}-version"] = requirement.split("==", 1)[1]
+    if not re.fullmatch(VERSION_PATTERN, config["version"]):
+        raise ValueError("Root project.version must be a release version in x.y.z format")
+    for key in ("server-image", "llm-image"):
+        if not isinstance(config[key], str) or not re.fullmatch(r"[\w./:@-]+", config[key]):
+            raise ValueError(f"Invalid {key} in root release configuration")
+    return config
+
+
+def replace_one(content: str, pattern: str, replacement: str, path: str) -> str:
+    updated, count = re.subn(pattern, lambda match: match[1] + replacement + match[2], content, flags=re.MULTILINE)
+    if count != 1:
+        raise ValueError(f"{path}: expected one release field matching {pattern!r}, found {count}")
+    return updated
+
+
+def updates(root: Path) -> dict[Path, tuple[str, str]]:
+    """Compute every edit before writing anything; leave historical versions alone."""
+    config = release_config(root)
+    version = config["version"]
+    result = {}
+    for module in MODULES:
+        path = f"{module}/pyproject.toml"
+        original = (root / path).read_text(encoding="utf-8")
+        # Restrict the replacement to [project], rather than a tool's version field.
+        updated = replace_one(original, r'(\[project\]\n(?:(?!\[).|\n)*?^version = ")[^"]+("[^\n]*)', version, path)
+        if module == "hugegraph-mcp":
+            updated = replace_one(updated, r'("hugegraph-python>=)[^"<]+(<2")', version + ",", path)
+        if updated != original:
+            result[root / path] = (original, updated)
+
+    replacements = {
+        TOOLING[0]: (
+            (r"(repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: v)[^\n]+($)", config["ruff-version"]),
+        ),
+        DEPLOYMENT[0]: (
+            (r"(^version: )[^\n]+($)", version),
+            (r'(^appVersion: ")[^"]+("$)', version),
+        ),
+        DEPLOYMENT[1]: (
+            (r"(^  repository: )[^\n]+($)", config["llm-image"]),
+            (r'(^  tag: ")[^"]*("$)', ""),
+        ),
+        DEPLOYMENT[2]: (
+            (r"(  hugegraph-server:\n    image: )[^\n]+($)", config["server-image"]),
+            (r"(  hugegraph-rag:\n    image: )[^\n]+($)", f"{config['llm-image']}:{version}"),
+        ),
+    }
+    for path, fields in replacements.items():
+        original = (root / path).read_text(encoding="utf-8")
+        updated = original
+        for pattern, value in fields:
+            updated = replace_one(updated, pattern, value, path)
+        if updated != original:
+            result[root / path] = (original, updated)
+
+    # Only executable release examples are synchronized, never migration text,
+    # minimum supported versions, protocol versions or recorded server evidence.
+    for path in DOCS:
+        original = (root / path).read_text(encoding="utf-8")
+        updated = re.sub(rf"(?<=hugegraph-mcp@){VERSION_PATTERN}", version, original)
+        updated = re.sub(rf"(?<=hugegraph_mcp-){VERSION_PATTERN}(?=-py3)", version, updated)
+        updated = re.sub(r"hugegraph/hugegraph:[\w.:-]+", lambda _: config["server-image"], updated)
+        updated = re.sub(rf"hugegraph/rag:{VERSION_PATTERN}", lambda _: f"{config['llm-image']}:{version}", updated)
+        if updated != original:
+            result[root / path] = (original, updated)
+    return result
+
+
+def main(argv: list[str] | None = None, *, root: Path = ROOT) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("sync", "check", "get"))
+    parser.add_argument(
+        "key",
+        nargs="?",
+        choices=("version", "server-image", "llm-image", "uv-version", "python-version", "ruff-version", "ty-version"),
+    )
+    args = parser.parse_args(argv)
+    if (args.command == "get") != (args.key is not None):
+        parser.error("get requires a key; sync/check do not accept a key")
+    try:
+        if args.command == "get":
+            sys.stdout.write(release_config(root)[args.key] + "\n")
+            return 0
+        pending = updates(root)
+        for path, (original, updated) in pending.items():
+            relative = str(path.relative_to(root))
+            if args.command == "sync":
+                path.write_text(updated, encoding="utf-8")
+                sys.stdout.write(f"Updated {relative}\n")
+            else:
+                sys.stdout.writelines(
+                    difflib.unified_diff(original.splitlines(True), updated.splitlines(True), relative, relative)
+                )
+        if pending and args.command == "check":
+            sys.stderr.write("Release metadata is out of sync. Run: python3.11 scripts/version.py sync\n")
+            return 1
+    except (KeyError, OSError, ValueError) as exc:
+        sys.stderr.write(f"Release configuration error: {exc}\n")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

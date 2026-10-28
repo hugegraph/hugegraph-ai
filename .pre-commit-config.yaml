@@ -30,10 +30,10 @@ repos:
       - id: debug-statements
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.1
+    rev: v0.17.3
     hooks:
       - id: ruff-format
         types_or: [python, pyi]
-      - id: ruff
+      - id: ruff-check
         types_or: [python, pyi]
         args: [--fix]

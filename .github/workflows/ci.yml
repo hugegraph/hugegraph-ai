@@ -1,0 +1,159 @@
+name: HugeGraph AI CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'release-*']
+  schedule:
+    - cron: '0 22 * * 0' # Monday 06:00 Asia/Taipei
+  workflow_dispatch:
+    inputs:
+      test-set:
+        description: Tests to run
+        type: choice
+        options: [mainline, full, dependencies, codeql]
+        default: mainline
+      base-ref:
+        description: Base ref for on-demand dependency review
+        type: string
+        default: main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ github.run_attempt == 1 && 'head' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
+jobs:
+  preflight:
+    if: github.event_name != 'schedule' || github.repository == 'apache/hugegraph-ai'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      client: ${{ steps.select.outputs.client }}
+      llm: ${{ steps.select.outputs.llm }}
+      mcp: ${{ steps.select.outputs.mcp }}
+      quality: ${{ steps.select.outputs.quality }}
+      dependencies: ${{ steps.select.outputs.dependencies }}
+      codeql: ${{ steps.select.outputs.codeql }}
+      version: ${{ steps.select.outputs.version }}
+      server-image: ${{ steps.select.outputs.server-image }}
+      uv-version: ${{ steps.select.outputs.uv-version }}
+      ruff-version: ${{ steps.select.outputs.ruff-version }}
+      ty-version: ${{ steps.select.outputs.ty-version }}
+      python-version: ${{ steps.select.outputs.python-version }}
+      client-pythons: ${{ steps.select.outputs.client-pythons }}
+      llm-pythons: ${{ steps.select.outputs.llm-pythons }}
+      mcp-pythons: ${{ steps.select.outputs.mcp-pythons }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select affected suites and read release configuration
+        id: select
+        env:
+          TEST_SET: ${{ inputs.test-set || 'mainline' }}
+        run: python3 scripts/ci.py
+      - name: Check synchronized release metadata
+        run: python3 scripts/version.py check
+      - name: Test release tooling and CI policy
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Check license headers
+        if: steps.select.outputs.license == 'true'
+        uses: apache/skywalking-eyes@main
+        with:
+          token: ${{ github.token }}
+          config: .licenserc.yaml
+          log: info
+
+  quality:
+    needs: preflight
+    if: needs.preflight.outputs.quality == 'true'
+    uses: ./.github/workflows/ruff.yml
+    with:
+      uv-version: ${{ needs.preflight.outputs.uv-version }}
+      ruff-version: ${{ needs.preflight.outputs.ruff-version }}
+      ty-version: ${{ needs.preflight.outputs.ty-version }}
+
+  client:
+    needs: preflight
+    if: needs.preflight.outputs.client == 'true'
+    uses: ./.github/workflows/hugegraph-python-client.yml
+    with:
+      python-versions: ${{ needs.preflight.outputs.client-pythons }}
+      integration-python: ${{ needs.preflight.outputs.python-version }}
+      uv-version: ${{ needs.preflight.outputs.uv-version }}
+      server-image: ${{ needs.preflight.outputs.server-image }}
+      version: ${{ needs.preflight.outputs.version }}
+
+  llm:
+    needs: preflight
+    if: needs.preflight.outputs.llm == 'true'
+    uses: ./.github/workflows/hugegraph-llm.yml
+    with:
+      python-versions: ${{ needs.preflight.outputs.llm-pythons }}
+      integration-python: ${{ needs.preflight.outputs.python-version }}
+      uv-version: ${{ needs.preflight.outputs.uv-version }}
+      server-image: ${{ needs.preflight.outputs.server-image }}
+      version: ${{ needs.preflight.outputs.version }}
+
+  mcp:
+    needs: preflight
+    if: needs.preflight.outputs.mcp == 'true'
+    uses: ./.github/workflows/hugegraph-mcp.yml
+    with:
+      python-versions: ${{ needs.preflight.outputs.mcp-pythons }}
+      integration-python: ${{ needs.preflight.outputs.python-version }}
+      uv-version: ${{ needs.preflight.outputs.uv-version }}
+      ty-version: ${{ needs.preflight.outputs.ty-version }}
+      server-image: ${{ needs.preflight.outputs.server-image }}
+      version: ${{ needs.preflight.outputs.version }}
+
+  dependencies:
+    needs: preflight
+    if: >-
+      needs.preflight.outputs.dependencies == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/check-dependencies.yml
+    with:
+      base-ref: ${{ github.event.pull_request.base.sha || inputs.base-ref || 'main' }}
+      head-ref: ${{ github.sha }}
+
+  codeql:
+    needs: preflight
+    if: needs.preflight.outputs.codeql == 'true'
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: ./.github/workflows/codeql.yml
+
+  result:
+    name: CI Result
+    if: always() && (github.event_name != 'schedule' || github.repository == 'apache/hugegraph-ai')
+    needs: [preflight, quality, client, llm, mcp, dependencies, codeql]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require successful selected checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          results = json.loads(os.environ['RESULTS'])
+          failed = [name for name, job in results.items() if job['result'] not in ('success', 'skipped')]
+          if results['preflight']['result'] != 'success':
+              failed.append('preflight')
+          if failed:
+              sys.exit('CI did not pass: ' + ', '.join(sorted(set(failed))))
+          PY

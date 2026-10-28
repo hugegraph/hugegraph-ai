@@ -101,6 +101,12 @@ def exercise(process, timeout):
         {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "package-smoke", "version": "1"}},
     )
     require("tools" in initialized["capabilities"], "Server does not advertise tools")
+    expected_version = os.getenv("EXPECTED_MCP_VERSION")
+    if expected_version:
+        require(
+            initialized["serverInfo"]["version"] == expected_version,
+            f"MCP reports {initialized['serverInfo']['version']}, expected package version {expected_version}",
+        )
     send({"method": "notifications/initialized"})
     tools = {tool["name"] for tool in call(2, "tools/list", {})["tools"]}
     require(len(tools) == 16, f"Expected 16 core tools, received {len(tools)}")

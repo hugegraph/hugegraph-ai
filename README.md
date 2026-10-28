@@ -5,6 +5,8 @@
 
 `hugegraph-ai` integrates [HugeGraph](https://github.com/apache/hugegraph) with artificial intelligence capabilities, providing comprehensive support for developers to build AI-powered graph applications.
 
+Contributor workflows: [CI selection and full validation](docs/quality/ci.md), [release preparation](docs/releasing.md).
+
 ## ✨ Key Features
 
 - **[LLM/GraphRAG](./hugegraph-llm/README.md#graphrag)**: Build intelligent question-answering systems with graph-enhanced retrieval
@@ -122,7 +124,7 @@ Model Context Protocol server for safe, controlled HugeGraph access:
 
 - **Stable Tool Contract**: Typed graph, schema, Gremlin, and extraction tools for MCP clients
 - **Safe Writes**: Read-only defaults plus dry-run, persistent single-use confirmation, and target revalidation
-- **Compatibility**: Default `core` toolset with an opt-in `legacy` compatibility mode in this checkout; published `1.7.1` uses `v2_core` / `v1`
+- **Compatibility**: Default `core` toolset with an opt-in `legacy` compatibility mode; the previous `1.7.1` release uses `v2_core` / `v1`
 
 ### [hugegraph-ml](./hugegraph-ml)
 
@@ -205,17 +207,21 @@ uv add numpy  # Add to base dependencies
 uv add --group dev pytest-mock  # Add to dev group
 ```
 
-### Code Quality (ruff + pre-commit)
+### Code Quality (uv + Ruff + ty)
 
-- Ruff is used for linting and formatting:
-  - \`ruff format .\`
-  - \`ruff check .\`
-- Enable Git hooks via pre-commit:
-  - \`pre-commit install\`
-  - \`pre-commit run --all-files\`
-- Config: [.pre-commit-config.yaml](.pre-commit-config.yaml). CI enforces these checks.
-  **Key Points:**
-- Config: [.pre-commit-config.yaml](.pre-commit-config.yaml). CI enforces these checks.
+From the repository root:
+
+```bash
+uv run ruff format --check .
+uv run ruff check .
+uv run ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
+```
+
+Versions are pinned in root `pyproject.toml`. Run `python3.11 scripts/version.py sync`
+after updating the Ruff pin to align the [pre-commit hooks](.pre-commit-config.yaml).
+Enable hooks with `uv run pre-commit install`. CI runs Ruff and affected-module ty
+checks in existing runners; application type checks remain advisory while the
+existing diagnostic baseline is resolved. See [CI policy](docs/quality/ci.md).
 
 **Key Points:**
 - Use [GitHub Desktop](https://desktop.github.com/) for easier PR management

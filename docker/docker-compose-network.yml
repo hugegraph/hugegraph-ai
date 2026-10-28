@@ -5,7 +5,7 @@ networks:
 services:
   # HugeGraph Server
   hugegraph-server:
-    image: hugegraph/hugegraph:1.7.0
+    image: hugegraph/hugegraph:latest
     container_name: server
     restart: unless-stopped
     ports:
@@ -24,7 +24,7 @@ services:
 
   # HugeGraph LLM RAG Service
   hugegraph-rag:
-    image: hugegraph/rag
+    image: hugegraph/rag:1.8.0
     container_name: rag
     restart: unless-stopped
     ports:

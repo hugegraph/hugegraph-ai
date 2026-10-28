@@ -29,7 +29,11 @@ Guidance for AI agents working in this repository. Keep README content in README
 uv sync --all-extras
 uv run ruff format --check .
 uv run ruff check .
+uv run ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
 ```
+
+- The default toolchain is uv + Ruff + ty; versions are maintained in the root `pyproject.toml`.
+- CI runs ty for affected modules on the primary runtime, in existing runners. Existing application diagnostics are advisory until the baseline is resolved.
 
 - Run tests for the affected module rather than defaulting to a full-repository test sweep.
 - For `hugegraph-llm`, use the module CI split between unit-style tests and integration tests.

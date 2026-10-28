@@ -12,8 +12,9 @@
 # limitations under the License.
 
 [project]
+# Release version is synchronized by scripts/version.py from the root pyproject.toml.
 name = "hugegraph-mcp"
-version = "1.7.1"
+version = "1.8.0"
 description = "FastMCP server that exposes HugeGraph schema & Gremlin tools over MCP/STDIO"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -35,7 +36,7 @@ authors = [
 
 dependencies = [
     "fastmcp==3.2.4",
-    "hugegraph-python>=1.7.1,<2",
+    "hugegraph-python>=1.8.0,<2",
 ]
 
 [project.urls]

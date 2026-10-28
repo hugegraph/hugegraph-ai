@@ -24,14 +24,20 @@ set -eo pipefail
 GROUP="hugegraph"
 # current repository name
 REPO="${GROUP}-ai"
-# release version (input by committer)
-RELEASE_VERSION=$1
-USERNAME=$2
-PASSWORD=$3
+# Python 3.11+; preserve the existing version/username/password argument order.
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+RELEASE_PYTHON="${PYTHON_FOR_RELEASE:-python3}"
+"${RELEASE_PYTHON}" "${SCRIPT_DIR}/version.py" check
+ROOT_VERSION=$("${RELEASE_PYTHON}" "${SCRIPT_DIR}/version.py" get version)
+RELEASE_VERSION=${1:-${ROOT_VERSION}}
+USERNAME=${2:-}
+PASSWORD=${3:-}
+if [ "${RELEASE_VERSION}" != "${ROOT_VERSION}" ]; then
+  echo "Release version must match root pyproject.toml (${ROOT_VERSION})" >&2
+  exit 1
+fi
 # git release branch (check it carefully)
 GIT_BRANCH="release-${RELEASE_VERSION}"
-
-RELEASE_VERSION=${RELEASE_VERSION:?"Please input the release version behind script"}
 
 WORK_DIR=$(
   cd "$(dirname "$0")"
@@ -39,6 +45,14 @@ WORK_DIR=$(
 )
 cd "${WORK_DIR}"
 echo "In the work dir: $(pwd)"
+
+# Reject a stale release branch before creating or signing any archive.
+BRANCH_VERSION=$(git show "${GIT_BRANCH}:pyproject.toml" | \
+  "${RELEASE_PYTHON}" -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')
+if [ "${BRANCH_VERSION}" != "${RELEASE_VERSION}" ]; then
+  echo "Release branch version does not match ${RELEASE_VERSION}" >&2
+  exit 1
+fi
 
 # clean old dir then build a new one
 rm -rf dist && mkdir -p dist/apache-${REPO}

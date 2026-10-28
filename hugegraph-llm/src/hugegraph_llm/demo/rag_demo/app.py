@@ -18,6 +18,7 @@
 import argparse
 import ipaddress
 import os
+from importlib.metadata import version as distribution_version
 
 import gradio as gr
 import uvicorn
@@ -169,7 +170,7 @@ def init_rag_ui() -> gr.Interface:
 
 
 def create_app():
-    app = FastAPI(lifespan=lifespan)
+    app = FastAPI(lifespan=lifespan, version=distribution_version("hugegraph-llm"))
     # we don't need to manually check the env now
     # settings.check_env()
     prompt.update_yaml_file()

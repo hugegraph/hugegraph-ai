@@ -21,8 +21,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
+# Release version is synchronized by scripts/version.py from the root pyproject.toml.
 name = "hugegraph-ml"
-version = "1.7.0"
+version = "1.8.0"
 description = "Machine learning extensions for Apache HugeGraph."
 authors = [
     { name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" },

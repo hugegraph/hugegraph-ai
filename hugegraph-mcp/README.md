@@ -9,10 +9,10 @@ HugeGraph MCP is a safe, controlled Model Context Protocol adapter for HugeGraph
 ## Quick Start
 
 Installing a published package does not require cloning this repository. The
-commands below target `1.7.1` on PyPI. The new `core`/`legacy` names described
-below apply to this checkout and its next release; use the
-[developer setup](#developer-notes) to try them now. Published `1.7.1` uses
-`v2_core`/`v1` instead. See the [release workflow](docs/releasing.md).
+commands below target the release prepared by this checkout and become available
+after publication to PyPI. Before publication, use the
+[developer setup](#developer-notes). This release uses `core`/`legacy`; the previous
+`1.7.1` release uses `v2_core`/`v1`. See the [release workflow](docs/releasing.md).
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then start the server in read-only mode:
 
@@ -23,10 +23,10 @@ export HUGEGRAPH_USER=admin
 export HUGEGRAPH_PASSWORD=admin
 export HUGEGRAPH_MCP_READONLY=true
 
-uvx hugegraph-mcp@1.7.1
+uvx hugegraph-mcp@1.8.0
 ```
 
-The process speaks MCP JSON-RPC on stdout. Keep `HUGEGRAPH_MCP_READONLY=true` unless controlled writes are required. Leave `HUGEGRAPH_MCP_TOOLSET` unset for the default toolset. To select the 10-tool compatibility toolset, use `legacy` with this checkout or `v1` with published `1.7.1`.
+The process speaks MCP JSON-RPC on stdout. Keep `HUGEGRAPH_MCP_READONLY=true` unless controlled writes are required. Leave `HUGEGRAPH_MCP_TOOLSET` unset for the default `core` toolset. To select the 10-tool compatibility toolset, use `legacy`. For migration from `1.7.1`, see [Toolset Naming and Migration](#toolset-naming-and-migration).
 
 For MCP clients that accept JSON server configuration:
 
@@ -35,7 +35,7 @@ For MCP clients that accept JSON server configuration:
   "mcpServers": {
     "hugegraph": {
       "command": "uvx",
-      "args": ["hugegraph-mcp@1.7.1"],
+      "args": ["hugegraph-mcp@1.8.0"],
       "env": {
         "HUGEGRAPH_URL": "http://hugegraph.example.com:8080",
         "HUGEGRAPH_GRAPH_PATH": "DEFAULT/hugegraph",
@@ -251,7 +251,7 @@ For the current AI source, also set `ENABLE_LOGIN=true` and
 `HUGEGRAPH_LLM_ENABLE_THIN_WRITES=true` on the AI service, configure a strong
 `USER_TOKEN`, and supply it through `HUGEGRAPH_AI_TOKEN`. These AI-side write gates
 apply to this implementation; older deployments may lack them. Verify the actual
-service version rather than assuming the published MCP `1.7.1` requires the same gates.
+service version rather than assuming every AI deployment implements these gates.
 
 The current MCP refresh path checks `GET /vid-embeddings/refresh-capabilities` for
 `protocol_version=1`, then sends both expected target fields to

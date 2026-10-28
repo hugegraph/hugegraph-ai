@@ -16,14 +16,13 @@
 # limitations under the License.
 #
 
-set -e
+set -euo pipefail
 
-tag="1.8.0"
+script_dir=$(cd "$(dirname "$0")" && pwd)
+release_python="${PYTHON_FOR_RELEASE:-python3}"
+"${release_python}" "${script_dir}/version.py" check
+tag=$("${release_python}" "${script_dir}/version.py" get version)
+repository=$("${release_python}" "${script_dir}/version.py" get llm-image)
 
-script_dir=$(realpath "$(dirname "$0")")
-
-cd "${script_dir}/../docker"
-
-name="hugegraph/graphrag:${tag}"
-
-docker build -f Dockerfile.llm -t ${name} ..
+docker build -f "${script_dir}/../docker/Dockerfile.llm" \
+  -t "${repository}:${tag}" "${script_dir}/.."

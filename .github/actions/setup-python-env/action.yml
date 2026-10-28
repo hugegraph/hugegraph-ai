@@ -1,0 +1,26 @@
+name: Set up cached Python dependencies
+description: Install the shared uv version and restore caches for a module and Python runtime
+inputs:
+  python-version:
+    required: true
+    description: Python runtime
+  uv-version:
+    required: true
+    description: uv version from root configuration
+  component:
+    required: true
+    description: Cache namespace
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v7
+      with:
+        version: ${{ inputs.uv-version }}
+        python-version: ${{ inputs.python-version }}
+        enable-cache: true
+        cache-python: true
+        cache-dependency-glob: |
+          pyproject.toml
+          hugegraph-python-client/pyproject.toml
+          hugegraph-${{ inputs.component }}*/pyproject.toml
+        cache-suffix: ${{ inputs.component }}-${{ inputs.python-version }}
