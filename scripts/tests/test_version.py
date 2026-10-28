@@ -34,7 +34,7 @@ class TestReleaseVersion(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
         paths = ["pyproject.toml", *(f"{module}/pyproject.toml" for module in version.MODULES)]
-        for relative in (*paths, *version.DOCS, *version.DEPLOYMENT, *version.TOOLING):
+        for relative in (*paths, *version.DOCS, *version.DEPLOYMENT):
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(version.ROOT / relative, target)
@@ -77,14 +77,19 @@ class TestReleaseVersion(unittest.TestCase):
         self.assertEqual(0, self.run_command("sync"))
         self.assertEqual("", self.stdout.getvalue())
 
-    def test_ruff_hook_and_ci_versions_follow_pinned_dev_requirement(self):
+    def test_ci_tool_minimums_follow_root_dev_requirements(self):
         path = self.root / "pyproject.toml"
         previous = version.release_config(self.root)["ruff-version"]
-        path.write_text(path.read_text().replace(f"ruff=={previous}", "ruff==0.17.99"))
-        self.assertEqual(1, self.run_command("check"))
-        self.assertEqual(0, self.run_command("sync"))
-        self.assertIn("rev: v0.17.99", (self.root / version.TOOLING[0]).read_text())
+        previous_ty = version.release_config(self.root)["ty-version"]
+        path.write_text(path.read_text().replace(f"ruff>={previous}", "ruff>=0.17.99"))
         self.assertEqual("0.17.99", version.release_config(self.root)["ruff-version"])
+        self.assertEqual(previous_ty, version.release_config(self.root)["ty-version"])
+
+    def test_tool_versions_must_remain_open_ended_requirements(self):
+        path = self.root / "pyproject.toml"
+        path.write_text(path.read_text().replace("ruff>=", "ruff=="))
+        self.assertEqual(1, self.run_command("get", "ruff-version"))
+        self.assertIn("Declare ruff with >=", self.stderr.getvalue())
 
     def test_history_minimums_and_protocol_versions_are_preserved(self):
         self.bump_root()

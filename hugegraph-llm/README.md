@@ -51,7 +51,7 @@ editable source installation and offline examples.
 - Enable Git hooks via pre-commit:
   - `pre-commit install` (in the root dir)
   - `pre-commit run --all-files`
-- Tool versions: root `pyproject.toml`. Run `python3.11 scripts/version.py sync` after updating them to keep the [Ruff hook](../.pre-commit-config.yaml) aligned.
+- Tool requirements: root `pyproject.toml` (`>=` for Ruff and ty). The [Ruff hooks](../.pre-commit-config.yaml) run through uv and inherit that range.
 
 ## 🚀 Quick Start
 

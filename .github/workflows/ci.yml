@@ -31,6 +31,10 @@ jobs:
     if: github.event_name != 'schedule' || github.repository == 'apache/hugegraph-ai'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
     outputs:
       client: ${{ steps.select.outputs.client }}
       llm: ${{ steps.select.outputs.llm }}
@@ -56,6 +60,7 @@ jobs:
         id: select
         env:
           TEST_SET: ${{ inputs.test-set || 'mainline' }}
+          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ci.py
       - name: Check synchronized release metadata
         run: python3 scripts/version.py check

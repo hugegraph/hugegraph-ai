@@ -81,6 +81,27 @@ def changed_paths(event: dict, event_name: str) -> list[str]:
     return [path for path in result.stdout.decode().split("\0") if path]
 
 
+def codeql_provider(selected: dict[str, bool], repository: str) -> str:
+    """Keep GitHub default setup as the single scanner when it is active."""
+    if not selected["codeql"]:
+        return "not-requested"
+    # Unlike code-scanning settings, workflow metadata only requires actions:read.
+    # Paginate so the default workflow cannot be missed in a large repository.
+    raw = subprocess.check_output(
+        ["gh", "api", "--paginate", "--slurp", f"repos/{repository}/actions/workflows?per_page=100"],
+        text=True,
+    )
+    pages = json.loads(raw)
+    if not isinstance(pages, list) or not pages:
+        raise ValueError("Invalid GitHub workflow metadata while selecting CodeQL provider")
+    for page in pages:
+        for workflow in page["workflows"]:
+            if workflow["path"] == "dynamic/github-code-scanning/codeql" and workflow["state"] == "active":
+                selected["codeql"] = False
+                return "github-default-setup"
+    return "advanced-workflow"
+
+
 def main() -> None:
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     event_name = os.environ["GITHUB_EVENT_NAME"]
@@ -92,6 +113,7 @@ def main() -> None:
     )
     paths = changed_paths(event, event_name)
     selected = select(paths, full=full, test_set=test_set)
+    provider = codeql_provider(selected, os.environ["GITHUB_REPOSITORY"])
     config = release_config(ROOT)
     outputs = {key: str(value).lower() for key, value in selected.items()}
     outputs.update(config)
@@ -102,7 +124,9 @@ def main() -> None:
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:
         for key, value in outputs.items():
             stream.write(f"{key}={value}\n")
-    summary = json.dumps({"full": full, "suites": selected, "changed_files": paths}, indent=2)
+    summary = json.dumps(
+        {"full": full, "codeql_provider": provider, "suites": selected, "changed_files": paths}, indent=2
+    )
     Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(f"### CI selection\n\n```json\n{summary}\n```\n")
 
 

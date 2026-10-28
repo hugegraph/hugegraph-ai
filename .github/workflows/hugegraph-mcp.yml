@@ -84,7 +84,7 @@ jobs:
         continue-on-error: true
         env:
           TY_VERSION: ${{ inputs.ty-version }}
-        run: uvx --from "ty==$TY_VERSION" ty check --python .venv-mcp/bin/python hugegraph-mcp/hugegraph_mcp
+        run: uvx --from "ty>=$TY_VERSION" ty check --python .venv-mcp/bin/python hugegraph-mcp/hugegraph_mcp
       - name: Verify wheel and sdist installation
         if: matrix.python-version == inputs.integration-python
         run: |

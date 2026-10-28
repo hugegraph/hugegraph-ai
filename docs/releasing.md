@@ -21,8 +21,9 @@ examples. Historical migrations, compatibility minimums, backend capability
 evidence and protocol versions are maintained separately. CI rejects drift.
 The root `tool.hugegraph.ci` table also defines the shared uv version and primary
 Python runtime; see [CI selection](quality/ci.md) for full-validation controls.
-Ruff and ty versions are pinned in root development dependencies; CI reads those
-same pins and synchronization updates the Ruff pre-commit revision.
+Ruff and ty use `>=` lower bounds in root development dependencies. CI uses
+those same ranges, and local pre-commit hooks run Ruff through uv without a fixed
+hook revision or a separate tool version.
 
 Build the source LLM image with `bash scripts/build_llm_image.sh`. The script
 uses the root image repository and release tag. Set `PYTHON_FOR_RELEASE` to a

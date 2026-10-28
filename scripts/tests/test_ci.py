@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import importlib.util
+import json
 import subprocess
 import sys
 import tempfile
@@ -60,6 +61,36 @@ class TestCISelection(unittest.TestCase):
         self.assertTrue(all(ci.select([], full=True).values()))
         selected = ci.select([], test_set="codeql")
         self.assertEqual({"codeql"}, {key for key, value in selected.items() if value})
+
+    def test_active_default_codeql_avoids_duplicate_advanced_scanner(self):
+        selected = ci.select([], test_set="codeql")
+        pages = [{"workflows": []}, {"workflows": [{"path": "dynamic/github-code-scanning/codeql", "state": "active"}]}]
+        with patch.object(ci.subprocess, "check_output", return_value=json.dumps(pages)) as api:
+            self.assertEqual("github-default-setup", ci.codeql_provider(selected, "hugegraph/hugegraph-ai"))
+        self.assertFalse(selected["codeql"])
+        self.assertIn("--paginate", api.call_args.args[0])
+
+    def test_disabled_default_or_advanced_workflow_keeps_selected_scanner(self):
+        for workflow in (
+            {"path": "dynamic/github-code-scanning/codeql", "state": "disabled_manually"},
+            {"path": ".github/workflows/codeql.yml", "state": "active"},
+        ):
+            selected = ci.select([], full=True)
+            with patch.object(ci.subprocess, "check_output", return_value=json.dumps([{"workflows": [workflow]}])):
+                self.assertEqual("advanced-workflow", ci.codeql_provider(selected, "hugegraph/hugegraph-ai"))
+            self.assertTrue(selected["codeql"])
+
+    def test_unselected_codeql_does_not_query_github(self):
+        with patch.object(ci.subprocess, "check_output") as api:
+            self.assertEqual("not-requested", ci.codeql_provider(ci.select(["README.md"]), "hugegraph/hugegraph-ai"))
+            api.assert_not_called()
+
+    def test_codeql_metadata_failures_are_not_silently_ignored(self):
+        with (
+            patch.object(ci.subprocess, "check_output", side_effect=subprocess.CalledProcessError(1, ["gh", "api"])),
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            ci.codeql_provider(ci.select([], full=True), "hugegraph/hugegraph-ai")
 
     def test_deleted_and_renamed_files_are_selected_from_real_git_diff(self):
         with tempfile.TemporaryDirectory() as directory:

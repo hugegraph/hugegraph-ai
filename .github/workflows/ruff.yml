@@ -34,9 +34,9 @@ jobs:
         env:
           RUFF_VERSION: ${{ inputs.ruff-version }}
         run: |
-          uvx --from "ruff==$RUFF_VERSION" ruff format --check .
-          uvx --from "ruff==$RUFF_VERSION" ruff check .
+          uvx --from "ruff>=$RUFF_VERSION" ruff format --check .
+          uvx --from "ruff>=$RUFF_VERSION" ruff check .
       - name: Type check release and CI tooling
         env:
           TY_VERSION: ${{ inputs.ty-version }}
-        run: uvx --from "ty==$TY_VERSION" ty check --python-version 3.11 --extra-search-path scripts scripts
+        run: uvx --from "ty>=$TY_VERSION" ty check --python-version 3.11 --extra-search-path scripts scripts

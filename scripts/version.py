@@ -46,7 +46,6 @@ DEPLOYMENT = (
     "docker/charts/hg-llm/values.yaml",
     "docker/docker-compose-network.yml",
 )
-TOOLING = (".pre-commit-config.yaml",)
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 
 
@@ -56,12 +55,12 @@ def release_config(root: Path) -> dict[str, str]:
     config.update(data["tool"]["hugegraph"]["ci"])
     for tool in ("ruff", "ty"):
         requirement = next(
-            (value for value in data["project"]["optional-dependencies"]["dev"] if value.startswith(f"{tool}==")),
+            (value for value in data["project"]["optional-dependencies"]["dev"] if value.startswith(f"{tool}>=")),
             None,
         )
         if requirement is None:
-            raise ValueError(f"Pin {tool} with == in root project.optional-dependencies.dev")
-        config[f"{tool}-version"] = requirement.split("==", 1)[1]
+            raise ValueError(f"Declare {tool} with >= in root project.optional-dependencies.dev")
+        config[f"{tool}-version"] = requirement.split(">=", 1)[1]
     if not re.fullmatch(VERSION_PATTERN, config["version"]):
         raise ValueError("Root project.version must be a release version in x.y.z format")
     for key in ("server-image", "llm-image"):
@@ -93,9 +92,6 @@ def updates(root: Path) -> dict[Path, tuple[str, str]]:
             result[root / path] = (original, updated)
 
     replacements = {
-        TOOLING[0]: (
-            (r"(repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: v)[^\n]+($)", config["ruff-version"]),
-        ),
         DEPLOYMENT[0]: (
             (r"(^version: )[^\n]+($)", version),
             (r'(^appVersion: ")[^"]+("$)', version),

@@ -34,9 +34,9 @@ Ruff, dependency review and CodeQL each have a single job rather than a runtime
 matrix. PR updates and new main pushes cancel superseded runs.
 
 The default toolchain is **uv + Ruff + ty**. The uv version is defined in
-`tool.hugegraph.ci`; Ruff and ty are pinned in the root development dependencies.
-CI reads these pins, and `scripts/version.py sync` aligns the Ruff pre-commit
-revision with the same pin. The legacy formatting/lint script now uses uv/Ruff/ty
+`tool.hugegraph.ci`; Ruff and ty use `>=` lower bounds in root development dependencies.
+CI reads those lower bounds and uses the same ranges. Local pre-commit hooks run
+Ruff through uv, without a fixed remote hook revision. The legacy formatting/lint script now uses uv/Ruff/ty
 instead of Black/Pylint; `-b` and `-p` retain their format/lint selections.
 
 ty runs on the primary-runtime client, LLM and MCP jobs by default, without
@@ -59,6 +59,15 @@ in the existing quality runner, using their Python 3.11+ target.
   **dependencies** with a base ref for dependency review.
 - **Rerun CI** is manual and accepts a failed run ID. Automatic delayed retries
   were removed; a deterministic test failure no longer allocates retry runners.
+
+When CodeQL is selected, preflight reads the repository's workflow metadata with
+`actions:read`. An active `dynamic/github-code-scanning/codeql` workflow means
+GitHub default setup already owns scanning, so the custom CodeQL job is skipped.
+This avoids both duplicate runners and GitHub's rejection of advanced SARIF
+uploads while default setup is enabled. Without an active default scanner, the
+selected custom workflow runs normally. Metadata-query failures fail preflight.
+GitHub default scans keep their own triggers and check results, outside
+`CI Result`; a manual `codeql` selection does not force a new default-setup scan.
 
 ## Required check migration
 

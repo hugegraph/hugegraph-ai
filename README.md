@@ -217,8 +217,8 @@ uv run ruff check .
 uv run ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
 ```
 
-Versions are pinned in root `pyproject.toml`. Run `python3.11 scripts/version.py sync`
-after updating the Ruff pin to align the [pre-commit hooks](.pre-commit-config.yaml).
+Ruff and ty use `>=` requirements in root `pyproject.toml`.
+The [pre-commit hooks](.pre-commit-config.yaml) run Ruff through uv and inherit that range.
 Enable hooks with `uv run pre-commit install`. CI runs Ruff and affected-module ty
 checks in existing runners; application type checks remain advisory while the
 existing diagnostic baseline is resolved. See [CI policy](docs/quality/ci.md).
