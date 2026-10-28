@@ -13,10 +13,10 @@
 
 """Standalone schema design and reviewed property-graph extraction."""
 
-from hugegraph_llm_core.api import ExtractionResult, aextract_graph, extract_graph
-from hugegraph_llm_core.errors import LLMOutputTruncatedError, ModelOutputError, SchemaValidationError
-from hugegraph_llm_core.extraction_runtime.property_graph import PropertyGraphBundle
-from hugegraph_llm_core.extraction_runtime.review import (
+from hugegraph_llm_sdk.api import ExtractionResult, aextract_graph, extract_graph
+from hugegraph_llm_sdk.errors import LLMOutputTruncatedError, ModelOutputError, SchemaValidationError
+from hugegraph_llm_sdk.extraction_runtime.property_graph import PropertyGraphBundle
+from hugegraph_llm_sdk.extraction_runtime.review import (
     ChunkInput,
     ChunkResult,
     ExtractionOptions,
@@ -27,9 +27,9 @@ from hugegraph_llm_core.extraction_runtime.review import (
     run_chunk,
     run_chunks,
 )
-from hugegraph_llm_core.models import AsyncModel, FunctionModel, Model, ThreadedModel
-from hugegraph_llm_core.prompts import GraphPrompts
-from hugegraph_llm_core.schema import SchemaDraft, adesign_schema, design_schema, validate_schema
+from hugegraph_llm_sdk.models import AsyncModel, FunctionModel, Model, ThreadedModel
+from hugegraph_llm_sdk.prompts import GraphPrompts
+from hugegraph_llm_sdk.schema import SchemaDraft, adesign_schema, design_schema, validate_schema
 
 __all__ = [
     "AsyncModel",

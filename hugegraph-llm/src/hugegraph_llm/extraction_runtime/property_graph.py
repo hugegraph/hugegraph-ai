@@ -13,8 +13,8 @@
 
 """Legacy application defaults around the independent property-graph runtime."""
 
-from hugegraph_llm_core.extraction_runtime.property_graph import PropertyGraphBundle as CorePropertyGraphBundle
-from hugegraph_llm_core.prompts import GraphPrompts
+from hugegraph_llm_sdk.extraction_runtime.property_graph import PropertyGraphBundle as CorePropertyGraphBundle
+from hugegraph_llm_sdk.prompts import GraphPrompts
 
 from hugegraph_llm.config import prompt, runtime_config_lock
 from hugegraph_llm.models.llms.base import BaseLLM

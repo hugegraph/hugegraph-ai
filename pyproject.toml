@@ -85,13 +85,13 @@ include = ["*/src", "*/pyproject.toml", "*/README.md", "*/LICENSE", "*/NOTICE", 
 
 [tool.uv.sources]
 hugegraph-llm = { workspace = true }
-hugegraph-llm-core = { workspace = true }
+hugegraph-llm-sdk = { workspace = true }
 hugegraph-python = { workspace = true }
 vermeer-python-client = { path = "vermeer-python-client", editable = true }
 
 [tool.uv.workspace]
 members = [
-    "hugegraph-llm-core",
+    "hugegraph-llm-sdk",
     "hugegraph-llm",
     "hugegraph-python-client"
 ]
@@ -194,7 +194,7 @@ ignore = [
 "hugegraph-python-client/src/pyhugegraph/structure/*.py" = ["N802"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["hugegraph_llm", "hugegraph_llm_core", "hugegraph_mcp", "hugegraph_python_client", "hugegraph_ml", "vermeer_python_client"]
+known-first-party = ["hugegraph_llm", "hugegraph_llm_sdk", "hugegraph_mcp", "hugegraph_python_client", "hugegraph_ml", "vermeer_python_client"]
 
 [tool.ruff.format]
 quote-style = "double"

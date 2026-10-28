@@ -13,32 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Use a native asynchronous model without starting a service or a UI."""
+"""Design, edit, validate and extract without a model service or database."""
 
-import asyncio
 import json
 
 from _fixtures import GRAPH, PASS_REVIEW, SCHEMA, TEXT
 
-from hugegraph_llm_core import FunctionModel, adesign_schema, aextract_graph
+from hugegraph_llm_sdk import FunctionModel, design_schema, extract_graph, validate_schema
 
 
-async def main():
+def main():
     responses = iter(json.dumps(value) for value in (SCHEMA, GRAPH, PASS_REVIEW))
+    model = FunctionModel(generate=lambda prompt: next(responses))
 
-    async def generate(prompt):
-        del prompt
-        await asyncio.sleep(0)
-        return next(responses)
-
-    model = FunctionModel(agenerate=generate)
-    draft = await adesign_schema(TEXT, model=model)
+    draft = design_schema(TEXT, questions=["Who works for which company?"], model=model)
     assert not draft.issues
-    result = await aextract_graph(TEXT, schema=draft.schema, model=model)
+
+    # A caller owns the schema and can edit it before extraction.
+    draft.schema["propertykeys"].append({"name": "role", "data_type": "TEXT", "cardinality": "SINGLE"})
+    draft.schema["vertexlabels"][0]["properties"].append("role")
+    draft.schema["vertexlabels"][0]["nullable_keys"].append("role")
+    assert not validate_schema(draft.schema)
+
+    result = extract_graph(TEXT, schema=draft.schema, model=model)
     assert result.status == "succeeded"
     assert result.chunks[0].status == "final"
+    assert len(result.graph["vertices"]) == 2
+    assert len(result.graph["edges"]) == 1
     print(json.dumps(result.graph, ensure_ascii=False, indent=2))  # noqa: T201
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

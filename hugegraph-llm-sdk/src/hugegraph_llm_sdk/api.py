@@ -19,10 +19,10 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from hugegraph_llm_core._lifecycle import OwnedModels
-from hugegraph_llm_core.errors import SchemaValidationError
-from hugegraph_llm_core.extraction_runtime.property_graph import PropertyGraphBundle
-from hugegraph_llm_core.extraction_runtime.review import (
+from hugegraph_llm_sdk._lifecycle import OwnedModels
+from hugegraph_llm_sdk.errors import SchemaValidationError
+from hugegraph_llm_sdk.extraction_runtime.property_graph import PropertyGraphBundle
+from hugegraph_llm_sdk.extraction_runtime.review import (
     ChunkInput,
     ChunkResult,
     ExtractionOptions,
@@ -30,9 +30,9 @@ from hugegraph_llm_core.extraction_runtime.review import (
     arun_chunks,
     run_chunks,
 )
-from hugegraph_llm_core.models import AsyncModel, Model, _is_async_callable, require_model
-from hugegraph_llm_core.prompts import GraphPrompts
-from hugegraph_llm_core.schema import validate_schema
+from hugegraph_llm_sdk.models import AsyncModel, Model, _is_async_callable, require_model
+from hugegraph_llm_sdk.prompts import GraphPrompts
+from hugegraph_llm_sdk.schema import validate_schema
 
 
 @dataclass

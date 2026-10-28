@@ -21,6 +21,8 @@ dependencies may be available; the model is a caller-owned deterministic fake.
 
 import asyncio
 import importlib.abc
+import importlib.metadata
+import importlib.util
 import io
 import json
 import logging
@@ -35,6 +37,7 @@ FORBIDDEN_IMPORTS = {
     "pycgraph",
     "pyhugegraph",
     "hugegraph_llm",
+    "hugegraph_llm_core",
     "faiss",
     "langchain",
     "langchain_text_splitters",
@@ -81,8 +84,26 @@ def scripted(*responses):
     return generate
 
 
+def verify_distribution():
+    distribution = importlib.metadata.distribution("hugegraph-llm-sdk")
+    assert distribution.metadata["Name"] == "hugegraph-llm-sdk"
+    if os.environ.get("HUGEGRAPH_LLM_SDK_TEST_INSTALLED") != "1":
+        return
+    specification = importlib.util.find_spec("hugegraph_llm_sdk")
+    installed_module = distribution.locate_file("hugegraph_llm_sdk/__init__.py")
+    assert specification is not None and Path(specification.origin).resolve() == installed_module.resolve()
+    assert importlib.util.find_spec("hugegraph_llm_core") is None, "The previous import name is still available"
+    try:
+        importlib.metadata.distribution("hugegraph-llm-core")
+    except importlib.metadata.PackageNotFoundError:
+        pass
+    else:
+        raise AssertionError("The previous distribution is still installed")
+
+
 def run():
     sys.dont_write_bytecode = True
+    verify_distribution()
     sys.meta_path.insert(0, DependencyBoundary())
     socket.create_connection = prevent_network
     socket.getaddrinfo = prevent_network
@@ -97,7 +118,7 @@ def run():
     previous_environment = dict(os.environ)
     previous_files = set(Path.cwd().rglob("*"))
 
-    from hugegraph_llm_core import (
+    from hugegraph_llm_sdk import (
         FunctionModel,
         adesign_schema,
         aextract_graph,

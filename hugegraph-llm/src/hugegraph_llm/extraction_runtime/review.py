@@ -13,7 +13,7 @@
 
 """Compatibility exports for the shared extraction runtime."""
 
-from hugegraph_llm_core.extraction_runtime.review import (
+from hugegraph_llm_sdk.extraction_runtime.review import (
     ChunkInput,
     ChunkResult,
     Issue,
@@ -21,7 +21,7 @@ from hugegraph_llm_core.extraction_runtime.review import (
     run_chunk,
     run_chunks,
 )
-from hugegraph_llm_core.extraction_runtime.review import ExtractionOptions as CoreExtractionOptions
+from hugegraph_llm_sdk.extraction_runtime.review import ExtractionOptions as CoreExtractionOptions
 from pydantic import Field
 
 

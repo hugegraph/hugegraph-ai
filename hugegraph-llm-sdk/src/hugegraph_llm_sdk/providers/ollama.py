@@ -30,8 +30,8 @@ from tenacity import (
     wait_exponential,
 )
 
-from hugegraph_llm_core.errors import LLMOutputTruncatedError
-from hugegraph_llm_core.providers._diagnostics import token_usage
+from hugegraph_llm_sdk.errors import LLMOutputTruncatedError
+from hugegraph_llm_sdk.providers._diagnostics import token_usage
 
 log = logging.getLogger(__name__)
 

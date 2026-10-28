@@ -20,7 +20,7 @@ from copy import deepcopy
 
 from _fixtures import GRAPH, PASS_REVIEW, SCHEMA, TEXT
 
-from hugegraph_llm_core import FunctionModel, GraphPrompts, Issue, extract_graph
+from hugegraph_llm_sdk import FunctionModel, GraphPrompts, Issue, extract_graph
 
 
 def source_company_rule(graph, schema, text):

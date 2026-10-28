@@ -21,7 +21,7 @@ import json
 import re
 from typing import Any, Dict, List
 
-from hugegraph_llm_core.graph_utils import generate_extract_property_graph_prompt, primary_key_id
+from hugegraph_llm_sdk.graph_utils import generate_extract_property_graph_prompt, primary_key_id
 
 from hugegraph_llm.config import prompt
 from hugegraph_llm.document.chunk_split import ChunkSplitter

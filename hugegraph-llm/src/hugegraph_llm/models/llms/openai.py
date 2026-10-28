@@ -19,7 +19,7 @@ from typing import Optional
 
 import openai as openai
 import tiktoken as tiktoken
-from hugegraph_llm_core.providers.openai import OpenAIClient as CoreOpenAIClient
+from hugegraph_llm_sdk.providers.openai import OpenAIClient as CoreOpenAIClient
 from openai import AsyncOpenAI, OpenAI
 
 from hugegraph_llm.models.llms.base import BaseLLM

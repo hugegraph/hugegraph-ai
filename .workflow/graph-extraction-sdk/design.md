@@ -1,10 +1,16 @@
-# 设计：独立核心与旧应用适配
+# 设计：HugeGraph-LLM SDK 与旧应用适配
+
+## 命名与目录
+
+发行包为 `hugegraph-llm-sdk`，Python 导入名为 `hugegraph_llm_sdk`，对外品牌为 HugeGraph-LLM SDK。当前公开能力是图 schema 设计与校验、属性图抽取、审阅和有限修复；未来更多 LLM 调用能力只作为扩展方向，不计入本期实现。
+
+SDK 位于仓库根级 `hugegraph-llm-sdk/`，与 `hugegraph-llm/` 应用平级。这样外部项目可以独立安装、引用和修改 SDK，目录结构也直接反映应用依赖 SDK 的方向。此次更名不提供旧包名兼容 shim。
 
 ## 依赖方向
 
-外部 Python 项目直接依赖 `hugegraph-llm-core`；现有 `hugegraph-llm` 通过兼容层调用同一核心。核心只依赖标准库和 Pydantic。厂商适配器通过 `openai`、`ollama`、`litellm` extras 安装，按模块惰性导入。
+外部 Python 项目直接依赖 `hugegraph-llm-sdk`；现有 `hugegraph-llm` 通过兼容层调用同一 SDK。SDK 只依赖标准库和 Pydantic。厂商适配器通过 `openai`、`ollama`、`litellm` extras 安装，按模块惰性导入。
 
-核心不能反向导入旧应用配置、UI、调度器、图客户端、文件上传或日志初始化。旧应用负责配置持久化和模型工厂；UI 负责展示、通知和表单保存。
+SDK 不能反向导入旧应用配置、UI、调度器、图客户端、文件上传或日志初始化。旧应用负责配置持久化和模型工厂；UI 负责展示、通知和表单保存。
 
 ## 公共接口
 
@@ -36,4 +42,6 @@ schema 校验增加显式边约束：排序键不能可空，声明的 frequency
 
 ## 验证策略
 
-核心行为测试、异步与状态隔离测试、旧入口真实核心契约回归并行进行。独立 wheel CI 复制核心目录到工作区之外构建，验证 Python 3.10–3.13；基础环境只装 wheel 与测试工具，另用 Python 3.11 安装厂商 extras 验证请求边界。
+SDK 行为测试、异步与状态隔离测试、旧入口真实 SDK 契约回归并行进行。独立 wheel CI 复制 SDK 目录到工作区之外构建，验证 Python 3.10–3.13；基础环境只装 wheel 与测试工具，另用 Python 3.11 安装厂商 extras 验证请求边界。
+
+更名后重新构建 sdist 和 wheel，并重复独立安装与应用兼容验证；重命名前的产物摘要与测试数量只作为历史记录，不用于证明新发行名的安装验收。

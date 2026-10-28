@@ -23,9 +23,9 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from hugegraph_llm_core.extraction_runtime.review import ChunkInput, Issue, ReviewResult
-from hugegraph_llm_core.graph_utils import generate_extract_property_graph_prompt, primary_key_id
-from hugegraph_llm_core.prompts import GraphPrompts
+from hugegraph_llm_sdk.extraction_runtime.review import ChunkInput, Issue, ReviewResult
+from hugegraph_llm_sdk.graph_utils import generate_extract_property_graph_prompt, primary_key_id
+from hugegraph_llm_sdk.prompts import GraphPrompts
 
 # The midpoint above the largest finite float32 rounds to infinity, not to FLOAT_MAX.
 _FLOAT32_OVERFLOW_MIDPOINT = Decimal(2**128 - 2**103)

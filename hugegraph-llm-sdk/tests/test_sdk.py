@@ -21,7 +21,7 @@ from copy import deepcopy
 
 import pytest
 
-from hugegraph_llm_core import (
+from hugegraph_llm_sdk import (
     ExtractionOptions,
     FunctionModel,
     GraphPrompts,

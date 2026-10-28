@@ -18,9 +18,9 @@ from copy import deepcopy
 
 import pytest
 
-from hugegraph_llm_core.extraction_runtime.property_graph import PropertyGraphBundle
-from hugegraph_llm_core.extraction_runtime.review import ChunkInput, ExtractionOptions, Issue, arun_chunk, run_chunk
-from hugegraph_llm_core.prompts import GraphPrompts
+from hugegraph_llm_sdk.extraction_runtime.property_graph import PropertyGraphBundle
+from hugegraph_llm_sdk.extraction_runtime.review import ChunkInput, ExtractionOptions, Issue, arun_chunk, run_chunk
+from hugegraph_llm_sdk.prompts import GraphPrompts
 
 CHUNK = ChunkInput(index=0, text="Alice works for Acme. Alice is 30 years old.")
 

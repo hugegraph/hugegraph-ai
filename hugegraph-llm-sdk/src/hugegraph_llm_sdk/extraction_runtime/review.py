@@ -23,7 +23,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from hugegraph_llm_core.errors import LLMOutputTruncatedError
+from hugegraph_llm_sdk.errors import LLMOutputTruncatedError
 
 log = logging.getLogger(__name__)
 

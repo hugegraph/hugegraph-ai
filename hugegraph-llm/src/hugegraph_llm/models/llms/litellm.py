@@ -18,8 +18,8 @@
 from typing import Optional
 
 import tiktoken as tiktoken
-from hugegraph_llm_core.providers.litellm import LiteLLMClient as CoreLiteLLMClient
-from hugegraph_llm_core.providers.litellm import log as log
+from hugegraph_llm_sdk.providers.litellm import LiteLLMClient as CoreLiteLLMClient
+from hugegraph_llm_sdk.providers.litellm import log as log
 from litellm import acompletion, completion
 
 from hugegraph_llm.models.llms.base import BaseLLM

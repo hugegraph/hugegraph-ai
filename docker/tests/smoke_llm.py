@@ -43,8 +43,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, Request, build_opener
 
-from hugegraph_llm_core import design_schema
-from hugegraph_llm_core.providers.openai import OpenAIClient
+from hugegraph_llm_sdk import design_schema
+from hugegraph_llm_sdk.providers.openai import OpenAIClient
 
 SOURCE = "Alice is a software engineer who works for Acme."
 SCHEMA = {

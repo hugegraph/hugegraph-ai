@@ -16,7 +16,7 @@
 # under the License.
 
 import ollama as ollama
-from hugegraph_llm_core.providers.ollama import OllamaClient as CoreOllamaClient
+from hugegraph_llm_sdk.providers.ollama import OllamaClient as CoreOllamaClient
 
 from hugegraph_llm.models.llms.base import BaseLLM
 

@@ -25,11 +25,13 @@ response semantics, and the [architecture explanation (中文)](docs/extraction-
 
 ### Use Graph Design and Extraction in Another Python Project
 
-The independent [hugegraph-llm-core SDK](../hugegraph-llm-core/README.md) provides schema design,
+The independent [HugeGraph-LLM SDK](../hugegraph-llm-sdk/README.md) currently provides schema design,
 validation, and reviewed extraction without Gradio, the application server, or a graph database connection.
 Use synchronous or asynchronous calls, inject your existing model, and customize prompts, validators, or
 individual pipeline steps. The application retains its existing UI, HTTP, and configuration contracts while
-sharing this core implementation. See the SDK guide for editable source installation and offline examples.
+sharing the SDK implementation. The sibling `hugegraph-llm-sdk/` package can be installed separately from this
+application; graph retrieval, persistence, and indexing remain application features. See the SDK guide for
+editable source installation and offline examples.
 
 ## 📋 Prerequisites
 

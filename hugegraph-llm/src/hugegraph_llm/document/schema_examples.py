@@ -19,7 +19,7 @@ import json
 import logging
 from pathlib import Path
 
-from hugegraph_llm_core.schema import normalize_few_shot_schema_json, normalize_query_examples_json
+from hugegraph_llm_sdk.schema import normalize_few_shot_schema_json, normalize_query_examples_json
 
 log = logging.getLogger(__name__)
 

@@ -20,8 +20,8 @@ from tempfile import TemporaryFile
 
 import pytest
 
-from hugegraph_llm_core import ExtractionOptions, ThreadedModel, aextract_graph, extract_graph
-from hugegraph_llm_core._lifecycle import OwnedModels
+from hugegraph_llm_sdk import ExtractionOptions, ThreadedModel, aextract_graph, extract_graph
+from hugegraph_llm_sdk._lifecycle import OwnedModels
 
 SCHEMA = {"vertexlabels": [], "edgelabels": []}
 EMPTY_GRAPH = '{"vertices": [], "edges": []}'

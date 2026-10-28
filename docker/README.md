@@ -1,7 +1,7 @@
 # LLM application image
 
 Build from the repository root so the image includes the application, Python
-client, and `hugegraph-llm-core` workspace package:
+client, and the [HugeGraph-LLM SDK](../hugegraph-llm-sdk/README.md) workspace package:
 
 ```bash
 docker build -f docker/Dockerfile.llm -t hugegraph-llm:local .
@@ -14,6 +14,11 @@ or supply their environment variables when starting the container. The image
 does not copy local `.env` files or saved prompts into its build context.
 The build compiles `pycgraph` 3.2.2 from a pinned source commit because its
 published x86_64 wheel requires a newer C++ runtime than the Bookworm image.
+
+The application depends on the sibling `hugegraph-llm-sdk/` package. External
+Python projects can install that SDK directly without Docker or the application;
+its current standalone capabilities are schema design, validation, and reviewed
+property-graph extraction.
 
 If the build uses a TLS-inspecting proxy, provide a CA bundle as a BuildKit
 secret. The bundle must trust the proxy and the public package repositories:
@@ -56,7 +61,7 @@ The script waits for startup and exits unsuccessfully if any check fails. A
 successful run prints JSON with `"status": "passed"`. It verifies:
 
 - The normal Gradio homepage responds over HTTP.
-- The installed SDK designs and validates a schema using the real OpenAI client
+- The installed HugeGraph-LLM SDK designs and validates a schema using the real OpenAI client
   transport. Schema design currently has no dedicated application HTTP route.
 - `/graph/extract` preserves the legacy extraction response without review.
 - `/graph/extract` with `review_options={}` performs extraction, review, repair,

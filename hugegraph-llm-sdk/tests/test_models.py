@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from hugegraph_llm_core import (
+from hugegraph_llm_sdk import (
     FunctionModel,
     ThreadedModel,
     adesign_schema,

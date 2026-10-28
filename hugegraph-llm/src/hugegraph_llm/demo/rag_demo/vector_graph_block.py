@@ -22,7 +22,7 @@ import json
 import os
 
 import gradio as gr
-from hugegraph_llm_core.schema import normalize_few_shot_schema_json, normalize_query_examples_json
+from hugegraph_llm_sdk.schema import normalize_few_shot_schema_json, normalize_query_examples_json
 
 from hugegraph_llm.config import huge_settings, prompt, resource_path
 from hugegraph_llm.document import schema_examples

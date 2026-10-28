@@ -19,11 +19,11 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from hugegraph_llm_core import aextract_graph, extract_graph
-from hugegraph_llm_core.errors import ModelOutputError, SchemaValidationError
-from hugegraph_llm_core.models import FunctionModel, ThreadedModel
-from hugegraph_llm_core.prompts import DEFAULT_EXTRACT_PROMPT_CN, GraphPrompts
-from hugegraph_llm_core.schema import (
+from hugegraph_llm_sdk import aextract_graph, extract_graph
+from hugegraph_llm_sdk.errors import ModelOutputError, SchemaValidationError
+from hugegraph_llm_sdk.models import FunctionModel, ThreadedModel
+from hugegraph_llm_sdk.prompts import DEFAULT_EXTRACT_PROMPT_CN, GraphPrompts
+from hugegraph_llm_sdk.schema import (
     adesign_schema,
     build_schema_prompt,
     choose_schema_examples,

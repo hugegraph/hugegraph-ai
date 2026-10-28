@@ -19,8 +19,8 @@ from threading import Barrier, Event, Lock, get_ident
 import pytest
 from pydantic import ValidationError
 
-from hugegraph_llm_core.errors import LLMOutputTruncatedError
-from hugegraph_llm_core.extraction_runtime.review import (
+from hugegraph_llm_sdk.errors import LLMOutputTruncatedError
+from hugegraph_llm_sdk.extraction_runtime.review import (
     ChunkInput,
     ChunkResult,
     ExtractionOptions,

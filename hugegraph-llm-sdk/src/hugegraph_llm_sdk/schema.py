@@ -21,10 +21,10 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from hugegraph_llm_core.errors import ModelOutputError
-from hugegraph_llm_core.extraction_runtime.review import Issue
-from hugegraph_llm_core.models import require_model
-from hugegraph_llm_core.prompts import DEFAULT_SCHEMA_PROMPT
+from hugegraph_llm_sdk.errors import ModelOutputError
+from hugegraph_llm_sdk.extraction_runtime.review import Issue
+from hugegraph_llm_sdk.models import require_model
+from hugegraph_llm_sdk.prompts import DEFAULT_SCHEMA_PROMPT
 
 _DATA_TYPES = frozenset({"OBJECT", "BOOLEAN", "BYTE", "INT", "LONG", "FLOAT", "DOUBLE", "TEXT", "BLOB", "DATE", "UUID"})
 _CARDINALITIES = frozenset({"SINGLE", "LIST", "SET"})

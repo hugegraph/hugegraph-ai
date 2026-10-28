@@ -20,7 +20,7 @@ from pathlib import Path
 def test_library_flow_has_no_application_dependencies_or_side_effects(tmp_path):
     package = Path(__file__).resolve().parents[1]
     environment = dict(os.environ)
-    if environment.get("HUGEGRAPH_LLM_CORE_TEST_INSTALLED") == "1":
+    if environment.get("HUGEGRAPH_LLM_SDK_TEST_INSTALLED") == "1":
         environment.pop("PYTHONPATH", None)
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     result = subprocess.run(

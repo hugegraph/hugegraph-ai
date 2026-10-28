@@ -18,7 +18,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Optional
 
-from hugegraph_llm_core.errors import LLMOutputTruncatedError as LLMOutputTruncatedError
+from hugegraph_llm_sdk.errors import LLMOutputTruncatedError as LLMOutputTruncatedError
 
 
 class BaseLLM(ABC):

@@ -18,8 +18,8 @@
 import json
 from typing import Any, Dict, List, Optional
 
-from hugegraph_llm_core.prompts import DEFAULT_SCHEMA_PROMPT
-from hugegraph_llm_core.schema import build_schema_prompt, parse_schema_response
+from hugegraph_llm_sdk.prompts import DEFAULT_SCHEMA_PROMPT
+from hugegraph_llm_sdk.schema import build_schema_prompt, parse_schema_response
 
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.models.llms.init_llm import LLMs

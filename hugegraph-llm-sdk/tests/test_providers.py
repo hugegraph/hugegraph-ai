@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from hugegraph_llm_core.errors import LLMOutputTruncatedError
+from hugegraph_llm_sdk.errors import LLMOutputTruncatedError
 
 PRIVATE_PAYLOAD = "synthetic-private-key-and-provider-echo"
 
@@ -29,8 +29,8 @@ PRIVATE_PAYLOAD = "synthetic-private-key-and-provider-echo"
 @pytest.fixture(params=["openai", "ollama", "litellm"])
 def provider(request, monkeypatch):
     name = request.param
-    pytest.importorskip(name, reason=f"Install hugegraph-llm-core[{name}] to run this provider contract")
-    module = importlib.import_module(f"hugegraph_llm_core.providers.{name}")
+    pytest.importorskip(name, reason=f"Install hugegraph-llm-sdk[{name}] to run this provider contract")
+    module = importlib.import_module(f"hugegraph_llm_sdk.providers.{name}")
     sync_call, async_call = Mock(), AsyncMock()
     if name == "openai":
         client = module.OpenAIClient(
@@ -113,7 +113,7 @@ def test_provider_does_not_retry_programming_errors(provider, mode):
 def test_openai_default_raises_authentication_errors(mode):
     openai = pytest.importorskip("openai", reason="Install the openai extra to run this provider contract")
     httpx = pytest.importorskip("httpx")
-    from hugegraph_llm_core.providers.openai import OpenAIClient
+    from hugegraph_llm_sdk.providers.openai import OpenAIClient
 
     error = openai.AuthenticationError(
         "invalid key", response=httpx.Response(401, request=httpx.Request("POST", "https://model.invalid")), body=None
@@ -135,7 +135,7 @@ def test_new_and_legacy_clients_share_transport_without_changing_legacy_defaults
     from hugegraph_llm.models.llms.base import BaseLLM
     from hugegraph_llm.models.llms.base import LLMOutputTruncatedError as LegacyTruncationError
     from hugegraph_llm.models.llms.openai import OpenAIClient as LegacyClient
-    from hugegraph_llm_core.providers.openai import OpenAIClient
+    from hugegraph_llm_sdk.providers.openai import OpenAIClient
 
     assert issubclass(LegacyClient, BaseLLM)
     assert LegacyClient.generate is OpenAIClient.generate
@@ -146,8 +146,8 @@ def test_new_and_legacy_clients_share_transport_without_changing_legacy_defaults
 @pytest.fixture(params=["openai", "ollama"])
 def managed_provider(request, monkeypatch):
     name = request.param
-    pytest.importorskip(name, reason=f"Install hugegraph-llm-core[{name}] to run this provider contract")
-    module = importlib.import_module(f"hugegraph_llm_core.providers.{name}")
+    pytest.importorskip(name, reason=f"Install hugegraph-llm-sdk[{name}] to run this provider contract")
+    module = importlib.import_module(f"hugegraph_llm_sdk.providers.{name}")
     close, aclose = Mock(), AsyncMock()
     if name == "openai":
         client = module.OpenAIClient(client=SimpleNamespace(close=close), async_client=SimpleNamespace(close=aclose))
@@ -219,7 +219,7 @@ def test_provider_failure_logs_do_not_include_error_content(provider, mode, capl
         failure = ValueError(PRIVATE_PAYLOAD)
     call = async_call if mode.startswith("async") else sync_call
     call.side_effect = failure
-    caplog.set_level(logging.DEBUG, logger=f"hugegraph_llm_core.providers.{name}")
+    caplog.set_level(logging.DEBUG, logger=f"hugegraph_llm_sdk.providers.{name}")
 
     with pytest.raises(type(failure)) as caught:
         invoke_mode(client, mode)
@@ -245,7 +245,7 @@ def test_provider_usage_logs_only_numeric_counter_fields(provider, mode, caplog)
             model_dump_json=lambda: PRIVATE_PAYLOAD,
         )
     (async_call if mode == "async" else sync_call).return_value = returned
-    caplog.set_level(logging.DEBUG, logger=f"hugegraph_llm_core.providers.{name}")
+    caplog.set_level(logging.DEBUG, logger=f"hugegraph_llm_sdk.providers.{name}")
 
     assert invoke(client, mode) == PRIVATE_PAYLOAD
     assert "prompt_tokens" in caplog.text and "3" in caplog.text
@@ -276,7 +276,7 @@ def test_provider_stream_diagnostics_do_not_log_response_chunks(provider, mode, 
 
     sync_call.return_value = iter(chunks)
     async_call.return_value = astream()
-    caplog.set_level(logging.DEBUG, logger=f"hugegraph_llm_core.providers.{name}")
+    caplog.set_level(logging.DEBUG, logger=f"hugegraph_llm_sdk.providers.{name}")
 
     assert invoke_mode(client, mode) == PRIVATE_PAYLOAD
     assert PRIVATE_PAYLOAD not in caplog.text
@@ -287,7 +287,7 @@ def test_openai_legacy_error_output_remains_explicit_but_is_not_logged(mode, cap
     openai = pytest.importorskip("openai", reason="Install the openai extra to run this provider contract")
     import httpx
 
-    from hugegraph_llm_core.providers.openai import OpenAIClient
+    from hugegraph_llm_sdk.providers.openai import OpenAIClient
 
     failure = openai.BadRequestError(
         PRIVATE_PAYLOAD,
@@ -300,7 +300,7 @@ def test_openai_legacy_error_output_remains_explicit_but_is_not_logged(mode, cap
         async_client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=async_call))),
         raise_on_truncation=False,
     )
-    caplog.set_level(logging.DEBUG, logger="hugegraph_llm_core.providers.openai")
+    caplog.set_level(logging.DEBUG, logger="hugegraph_llm_sdk.providers.openai")
 
     assert PRIVATE_PAYLOAD in invoke_mode(client, mode)
     assert PRIVATE_PAYLOAD not in caplog.text

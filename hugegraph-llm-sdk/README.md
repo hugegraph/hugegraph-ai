@@ -1,34 +1,34 @@
-# HugeGraph-LLM Core
+# HugeGraph-LLM SDK
 
-用于独立 Python 项目的图设计与属性图抽取 SDK。传入自己的模型，即可生成 schema、校验图数据，并执行抽取、审阅和有限修复。核心采用 HugeGraph 属性图规则，运行这些步骤不需要图数据库、Gradio 或 HTTP 服务。
+面向独立 Python 项目的 HugeGraph-LLM 能力调用接口，发行名为 `hugegraph-llm-sdk`，导入名为 `hugegraph_llm_sdk`。当前提供图 schema 设计、校验、属性图抽取、审阅和有限修复；传入自己的模型即可使用，不需要图数据库、Gradio 或 HTTP 服务。
 
-基础安装只依赖 Pydantic。模型厂商适配器按需安装；核心不会加载旧应用配置、读写 `.env` / YAML、创建日志文件或配置宿主程序的日志。
+SDK 的命名为后续更多可组合的 LLM 能力保留空间，当前实现范围仍限于上述图设计与抽取流程。它沿用 HugeGraph 属性图规则，基础安装只依赖 Pydantic。模型厂商适配器按需安装；SDK 不会加载旧应用配置、读写 `.env` / YAML、创建日志文件或配置宿主程序的日志。
 
 ## 安装到另一个项目
 
-此核心包随当前源码提供，尚未通过本次变更发布到公共包仓库。请使用仓库路径或构建的 wheel，勿假定公共索引已有此版本。
+此 SDK 随当前源码提供，尚未通过本次变更发布到公共包仓库。请使用仓库路径或构建的 wheel，勿假定公共索引已有此版本。
 
 ```bash
 # 在自己的 Python 项目目录中执行；路径替换为实际 checkout
-uv add --editable /absolute/path/hugegraph-ai/hugegraph-llm-core
+uv add --editable /absolute/path/hugegraph-ai/hugegraph-llm-sdk
 
 # 需要现成 OpenAI 适配器时，显式安装对应 extra
-uv add --editable /absolute/path/hugegraph-ai/hugegraph-llm-core --extra openai
+uv add --editable /absolute/path/hugegraph-ai/hugegraph-llm-sdk --extra openai
 ```
 
 也可以构建 wheel 后安装到外部项目：
 
 ```bash
-uv build --no-sources /absolute/path/hugegraph-ai/hugegraph-llm-core --out-dir /tmp/core-dist
-uv add /tmp/core-dist/hugegraph_llm_core-1.8.0-py3-none-any.whl
+uv build --no-sources /absolute/path/hugegraph-ai/hugegraph-llm-sdk --out-dir /tmp/llm-sdk-dist
+uv add /tmp/llm-sdk-dist/hugegraph_llm_sdk-1.8.0-py3-none-any.whl
 ```
 
-核心支持 Python 3.10–3.13 的独立安装验证。旧 `hugegraph-llm` 应用仍沿用自己的 Python 与依赖约束。修改 editable 安装指向的核心源码后，外部项目下次运行会使用这些改动，无需复制源码或重新安装 wheel。
+SDK 支持 Python 3.10–3.13，并通过独立安装矩阵验证。旧 `hugegraph-llm` 应用仍沿用自己的 Python 与依赖约束。修改 editable 安装指向的 SDK 源码后，外部项目下次运行会使用这些改动，无需复制源码或重新安装 wheel。
 
 ## 最小接入
 
 ```python
-from hugegraph_llm_core import (
+from hugegraph_llm_sdk import (
     FunctionModel,
     design_schema,
     extract_graph,
@@ -79,14 +79,14 @@ for chunk in result.chunks:
 - 显式传 `review=False` 时只抽取和本地校验，不调用审阅或修复模型；通过的状态为 `validated`，也会汇总到 `result.graph`。
 - 总体 `status` 为 `succeeded`、`partial` 或 `failed`。模型或块级处理失败不会丢弃其他块的结果；调用方应检查状态，而非只检查是否抛出异常。
 - 参数或 schema 无效时，在调用模型前报错。汇总图按输入顺序拼接完成块，不进行跨块实体消歧、去重或语义合并。
-- 核心不写库、不刷新索引、不保存任务；返回结果的保存和后续处理由调用方决定。
+- SDK 不写库、不刷新索引、不保存任务；返回结果的保存和后续处理由调用方决定。
 
 ## 替换模型、prompt 和校验规则
 
 现成适配器使用显式参数，不读取旧应用配置：
 
 ```python
-from hugegraph_llm_core.providers.openai import OpenAIClient
+from hugegraph_llm_sdk.providers.openai import OpenAIClient
 
 model = OpenAIClient(
     api_key=my_api_key,
@@ -103,11 +103,11 @@ model = OpenAIClient(
 
 自定义校验器接收 `(graph, schema, text)`，返回 `list[Issue]`。它在基础校验后运行，问题会进入修复循环；修复后的图会重新校验。参见可离线运行的 [customization.py](examples/customization.py)。
 
-需要修改某个步骤时，可以扩展 `PropertyGraphBundle` 的 `extract / validate / review / repair` 方法，然后使用公共 `run_chunk` / `run_chunks`。对应异步方法为 `aextract / areview / arepair`，本地 `validate` 保持同步；异步运行入口是 `arun_chunk` / `arun_chunks`。这些类型和函数位于 `hugegraph_llm_core.extraction_runtime` 的 `property_graph` 与 `review` 模块。
+需要修改某个步骤时，可以扩展 `PropertyGraphBundle` 的 `extract / validate / review / repair` 方法，然后使用公共 `run_chunk` / `run_chunks`。对应异步方法为 `aextract / areview / arepair`，本地 `validate` 保持同步；异步运行入口是 `arun_chunk` / `arun_chunks`。这些类型和函数位于 `hugegraph_llm_sdk.extraction_runtime` 的 `property_graph` 与 `review` 模块。
 
 ```python
-from hugegraph_llm_core.extraction_runtime.property_graph import PropertyGraphBundle
-from hugegraph_llm_core.extraction_runtime.review import ChunkInput, ExtractionOptions, run_chunk
+from hugegraph_llm_sdk.extraction_runtime.property_graph import PropertyGraphBundle
+from hugegraph_llm_sdk.extraction_runtime.review import ChunkInput, ExtractionOptions, run_chunk
 
 
 class ProjectBundle(PropertyGraphBundle):
@@ -132,7 +132,7 @@ chunk = run_chunk(
 并发大于 1 时必须使用无参数 `model_factory`，每块返回独立模型实例：
 
 ```python
-from hugegraph_llm_core import ExtractionOptions, extract_graph
+from hugegraph_llm_sdk import ExtractionOptions, extract_graph
 
 result = extract_graph(
     chunks,
@@ -148,12 +148,14 @@ SDK 负责清理 `model_factory` 创建的模型。输入按最多 `max_workers`
 
 ## 与旧应用的关系
 
-旧 UI 和 HTTP 的图设计／抽取入口复用核心，但保留原有参数、表单保存、配置文件和返回合同。旧 `/graph/extract` 仍通过显式 `review_options` 开启审阅，旧入口的默认并发也保持不变；它们不会自动采用新 SDK 的默认策略。
+SDK 与应用在仓库根目录下平级：`hugegraph-llm-sdk/` 提供可独立安装的 Python 接口，`hugegraph-llm/` 提供 UI、HTTP 和应用工作流。依赖方向是应用调用 SDK；SDK 不依赖应用，也不需要安装整个仓库的依赖。
 
-本次独立的是 Python 核心包。完整旧 HTTP 服务的启动仍属于 `hugegraph-llm` 应用；召回、写库、索引以及文件上传也继续由该应用负责。
+旧 UI 和 HTTP 的图设计／抽取入口复用 SDK，但保留原有参数、表单保存、配置文件和返回合同。旧 `/graph/extract` 仍通过显式 `review_options` 开启审阅，旧入口的默认并发也保持不变；它们不会自动采用新 SDK 的默认策略。
+
+完整旧 HTTP 服务的启动仍属于 `hugegraph-llm` 应用；召回、写库、索引以及文件上传也继续由该应用负责。这些应用能力尚未作为本 SDK 的独立接口交付。
 
 ## 验证
 
-CI 在仓库工作区之外构建并安装 wheel，分别验证 Python 3.10、3.11、3.12 和 3.13。基础环境运行隔离 smoke、离线示例和核心测试；模型适配器另有安装 extras 的契约测试，网络请求在测试边界替换。
+CI 在仓库工作区之外构建并安装 wheel，分别验证 Python 3.10、3.11、3.12 和 3.13。基础环境运行隔离 smoke、离线示例和 SDK 测试；模型适配器另有安装 extras 的契约测试，网络请求在测试边界替换。
 
-源码开发可使用根工作区已有的测试环境运行核心测试。发布前仍需执行独立 wheel 验证，不能用源码路径注入代替安装验收。
+源码开发可使用根工作区已有的测试环境运行 SDK 测试。发布前仍需执行独立 wheel 验证，不能用源码路径注入代替安装验收。
