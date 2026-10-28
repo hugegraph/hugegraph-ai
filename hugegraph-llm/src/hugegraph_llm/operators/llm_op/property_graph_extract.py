@@ -21,6 +21,8 @@ import json
 import re
 from typing import Any, Dict, List
 
+from hugegraph_llm_sdk.graph_utils import generate_extract_property_graph_prompt, primary_key_id
+
 from hugegraph_llm.config import prompt
 from hugegraph_llm.document.chunk_split import ChunkSplitter
 from hugegraph_llm.models.llms.base import BaseLLM
@@ -31,17 +33,7 @@ from hugegraph_llm.utils.log import log
 # prompt.extract_graph_prompt changes after the system loads, this does not seem to meet expectations.
 SCHEMA_EXAMPLE_PROMPT = prompt.extract_graph_prompt
 
-
-def generate_extract_property_graph_prompt(text, schema=None) -> str:
-    return f"""---
-Following the full instructions above, try to extract the following text from the given schema, output the JSON result:
-# Input
-## Text:
-{text}
-## Graph schema
-{schema}
-
-# Output"""
+__all__ = ["PropertyGraphExtract", "generate_extract_property_graph_prompt", "filter_item", "split_text"]
 
 
 def split_text(text: str) -> List[str]:
@@ -118,20 +110,7 @@ class PropertyGraphExtract:
 
     @staticmethod
     def _primary_key_id(vertex_label, properties):
-        id_strategy = vertex_label.get("id_strategy")
-        if id_strategy and str(id_strategy).upper() != "PRIMARY_KEY":
-            return None
-        primary_keys = vertex_label.get("primary_keys", [])
-        if not primary_keys or "id" not in vertex_label:
-            return None
-        values = []
-        for key in primary_keys:
-            value = properties.get(key)
-            if value is None or value == "":
-                return None
-            values.append(str(value).replace("!", "`!"))
-        # Match HugeGraph's concatValues(), followed by splicing().
-        return ":".join(part.replace(":", "`:") for part in (str(vertex_label["id"]), "!".join(values)))
+        return primary_key_id(vertex_label, properties)
 
     def _normalize_vertices(self, vertices, vertex_label_map):
         vertex_id_map = {}

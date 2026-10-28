@@ -23,6 +23,16 @@ option keep the existing extraction path.
 See the [runtime guide](docs/extraction-runtime.md) for a runnable example and
 response semantics, and the [architecture explanation (中文)](docs/extraction-runtime-architecture.zh-CN.md).
 
+### Use Graph Design and Extraction in Another Python Project
+
+The independent [HugeGraph-LLM SDK](../hugegraph-llm-sdk/README.md) currently provides schema design,
+validation, and reviewed extraction without Gradio, the application server, or a graph database connection.
+Use synchronous or asynchronous calls, inject your existing model, and customize prompts, validators, or
+individual pipeline steps. The application retains its existing UI, HTTP, and configuration contracts while
+sharing the SDK implementation. The sibling `hugegraph-llm-sdk/` package can be installed separately from this
+application; graph retrieval, persistence, and indexing remain application features. See the SDK guide for
+editable source installation and offline examples.
+
 ## 📋 Prerequisites
 
 > [!IMPORTANT]
