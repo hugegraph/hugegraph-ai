@@ -32,7 +32,7 @@ The implemented algorithm models can be found in the [models](./src/hugegraph_ml
 
 ## Environment Requirements
 
-- python 3.9+ (standalone module, not part of workspace)
+- python 3.11+ (standalone module, not part of workspace)
 - hugegraph-server 1.0+ (recommended: 1.5+)
 - [uv](https://docs.astral.sh/uv/) 0.7+ (for dependency management)
 

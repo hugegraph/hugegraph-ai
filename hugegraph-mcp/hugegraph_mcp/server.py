@@ -19,6 +19,7 @@ server.py 只负责参数校验和 mode 分发，具体业务逻辑委托给 too
 
 import os
 import time
+from importlib.metadata import version as distribution_version
 from typing import Any
 
 from fastmcp import FastMCP
@@ -46,7 +47,7 @@ READONLY = MCPConfig.from_env().is_readonly()
 MCP_TOOL_CONTRACT_VERSION = "2.0"
 ACTIVE_TOOLSET = resolve_toolset(os.getenv("HUGEGRAPH_MCP_TOOLSET"))
 
-mcp = FastMCP("HugeGraph MCP")
+mcp = FastMCP("HugeGraph MCP", version=distribution_version("hugegraph-mcp"))
 
 
 def _register_core_tool(func):

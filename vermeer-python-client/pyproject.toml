@@ -16,15 +16,16 @@
 # under the License.
 
 [project]
+# Release version is synchronized by scripts/version.py from the root pyproject.toml.
 name = "vermeer-python-client"
-version = "1.7.0" # Independently managed version for the vermeer-python-client package
+version = "1.8.0"
 description = "A Python client library for interacting with Vermeer, a tool for managing and analyzing large-scale graph data."
 authors = [
     { name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" }
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 
 dependencies = [
     # Common dependencies

@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from importlib.metadata import version
 from unittest.mock import Mock
 
 import pytest
@@ -22,6 +23,16 @@ import pytest
 from hugegraph_llm.demo.rag_demo import app
 
 pytestmark = pytest.mark.contract
+
+
+def test_openapi_reports_installed_package_version(monkeypatch):
+    monkeypatch.setattr(app.prompt, "update_yaml_file", Mock())
+    monkeypatch.setattr(app, "init_rag_ui", Mock())
+    monkeypatch.setattr(app.gr, "mount_gradio_app", lambda application, *_args, **_kwargs: application)
+
+    application = app.create_app()
+
+    assert application.openapi()["info"]["version"] == version("hugegraph-llm")
 
 
 @pytest.mark.parametrize(

@@ -36,4 +36,4 @@ When AI is disabled by configuration, `hugegraph_ai_status="disabled"` is normal
 
 Structured query and plan lifecycle tools require the default `core` toolset. For a `legacy` deployment, enable `HUGEGRAPH_MCP_TOOLSET=core` and restart before using them.
 
-These skills describe current source. Published `1.7.1` uses `v2_core` / `v1`; see the [migration guide](../../hugegraph-mcp/README.md#toolset-naming-and-migration).
+These skills describe the current release with `core` / `legacy`. The previous `1.7.1` release uses `v2_core` / `v1`; see the [migration guide](../../hugegraph-mcp/README.md#toolset-naming-and-migration).

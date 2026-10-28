@@ -1,11 +1,11 @@
 # LLM application image
 
-Build from the repository root so the image includes the application, Python
+The image uses Python 3.11. Build from the repository root so it includes the application, Python
 client, and the [HugeGraph-LLM SDK](../hugegraph-llm-sdk/README.md) workspace package:
 
 ```bash
-docker build -f docker/Dockerfile.llm -t hugegraph-llm:local .
-docker run --rm --name hugegraph-llm -p 127.0.0.1:8001:8001 hugegraph-llm:local
+docker build -f docker/Dockerfile.llm -t hugegraph/rag:local .
+docker run --rm --name hugegraph-llm -p 127.0.0.1:8001:8001 hugegraph/rag:local
 ```
 
 The default command starts the FastAPI application and Gradio interface at
@@ -24,7 +24,7 @@ If the build uses a TLS-inspecting proxy, provide a CA bundle as a BuildKit
 secret. The bundle must trust the proxy and the public package repositories:
 
 ```bash
-docker build -f docker/Dockerfile.llm -t hugegraph-llm:local \
+docker build -f docker/Dockerfile.llm -t hugegraph/rag:local \
   --secret id=proxy_ca,src=/absolute/path/ca-bundle.pem .
 ```
 
@@ -51,7 +51,7 @@ docker run --rm -d --name llm-smoke -p 127.0.0.1:8001:8001 \
   -e NLTK_DATA=/home/work/hugegraph-llm/src/hugegraph_llm/resources/nltk_data \
   -e HUGEGRAPH_LLM_ENV_PATH=/tmp/llm-smoke.env \
   -e HUGEGRAPH_LLM_PROMPT_CONFIG_PATH=/tmp/llm-smoke-prompts.yaml \
-  hugegraph-llm:local
+  hugegraph/rag:local
 docker cp docker/tests/smoke_llm.py llm-smoke:/tmp/smoke_llm.py
 docker exec llm-smoke python /tmp/smoke_llm.py
 docker stop llm-smoke

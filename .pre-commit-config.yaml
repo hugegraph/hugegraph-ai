@@ -29,11 +29,18 @@ repos:
       - id: check-docstring-first
       - id: debug-statements
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.1
+  - repo: local
     hooks:
       - id: ruff-format
+        name: Ruff format (root dependency range)
+        entry: uv run --extra dev ruff format --force-exclude
+        language: system
         types_or: [python, pyi]
-      - id: ruff
+        require_serial: true
+      - id: ruff-check
+        name: Ruff check (root dependency range)
+        entry: uv run --extra dev ruff check --force-exclude
+        language: system
         types_or: [python, pyi]
+        require_serial: true
         args: [--fix]

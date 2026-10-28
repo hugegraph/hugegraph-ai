@@ -94,10 +94,9 @@ no public resume tool or automatic replay of `PARTIAL`/`UNKNOWN` writes.
 
 ## Next Work
 
-1. **Prepare the next aligned release.** The published pair is `1.7.1`; this
-   checkout currently has client `1.8.0` and MCP `1.7.1`, with MCP requiring
-   `hugegraph-python>=1.7.1,<2`. At release preparation, align both packages to
-   `1.8.0` and raise the client minimum accordingly. Validate distribution, public
+1. **Validate the aligned release.** Client and MCP versions are synchronized
+   from the root release version, together with MCP's client dependency minimum.
+   Run `python3.11 scripts/version.py check`, then validate distribution, public
    index installation, and a real service following the [publishing guide](releasing.md).
 2. **Enable additional writes only with backend support.** Add the atomic
    primitives listed above and prove them with two-client concurrency tests for

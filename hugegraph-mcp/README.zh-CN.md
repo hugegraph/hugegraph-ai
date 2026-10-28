@@ -8,9 +8,9 @@ HugeGraph MCP 是 HugeGraph Server 的安全、可控 Model Context Protocol 适
 
 ## 快速开始
 
-安装已发布版本不需要克隆仓库。以下命令面向 PyPI 的 `1.7.1` 包。
-下文新的 `core`／`legacy` 名称适用于当前源码和下一次发行；现在体验请使用
-[开发者说明](#开发者说明)。已发布的 `1.7.1` 仍使用 `v2_core`／`v1`。
+安装已发布版本不需要克隆仓库。以下命令面向当前仓库准备的发行版本，正式发布到 PyPI 后才可使用。
+发布前请使用[开发者说明](#开发者说明)中的源码方式验证。
+本次发行使用 `core`／`legacy`；上一版 `1.7.1` 使用 `v2_core`／`v1`。
 发布步骤见[发布流程](docs/releasing.md)。
 
 安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)，然后以只读模式启动：
@@ -22,10 +22,10 @@ export HUGEGRAPH_USER=admin
 export HUGEGRAPH_PASSWORD=admin
 export HUGEGRAPH_MCP_READONLY=true
 
-uvx hugegraph-mcp@1.7.1
+uvx hugegraph-mcp@1.8.0
 ```
 
-进程通过 stdout 提供 MCP JSON-RPC。除非明确需要受控写入，请保持 `HUGEGRAPH_MCP_READONLY=true`。不设置 `HUGEGRAPH_MCP_TOOLSET` 即使用默认工具集。需要 10 工具的兼容工具集时，当前源码使用 `legacy`，已发布的 `1.7.1` 使用 `v1`。
+进程通过 stdout 提供 MCP JSON-RPC。除非明确需要受控写入，请保持 `HUGEGRAPH_MCP_READONLY=true`。不设置 `HUGEGRAPH_MCP_TOOLSET` 即使用默认 `core` 工具集。需要 10 工具的兼容工具集时使用 `legacy`；从 `1.7.1` 升级请参考下文的工具集命名与迁移说明。
 
 支持 JSON Server 配置的 MCP 客户端可使用：
 
@@ -34,7 +34,7 @@ uvx hugegraph-mcp@1.7.1
   "mcpServers": {
     "hugegraph": {
       "command": "uvx",
-      "args": ["hugegraph-mcp@1.7.1"],
+      "args": ["hugegraph-mcp@1.8.0"],
       "env": {
         "HUGEGRAPH_URL": "http://hugegraph.example.com:8080",
         "HUGEGRAPH_GRAPH_PATH": "DEFAULT/hugegraph",
@@ -58,7 +58,7 @@ uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-m
 从 PR checkout 的仓库根目录执行。安装 uv 后，创建独立环境并安装同分支的 MCP 与客户端：
 
 ```bash
-uv venv --python 3.10 .venv-mcp
+uv venv --python 3.11 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 ```
 
@@ -237,7 +237,7 @@ AI 服务访问，例如 Docker 内的 `http://server:8080`；图名与 graphspa
 刷新需要 MCP 允许写入、启用管理模式、启用 AI，并在调用时设置 `confirm=true`。当前 AI 源码还要求服务侧
 `ENABLE_LOGIN=true`、`HUGEGRAPH_LLM_ENABLE_THIN_WRITES=true`，配置强 `USER_TOKEN`，并通过 MCP 的
 `HUGEGRAPH_AI_TOKEN` 传入。上述 AI 写入门禁适用于当前实现；旧部署可能没有这些门禁，必须核对实际服务版本，
-不能认为已发布的 MCP `1.7.1` 与所有 AI 部署都具有相同条件。
+不能假设所有 AI 部署都实现了相同的门禁。
 
 当前 MCP 刷新路径先检查 `GET /vid-embeddings/refresh-capabilities` 返回的 `protocol_version=1`，
 再向 `POST /v1/vid-embeddings/refresh` 传入两个必填目标字段，在同一配置锁内完成目标校验与刷新。

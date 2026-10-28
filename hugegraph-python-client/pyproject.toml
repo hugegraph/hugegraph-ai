@@ -16,6 +16,7 @@
 # under the License.
 
 [project]
+# Release version is synchronized by scripts/version.py from the root pyproject.toml.
 name = "hugegraph-python"
 version = "1.8.0"
 description = "A Python SDK for Apache HugeGraph Database."
@@ -24,7 +25,7 @@ authors = [
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 dependencies = [
     # Common dependencies

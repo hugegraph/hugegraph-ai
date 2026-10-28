@@ -16,42 +16,32 @@
 # limitations under the License.
 #
 
-BLACK=false
-PYLINT=false
-ROOT_DIR=$(pwd)
-echo ${ROOT_DIR}
-# Parse command line arguments
-while getopts ":bp" opt; do
-  case ${opt} in
-    b )
-      BLACK=true
-      ;;
-    p )
-      PYLINT=true
-      ;;
-    \? )
-      echo "Usage: cmd [-b] [-p]"
-      ;;
+# Default to blocking Ruff format/lint checks. -b/-p preserve the legacy
+# selections; -t explicitly runs the advisory application type check.
+set -euo pipefail
+ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+FORMAT=false
+LINT=false
+TYPECHECK=false
+while getopts ":bpt" opt; do
+  case "${opt}" in
+    b) FORMAT=true ;;
+    p) LINT=true ;;
+    t) TYPECHECK=true ;;
+    *) echo "Usage: $0 [-b (format)] [-p (lint)] [-t (types)]" >&2; exit 2 ;;
   esac
 done
-
-# If no arguments were provided, run both BLACK and PYLINT
-if [ "$BLACK" = false ] && [ "$PYLINT" = false ]; then
-  BLACK=true
-  PYLINT=true
+if [ "${FORMAT}" = false ] && [ "${LINT}" = false ] && [ "${TYPECHECK}" = false ]; then
+  FORMAT=true
+  LINT=true
 fi
-
-# Run BLACK if -b is specified
-if [ "$BLACK" = true ] ; then
-  echo "[black] Start to check code style and auto format"
-  # https://github.com/psf/BLACK/issues/1802
-  black --line-length=120 ${ROOT_DIR}
+cd "${ROOT_DIR}"
+if [ "${FORMAT}" = true ]; then
+  uv run --extra dev ruff format .
 fi
-
-# Run PYLINT if -p is specified
-if [ "$PYLINT" = true ] ; then
-  echo "[pylint] Start code analysis and check,
-  we need to manually fix all the warnings mentioned below before commit! "
-  export PYTHONPATH=${ROOT_DIR}/hugegraph-llm/src:${ROOT_DIR}/hugegraph-python-client/src:${ROOT_DIR}/hugegraph-ml/src
-  pylint --rcfile=${ROOT_DIR}/style/pylint.conf ${ROOT_DIR}/hugegraph-llm ${ROOT_DIR}/hugegraph-ml ${ROOT_DIR}/hugegraph-python-client
+if [ "${LINT}" = true ]; then
+  uv run --extra dev ruff check .
+fi
+if [ "${TYPECHECK}" = true ]; then
+  uv run --extra dev ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
 fi

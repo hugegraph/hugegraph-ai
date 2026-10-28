@@ -1,5 +1,6 @@
 # Stage 1: Build stage (Isolating the build env)
-FROM python:3.10.16-bookworm AS builder
+ARG PYTHON_VERSION=3.11
+FROM python:${PYTHON_VERSION}-bookworm AS builder
 
 WORKDIR /home/work/
 
@@ -23,7 +24,7 @@ RUN --mount=type=secret,id=proxy_ca \
       'pycgraph @ git+https://github.com/ChunelFeng/CGraph.git@f224e02339f8de73b34054c8a9db1236b64ede86#subdirectory=python'
 
 # Stage 2: Runtime stage
-FROM python:3.10.16-slim-bookworm
+FROM python:${PYTHON_VERSION}-slim-bookworm
 LABEL maintainer="HugeGraph Docker Maintainers <dev@hugegraph.apache.org>"
 
 # Create non-root user & install 'curl' for healthcheck

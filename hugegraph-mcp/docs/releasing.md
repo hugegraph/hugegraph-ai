@@ -8,14 +8,12 @@ second tag-triggered publisher in this repository.
 
 ## Package Versions
 
-The published client and MCP packages use `1.7.1`. This checkout is an intermediate
-development state: client `1.8.0`, MCP `1.7.1`. MCP currently requires
-`hugegraph-python>=1.7.1,<2`; the published `1.7.0` client does not include all
-client fixes required by MCP. Publish the client before the MCP package.
-
-For the planned `1.8.0` release, update the repository's package versions together
-and raise the MCP client dependency to `>=1.8.0,<2`. Already uploaded `1.7.1`
-artifacts remain available; do not overwrite or delete them.
+Client and MCP use the release version defined in the root `pyproject.toml`.
+Run `python3.11 scripts/version.py sync` after changing that version and
+`python3.11 scripts/version.py check` before building. The MCP client dependency
+minimum is synchronized with it. See [workspace release preparation](../../docs/releasing.md).
+Publish the client before MCP. Previously published `1.7.1` artifacts remain
+available and must not be overwritten or deleted.
 
 `hugegraph-python` is the client distribution name, `pyhugegraph` is its import
 name, and `hugegraph-python-client/` is its source directory. `hugegraph-mcp`
@@ -36,10 +34,9 @@ validation can therefore run before the PR is merged into ASF `main`.
 The workflow defaults to `publish=false`: it builds, tests, and records artifacts
 without uploading a package. In `both` mode, MCP uses the verified client artifact
 from the same run; this validates the package pair, not registry installation.
-For the next joint release, align both source versions to `1.8.0` before using
-`both`, and use the same resolved commit. The current mixed-version checkout is
-not yet that release pair; these instructions do not establish that a remote
-workflow has been run successfully.
+Use `both` with the same resolved source commit and run the release metadata
+check first. Local validation does not establish that the remote publishing
+workflow has succeeded.
 With `publish=true`, `target` selects the `testpypi`
 or `pypi` GitHub environment and its `PYPI_API_TOKEN`. The PyPI token must have
 permission for the selected project; a token scoped only to `hugegraph-python`
@@ -62,8 +59,8 @@ does not establish compatibility with a client published only on public PyPI.
    version from the selected index before publishing MCP. If MCP fails after the
    client is published, fix the cause and use `component=mcp` to retry; do not
    re-upload an existing client version.
-4. After `1.8.0` has been published, verify installation from outside the checkout
-   (the following command targets that future release, not the current published `1.7.1`):
+4. After the prepared release has been published, verify installation from outside the checkout
+   (the command below is available only after publication):
 
    ```bash
    uvx --no-cache hugegraph-mcp@1.8.0
@@ -81,13 +78,16 @@ structured query. This checks packaging and protocol wiring; it does not replace
 real-server integration tests.
 
 To repeat the distribution smoke locally, build a wheel and pass its absolute
-path after aligning/building `1.8.0` (client `1.8.0` must already be on PyPI):
+path after building the aligned packages. Include the local client wheel to validate
+before publication:
 
 ```bash
+uv build --no-sources hugegraph-python-client --out-dir /tmp/mcp-dist
 uv build --no-sources hugegraph-mcp --out-dir /tmp/mcp-dist
 python hugegraph-mcp/tests/distribution_smoke.py -- \
   uvx --no-config --no-cache --index-url https://pypi.org/simple \
-  --from /tmp/mcp-dist/hugegraph_mcp-1.8.0-py3-none-any.whl hugegraph-mcp
+  --with "$(realpath /tmp/mcp-dist/hugegraph_python-*.whl)" \
+  --from "$(realpath /tmp/mcp-dist/hugegraph_mcp-*.whl)" hugegraph-mcp
 ```
 
 PR CI separately tests wheels for both packages from the same checkout. That

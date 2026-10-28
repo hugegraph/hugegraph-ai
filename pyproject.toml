@@ -24,7 +24,7 @@ authors = [
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10" # Adjusted to the highest requirement among submodules (hugegraph-llm)
+requires-python = ">=3.11"
 maintainers = [
     { name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" },
 ]
@@ -42,10 +42,8 @@ dev = [
     "pytest~=8.0.0",
     "pytest-cov~=5.0.0",
     "coverage[toml]==7.10.4",
-    "pylint~=3.0.0",
-    "ruff>=0.11.0",
-    "mypy>=1.16.1",
-    "ty>=0.0.51",  # pre-stable (0.0.x): consider tight pinning to avoid surprise breakage
+    "ruff>=0.17.3",
+    "ty>=0.0.93",
     "pre-commit>=3.5.0",
 ]
 
@@ -95,6 +93,14 @@ members = [
     "hugegraph-llm",
     "hugegraph-python-client"
 ]
+
+[tool.hugegraph.release]
+server-image = "hugegraph/hugegraph:latest"
+llm-image = "hugegraph/rag"
+
+[tool.hugegraph.ci]
+uv-version = "0.13.6"
+python-version = "3.11"
 
 [tool.uv]
 constraint-dependencies = [
@@ -165,7 +171,7 @@ addopts = "--strict-markers --strict-config"
 # for code format
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 # Select a broad set of rules for comprehensive checks.
@@ -176,6 +182,7 @@ select = ["E", "F", "W", "I", "C", "N", "UP", "B", "SIM", "T20", "RUF"]
 
 # Ignore specific rules
 ignore = [
+    "UP042", # Preserve public str/Enum string representations; StrEnum changes __str__.
     "PYI041", # redundant-numeric-union: keep clear 'int | float' for type hinting
     "N812",    # lowercase-imported-as-non-lowercase
     "N806",    # non-lowercase-variable-in-function

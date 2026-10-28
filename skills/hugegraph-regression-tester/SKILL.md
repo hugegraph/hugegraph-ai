@@ -46,4 +46,4 @@ The capability GET is only discovery; MCP must never fall back to the legacy POS
 when the versioned route is unavailable. This does not verify physical-instance
 identity or establish a live rolling-deployment test.
 Generation and extraction require `HUGEGRAPH_MCP_ALLOW_AI=true` and a configured AI service.
-These skills describe current source; published `1.7.1` uses `v2_core` / `v1`.
+These skills describe the current release with `core` / `legacy`; the previous `1.7.1` release uses `v2_core` / `v1`.
