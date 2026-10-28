@@ -19,6 +19,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -26,6 +29,27 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class DeveloperToolingContractTest(unittest.TestCase):
+    def _run_quality_script(self, *arguments: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            directory_path = Path(directory)
+            log_path = directory_path / "uv.log"
+            executable = directory_path / "uv"
+            executable.write_text(
+                '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$UV_LOG"\n',
+                encoding="utf-8",
+            )
+            executable.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{directory_path}{os.pathsep}{env.get('PATH', '')}"
+            env["UV_LOG"] = str(log_path)
+            subprocess.run(
+                ["bash", str(ROOT / "style" / "code_format_and_analysis.sh"), *arguments],
+                cwd=ROOT,
+                env=env,
+                check=True,
+            )
+            return log_path.read_text(encoding="utf-8").splitlines()
+
     def test_quality_commands_enable_dev_extra(self) -> None:
         script = (ROOT / "style" / "code_format_and_analysis.sh").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -46,6 +70,21 @@ class DeveloperToolingContractTest(unittest.TestCase):
         )
         for command in expected_readme_commands:
             self.assertIn(command, readme)
+
+    def test_default_quality_script_runs_only_blocking_checks(self) -> None:
+        self.assertEqual(
+            [
+                "run --extra dev ruff format .",
+                "run --extra dev ruff check .",
+            ],
+            self._run_quality_script(),
+        )
+
+    def test_typecheck_requires_explicit_flag(self) -> None:
+        self.assertEqual(
+            ["run --extra dev ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph"],
+            self._run_quality_script("-t"),
+        )
 
     def test_default_codeql_remains_a_separate_required_check(self) -> None:
         ci_doc = (ROOT / "docs" / "quality" / "ci.md").read_text(encoding="utf-8")

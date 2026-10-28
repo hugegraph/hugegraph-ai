@@ -93,6 +93,7 @@ class TestCISelection(unittest.TestCase):
         self.assert_modules(["hugegraph-llm/src/hugegraph_llm/config/hugegraph_config.py"], {"llm"})
         self.assert_modules(["hugegraph-mcp/tests/contracts/write_confirmation_v2.json"], {"mcp"})
         self.assert_modules(["docker/Dockerfile.llm"], {"llm"})
+        self.assert_modules([".dockerignore"], {"llm"})
 
     def test_shared_config_and_workflows_do_not_skip_tests(self):
         for path in ("pyproject.toml", "scripts/ci.py", ".github/actions/setup-python-env/action.yml"):

@@ -16,8 +16,8 @@
 # limitations under the License.
 #
 
-# Default developer tools: uv + Ruff + ty. -b/-p preserve the legacy
-# formatting/lint selections; -t selects type checking.
+# Default to blocking Ruff format/lint checks. -b/-p preserve the legacy
+# selections; -t explicitly runs the advisory application type check.
 set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 FORMAT=false
@@ -34,7 +34,6 @@ done
 if [ "${FORMAT}" = false ] && [ "${LINT}" = false ] && [ "${TYPECHECK}" = false ]; then
   FORMAT=true
   LINT=true
-  TYPECHECK=true
 fi
 cd "${ROOT_DIR}"
 if [ "${FORMAT}" = true ]; then

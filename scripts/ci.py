@@ -70,7 +70,7 @@ def select(paths: list[str], *, full: bool = False, test_set: str = "mainline") 
         for key, module in MODULES.items():
             if path.startswith(module + "/") or path == f".github/workflows/{module}.yml":
                 flags[key] = True
-        if path.startswith("docker/") or path == "scripts/build_llm_image.sh":
+        if path == ".dockerignore" or path.startswith("docker/") or path == "scripts/build_llm_image.sh":
             flags["llm"] = True
         if (
             is_pyproject
