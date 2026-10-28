@@ -181,7 +181,9 @@ def main(argv: list[str] | None = None, *, root: Path = ROOT) -> int:
                     difflib.unified_diff(original.splitlines(True), updated.splitlines(True), relative, relative)
                 )
         if pending and args.command == "check":
-            sys.stderr.write("Release metadata is out of sync. Run: python3.12 scripts/version.py sync\n")
+            sys.stderr.write(
+                'Release metadata is out of sync. Run: "${PYTHON_FOR_RELEASE:-python3}" scripts/version.py sync\n'
+            )
             return 1
     except (KeyError, OSError, ValueError) as exc:
         sys.stderr.write(f"Release configuration error: {exc}\n")

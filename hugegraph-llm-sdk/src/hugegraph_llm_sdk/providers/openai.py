@@ -51,7 +51,7 @@ class OpenAIClient:
         client: Any = None,
         async_client: Any = None,
     ) -> None:
-        api_key = api_key or ""
+        api_key = api_key or "EMPTY"
         self.client = client if client is not None else OpenAI(api_key=api_key, base_url=api_base)
         self.aclient = async_client if async_client is not None else AsyncOpenAI(api_key=api_key, base_url=api_base)
         self.model = model_name

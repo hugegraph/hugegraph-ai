@@ -36,6 +36,7 @@ dependencies = [
 
 [project.optional-dependencies]
 llm = ["hugegraph-llm"]
+vectordb = ["hugegraph-llm[vectordb]"]
 python-client = ["hugegraph-python"]
 vermeer = ["vermeer-python-client"]
 dev = [

@@ -44,6 +44,6 @@ class OpenAIClient(CoreOpenAIClient, BaseLLM):
             max_tokens=max_tokens,
             temperature=temperature,
             raise_on_truncation=raise_on_truncation,
-            client=OpenAI(api_key=api_key or "", base_url=api_base),
-            async_client=AsyncOpenAI(api_key=api_key or "", base_url=api_base),
+            client=OpenAI(api_key=api_key or "EMPTY", base_url=api_base),
+            async_client=AsyncOpenAI(api_key=api_key or "EMPTY", base_url=api_base),
         )

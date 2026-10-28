@@ -71,6 +71,7 @@ class TestReleaseVersion(unittest.TestCase):
         before = {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
         self.assertEqual(1, self.run_command("check"))
         self.assertIn("hugegraph-mcp/pyproject.toml", self.stdout.getvalue())
+        self.assertIn('"${PYTHON_FOR_RELEASE:-python3}" scripts/version.py sync', self.stderr.getvalue())
         self.assertEqual(before, {p: p.read_bytes() for p in before})
 
     def test_sync_is_idempotent(self):

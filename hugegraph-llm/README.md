@@ -50,8 +50,19 @@ the workspace.
 A few upstream compatibility limits remain: LiteLLM requires OpenAI 2.x and its
 Botocore dependency requires dateutil below 3. Jieba uses its built-in resource
 fallback without requiring setuptools. `pycgraph` stays on 3.2.2 because 3.3.0 has no
-Linux wheel or source distribution on PyPI. These limits do not prevent using
+CPython 3.14 Linux wheel or source distribution on PyPI. These limits do not prevent using
 Python 3.12, 3.13 or 3.14.
+
+Linux source installs build pycgraph from the pinned GitHub commit. Install Git,
+a C++ compiler and Python development headers (Debian/Ubuntu:
+`apt-get install git build-essential python3-dev`) and allow access to GitHub and
+PyPI before running `uv sync`. The Docker builder includes this toolchain.
+
+NLTK 3.10 refuses data directories writable by other accounts. Use a private,
+user-owned `NLTK_DATA` cache; for an existing cache that you own, remove group
+and world write permissions with `chmod -R go-w "$NLTK_DATA"`, then restart the
+application. A missing or refused stopwords corpus is logged and falls back to
+an empty stopword list. Do not use shared writable corpora as trusted data.
 
 ### Code Quality (uv + Ruff + ty)
 
@@ -211,11 +222,11 @@ Use the Gradio interface for visual knowledge graph building:
 - **Custom Schema**: JSON format following our [template](https://github.com/apache/hugegraph-ai/blob/aff3bbe25fa91c3414947a196131be812c20ef11/hugegraph-llm/src/hugegraph_llm/config/config_data.py#L125)
 - **HugeGraph Schema**: Use existing graph instance schema (e.g., "hugegraph")
 
-![Knowledge Graph Builder](../docs/images/gradio/graph-extraction.png)
+![Knowledge Graph Builder](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/graph-extraction.png)
 
 After loading the extracted graph, open **Graph Tools** to run a Gremlin query:
 
-![Graph Tools query](../docs/images/gradio/graph-query.png)
+![Graph Tools query](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/graph-query.png)
 
 ## 🔧 Configuration
 
@@ -227,7 +238,7 @@ After running the demo, configuration files are automatically generated:
 Provider settings can also be edited in the web interface. This example uses a
 local model endpoint:
 
-![LLM provider configuration](../docs/images/gradio/configuration.png)
+![LLM provider configuration](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/configuration.png)
 
 ### Language Support
 

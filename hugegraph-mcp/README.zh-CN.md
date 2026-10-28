@@ -88,7 +88,7 @@ Windows PowerShell：
 
 使用 MCP Inspector 可以验证连接，并调用 `inspect_graph_tool(include_counts=true)` 查看图状态：
 
-![MCP Inspector 查看图状态](../docs/images/mcp/inspector.png)
+![MCP Inspector 查看图状态](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/mcp/inspector.png)
 
 结构化查询的 `limit` 默认是 `100`，输入必须是 `1–500` 的整数；超过 `500` 返回 `VALIDATION_ERROR`。合法值再按 `HUGEGRAPH_MCP_MAX_RESULT_ITEMS` 收紧，例如配置上限为 `50` 时，请求 `100` 实际使用 `50`。超过有效上限的 ID 批次会在查询前被拒绝。返回结果超过条数或字节上限时整体拒绝，不截断结果或返回后续游标；这些检查不限制服务端执行量或传输期间的内存占用。
 

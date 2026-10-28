@@ -87,7 +87,7 @@ jobs:
         env:
           TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/tiktoken
         run: |
-          uv sync --extra llm --extra dev
+          uv sync --extra llm --extra vectordb --extra dev
           uv run --no-sync python - <<'PYTHON'
           import nltk
           for package in ('stopwords', 'punkt', 'punkt_tab'):

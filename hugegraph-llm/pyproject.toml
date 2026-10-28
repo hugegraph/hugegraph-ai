@@ -66,12 +66,12 @@ dependencies = [
     "uvicorn>=0.54,<1",
     "PyYAML>=6.0.3,<7",
     "hugegraph-python",
-    "pycgraph==3.2.2", # 3.3.0 has no Linux wheel or source distribution on PyPI.
+    "pycgraph==3.2.2", # 3.3.0 has no CPython 3.14 Linux wheel or source distribution on PyPI.
 ]
 
 [project.optional-dependencies]
 vectordb = [
-    "pymilvus>=2.5.9,<4",
+    "pymilvus>=3.0.2,<4",
     "qdrant-client>=1.20,<2",
 ]
 
