@@ -91,32 +91,23 @@ def test_dynamic_configuration_inputs_remain_editable(monkeypatch, render_name, 
         client.close()
 
 
-@pytest.mark.parametrize(("tab", "preserved_index"), [("text", 1), ("file", 0)])
-def test_document_tab_switch_preserves_new_edits_while_the_event_is_pending(monkeypatch, tab, preserved_index):
+def test_document_tab_switches_are_synchronous_client_updates(monkeypatch):
     monkeypatch.setenv("GRADIO_ANALYTICS_ENABLED", "false")
     monkeypatch.setattr(app.prompt, "update_yaml_file", Mock())
     monkeypatch.setattr(app.admin_settings, "enable_login", "false")
+
     ui = app.init_rag_ui()
-    select = next(function for function in ui.fns.values() if function.name == "on_tab_select")
-    monkeypatch.setattr(app, "init_rag_ui", lambda: ui)
-    client = TestClient(app.create_app())
-    try:
-        response = client.post(
-            f"/gradio_api/run/{select.api_name}",
-            json={
-                "data": [None, "text captured before the user finished editing"],
-                "session_hash": "document-tab-regression",
-                "event_data": {"index": 0, "value": tab, "selected": True},
-            },
-        )
-        assert response.status_code == 200, response.text
-        data = response.json()["data"]
-        # Leave the currently selected input untouched instead of sending its
-        # stale event-time value back over a newer browser edit or upload.
-        assert data[preserved_index] == {"__type__": "update"}
-        assert not data[1 - preserved_index]
-    finally:
-        client.close()
+    expected_javascript = {
+        "(files, _text) => [files, '']",
+        "(_files, text) => [[], text]",
+    }
+    tab_switches = [
+        dependency for dependency in ui.config["dependencies"] if dependency.get("js") in expected_javascript
+    ]
+
+    assert {dependency["js"] for dependency in tab_switches} == expected_javascript
+    assert all(dependency["backend_fn"] is False for dependency in tab_switches)
+    assert all(dependency["queue"] is False for dependency in tab_switches)
 
 
 def test_openapi_reports_installed_package_version(monkeypatch):

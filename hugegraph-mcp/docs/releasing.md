@@ -9,8 +9,8 @@ second tag-triggered publisher in this repository.
 ## Package Versions
 
 Client and MCP use the release version defined in the root `pyproject.toml`.
-Run `python3.11 scripts/version.py sync` after changing that version and
-`python3.11 scripts/version.py check` before building. The MCP client dependency
+Run `"${PYTHON_FOR_RELEASE:-python3}" scripts/version.py sync` after changing that version and
+`"${PYTHON_FOR_RELEASE:-python3}" scripts/version.py check` before building. The MCP client dependency
 minimum is synchronized with it. See [workspace release preparation](../../docs/releasing.md).
 Publish the client before MCP. Previously published `1.7.1` artifacts remain
 available and must not be overwritten or deleted.

@@ -102,7 +102,9 @@ allow-direct-references = true
 [tool.uv.sources]
 hugegraph-llm-sdk = { workspace = true }
 hugegraph-python = { workspace = true }
-pycgraph = { git = "https://github.com/ChunelFeng/CGraph.git", subdirectory = "python", tag = "v3.2.2", marker = "platform_machine == 'aarch64'" }
+# The published Linux wheel needs a newer libstdc++ than Debian Bookworm.
+# Build the same immutable 3.2.2 release commit used by the Docker image.
+pycgraph = { git = "https://github.com/ChunelFeng/CGraph.git", subdirectory = "python", rev = "f224e02339f8de73b34054c8a9db1236b64ede86", marker = "sys_platform == 'linux'" }
 
 [tool.ruff]
 line-length = 120

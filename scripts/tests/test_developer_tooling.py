@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -96,6 +97,28 @@ class DeveloperToolingContractTest(unittest.TestCase):
             "keep its emitted code-scanning check separately required",
             ci_doc,
         )
+
+    def test_linux_pycgraph_source_matches_docker_commit(self) -> None:
+        llm_config = tomllib.loads((ROOT / "hugegraph-llm" / "pyproject.toml").read_text(encoding="utf-8"))
+        source = llm_config["tool"]["uv"]["sources"]["pycgraph"]
+        commit = "f224e02339f8de73b34054c8a9db1236b64ede86"
+
+        self.assertEqual("sys_platform == 'linux'", source["marker"])
+        self.assertEqual(commit, source["rev"])
+        self.assertNotIn("tag", source)
+        dockerfile = (ROOT / "docker" / "Dockerfile.llm").read_text(encoding="utf-8")
+        self.assertIn(f"@{commit}#subdirectory=python", dockerfile)
+
+    def test_release_docs_use_configurable_python(self) -> None:
+        release_doc = (ROOT / "docs" / "releasing.md").read_text(encoding="utf-8")
+        mcp_doc = (ROOT / "hugegraph-mcp" / "docs" / "releasing.md").read_text(encoding="utf-8")
+        command = '"${PYTHON_FOR_RELEASE:-python3}" scripts/version.py'
+
+        self.assertIn(command, release_doc)
+        self.assertIn(command, mcp_doc)
+        for stale in ("python3.11 scripts/version.py", "python3.12 scripts/version.py"):
+            self.assertNotIn(stale, release_doc)
+            self.assertNotIn(stale, mcp_doc)
 
 
 if __name__ == "__main__":
