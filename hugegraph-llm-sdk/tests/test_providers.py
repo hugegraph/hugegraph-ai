@@ -466,3 +466,18 @@ def test_openai_stream_adapter_does_not_replay_output_after_callback_failure(pro
     assert callbacks == ["first", "second"]
     sync_call.assert_called_once()
     async_call.assert_not_called()
+
+
+@pytest.mark.parametrize("key", [None, ""])
+def test_openai_provider_constructs_real_keyless_clients(monkeypatch, key):
+    pytest.importorskip("openai", reason="Install the openai provider extra")
+    from hugegraph_llm_sdk.providers.openai import OpenAIClient
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    client = OpenAIClient(api_key=key, api_base="http://local-model.test/v1")
+    try:
+        assert client.client.base_url.host == "local-model.test"
+        assert client.aclient.base_url.host == "local-model.test"
+    finally:
+        client.client.close()
+        asyncio.run(client.aclient.close())

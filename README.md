@@ -23,8 +23,8 @@ Contributor workflows: [CI selection and full validation](docs/quality/ci.md), [
 
 ### Prerequisites
 
-- Python 3.11 for hugegraph-llm (`>=3.11,<3.12`; Python 3.12 is not supported by the application)
-- [uv](https://docs.astral.sh/uv/) 0.7+ (required for workspace management)
+- Python 3.12–3.14 for the LLM application, SDK, Python client and MCP
+- [uv](https://docs.astral.sh/uv/) 0.13.6+ (required for workspace management)
 - HugeGraph Server 1.3+ for the LLM/client modules (1.5+ recommended); `hugegraph-mcp` requires 1.7.0+
 - Docker (optional, for containerized deployment)
 
@@ -88,15 +88,9 @@ The source launcher binds to `127.0.0.1` by default and warns when a non-loopbac
 
 #### Graph Machine Learning
 
-```bash
-# ML is not part of the uv workspace.
-uv sync --project hugegraph-ml
-source hugegraph-ml/.venv/bin/activate
-
-# Run ML algorithms
-cd hugegraph-ml
-python examples/your_ml_example.py
-```
+ML remains outside this workspace and is not part of the dependency modernization.
+Its standalone environment requires Python 3.12+ because it uses the local Python
+client. Follow [the ML module](./hugegraph-ml) for installation and examples.
 
 ## 📦 Modules
 

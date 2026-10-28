@@ -1,5 +1,5 @@
 # User-specific files
-**/logs/*.log*
+**/logs/
 *.faiss
 *.pkl
 out/production/

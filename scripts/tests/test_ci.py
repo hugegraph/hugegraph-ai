@@ -113,11 +113,10 @@ class TestCISelection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assert_modules([path], {"sdk", "llm"})
 
-    def test_full_runtimes_drop_python_310_without_expanding_application_support(self):
-        self.assertEqual(["3.11"], ci.FULL_PYTHONS["client"])
-        self.assertEqual(["3.11"], ci.FULL_PYTHONS["llm"])
-        self.assertEqual(["3.11", "3.12"], ci.FULL_PYTHONS["mcp"])
-        self.assertEqual(["3.11", "3.12", "3.13"], ci.FULL_PYTHONS["sdk"])
+    def test_full_runtimes_cover_python_312_through_314(self):
+        for module in ci.MODULES:
+            with self.subTest(module=module):
+                self.assertEqual(["3.12", "3.13", "3.14"], ci.FULL_PYTHONS[module])
 
     def test_module_changes_are_isolated(self):
         self.assert_modules(["hugegraph-llm/src/hugegraph_llm/config/hugegraph_config.py"], {"llm"})

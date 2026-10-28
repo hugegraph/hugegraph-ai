@@ -53,7 +53,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_openai_class.return_value = mock_client
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
         response = openai_client.generate(prompt="What is the capital of France?")
 
         # Verify the response
@@ -77,7 +77,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_openai_class.return_value = mock_client
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "What is the capital of France?"},
@@ -108,7 +108,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_openai_class.return_value = mock_client
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
 
         with self.assertRaisesRegex(RuntimeError, "Empty choices in LLM response"):
             openai_client.generate(prompt="What is the capital of France?")
@@ -120,7 +120,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_client.chat.completions.create.return_value = object()
         mock_openai_class.return_value = mock_client
 
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
 
         with self.assertRaises(AttributeError):
             openai_client.generate(prompt="What is the capital of France?")
@@ -134,7 +134,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_async_openai_class.return_value = mock_async_client
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
 
         async def run_async_test():
             response = await openai_client.agenerate(prompt="What is the capital of France?")
@@ -163,7 +163,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_async_openai_class.return_value = mock_async_client
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
 
         async def run_async_test():
             with self.assertRaisesRegex(RuntimeError, "Empty choices in LLM response"):
@@ -180,7 +180,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_openai_class.return_value = mock_client
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
         collected_tokens = []
 
         def on_token_callback(chunk):
@@ -221,7 +221,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_async_openai_class.return_value = mock_async_client
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
 
         async def run_async_streaming_test():
             collected_tokens = []
@@ -271,7 +271,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_openai_class.return_value = mock_client
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
 
         # The call should return an authentication failure message.
         result = openai_client.generate(prompt="What is the capital of France?")
@@ -286,7 +286,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_encoding_for_model.return_value = mock_encoding
 
         # Test the method
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
         token_count = openai_client.num_tokens_from_string("Hello, world!")
 
         # Verify the response
@@ -299,14 +299,14 @@ class TestOpenAIClient(unittest.TestCase):
 
     def test_max_allowed_token_length(self):
         """Test max_allowed_token_length method."""
-        openai_client = OpenAIClient(model_name="gpt-3.5-turbo")
+        openai_client = OpenAIClient(api_key="test-key", model_name="gpt-3.5-turbo")
         max_tokens = openai_client.max_allowed_token_length()
         self.assertIsInstance(max_tokens, int)
         self.assertEqual(max_tokens, 8192)
 
     def test_get_llm_type(self):
         """Test get_llm_type method."""
-        openai_client = OpenAIClient()
+        openai_client = OpenAIClient(api_key="test-key")
         llm_type = openai_client.get_llm_type()
         self.assertEqual(llm_type, "openai")
 

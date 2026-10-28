@@ -81,7 +81,7 @@ def test_import_graph_data_tool_runtime_input_schema():
         async with Client(server.mcp) as client:
             tools = await client.list_tools()
             tool = next(item for item in tools if item.name == "import_graph_data_tool")
-            return tool.inputSchema
+            return tool.input_schema
 
     input_schema = asyncio.run(_input_schema())
 

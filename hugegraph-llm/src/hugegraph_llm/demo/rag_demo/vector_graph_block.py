@@ -273,7 +273,7 @@ def create_vector_graph_block():
                         value=prompt.doc_input_text,
                         label="Input Doc(s)",
                         lines=20,
-                        show_copy_button=True,
+                        buttons=["copy"],
                     )
                 with gr.Tab("file") as tab_upload_file:
                     input_file = gr.File(
@@ -455,23 +455,21 @@ def create_vector_graph_block():
             ],  # Persist the updated schema-generator examples
         )
 
-        def on_tab_select(input_f, input_t, evt: gr.SelectData):
-            print(f"You selected {evt.value} at {evt.index} from {evt.target}")
-            if evt.value == "file":
-                return input_f, ""
-            if evt.value == "text":
-                return [], input_t
-            return [], ""
-
+        # Clear the inactive input synchronously in the browser. A backend
+        # callback can return after a later tab switch and erase newer input.
         tab_upload_file.select(
-            fn=on_tab_select,
+            fn=None,
             inputs=[input_file, input_text],
             outputs=[input_file, input_text],
+            js="(files, _text) => [files, '']",
+            queue=False,
         )
         tab_upload_text.select(
-            fn=on_tab_select,
+            fn=None,
             inputs=[input_file, input_text],
             outputs=[input_file, input_text],
+            js="(_files, text) => [[], text]",
+            queue=False,
         )
 
     return input_text, input_schema, info_extract_template

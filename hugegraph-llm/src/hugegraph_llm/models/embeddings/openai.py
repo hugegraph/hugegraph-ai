@@ -31,7 +31,7 @@ class OpenAIEmbedding(BaseEmbedding):
         api_key: Optional[str] = None,
         api_base: Optional[str] = None,
     ):
-        api_key = api_key or ""
+        api_key = api_key or "EMPTY"
         self.client = OpenAI(api_key=api_key, base_url=api_base)
         self.aclient = AsyncOpenAI(api_key=api_key, base_url=api_base)
         self.model = model_name

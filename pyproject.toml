@@ -24,7 +24,7 @@ authors = [
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 maintainers = [
     { name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" },
 ]
@@ -36,15 +36,16 @@ dependencies = [
 
 [project.optional-dependencies]
 llm = ["hugegraph-llm"]
+vectordb = ["hugegraph-llm[vectordb]"]
 python-client = ["hugegraph-python"]
 vermeer = ["vermeer-python-client"]
 dev = [
-    "pytest~=8.0.0",
-    "pytest-cov~=5.0.0",
-    "coverage[toml]==7.10.4",
+    "pytest>=9.2,<10",
+    "pytest-cov>=7.1,<8",
+    "coverage[toml]>=7.17,<8",
     "ruff>=0.17.3",
     "ty>=0.0.93",
-    "pre-commit>=3.5.0",
+    "pre-commit>=4.7",
 ]
 
 nk-llm = ["hugegraph-llm", "hugegraph-python", "nuitka"]
@@ -100,58 +101,7 @@ llm-image = "hugegraph/rag"
 
 [tool.hugegraph.ci]
 uv-version = "0.13.6"
-python-version = "3.11"
-
-[tool.uv]
-constraint-dependencies = [
-    # Common dependencies
-    "decorator~=5.1.1",
-    "requests~=2.32.0", # TODO: use httpx instead of urllib3 directly
-    "setuptools~=70.0.0", # TODO: remove it when we use hatchling well
-    "urllib3~=2.2.2",
-    "rich~=13.9.4",
-
-    # Data processing dependencies
-    "numpy~=1.24.4",
-    "pandas~=2.2.3", # TODO: replace by polars(rust) in the future
-    "pydantic~=2.10.6",
-    "scipy~=1.15.3", # word segment need
-    "python-igraph~=0.11.9", # textrank need
-
-    # LLM dependencies
-    "openai~=1.61.0",
-    "ollama~=0.4.8",
-    "tenacity~=8.5.0",
-    "tiktoken~=0.7.0",
-    "nltk~=3.9.1",
-    "gradio~=5.20.0",
-    "jieba~=0.42.1",
-    "python-docx~=1.1.2",
-    "pypdf~=6.12.0",
-    "langchain-text-splitters~=0.2.2",
-    "faiss-cpu~=1.8.0",
-    "python-dotenv~=1.0.1",
-    "pyarrow~=17.0.0",
-    "openpyxl~=3.1.5",
-    "pydantic-settings~=2.6.1",
-    "apscheduler~=3.10.4",
-    "litellm~=1.61.13",
-
-
-    # ML dependencies
-    "dgl~=2.1.0",
-    "ogb~=1.3.6",
-    "catboost~=1.2.3",
-    "category-encoders~=2.6.3",
-    "torch==2.2.0",
-    "tqdm~=4.66.5",
-    "packaging~=24.1",
-    "torchdata~=0.7.0",
-    "PyYAML~=6.0.2",
-
-    # Other dependencies
-    "python-dateutil~=2.9.0",
-]
+python-version = "3.12"
 
 [tool.pytest.ini_options]
 markers = [
@@ -168,10 +118,14 @@ markers = [
 ]
 addopts = "--strict-markers --strict-config"
 
+[tool.coverage.run]
+# Avoid CPython 3.12's slow sys.settrace instrumentation of Jieba's large tables.
+core = "sysmon"
+
 # for code format
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 # Select a broad set of rules for comprehensive checks.

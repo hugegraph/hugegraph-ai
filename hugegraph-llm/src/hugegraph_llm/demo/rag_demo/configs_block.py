@@ -400,19 +400,23 @@ def create_configs_block() -> list:
                 if llm_type == "openai":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_chat_api_key"),
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_chat_api_base"),
                             label="api_base",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_chat_language_model"),
                             label="model_name",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_chat_tokens"),
                             label="max_token",
                         ),
@@ -420,14 +424,17 @@ def create_configs_block() -> list:
                 elif llm_type == "ollama/local":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "ollama_chat_host"),
                             label="host",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=str(getattr(llm_settings, "ollama_chat_port")),
                             label="port",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "ollama_chat_language_model"),
                             label="model_name",
                         ),
@@ -436,21 +443,25 @@ def create_configs_block() -> list:
                 elif llm_type == "litellm":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_chat_api_key"),
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_chat_api_base"),
                             label="api_base",
                             info="If you want to use the default api_base, please keep it blank",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_chat_language_model"),
                             label="model_name",
                             info="Please refer to https://docs.litellm.ai/docs/providers",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_chat_tokens"),
                             label="max_token",
                         ),
@@ -483,19 +494,23 @@ def create_configs_block() -> list:
                 if llm_type == "openai":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_extract_api_key"),
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_extract_api_base"),
                             label="api_base",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_extract_language_model"),
                             label="model_name",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_extract_tokens"),
                             label="max_token",
                         ),
@@ -503,14 +518,17 @@ def create_configs_block() -> list:
                 elif llm_type == "ollama/local":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "ollama_extract_host"),
                             label="host",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=str(getattr(llm_settings, "ollama_extract_port")),
                             label="port",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "ollama_extract_language_model"),
                             label="model_name",
                         ),
@@ -519,21 +537,25 @@ def create_configs_block() -> list:
                 elif llm_type == "litellm":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_extract_api_key"),
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_extract_api_base"),
                             label="api_base",
                             info="If you want to use the default api_base, please keep it blank",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_extract_language_model"),
                             label="model_name",
                             info="Please refer to https://docs.litellm.ai/docs/providers",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_extract_tokens"),
                             label="max_token",
                         ),
@@ -558,19 +580,23 @@ def create_configs_block() -> list:
                 if llm_type == "openai":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_text2gql_api_key"),
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_text2gql_api_base"),
                             label="api_base",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_text2gql_language_model"),
                             label="model_name",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "openai_text2gql_tokens"),
                             label="max_token",
                         ),
@@ -578,14 +604,17 @@ def create_configs_block() -> list:
                 elif llm_type == "ollama/local":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "ollama_text2gql_host"),
                             label="host",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=str(getattr(llm_settings, "ollama_text2gql_port")),
                             label="port",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "ollama_text2gql_language_model"),
                             label="model_name",
                         ),
@@ -594,21 +623,25 @@ def create_configs_block() -> list:
                 elif llm_type == "litellm":
                     llm_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_text2gql_api_key"),
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_text2gql_api_base"),
                             label="api_base",
                             info="If you want to use the default api_base, please keep it blank",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_text2gql_language_model"),
                             label="model_name",
                             info="Please refer to https://docs.litellm.ai/docs/providers",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_text2gql_tokens"),
                             label="max_token",
                         ),
@@ -633,15 +666,18 @@ def create_configs_block() -> list:
                 with gr.Row():
                     embedding_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=llm_settings.openai_embedding_api_key,
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=llm_settings.openai_embedding_api_base,
                             label="api_base",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=llm_settings.openai_embedding_model,
                             label="model_name",
                         ),
@@ -649,9 +685,10 @@ def create_configs_block() -> list:
             elif embedding_type == "ollama/local":
                 with gr.Row():
                     embedding_config_input = [
-                        gr.Textbox(value=llm_settings.ollama_embedding_host, label="host"),
-                        gr.Textbox(value=str(llm_settings.ollama_embedding_port), label="port"),
+                        gr.Textbox(interactive=True, value=llm_settings.ollama_embedding_host, label="host"),
+                        gr.Textbox(interactive=True, value=str(llm_settings.ollama_embedding_port), label="port"),
                         gr.Textbox(
+                            interactive=True,
                             value=llm_settings.ollama_embedding_model,
                             label="model_name",
                         ),
@@ -660,16 +697,19 @@ def create_configs_block() -> list:
                 with gr.Row():
                     embedding_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_embedding_api_key"),
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_embedding_api_base"),
                             label="api_base",
                             info="If you want to use the default api_base, please keep it blank",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value=getattr(llm_settings, "litellm_embedding_model"),
                             label="model_name",
                             info="Please refer to https://docs.litellm.ai/docs/embedding/supported_embedding",
@@ -705,22 +745,25 @@ def create_configs_block() -> list:
                 with gr.Row():
                     reranker_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=llm_settings.reranker_api_key,
                             label="api_key",
                             type="password",
                         ),
-                        gr.Textbox(value=llm_settings.reranker_model, label="model"),
-                        gr.Textbox(value=llm_settings.cohere_base_url, label="base_url"),
+                        gr.Textbox(interactive=True, value=llm_settings.reranker_model, label="model"),
+                        gr.Textbox(interactive=True, value=llm_settings.cohere_base_url, label="base_url"),
                     ]
             elif reranker_type == "siliconflow":
                 with gr.Row():
                     reranker_config_input = [
                         gr.Textbox(
+                            interactive=True,
                             value=llm_settings.reranker_api_key,
                             label="api_key",
                             type="password",
                         ),
                         gr.Textbox(
+                            interactive=True,
                             value="BAAI/bge-reranker-v2-m3",
                             label="model",
                             info="Please refer to https://siliconflow.cn/pricing",
@@ -758,19 +801,22 @@ def create_configs_block() -> list:
             if engine == "Milvus":
                 with gr.Row():
                     milvus_inputs = [
-                        gr.Textbox(value=index_settings.milvus_host, label="host"),
-                        gr.Textbox(value=str(index_settings.milvus_port), label="port"),
-                        gr.Textbox(value=index_settings.milvus_user, label="user"),
-                        gr.Textbox(value=index_settings.milvus_password, label="password", type="password"),
+                        gr.Textbox(interactive=True, value=index_settings.milvus_host, label="host"),
+                        gr.Textbox(interactive=True, value=str(index_settings.milvus_port), label="port"),
+                        gr.Textbox(interactive=True, value=index_settings.milvus_user, label="user"),
+                        gr.Textbox(
+                            interactive=True, value=index_settings.milvus_password, label="password", type="password"
+                        ),
                     ]
                 apply_backend_button = gr.Button("Apply Configuration")
                 apply_backend_button.click(partial(apply_vector_engine_backend, "Milvus"), inputs=milvus_inputs)
             elif engine == "Qdrant":
                 with gr.Row():
                     qdrant_inputs = [
-                        gr.Textbox(value=index_settings.qdrant_host, label="host"),
-                        gr.Textbox(value=str(index_settings.qdrant_port), label="port"),
+                        gr.Textbox(interactive=True, value=index_settings.qdrant_host, label="host"),
+                        gr.Textbox(interactive=True, value=str(index_settings.qdrant_port), label="port"),
                         gr.Textbox(
+                            interactive=True,
                             value=(index_settings.qdrant_api_key or ""),
                             label="api_key",
                             type="password",

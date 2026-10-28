@@ -24,17 +24,18 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     { name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" },
 ]
 
 dependencies = [
-    "fastmcp==3.2.4",
+    "fastmcp>=4.1,<5",
     "hugegraph-python>=1.8.0,<2",
 ]
 
@@ -58,7 +59,7 @@ allow-direct-references = true
 
 [dependency-groups]
 dev = [
-    "pytest~=8.0.0",
+    "pytest>=9.2,<10",
 ]
 
 [tool.pytest.ini_options]

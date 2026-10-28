@@ -37,9 +37,35 @@ editable source installation and offline examples.
 
 > [!IMPORTANT]
 >
-> - **Python**: 3.11 (`>=3.11,<3.12`; Python 3.12 is not supported)
+> - **Python**: 3.12–3.14 (`>=3.12,<3.15`)
 > - **HugeGraph Server**: 1.3+ (recommended: 1.5+)
-> - **UV Package Manager**: 0.7+
+> - **UV Package Manager**: 0.13.6+
+
+Dependency ranges live in each package's `pyproject.toml`, so standalone installs
+and workspace installs use the same requirements. The application uses Gradio 6,
+Pydantic 2, NumPy 2 and current provider libraries. Unused PyArrow and igraph
+requirements and root-level ML constraints have been removed; ML remains outside
+the workspace.
+
+A few upstream compatibility limits remain: LiteLLM requires OpenAI 2.x and its
+Botocore dependency requires dateutil below 3. Jieba uses its built-in resource
+fallback without requiring setuptools. `pycgraph` stays on 3.2.2 because 3.3.0 has no
+CPython 3.14 Linux wheel or source distribution on PyPI. These limits do not prevent using
+Python 3.12, 3.13 or 3.14.
+
+Linux source installs build pycgraph from the pinned GitHub commit. Install Git,
+a C++ compiler and Python development headers (Debian/Ubuntu:
+`apt-get install git build-essential python3-dev`) and allow access to GitHub and
+PyPI before running `uv sync`. The Docker builder includes this toolchain.
+
+NLTK 3.10 refuses data directories writable by other accounts. Use a private,
+user-owned `NLTK_DATA` cache. If a cache was ever writable by another account,
+create a new private directory and download the corpora again with
+`python -m nltk.downloader -d "$NLTK_DATA" stopwords punkt punkt_tab`; changing
+permissions cannot restore file integrity. For a cache that was never shared and
+whose contents are trusted, remove group and world write permissions with
+`chmod -R go-w "$NLTK_DATA"`, then restart the application. A missing or refused
+stopwords corpus is logged and falls back to an empty stopword list.
 
 ### Code Quality (uv + Ruff + ty)
 
@@ -65,8 +91,8 @@ The fastest way to get started with both HugeGraph Server and RAG Service:
 
 The image tags in these examples target the release prepared by this checkout.
 They become available after publication. Before publication, build the image
-from the repository root with `bash scripts/build_llm_image.sh` (Python 3.11+
-is required; set `PYTHON_FOR_RELEASE=python3.11` if needed), or use
+from the repository root with `bash scripts/build_llm_image.sh` (Python 3.12+
+is required; set `PYTHON_FOR_RELEASE=python3.12` if needed), or use
 [Build from Source](#option-3-build-from-source).
 
 The bundled Compose file defaults to the rolling Server image used by CI for
@@ -199,7 +225,11 @@ Use the Gradio interface for visual knowledge graph building:
 - **Custom Schema**: JSON format following our [template](https://github.com/apache/hugegraph-ai/blob/aff3bbe25fa91c3414947a196131be812c20ef11/hugegraph-llm/src/hugegraph_llm/config/config_data.py#L125)
 - **HugeGraph Schema**: Use existing graph instance schema (e.g., "hugegraph")
 
-![Knowledge Graph Builder](https://hugegraph.apache.org/docs/images/gradio-kg.png)
+![Knowledge Graph Builder](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/graph-extraction.png)
+
+After loading the extracted graph, open **Graph Tools** to run a Gremlin query:
+
+![Graph Tools query](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/graph-query.png)
 
 ## 🔧 Configuration
 
@@ -207,6 +237,11 @@ After running the demo, configuration files are automatically generated:
 
 - **Environment**: `hugegraph-llm/.env`
 - **Prompts**: `hugegraph-llm/src/hugegraph_llm/resources/demo/config_prompt.yaml`
+
+Provider settings can also be edited in the web interface. This example uses a
+local model endpoint:
+
+![LLM provider configuration](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/configuration.png)
 
 ### Language Support
 

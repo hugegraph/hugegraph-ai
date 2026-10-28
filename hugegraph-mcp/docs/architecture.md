@@ -96,7 +96,7 @@ no public resume tool or automatic replay of `PARTIAL`/`UNKNOWN` writes.
 
 1. **Validate the aligned release.** Client and MCP versions are synchronized
    from the root release version, together with MCP's client dependency minimum.
-   Run `python3.11 scripts/version.py check`, then validate distribution, public
+   Run `"${PYTHON_FOR_RELEASE:-python3}" scripts/version.py check`, then validate distribution, public
    index installation, and a real service following the [publishing guide](releasing.md).
 2. **Enable additional writes only with backend support.** Add the atomic
    primitives listed above and prove them with two-client concurrency tests for

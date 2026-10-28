@@ -77,11 +77,9 @@ def create_api_router() -> tuple[APIRouter, bool]:
 # pylint: disable=C0301
 def init_rag_ui() -> gr.Interface:
     with gr.Blocks(
-        theme="default",
         title="HugeGraph RAG Platform",
-        css=CSS,
     ) as hugegraph_llm_ui:
-        gr.HTML(value=get_header_with_language_indicator(prompt.llm_settings.language))
+        gr.HTML(value=get_header_with_language_indicator(prompt.llm_settings.language), padding=True)
 
         """
         TODO: leave a general idea of the unresolved part
@@ -198,6 +196,8 @@ def create_app():
         app,
         hugegraph_llm,
         path="/",
+        theme="default",
+        css=CSS,
         auth=("rag", admin_settings.user_token) if auth_enabled else None,
     )
 

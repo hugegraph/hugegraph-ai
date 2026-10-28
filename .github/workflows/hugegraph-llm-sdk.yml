@@ -75,7 +75,7 @@ jobs:
           for format in whl tar.gz; do
             uv --no-config venv "$RUNNER_TEMP/sdk-venv-$format"
             uv --no-config pip install --python "$RUNNER_TEMP/sdk-venv-$format/bin/python" \
-              "$RUNNER_TEMP"/sdk-dist/*.$format 'pytest>=8,<9'
+              "$RUNNER_TEMP"/sdk-dist/*.$format 'pytest>=9.2,<10'
             "$RUNNER_TEMP/sdk-venv-$format/bin/python" -c \
               'import os; from importlib.metadata import version; assert version("hugegraph-llm-sdk") == os.environ["EXPECTED_VERSION"]'
             "$RUNNER_TEMP/sdk-venv-$format/bin/python" -B "$RUNNER_TEMP/sdk-build/tests/distribution_smoke.py"

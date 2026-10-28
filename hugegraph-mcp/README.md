@@ -59,7 +59,7 @@ uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-m
 From the root of the PR checkout, install uv, then create an isolated environment and install both packages from this branch:
 
 ```bash
-uv venv --python 3.11 .venv-mcp
+uv venv --python 3.12 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 ```
 
@@ -75,7 +75,7 @@ On Windows PowerShell (set variables with `$env:NAME="value"`):
 .\.venv-mcp\Scripts\python.exe -m hugegraph_mcp.server
 ```
 
-Both packages load from this checkout; no author-specific path or pre-existing environment is required. `--no-config` keeps root LLM dependency constraints out of the standalone MCP environment.
+Both packages load from this checkout; no author-specific path or pre-existing environment is required. `--no-config` keeps installation independent of the root workspace configuration.
 
 For an MCP client, set `command` to the absolute path of this Python interpreter in your own checkout and `args` to `["-m", "hugegraph_mcp.server"]`.
 
@@ -86,6 +86,10 @@ After connecting, call `inspect_graph_tool(include_raw_schema=true)` and check t
 ```
 
 [Architecture and roadmap](docs/architecture.md) · [Integration checklist](docs/integration.md) · [Release order](docs/releasing.md)
+
+MCP Inspector can verify the connection and run `inspect_graph_tool(include_counts=true)`:
+
+![MCP Inspector graph inspection](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/mcp/inspector.png)
 
 Structured query `limit` defaults to `100` and must be an integer in `1–500`; values above `500` return `VALIDATION_ERROR`. Valid values are then reduced to `HUGEGRAPH_MCP_MAX_RESULT_ITEMS` when that configured ceiling is smaller (for example, `limit=100` with a ceiling of `50` uses `50`). ID batches exceeding the effective limit are rejected before querying. Responses exceeding the item or byte limit are rejected without truncation or a continuation cursor; these checks do not bound backend execution or transport memory.
 

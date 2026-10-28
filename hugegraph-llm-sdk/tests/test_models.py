@@ -265,7 +265,7 @@ def test_threaded_model_preserves_normal_worker_exception():
 
 
 @pytest.mark.parametrize("late_error", [False, True])
-@pytest.mark.parametrize("cancel_count", [1, 2])
+@pytest.mark.parametrize("cancel_count", [1, 2, 3])
 def test_threaded_model_cancellation_drains_worker_and_preserves_first_cancellation(late_error, cancel_count):
     async def scenario():
         loop = asyncio.get_running_loop()
@@ -300,14 +300,12 @@ def test_threaded_model_cancellation_drains_worker_and_preserves_first_cancellat
             release.set()
         with pytest.raises(asyncio.CancelledError) as caught:
             await task
-        # Python 3.10 can expose an empty cancellation with the original in its context.
         cancellation = caught.value
-        while not cancellation.args and isinstance(cancellation.__context__, asyncio.CancelledError):
-            cancellation = cancellation.__context__
         assert cancellation.args == ("first cancellation",)
         assert finished.is_set()
         assert asyncio.all_tasks() == {asyncio.current_task()}
         del task, caught, cancellation
+        await asyncio.sleep(0)  # Flush completion callbacks before checking late failures.
         gc.collect()
         assert background_errors == []
 

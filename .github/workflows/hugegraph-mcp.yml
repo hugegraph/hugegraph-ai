@@ -77,7 +77,7 @@ jobs:
         run: |
           uv venv .venv-mcp
           uv --no-config pip install --python .venv-mcp/bin/python \
-            -e ./hugegraph-python-client -e ./hugegraph-mcp "pytest~=8.0.0"
+            -e ./hugegraph-python-client -e ./hugegraph-mcp "pytest>=9.2,<10"
       - name: Run MCP tests
         run: .venv-mcp/bin/python -m pytest hugegraph-mcp -m "not live and not integration and not llm"
       - name: Type check MCP (advisory while existing diagnostics are resolved)

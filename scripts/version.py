@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Synchronize release metadata from the root pyproject.toml (Python 3.11+)."""
+"""Synchronize release metadata from the root pyproject.toml (Python 3.12+)."""
 
 import argparse
 import difflib
@@ -181,7 +181,9 @@ def main(argv: list[str] | None = None, *, root: Path = ROOT) -> int:
                     difflib.unified_diff(original.splitlines(True), updated.splitlines(True), relative, relative)
                 )
         if pending and args.command == "check":
-            sys.stderr.write("Release metadata is out of sync. Run: python3.11 scripts/version.py sync\n")
+            sys.stderr.write(
+                'Release metadata is out of sync. Run: "${PYTHON_FOR_RELEASE:-python3}" scripts/version.py sync\n'
+            )
             return 1
     except (KeyError, OSError, ValueError) as exc:
         sys.stderr.write(f"Release configuration error: {exc}\n")
