@@ -305,3 +305,93 @@ def test_openai_legacy_error_output_remains_explicit_but_is_not_logged(mode, cap
     assert PRIVATE_PAYLOAD in invoke_mode(client, mode)
     assert PRIVATE_PAYLOAD not in caplog.text
     assert "BadRequestError" in caplog.text
+
+
+@pytest.mark.parametrize("provider", ["openai", "litellm"], indirect=True)
+@pytest.mark.parametrize("model_name", ["openai/gpt-4.1-mini", "custom/private-model"])
+def test_token_count_estimates_unknown_models_without_loading_another_tokenizer(provider, model_name, monkeypatch):
+    name, client, sync_call, async_call = provider
+    module = importlib.import_module(f"hugegraph_llm_sdk.providers.{name}")
+    client.model = model_name
+
+    def unexpected_tokenizer_load(*_args, **_kwargs):
+        pytest.fail("Unknown models should use a local estimate without loading tokenizer data")
+
+    # Exercise tiktoken's real unknown-model KeyError, without downloading a
+    # fallback vocabulary or substituting the behavior under regression.
+    monkeypatch.setattr(module.tiktoken, "get_encoding", unexpected_tokenizer_load)
+    assert client.num_tokens_from_string("hello world!") == 3
+    assert client.num_tokens_from_string("") == 0
+    sync_call.assert_not_called()
+    async_call.assert_not_called()
+
+
+@pytest.mark.parametrize("provider", ["openai", "litellm"], indirect=True)
+def test_token_count_keeps_known_model_encoding(provider, monkeypatch):
+    name, client, _, _ = provider
+    module = importlib.import_module(f"hugegraph_llm_sdk.providers.{name}")
+    client.model = "gpt-4.1-mini"
+    encoding = SimpleNamespace(encode=Mock(return_value=[101, 202]))
+    get_encoding = Mock(return_value=encoding)
+    monkeypatch.setattr(module.tiktoken, "encoding_for_model", get_encoding)
+
+    assert client.num_tokens_from_string("hello world!") == 2
+    get_encoding.assert_called_once_with(client.model)
+    encoding.encode.assert_called_once_with("hello world!")
+
+
+@pytest.mark.parametrize("provider", ["litellm"], indirect=True)
+@pytest.mark.parametrize("error", [ValueError, TypeError])
+def test_litellm_keeps_existing_token_estimation_error_fallbacks(provider, monkeypatch, error):
+    _, client, _, _ = provider
+    module = importlib.import_module("hugegraph_llm_sdk.providers.litellm")
+    monkeypatch.setattr(module.tiktoken, "encoding_for_model", Mock(side_effect=error("unsupported encoding")))
+    assert client.num_tokens_from_string("hello world!") == 3
+
+
+@pytest.mark.parametrize("provider", ["openai"], indirect=True)
+@pytest.mark.parametrize("mode", ["sync", "async"])
+@pytest.mark.parametrize("error_name", ["RateLimitError", "APIConnectionError", "APITimeoutError"])
+def test_openai_retries_preserve_original_provider_error(provider, mode, error_name, monkeypatch):
+    import httpx
+    import openai
+    from tenacity import wait_none
+
+    _, client, sync_call, async_call = provider
+    request = httpx.Request("POST", "https://model.invalid")
+    if error_name == "RateLimitError":
+        failure = openai.RateLimitError("rate limited", response=httpx.Response(429, request=request), body=None)
+    else:
+        failure = getattr(openai, error_name)(request=request)
+    call = async_call if mode == "async" else sync_call
+    call.side_effect = failure
+    method = client.agenerate if mode == "async" else client.generate
+    monkeypatch.setattr(method.retry, "wait", wait_none())
+
+    with pytest.raises(type(failure)) as caught:
+        invoke(client, mode)
+
+    assert caught.value is failure
+    assert call.call_count == 3
+    if mode == "async":
+        assert call.await_count == 3
+
+
+@pytest.mark.parametrize("provider", ["openai"], indirect=True)
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_openai_retry_can_recover_before_attempts_are_exhausted(provider, mode, monkeypatch):
+    import httpx
+    import openai
+    from tenacity import wait_none
+
+    _, client, sync_call, async_call = provider
+    call = async_call if mode == "async" else sync_call
+    call.side_effect = [
+        openai.APIConnectionError(request=httpx.Request("POST", "https://model.invalid")),
+        response("openai", content="recovered"),
+    ]
+    method = client.agenerate if mode == "async" else client.generate
+    monkeypatch.setattr(method.retry, "wait", wait_none())
+
+    assert invoke(client, mode) == "recovered"
+    assert call.call_count == 2

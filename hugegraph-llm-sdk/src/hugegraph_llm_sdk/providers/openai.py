@@ -75,6 +75,7 @@ class OpenAIClient:
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
         retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
+        reraise=True,
     )
     def generate(
         self,
@@ -121,6 +122,7 @@ class OpenAIClient:
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
         retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
+        reraise=True,
     )
     async def agenerate(
         self,
@@ -270,7 +272,11 @@ class OpenAIClient:
 
     def num_tokens_from_string(self, string: str) -> int:
         """Get token count from a string."""
-        encoding = tiktoken.encoding_for_model(self.model)
+        try:
+            encoding = tiktoken.encoding_for_model(self.model)
+        except KeyError:
+            # Unknown compatible models use the same local estimate as LiteLLM.
+            return len(string) // 4
         num_tokens = len(encoding.encode(string))
         return num_tokens
 

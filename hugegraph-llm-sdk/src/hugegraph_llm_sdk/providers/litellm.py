@@ -202,7 +202,7 @@ class LiteLLMClient:
             encoding = tiktoken.encoding_for_model(self.model)
             num_tokens = len(encoding.encode(string))
             return num_tokens
-        except (ValueError, TypeError) as _:  # Handle unused variable
+        except (KeyError, ValueError, TypeError):
             # Fallback for models not supported by tiktoken
             # Rough estimate: 1 token ≈ 4 characters
             return len(string) // 4

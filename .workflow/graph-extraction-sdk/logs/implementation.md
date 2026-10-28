@@ -93,6 +93,25 @@ schema 校验按实际声明信息执行。省略 propertykeys 时不检查全�
 
 本轮没有调用真实模型服务或图数据库，也没有对外发布包、镜像或部署生产服务。HTTP fixture 使用固定响应，验证应用集成与协议传输，不衡量真实模型质量。
 
+## PR 新增 provider 评论处理（2026-10-28）
+
+用户授权并行处理新增评论，并要求仅在验证解决后关闭线程。基于 `d67e114` 重新核对所有 7 条未关闭线程；4 条历史问题的实现与回归除包名变更外完整保留 `f3d1654` 的修复，相关生命周期、模型接口和 schema 测试为 **157 passed**，已补充证据回复并关闭这 4 条线程。
+
+3 条新评论均可复现：LiteLLM 和 OpenAI 对无法映射的模型名计数时抛出 `KeyError`；OpenAI 的同步／异步重试耗尽时把原始服务商异常包装成 `RetryError`。修复后，未知模型名使用与 LiteLLM 原有行为一致的本地字符数估算，不加载替代 tokenizer；已知模型仍使用原编码器。OpenAI 的同步／异步调用保留三次重试及原等待策略，耗尽后重新抛出原始异常；Ollama 的重试行为不变。
+
+- 新增 **16** 项回归，其中对应故障的 **10** 项先在修复前验证失败。
+- SDK provider 集合：**71 passed**；已知模型编码路径补充明确模型名后，对应 **2** 项再次通过。
+- 旧应用 OpenAI、LiteLLM、Ollama、错误处理和连接探测日志集合：**104 passed、2 skipped**；跳过项明确需要外部 Ollama 服务。
+- 根级 Ruff lint／format 通过，检查 **561** 个文件；`git diff --check` 通过。
+
+已在工作区之外用 `--no-sources --offline` 从 sdist 重建 wheel，并刷新 `hugegraph-llm-sdk/dist/` 下的本地产物。构建直接复用已缓存的后端，未安装依赖。wheel 中的两个 provider 源文件与本轮源码逐字节一致。已有 Python 3.11 隔离 extras 环境直接导入新 wheel 后运行 provider 集合为 **70 passed、1 skipped**；唯一跳过项需要未安装的旧应用，其兼容已由上述工作区测试覆盖。
+
+- wheel SHA-256：`1d8fd5f36d5d475683f8f44e8e8cc5b2e2a2a2bc692fd95a3926c7a37c4c09c6`。
+- sdist SHA-256：`3b3d0b316746ab4c009d518ab7661625e2a86343aa60b5918cb79f8f64c04d72`。
+- 构建和验证目录：`/tmp/hugegraph-sdk-pr84-provider-xbcbqj9w`。
+
+本轮仅验证 provider 与受影响的旧入口合同，未重新执行四版本基础矩阵或重建 Docker；上节 Docker 和矩阵记录对应此前提交，不冒充本轮结果。没有调用真实模型或图数据库。新提交的 CI 与评论处理状态以 PR 为准。
+
 ## 仅更名后的验收（合并审计修复前，历史记录）
 
 用户在已有实现和 Docker 验证完成后确认使用 `hugegraph-llm-sdk` / `hugegraph_llm_sdk`。README 已统一命名、安装方式与根级平行目录说明；代码、依赖、CI 和旧应用引用由主代理完成更名。
