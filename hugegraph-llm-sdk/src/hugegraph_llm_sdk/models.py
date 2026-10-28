@@ -16,6 +16,7 @@
 import asyncio
 import inspect
 from collections.abc import Awaitable, Callable
+from contextvars import copy_context
 from functools import partial
 from typing import Protocol
 
@@ -76,8 +77,10 @@ class FunctionModel:
 class ThreadedModel:
     """Explicitly run a synchronous model in a worker thread for async callers.
 
-    Cancelling the awaiting task does not stop an already running model call.
-    Use a model factory when processing several chunks concurrently.
+    Cancellation waits for the submitted synchronous call to finish before it
+    propagates, so factory cleanup cannot close a model still in use. Request
+    timeouts and executor queueing determine cancellation latency. Use a model
+    factory when processing several chunks concurrently.
     """
 
     def __init__(self, model: Model):
@@ -91,7 +94,25 @@ class ThreadedModel:
         return self.model.generate(prompt=prompt)
 
     async def agenerate(self, *, prompt: str) -> str:
-        return await asyncio.to_thread(self.model.generate, prompt=prompt)
+        # Keep an executor Future, not a to_thread Task: loop shutdown cancels
+        # every Task without stopping its underlying thread. Preserve to_thread's
+        # context propagation while keeping completion tied to the real call.
+        call = partial(copy_context().run, self.model.generate, prompt=prompt)
+        worker = asyncio.get_running_loop().run_in_executor(None, call)
+        cancellation = None
+        while not worker.done():
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError as error:
+                if cancellation is None:
+                    cancellation = error
+            except Exception:
+                break
+        if cancellation is not None:
+            if not worker.cancelled():
+                worker.exception()  # Retrieve a late failure without replacing cancellation.
+            raise cancellation
+        return worker.result()
 
     def close(self) -> None:
         close = getattr(self.model, "close", None)

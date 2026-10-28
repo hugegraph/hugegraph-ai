@@ -127,7 +127,7 @@ chunk = run_chunk(
 
 原生异步项目传入实现 `agenerate(prompt=...)` 的模型，或 `FunctionModel(agenerate=async_function)`，然后调用 `adesign_schema` / `aextract_graph`。参见 [async_example.py](examples/async_example.py)。
 
-只有同步模型时，显式使用 `ThreadedModel(sync_model)` 将模型调用放在线程中。异步取消会向上传播；已经在线程中发出的同步请求不保证随之终止，后续资源关闭可能与该请求的收尾重叠。
+只有同步模型时，显式使用 `ThreadedModel(sync_model)` 将模型调用放在线程中。调用任务收到取消后，适配器会异步等待已经提交到线程池的同步调用完成，再传播 `CancelledError`；工厂创建的模型随后才会清理。等待期间事件循环仍可运行，但同步调用不能被强制中断，取消返回可能延后；请在同步模型侧设置请求超时，并考虑线程池排队时间。直接传入的模型仍由调用方管理生命周期。
 
 并发大于 1 时必须使用无参数 `model_factory`，每块返回独立模型实例：
 

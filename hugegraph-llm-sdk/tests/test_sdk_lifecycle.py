@@ -217,6 +217,119 @@ def test_threaded_model_delegates_cleanup_only_for_factory_owned_models(factory_
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("factory_owned", [False, True], ids=["caller-owned", "factory-owned"])
+@pytest.mark.parametrize("async_close", [False, True], ids=["close", "aclose"])
+@pytest.mark.parametrize("late_failure", [False, True], ids=["worker-returns", "worker-raises"])
+def test_threaded_cancellation_finishes_resource_use_before_owned_cleanup(factory_owned, async_close, late_failure):
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        worker_limit = 2 if factory_owned else 1
+        started = asyncio.Event()
+        release = threading.Event()
+        lock = threading.Lock()
+        models = []
+        started_count = 0
+
+        class ResourceModel:
+            def __init__(self):
+                with ExitStack() as resources:
+                    self.resource = resources.enter_context(TemporaryFile(mode="w+t"))
+                    self.resource.write(EMPTY_GRAPH)
+                    self.resources = resources.pop_all()
+                self.finished = threading.Event()
+                self.finished_async = asyncio.Event()
+                self.bridge_finished = False
+                self.read_result = None
+                self.closed = self.async_closed = 0
+                self.failure = None
+                models.append(self)
+
+            def generate(self, *, prompt):
+                nonlocal started_count
+                with lock:
+                    started_count += 1
+                    if started_count == worker_limit:
+                        loop.call_soon_threadsafe(started.set)
+                try:
+                    if not release.wait(timeout=5):
+                        raise RuntimeError("Test did not release the synchronous worker")
+                    self.resource.seek(0)
+                    self.read_result = self.resource.read()
+                    if late_failure:
+                        self.failure = RuntimeError("Worker failed after caller cancellation")
+                        raise self.failure
+                    return self.read_result
+                finally:
+                    self.finished.set()
+                    loop.call_soon_threadsafe(self.finished_async.set)
+
+            def close(self):
+                assert all(model.finished.is_set() for model in models), "Closed a resource still in use"
+                self.resources.close()
+                self.closed += 1
+
+        class AsyncCloseResourceModel(ResourceModel):
+            async def aclose(self):
+                self.async_closed += 1
+                self.close()
+
+        class ObservedThreadedModel(ThreadedModel):
+            async def agenerate(self, *, prompt):
+                try:
+                    return await super().agenerate(prompt=prompt)
+                finally:
+                    # Observe the real adapter; do not replace its cancellation handling.
+                    self.model.bridge_finished = True
+
+        def factory():
+            return ObservedThreadedModel(AsyncCloseResourceModel() if async_close else ResourceModel())
+
+        supplied = factory() if not factory_owned else None
+        kwargs = {"model_factory": factory} if factory_owned else {"model": supplied}
+        task = asyncio.create_task(
+            aextract_graph(
+                ["first", "second", "must not start"],
+                schema=SCHEMA,
+                options=ExtractionOptions(max_workers=worker_limit),
+                review=False,
+                **kwargs,
+            )
+        )
+        try:
+            await asyncio.wait_for(started.wait(), timeout=2)
+            for _ in range(2):
+                task.cancel("caller cancellation")
+                # A queued event lets the cancelled workers run before the assertion,
+                # while their real threads remain behind the release gate.
+                checkpoint = asyncio.Event()
+                loop.call_soon(checkpoint.set)
+                await checkpoint.wait()
+                assert not task.done()
+                assert all(not model.bridge_finished and model.closed == 0 for model in models)
+
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, timeout=2)
+            assert len(models) == started_count == worker_limit
+            assert all(model.finished.is_set() and model.bridge_finished for model in models)
+            assert all(model.read_result == EMPTY_GRAPH for model in models)
+            assert all((model.failure is not None) == late_failure for model in models)
+            assert all(model.closed == int(factory_owned) for model in models)
+            assert all(model.async_closed == int(factory_owned and async_close) for model in models)
+            if supplied is not None:
+                assert not supplied.model.resource.closed
+                await supplied.aclose()
+                assert supplied.model.closed == 1
+        finally:
+            release.set()
+            await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), timeout=2)
+            await asyncio.wait_for(asyncio.gather(*(model.finished_async.wait() for model in models)), timeout=2)
+            for model in models:
+                model.resources.close()
+
+    asyncio.run(scenario())
+
+
 def test_async_cleanup_attempts_all_models_before_reporting_cleanup_failure():
     async def scenario():
         class BrokenClose(AsyncClosableModel):

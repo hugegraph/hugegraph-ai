@@ -34,7 +34,7 @@
 
 SDK 仅清理 `model_factory` 创建且提供关闭方法的模型；调用方直接传入的模型仍由调用方管理。工厂模型按最多 `max_workers` 块一组执行，每组结束后清理再启动下一组，限制同时打开的客户端数量。同步入口调用 close，异步入口优先等待 aclose，只有同步关闭方法时使用线程适配。完成、异常和取消均覆盖清理路径；模型自身的共享全局连接池不由 SDK 接管。
 
-同步批次在调用线程完成清理，不承诺模型创建与关闭的线程相同。取消线程适配后的等待不保证停止已经发出的同步请求；关闭可能与请求收尾重叠，文档明确保留此边界。
+同步批次在调用线程完成清理，不承诺模型创建与关闭的线程相同。线程适配不能强制停止已经提交的同步调用；取消后等待实际工作结束，再清理工厂资源并传播取消。初版允许关闭与请求收尾重叠的行为已在后续 ThreadedModel P2 审查中更正。
 
 ## Schema 可选声明边界
 
@@ -317,3 +317,42 @@ sdist SHA-256：`d012a30f6c2330b4f8b59bd6fff2e5a8d65a77e8cd239da9e329c3840d6d3df
 - sdist SHA-256：`7da4cd9024ab8c77c4d4a9b0e09eb5114173bd1a3c198230cc278ac9c76ce6f8`。
 
 本轮不重建 Docker，不访问真实模型或图数据库，不发布发行包；旧 Docker 与版本矩阵记录不充当此次执行结果。各测试集合有交叉，不累加为独立总数。
+
+## 追加处理 ThreadedModel 取消与清理 P2（2026-10-28）
+
+流式清理已提交为 `259933edcc3339d90054776c215b660f9c00c05d`，六个 CI workflow 通过后，自动审阅新增 [ThreadedModel P2](https://github.com/hugegraph/hugegraph-ai/pull/84#discussion_r4397779573)。主审和独立审查代理在该干净提交上重新复现，确认先前将其归为文档化限制的判断过宽：无法中断同步调用，不意味着可以关闭仍被该调用使用的资源。
+
+真实线程、事件门和临时文件探针给出顺序 `generate started → close → cancellation propagated → generate ended`；工作线程随后实际发生 `ValueError: seek of closed file`。该问题存在于本 PR 新 SDK 的 ThreadedModel 与工厂所有权组合中，早于流式清理提交。
+
+在新增源码编辑前，已公开 [确认 P2 与修复计划](https://github.com/hugegraph/hugegraph-ai/pull/84#discussion_r4397806780)，并将原评分评论的修复前判断更正为 **8.5/10**。原 9.0/10 及流式修复测试保留为当时结果，不作为对新增问题的结论。
+
+修复在 ThreadedModel 的调用等待边界处理：保留默认 executor 的 Future 并 shield，取消后继续等待实际工作完成，重复取消不能跳过收尾；取消后的工作异常被取回但不替代原取消。不新增线程池，也不改变 OwnedModels、低层 scheduler 或调用方传入模型的所有权。
+
+原型还发现单独创建 `to_thread` Task 并 shield 不足以覆盖 `asyncio.run` 关闭：关闭过程会取消所有 Task，包括内部线程等待 Task。最终方案使用默认 executor Future，并复制调用方 ContextVar 上下文以保留 `to_thread` 的上下文传播。README 与设计文档明确取消等待包含已提交工作排队和执行的时间。
+
+### 线程取消修复的验证
+
+- 新增 **16** 项回归：8 项直接模型/上下文/异常/重复取消/实际事件循环关闭测试，8 项工厂与调用方所有权、同步/异步关闭、正常返回与迟到异常的真实资源测试。
+- 生命周期新增 8 项在从 `259933e` 导出的旧 SDK 上全部失败，在修复后全部通过。测试用事件门控制真实线程和临时文件，不用固定睡眠时间窗口猜测关闭顺序。
+- 修复后完整 SDK：**688 passed**（Python 3.11，含全部 provider extras 与旧应用）。
+- 旧应用共享 SDK 的 schema/抽取/配置快照兼容：**3 passed**；本次线程适配修改没有旧应用直接调用方，没有重跑不受此改动影响的全部旧应用单元集合。
+- 两位独立审查者交叉检查最终实现与测试，未发现新增问题；根级 Ruff lint/format 通过，检查 **561** 个文件；`git diff --check` 通过。
+
+最终源码在工作区之外从 sdist 构建 wheel，使用四个全新基础环境验证；各环境只有 SDK、Pydantic 与 pytest 及其依赖，没有 provider extras。以下结果都针对相同的最终测试文件：
+
+| Python | 已安装 wheel 全量测试 | 隔离 smoke | 三个离线示例 |
+| --- | --- | --- | --- |
+| 3.10.22 | **607 passed、81 skipped** | 通过 | 全部通过 |
+| 3.11.17 | **607 passed、81 skipped** | 通过 | 全部通过 |
+| 3.12.14 | **607 passed、81 skipped** | 通过 | 全部通过 |
+| 3.13.16 | **607 passed、81 skipped** | 通过 | 全部通过 |
+
+81 项 skip 对应未安装的可选 provider；另在全部 extras 的独立环境升级最终 wheel 后，provider 集合为 **80 passed、1 skipped**，唯一 skip 需要未安装的旧应用。全部发行包和五套环境的实际安装源码均与最终 16 个 SDK 模块逐字节一致。
+
+首轮 Python 3.10 运行出现 4 项新增测试失败：该版本将首次取消的消息保留在 `CancelledError.__context__`，最外层 `args` 为空。已独立核实原取消未被重复取消覆盖；只调整测试沿异常上下文断言，生产代码与 skip 规则不变。保留首次失败记录后，刷新最终测试副本并完整重跑四个版本，得到上表结果；工作区最终 SDK 仍为 **688 passed**。
+
+- wheel SHA-256：`c8a66707a498d799d42392466fc14f0560255c9087faad843eb684a267032a0d`。
+- sdist SHA-256：`415435b9154b4737c66f9f6d4329e3f0043af569b71c61a6fff333407ee97ce3`。
+- 完整验证汇总：`/tmp/pr84-r3-integration/evidence.json`；首轮结果保留于同目录的 `initial-run/`。
+
+此项修复完成后的评分与最终 CI 结论通过 PR 回复记录。本轮没有重建应用 Docker 或调用真实模型，也没有发布发行包或合并 PR。

@@ -12,7 +12,9 @@
 # limitations under the License.
 
 import asyncio
+import gc
 import threading
+from contextvars import ContextVar
 from functools import partial
 from types import SimpleNamespace
 
@@ -228,3 +230,151 @@ def test_threaded_model_runs_sync_call_off_the_event_loop():
         assert seen_threads and seen_threads[0] != loop_thread
 
     asyncio.run(scenario())
+
+
+def test_threaded_model_preserves_context_without_propagating_worker_changes():
+    request_context = ContextVar("request_context", default="unset")
+
+    def generate(prompt):
+        result = f"{request_context.get()}: {prompt}"
+        request_context.set("worker context")
+        return result
+
+    async def scenario():
+        request_context.set("caller context")
+        model = ThreadedModel(FunctionModel(generate=generate))
+        assert await model.agenerate(prompt="question") == "caller context: question"
+        assert request_context.get() == "caller context"
+
+    asyncio.run(scenario())
+
+
+def test_threaded_model_preserves_normal_worker_exception():
+    failure = RuntimeError("provider failed")
+
+    def generate(prompt):
+        raise failure
+
+    async def scenario():
+        model = ThreadedModel(FunctionModel(generate=generate))
+        with pytest.raises(RuntimeError) as caught:
+            await model.agenerate(prompt="question")
+        assert caught.value is failure
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("late_error", [False, True])
+@pytest.mark.parametrize("cancel_count", [1, 2])
+def test_threaded_model_cancellation_drains_worker_and_preserves_first_cancellation(late_error, cancel_count):
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        entered = asyncio.Event()
+        release, finished = threading.Event(), threading.Event()
+        background_errors = []
+        loop.set_exception_handler(lambda _loop, context: background_errors.append(context))
+
+        def generate(prompt):
+            loop.call_soon_threadsafe(entered.set)
+            try:
+                if not release.wait(timeout=5):
+                    raise RuntimeError("event loop could not release worker")
+                if late_error:
+                    raise RuntimeError("provider failed after cancellation")
+                return prompt
+            finally:
+                finished.set()
+
+        model = ThreadedModel(FunctionModel(generate=generate))
+        task = asyncio.create_task(model.agenerate(prompt="question"))
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=2)
+            task.cancel("first cancellation")
+            await asyncio.sleep(0)
+            for _ in range(cancel_count - 1):
+                task.cancel("repeated cancellation")
+                await asyncio.sleep(0)
+            assert not task.done()
+            assert not finished.is_set()
+        finally:
+            release.set()
+        with pytest.raises(asyncio.CancelledError) as caught:
+            await task
+        # Python 3.10 can expose an empty cancellation with the original in its context.
+        cancellation = caught.value
+        while not cancellation.args and isinstance(cancellation.__context__, asyncio.CancelledError):
+            cancellation = cancellation.__context__
+        assert cancellation.args == ("first cancellation",)
+        assert finished.is_set()
+        assert asyncio.all_tasks() == {asyncio.current_task()}
+        del task, caught, cancellation
+        gc.collect()
+        assert background_errors == []
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("late_error", [False, True])
+def test_threaded_model_drains_worker_before_cleanup_during_asyncio_run_shutdown(late_error):
+    release, finished = threading.Event(), threading.Event()
+    closed_after_finish, cancellations, background_errors, tasks = [], [], [], []
+
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        entered = asyncio.Event()
+        loop.set_exception_handler(lambda _loop, context: background_errors.append(context))
+
+        def generate(*, prompt):
+            loop.call_soon_threadsafe(entered.set)
+            try:
+                if not release.wait(timeout=5):
+                    raise RuntimeError("shutdown could not release worker")
+                if late_error:
+                    raise RuntimeError("provider failed during shutdown")
+                return prompt
+            finally:
+                finished.set()
+
+        def close():
+            closed_after_finish.append(finished.is_set())
+
+        model = ThreadedModel(SimpleNamespace(generate=generate, close=close))
+
+        async def owned_call():
+            try:
+                await model.agenerate(prompt="question")
+            except asyncio.CancelledError:
+                cancellations.append(True)
+                raise
+            finally:
+                model.close()
+
+        async def release_during_shutdown():
+            try:
+                await asyncio.Event().wait()
+            finally:
+                try:
+                    # Let cancellation callbacks run while the real worker stays
+                    # behind its event gate; no wall-clock sleep controls ordering.
+                    for _ in range(2):
+                        checkpoint = asyncio.Event()
+                        loop.call_soon(checkpoint.set)
+                        await checkpoint.wait()
+                finally:
+                    release.set()
+
+        # Returning leaves both tasks for asyncio.run's actual cancel-all phase.
+        tasks.extend((asyncio.create_task(owned_call()), asyncio.create_task(release_during_shutdown())))
+        await asyncio.wait_for(entered.wait(), timeout=2)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        release.set()
+    assert all(task.cancelled() for task in tasks)
+    tasks.clear()
+    gc.collect()
+    assert finished.is_set()
+    assert closed_after_finish == [True]
+    assert cancellations == [True]
+    assert background_errors == []
