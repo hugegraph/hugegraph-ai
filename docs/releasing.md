@@ -35,6 +35,15 @@ documentation become pullable only after publication.
 argument order and defaults to the root version. It checks metadata and the
 release branch version before archiving/signing/uploading. Follow the existing
 ASF release process for signatures, voting and distribution.
+The script resolves the release branch to one commit, extracts a temporary
+snapshot, and checks all synchronized fields in that snapshot before creating
+the distribution archive. The final archive uses the same immutable commit.
+To check another snapshot directly, use `python3.11 scripts/version.py check --root /path/to/snapshot`.
+
+CI intentionally follows Server `latest` during development. Its core-version
+guard fails on drift and logs the digest used. For reproducible Compose
+deployments, set `HUGEGRAPH_SERVER_IMAGE` to a verified release tag or digest;
+this leaves the root CI image choice unchanged.
 
 Python publication uses the existing external
 [`hugegraph/actions` workflow](../hugegraph-mcp/docs/releasing.md): validate with

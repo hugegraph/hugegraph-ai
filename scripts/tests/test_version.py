@@ -19,6 +19,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,6 +153,85 @@ class TestReleaseVersion(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("Release version must match root", result.stderr)
         self.assertFalse((self.root / "scripts/dist").exists())
+
+    def git(self, *args):
+        return subprocess.check_output(["git", "-C", str(self.root), *args], text=True).strip()
+
+    def prepare_release_branch(self, *, stale_path=None):
+        self.run_command("sync")
+        self.copy_scripts("apache-release.sh")
+        self.git("init", "-q")
+        self.git("config", "user.name", "Release Test")
+        self.git("config", "user.email", "release-test@example.invalid")
+        self.git("config", "commit.gpgsign", "false")
+        self.git("add", ".")
+        self.git("commit", "-qm", "consistent checkout")
+        base_branch = self.git("branch", "--show-current")
+        current = version.release_config(self.root)["version"]
+        self.git("checkout", "-qb", f"release-{current}")
+        if stale_path:
+            target = self.root / stale_path
+            target.write_text(target.read_text().replace(current, "0.0.0"))
+        (self.root / "release-branch-only.txt").write_text("from the selected release commit\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "release branch snapshot")
+        self.git("checkout", "-q", base_branch)
+        self.assertEqual(0, self.run_command("check"))
+
+    def invoke_release_before_signing(self):
+        # Block signing/upload commands even if the regression reaches them.
+        tools = self.root / "test-tools"
+        tools.mkdir()
+        for name in ("gpg", "svn"):
+            tool = tools / name
+            tool.write_text('#!/bin/sh\ntouch "$RELEASE_EXTERNAL_CALLED"\nexit 91\n')
+            tool.chmod(0o755)
+        snapshots = self.root / "snapshots"
+        snapshots.mkdir()
+        result = subprocess.run(
+            ["bash", str(self.root / "scripts/apache-release.sh")],
+            cwd=self.root,
+            env={
+                **os.environ,
+                "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+                "PYTHON_FOR_RELEASE": sys.executable,
+                "TMPDIR": str(snapshots),
+                "RELEASE_EXTERNAL_CALLED": str(self.root / "external-command-called"),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual([], list(snapshots.iterdir()), "Release snapshot must be cleaned up")
+        return result
+
+    def test_release_checks_subpackage_versions_in_actual_release_branch(self):
+        self.prepare_release_branch(stale_path="hugegraph-mcp/pyproject.toml")
+        result = self.invoke_release_before_signing()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("hugegraph-mcp/pyproject.toml", result.stdout)
+        self.assertFalse((self.root / "scripts/dist").exists())
+        self.assertFalse((self.root / "external-command-called").exists())
+
+    def test_release_checks_documentation_in_actual_release_branch(self):
+        self.prepare_release_branch(stale_path="hugegraph-mcp/README.md")
+        result = self.invoke_release_before_signing()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("hugegraph-mcp/README.md", result.stdout)
+        self.assertFalse((self.root / "scripts/dist").exists())
+        self.assertFalse((self.root / "external-command-called").exists())
+
+    def test_release_archives_validated_branch_and_stops_at_test_signer(self):
+        self.prepare_release_branch()
+        result = self.invoke_release_before_signing()
+        self.assertEqual(91, result.returncode, result.stdout + result.stderr)
+        archives = list((self.root / "scripts/dist/apache-hugegraph-ai").glob("*.tar.gz"))
+        self.assertEqual(1, len(archives))
+        current = version.release_config(self.root)["version"]
+        with tarfile.open(archives[0]) as archive:
+            marker = archive.extractfile(f"apache-hugegraph-ai-{current}-src/release-branch-only.txt")
+            assert marker is not None
+            self.assertEqual(b"from the selected release commit\n", marker.read())
 
 
 if __name__ == "__main__":

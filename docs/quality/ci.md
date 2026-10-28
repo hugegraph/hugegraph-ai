@@ -17,6 +17,8 @@ in the job summary. A failed diff or preflight fails CI rather than skipping tes
 
 Ruff runs once for Python/lint/shared configuration changes using `uvx`, without
 installing application dependencies. License checks share the preflight runner.
+Every `pyproject.toml` change selects quality checks, including module and
+nested configurations that may change Ruff/type-check behavior.
 Dependency review runs for dependency changes on same-repository PRs; its token
 restrictions for fork PRs are unchanged. Deleted files and both sides of a rename
 participate in selection.
@@ -27,6 +29,10 @@ HugeGraph service for its unit, integration and smoke phases. Existing coverage
 thresholds remain enforced. Integration tests fail if the service is unavailable.
 Server image digests and the `/versions` response are logged; `versions.core`
 must match the prepared release version. Backend capability gates remain unchanged.
+Following Server `latest` is an intentional development/test policy, so a future
+master image changing its core version is expected to fail this guard. The
+Compose `HUGEGRAPH_SERVER_IMAGE` override supports reproducible deployments with
+a verified release tag or digest without pinning the CI image.
 
 `astral-sh/setup-uv` caches downloads and Python installations by component,
 Python runtime and relevant manifests. LLM jobs also cache NLTK and tiktoken data.

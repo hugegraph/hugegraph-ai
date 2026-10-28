@@ -43,8 +43,9 @@ def select(paths: list[str], *, full: bool = False, test_set: str = "mainline") 
         flags[test_set] = True
         return flags
     for path in paths:
+        is_pyproject = Path(path).name == "pyproject.toml"
         # Documentation changes do not require runtime environments or Docker.
-        if Path(path).suffix.lower() in (".md", ".rst") or "/docs/" in path:
+        if not is_pyproject and (Path(path).suffix.lower() in (".md", ".rst") or "/docs/" in path):
             continue
         flags["license"] = True
         if path in SHARED or path.startswith(".github/actions/"):
@@ -55,7 +56,7 @@ def select(paths: list[str], *, full: bool = False, test_set: str = "mainline") 
                 flags[key] = True
         if path.startswith("docker/") or path == "scripts/build_llm_image.sh":
             flags["llm"] = True
-        if path.endswith(".py") or path in (".pre-commit-config.yaml", ".github/workflows/ruff.yml"):
+        if is_pyproject or path.endswith(".py") or path in (".pre-commit-config.yaml", ".github/workflows/ruff.yml"):
             flags["quality"] = True
         if Path(path).name in ("pyproject.toml", "uv.lock") or Path(path).name.startswith("requirements"):
             flags["dependencies"] = True

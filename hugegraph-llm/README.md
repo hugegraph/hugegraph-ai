@@ -67,6 +67,11 @@ from the repository root with `bash scripts/build_llm_image.sh` (Python 3.11+
 is required; set `PYTHON_FOR_RELEASE=python3.11` if needed), or use
 [Build from Source](#option-3-build-from-source).
 
+The bundled Compose file defaults to the rolling Server image used by CI for
+development/testing. For reproducible deployments, set `HUGEGRAPH_SERVER_IMAGE`
+in `docker/.env` to a verified release tag or immutable digest. The override
+does not change the CI image policy.
+
 ```bash
 # 1. Set up environment
 cp docker/env.template docker/.env

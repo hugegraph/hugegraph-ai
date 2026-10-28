@@ -46,13 +46,17 @@ WORK_DIR=$(
 cd "${WORK_DIR}"
 echo "In the work dir: $(pwd)"
 
-# Reject a stale release branch before creating or signing any archive.
-BRANCH_VERSION=$(git show "${GIT_BRANCH}:pyproject.toml" | \
-  "${RELEASE_PYTHON}" -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')
+# Validate the exact commit that will be distributed, not just this checkout.
+RELEASE_COMMIT=$(git rev-parse --verify "${GIT_BRANCH}^{commit}")
+SNAPSHOT_DIR=$(mktemp -d)
+trap 'rm -rf "${SNAPSHOT_DIR}"' EXIT
+git -C "${SCRIPT_DIR}/.." archive --format=tar "${RELEASE_COMMIT}" | tar -xf - -C "${SNAPSHOT_DIR}"
+BRANCH_VERSION=$("${RELEASE_PYTHON}" "${SCRIPT_DIR}/version.py" get version --root "${SNAPSHOT_DIR}")
 if [ "${BRANCH_VERSION}" != "${RELEASE_VERSION}" ]; then
   echo "Release branch version does not match ${RELEASE_VERSION}" >&2
   exit 1
 fi
+"${RELEASE_PYTHON}" "${SCRIPT_DIR}/version.py" check --root "${SNAPSHOT_DIR}"
 
 # clean old dir then build a new one
 rm -rf dist && mkdir -p dist/apache-${REPO}
@@ -61,7 +65,7 @@ rm -rf dist && mkdir -p dist/apache-${REPO}
 cd ../
 git archive --format=tar.gz \
   --output="scripts/dist/apache-${REPO}/apache-${REPO}-${RELEASE_VERSION}-src.tar.gz" \
-  --prefix="apache-${REPO}-${RELEASE_VERSION}-src/" "${GIT_BRANCH}" || exit
+  --prefix="apache-${REPO}-${RELEASE_VERSION}-src/" "${RELEASE_COMMIT}" || exit
 
 cd -
 

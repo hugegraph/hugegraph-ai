@@ -101,7 +101,10 @@ def updates(root: Path) -> dict[Path, tuple[str, str]]:
             (r'(^  tag: ")[^"]*("$)', ""),
         ),
         DEPLOYMENT[2]: (
-            (r"(  hugegraph-server:\n    image: )[^\n]+($)", config["server-image"]),
+            (
+                r"(  hugegraph-server:\n    image: )[^\n]+($)",
+                "${HUGEGRAPH_SERVER_IMAGE:-" + config["server-image"] + "}",
+            ),
             (r"(  hugegraph-rag:\n    image: )[^\n]+($)", f"{config['llm-image']}:{version}"),
         ),
     }
@@ -129,12 +132,14 @@ def updates(root: Path) -> dict[Path, tuple[str, str]]:
 def main(argv: list[str] | None = None, *, root: Path = ROOT) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("sync", "check", "get"))
+    parser.add_argument("--root", type=Path, default=root, help="Project snapshot to read or synchronize")
     parser.add_argument(
         "key",
         nargs="?",
         choices=("version", "server-image", "llm-image", "uv-version", "python-version", "ruff-version", "ty-version"),
     )
     args = parser.parse_args(argv)
+    root = args.root.resolve()
     if (args.command == "get") != (args.key is not None):
         parser.error("get requires a key; sync/check do not accept a key")
     try:

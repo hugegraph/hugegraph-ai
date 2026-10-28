@@ -57,6 +57,18 @@ class TestCISelection(unittest.TestCase):
         self.assertFalse(ci.select(["hugegraph-mcp/hugegraph_mcp/server.py"])["dependencies"])
         self.assertTrue(ci.select(["hugegraph-mcp/pyproject.toml"])["dependencies"])
 
+    def test_module_and_nested_pyprojects_always_select_quality(self):
+        for path in (
+            "hugegraph-llm/pyproject.toml",
+            "hugegraph-python-client/pyproject.toml",
+            "hugegraph-mcp/pyproject.toml",
+            "hugegraph-ml/pyproject.toml",
+            "vermeer-python-client/pyproject.toml",
+            "docs/example/pyproject.toml",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(ci.select([path])["quality"])
+
     def test_full_and_on_demand_selections(self):
         self.assertTrue(all(ci.select([], full=True).values()))
         selected = ci.select([], test_set="codeql")
