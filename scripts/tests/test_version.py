@@ -80,6 +80,30 @@ class TestReleaseVersion(unittest.TestCase):
         self.assertEqual(0, self.run_command("sync"))
         self.assertEqual("", self.stdout.getvalue())
 
+    def test_consecutive_custom_image_changes_keep_documentation_synchronized(self):
+        for index in (1, 2):
+            config = self.root / "pyproject.toml"
+            previous = version.release_config(self.root)
+            server = f"registry.example:5000/team/server{index}@sha256:" + str(index) * 64
+            llm = f"registry.example:5000/team/rag{index}"
+            config.write_text(
+                config.read_text().replace(previous["server-image"], server).replace(previous["llm-image"], llm)
+            )
+            self.assertEqual(1, self.run_command("check"))
+            self.assertEqual(0, self.run_command("sync"))
+            readme = (self.root / "hugegraph-llm/README.md").read_text()
+            self.assertIn(server, readme)
+            self.assertIn(llm + ":1.8.0", readme)
+            if index == 2:
+                self.assertNotIn("server1@", readme)
+            self.assertEqual(0, self.run_command("check"))
+            self.assertEqual(0, self.run_command("sync"))
+
+        self.bump_root()
+        self.assertEqual(0, self.run_command("sync"))
+        self.assertIn("registry.example:5000/team/rag2:1.9.2", (self.root / "hugegraph-llm/README.md").read_text())
+        self.assertEqual(0, self.run_command("check"))
+
     def test_ci_tool_minimums_follow_root_dev_requirements(self):
         path = self.root / "pyproject.toml"
         previous = version.release_config(self.root)["ruff-version"]
@@ -232,6 +256,18 @@ class TestReleaseVersion(unittest.TestCase):
         self.assertIn("hugegraph-ml/pyproject.toml", result.stdout)
         self.assertFalse((self.root / "scripts/dist").exists())
         self.assertFalse((self.root / "external-command-called").exists())
+
+    def test_release_branch_wins_over_same_named_tag(self):
+        self.prepare_release_branch()
+        current = version.release_config(self.root)["version"]
+        self.git("tag", f"release-{current}", "HEAD")
+        result = self.invoke_release_before_signing()
+        self.assertEqual(91, result.returncode, result.stdout + result.stderr)
+        archives = list((self.root / "scripts/dist/apache-hugegraph-ai").glob("*.tar.gz"))
+        with tarfile.open(archives[0]) as archive:
+            marker = archive.extractfile(f"apache-hugegraph-ai-{current}-src/release-branch-only.txt")
+            assert marker is not None
+            self.assertEqual(b"from the selected release commit\n", marker.read())
 
     def test_release_archives_validated_branch_and_stops_at_test_signer(self):
         self.prepare_release_branch()

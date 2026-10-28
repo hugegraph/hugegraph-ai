@@ -37,20 +37,22 @@ editable source installation and offline examples.
 
 > [!IMPORTANT]
 >
-> - **Python**: 3.11+ (not tested on 3.12)
+> - **Python**: 3.11 (`>=3.11,<3.12`; Python 3.12 is not supported)
 > - **HugeGraph Server**: 1.3+ (recommended: 1.5+)
 > - **UV Package Manager**: 0.7+
 
 ### Code Quality (uv + Ruff + ty)
 
+Run all quality commands from the repository root.
+
 - Ruff is used for linting and formatting:
-  - `uv run ruff format --check .`
-  - `uv run ruff check .`
-- Type checking: `uv run ty check hugegraph-llm/src/hugegraph_llm` from the repository root.
+  - `uv run --extra dev ruff format --check .`
+  - `uv run --extra dev ruff check .`
+- Type checking: `uv run --extra dev ty check hugegraph-llm/src/hugegraph_llm` from the repository root.
   CI runs it for affected modules in the existing test runner; existing diagnostics are advisory.
 - Enable Git hooks via pre-commit:
-  - `pre-commit install` (in the root dir)
-  - `pre-commit run --all-files`
+  - `uv run --extra dev pre-commit install` (in the root dir)
+  - `uv run --extra dev pre-commit run --all-files`
 - Tool requirements: root `pyproject.toml` (`>=` for Ruff and ty). The [Ruff hooks](../.pre-commit-config.yaml) run through uv and inherit that range.
 
 ## 🚀 Quick Start
@@ -100,7 +102,7 @@ For more control over individual components:
 
 #### Available Images
 
-- **`hugegraph/rag`** - Development image with source code access
+- **`hugegraph/rag:1.8.0`** - Development image with source code access
 - **`hugegraph/rag-bin`** - Production-optimized binary (compiled with Nuitka)
 
 ```bash

@@ -53,6 +53,10 @@ class DeveloperToolingContractTest(unittest.TestCase):
     def test_quality_commands_enable_dev_extra(self) -> None:
         script = (ROOT / "style" / "code_format_and_analysis.sh").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        llm_readme = (ROOT / "hugegraph-llm/README.md").read_text(encoding="utf-8")
+        self.assertIn("Run all quality commands from the repository root", llm_readme)
+        for command in ("ruff format --check .", "ruff check .", "ty check hugegraph-llm/src/hugegraph_llm"):
+            self.assertIn("uv run --extra dev " + command, llm_readme)
 
         expected_script_commands = (
             "uv run --extra dev ruff format .",

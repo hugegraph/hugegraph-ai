@@ -82,6 +82,26 @@ def updates(root: Path) -> dict[Path, tuple[str, str]]:
     config = release_config(root)
     version = config["version"]
     result = {}
+    compose = (root / DEPLOYMENT[2]).read_text(encoding="utf-8")
+    previous_server = re.search(r"hugegraph-server:\n    image: (.+)", compose)
+    previous_llm = re.search(r"hugegraph-rag:\n    image: (.+)", compose)
+    if previous_server is None or previous_llm is None:
+        raise ValueError("Compose must define server and LLM image references")
+    # Read the previously synchronized references before computing deployment edits.
+    server_ref = previous_server[1].removeprefix("${HUGEGRAPH_SERVER_IMAGE:-").removesuffix("}")
+
+    def image_pattern(*references: str) -> str:
+        repositories = set()
+        for reference in references:
+            repository = reference.split("@", 1)[0]
+            if ":" in repository.rsplit("/", 1)[-1]:
+                repository = repository.rsplit(":", 1)[0]
+            repositories.add(repository)
+        names = "|".join(re.escape(name) for name in sorted(repositories))
+        return rf"(?<![\w./:@-])(?:{names})(?::[\w.-]+)?(?:@sha256:[a-fA-F0-9]{{64}})?(?![\w./:@-])"
+
+    server_pattern = image_pattern("hugegraph/hugegraph", server_ref, config["server-image"])
+    llm_pattern = image_pattern("hugegraph/rag", previous_llm[1], config["llm-image"])
     for module in MODULES:
         path = f"{module}/pyproject.toml"
         original = (root / path).read_text(encoding="utf-8")
@@ -126,8 +146,8 @@ def updates(root: Path) -> dict[Path, tuple[str, str]]:
         updated = re.sub(rf"(?<=hugegraph-mcp@){VERSION_PATTERN}", version, original)
         updated = re.sub(rf"(?<=hugegraph_mcp-){VERSION_PATTERN}(?=-py3)", version, updated)
         updated = re.sub(rf"(?<=hugegraph_llm_sdk-){VERSION_PATTERN}(?=-py3)", version, updated)
-        updated = re.sub(r"hugegraph/hugegraph:[\w.:-]+", lambda _: config["server-image"], updated)
-        updated = re.sub(rf"hugegraph/rag:{VERSION_PATTERN}", lambda _: f"{config['llm-image']}:{version}", updated)
+        updated = re.sub(server_pattern, lambda _: config["server-image"], updated)
+        updated = re.sub(llm_pattern, lambda _: f"{config['llm-image']}:{version}", updated)
         if updated != original:
             result[root / path] = (original, updated)
     return result

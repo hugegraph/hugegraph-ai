@@ -23,7 +23,7 @@ Contributor workflows: [CI selection and full validation](docs/quality/ci.md), [
 
 ### Prerequisites
 
-- Python 3.11+ (required for hugegraph-llm)
+- Python 3.11 for hugegraph-llm (`>=3.11,<3.12`; Python 3.12 is not supported by the application)
 - [uv](https://docs.astral.sh/uv/) 0.7+ (required for workspace management)
 - HugeGraph Server 1.3+ for the LLM/client modules (1.5+ recommended); `hugegraph-mcp` requires 1.7.0+
 - Docker (optional, for containerized deployment)

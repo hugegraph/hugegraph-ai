@@ -13,7 +13,7 @@ uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./
 docker pull hugegraph/hugegraph:latest
 docker run --rm -d --name hg-mcp-check -e PASSWORD=admin -p 127.0.0.1:18080:8080 hugegraph/hugegraph:latest
 until curl -fsS http://127.0.0.1:18080/versions >/dev/null; do sleep 1; done
-HUGEGRAPH_URL=http://127.0.0.1:18080 bash scripts/check_hugegraph.sh "$(python3.11 scripts/version.py get version)" hg-mcp-check
+HUGEGRAPH_URL=http://127.0.0.1:18080 bash scripts/check_hugegraph.sh "$(.venv-mcp/bin/python scripts/version.py get version)" hg-mcp-check
 
 export HUGEGRAPH_URL=http://127.0.0.1:18080
 export HUGEGRAPH_GRAPH_PATH=DEFAULT/hugegraph

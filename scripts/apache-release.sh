@@ -47,7 +47,7 @@ cd "${WORK_DIR}"
 echo "In the work dir: $(pwd)"
 
 # Validate the exact commit that will be distributed, not just this checkout.
-RELEASE_COMMIT=$(git rev-parse --verify "${GIT_BRANCH}^{commit}")
+RELEASE_COMMIT=$(git rev-parse --verify "refs/heads/${GIT_BRANCH}^{commit}")
 SNAPSHOT_DIR=$(mktemp -d)
 cleanup_snapshot() {
   git -C "${SCRIPT_DIR}/.." worktree remove --force "${SNAPSHOT_DIR}" >/dev/null 2>&1 || rm -rf "${SNAPSHOT_DIR}"

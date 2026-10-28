@@ -146,6 +146,9 @@ def main() -> None:
     outputs["full"] = str(full).lower()
     for key in MODULES:
         outputs[key + "-pythons"] = json.dumps(FULL_PYTHONS[key] if full else [config["python-version"]])
+    for key, value in outputs.items():
+        if "\n" in str(value) or "\r" in str(value):
+            raise ValueError(f"Output {key} must be a single line")
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:
         for key, value in outputs.items():
             stream.write(f"{key}={value}\n")

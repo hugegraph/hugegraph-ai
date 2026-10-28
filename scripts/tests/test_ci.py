@@ -15,6 +15,7 @@
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,35 @@ class TestCISelection(unittest.TestCase):
     def assert_modules(self, paths, expected):
         selected = ci.select(paths)
         self.assertEqual(set(expected), {key for key in ci.MODULES if selected[key]})
+
+    def test_multiline_config_does_not_write_any_ci_outputs(self):
+        for separator in ("\n", "\r"):
+            with self.subTest(separator=repr(separator)), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                event = root / "event.json"
+                event.write_text("{}")
+                output = root / "output"
+                output.write_text("existing=true\n")
+                config = ci.release_config(ci.ROOT)
+                config["uv-version"] += separator + "client=false"
+                with (
+                    patch.dict(
+                        os.environ,
+                        {
+                            "GITHUB_EVENT_PATH": str(event),
+                            "GITHUB_EVENT_NAME": "pull_request",
+                            "GITHUB_REPOSITORY": "hugegraph/hugegraph-ai",
+                            "GITHUB_OUTPUT": str(output),
+                            "GITHUB_STEP_SUMMARY": str(root / "summary"),
+                        },
+                    ),
+                    patch.object(ci, "changed_paths", return_value=["scripts/ci.py"]),
+                    patch.object(ci, "codeql_provider", return_value="advanced-workflow"),
+                    patch.object(ci, "release_config", return_value=config),
+                    self.assertRaisesRegex(ValueError, "uv-version must be a single line"),
+                ):
+                    ci.main()
+                self.assertEqual("existing=true\n", output.read_text())
 
     def test_repository_docs_skip_runtime_and_security_jobs(self):
         flags = ci.select(["README.md", "docs/quality/ci.md", "docs/design.rst"])
