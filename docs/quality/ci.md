@@ -89,10 +89,14 @@ GitHub default scans keep their own triggers and check results, outside
 
 ## Required check migration
 
-Use **CI Result** as the required branch-protection check. It fails for any
-failed/cancelled selected job or failed preflight and accepts intentionally
-skipped suites. Replace old per-module matrix check names in repository rules
-when adopting this workflow; code changes here do not update GitHub rules.
+Use **CI Result** as the required branch-protection check for jobs owned by this
+workflow. It fails for any failed/cancelled selected job or failed preflight and
+accepts intentionally skipped suites. When GitHub default CodeQL setup is active,
+keep its emitted code-scanning check separately required because that scan
+deliberately remains outside `CI Result`. Without default setup, the selected
+custom CodeQL job is aggregated into `CI Result`. Replace old per-module matrix
+check names in repository rules when adopting this workflow; code changes here
+do not update GitHub rules.
 
 The regular test workflows are reusable and receive configuration from preflight.
 They do not independently trigger duplicate runs. PR labeling and other repository

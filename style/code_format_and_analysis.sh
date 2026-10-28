@@ -38,11 +38,11 @@ if [ "${FORMAT}" = false ] && [ "${LINT}" = false ] && [ "${TYPECHECK}" = false 
 fi
 cd "${ROOT_DIR}"
 if [ "${FORMAT}" = true ]; then
-  uv run ruff format .
+  uv run --extra dev ruff format .
 fi
 if [ "${LINT}" = true ]; then
-  uv run ruff check .
+  uv run --extra dev ruff check .
 fi
 if [ "${TYPECHECK}" = true ]; then
-  uv run ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
+  uv run --extra dev ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
 fi

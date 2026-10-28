@@ -212,14 +212,14 @@ uv add --group dev pytest-mock  # Add to dev group
 From the repository root:
 
 ```bash
-uv run ruff format --check .
-uv run ruff check .
-uv run ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
+uv run --extra dev ruff format --check .
+uv run --extra dev ruff check .
+uv run --extra dev ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
 ```
 
 Ruff and ty use `>=` requirements in root `pyproject.toml`.
 The [pre-commit hooks](.pre-commit-config.yaml) run Ruff through uv and inherit that range.
-Enable hooks with `uv run pre-commit install`. CI runs Ruff and affected-module ty
+Enable hooks with `uv run --extra dev pre-commit install`. CI runs Ruff and affected-module ty
 checks in existing runners; application type checks remain advisory while the
 existing diagnostic baseline is resolved. See [CI policy](docs/quality/ci.md).
 
