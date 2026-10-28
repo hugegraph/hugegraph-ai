@@ -10,9 +10,10 @@ in the job summary. A failed diff or preflight fails CI rather than skipping tes
 | Repository-level README/Markdown outside tested modules | No runtime environment, Docker or custom CodeQL |
 | Module README/docs, including examples and data files | Owning module, preserving documentation/example contracts |
 | Python client | Client plus downstream LLM and MCP |
+| Standalone LLM SDK | SDK plus downstream LLM compatibility tests |
 | LLM | LLM |
 | MCP | MCP |
-| Root dependency/release configuration or shared CI setup | Client, LLM and MCP |
+| Root dependency/release configuration or shared CI setup | Client, SDK, LLM and MCP |
 | Module CI workflow | That module and its downstream consumers |
 | Docker configuration or LLM image build script | LLM |
 
@@ -24,8 +25,15 @@ Dependency review runs for dependency changes on same-repository PRs; its token
 restrictions for fork PRs are unchanged. Deleted files and both sides of a rename
 participate in selection.
 
+SDK changes run the SDK distribution contracts and downstream LLM adapter tests,
+without selecting unrelated client/MCP suites. The SDK workflow builds outside
+the application workspace and verifies both wheel and sdist in clean environments
+with only base dependencies. Offline examples and installed-wheel tests run
+before optional provider extras are installed. Provider contracts then share
+the primary-runtime SDK runner, avoiding a duplicate build and setup job.
+
 Ordinary runs use the primary Python version defined in `tool.hugegraph.ci` in
-the root `pyproject.toml`. Each module reuses one dependency environment and one
+the root `pyproject.toml`. Each application module reuses one dependency environment and one
 HugeGraph service for its unit, integration and smoke phases. Existing coverage
 thresholds remain enforced. Integration tests fail if the service is unavailable.
 Server image digests and the `/versions` response are logged; `versions.core`
@@ -34,6 +42,12 @@ Following Server `latest` is an intentional development/test policy, so a future
 master image changing its core version is expected to fail this guard. The
 Compose `HUGEGRAPH_SERVER_IMAGE` override supports reproducible deployments with
 a verified release tag or digest without pinning the CI image.
+
+The primary-runtime client job also verifies the actual `git archive` source
+distribution: ML and Docker remain excluded, all included workspace packages
+build, and `uv sync --all-packages` plus `uv pip check` validate installation.
+This archive check is separate from release metadata validation, which needs
+the complete commit tree before distribution exclusions are applied.
 
 GitHub-owned `setup-python` selects the interpreter; the root uv version is
 installed with pip before project dependencies are managed with uv. This avoids
@@ -51,7 +65,7 @@ CI reads those lower bounds and uses the same ranges. Local pre-commit hooks run
 Ruff through uv, without a fixed remote hook revision. The legacy formatting/lint script now uses uv/Ruff/ty
 instead of Black/Pylint; `-b` and `-p` retain their format/lint selections.
 
-ty runs on the primary-runtime client, LLM and MCP jobs by default, without
+ty runs on the primary-runtime client, SDK, LLM and MCP jobs by default, without
 adding runners. MCP uses its standalone Python environment for import resolution.
 Application type checks retain the existing advisory status: the current ty
 baseline contains unresolved diagnostics, so a ty failure is visible but does
@@ -63,8 +77,8 @@ in the existing quality runner, using their Python 3.11+ target.
 ## Full and optional checks
 
 - Weekly on ASF main (Monday 06:00 Asia/Taipei), release-branch pushes, and manual
-  **full** runs validate client/LLM on Python 3.10 and 3.11, MCP on 3.10–3.12,
-  plus CodeQL. Docker integration runs
+  **full** runs validate client/LLM on Python 3.11, MCP on 3.11–3.12,
+  and the SDK on 3.11–3.13, plus CodeQL. Python 3.10 is no longer supported. Docker integration runs
   once per module on the primary Python runtime.
 - Use **Run workflow → mainline** for the primary-runtime checks on the selected
   branch, **full** for the complete matrix, **codeql** for security scanning, or

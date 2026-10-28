@@ -78,6 +78,17 @@ jobs:
           component: client
       - name: Install client and test dependencies
         run: uv sync --extra python-client --extra dev
+      - name: Verify source archive build and installation
+        if: matrix.python-version == inputs.integration-python
+        run: |
+          archive_dir=$(mktemp -d)
+          trap 'rm -rf "$archive_dir"' EXIT
+          git archive HEAD | tar -x -C "$archive_dir"
+          test ! -e "$archive_dir/hugegraph-ml"
+          test ! -e "$archive_dir/docker"
+          uv build --all-packages "$archive_dir" --out-dir "$archive_dir/dist"
+          uv sync --project "$archive_dir" --all-packages
+          uv pip check --python "$archive_dir/.venv/bin/python"
       - name: Type check client (advisory while existing diagnostics are resolved)
         if: matrix.python-version == inputs.integration-python
         continue-on-error: true

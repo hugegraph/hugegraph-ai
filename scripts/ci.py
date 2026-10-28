@@ -24,7 +24,18 @@ from pathlib import Path
 from version import release_config
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = {"client": "hugegraph-python-client", "llm": "hugegraph-llm", "mcp": "hugegraph-mcp"}
+MODULES = {
+    "client": "hugegraph-python-client",
+    "sdk": "hugegraph-llm-sdk",
+    "llm": "hugegraph-llm",
+    "mcp": "hugegraph-mcp",
+}
+FULL_PYTHONS = {
+    "client": ["3.11"],
+    "sdk": ["3.11", "3.12", "3.13"],
+    "llm": ["3.11"],
+    "mcp": ["3.11", "3.12"],
+}
 SHARED = {
     "pyproject.toml",
     "uv.lock",
@@ -76,6 +87,8 @@ def select(paths: list[str], *, full: bool = False, test_set: str = "mainline") 
             flags["dependencies"] = True
     if flags["client"]:
         flags["llm"] = flags["mcp"] = True
+    if flags["sdk"]:
+        flags["llm"] = True
     return flags
 
 
@@ -130,8 +143,7 @@ def main() -> None:
     outputs.update(config)
     outputs["full"] = str(full).lower()
     for key in MODULES:
-        versions = ["3.10", "3.11", "3.12"] if key == "mcp" else ["3.10", "3.11"]
-        outputs[key + "-pythons"] = json.dumps(versions if full else [config["python-version"]])
+        outputs[key + "-pythons"] = json.dumps(FULL_PYTHONS[key] if full else [config["python-version"]])
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:
         for key, value in outputs.items():
             stream.write(f"{key}={value}\n")

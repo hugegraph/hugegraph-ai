@@ -39,6 +39,7 @@ jobs:
       actions: read
     outputs:
       client: ${{ steps.select.outputs.client }}
+      sdk: ${{ steps.select.outputs.sdk }}
       llm: ${{ steps.select.outputs.llm }}
       mcp: ${{ steps.select.outputs.mcp }}
       quality: ${{ steps.select.outputs.quality }}
@@ -51,6 +52,7 @@ jobs:
       ty-version: ${{ steps.select.outputs.ty-version }}
       python-version: ${{ steps.select.outputs.python-version }}
       client-pythons: ${{ steps.select.outputs.client-pythons }}
+      sdk-pythons: ${{ steps.select.outputs.sdk-pythons }}
       llm-pythons: ${{ steps.select.outputs.llm-pythons }}
       mcp-pythons: ${{ steps.select.outputs.mcp-pythons }}
     steps:
@@ -95,6 +97,17 @@ jobs:
       integration-python: ${{ needs.preflight.outputs.python-version }}
       uv-version: ${{ needs.preflight.outputs.uv-version }}
       server-image: ${{ needs.preflight.outputs.server-image }}
+      version: ${{ needs.preflight.outputs.version }}
+
+  sdk:
+    needs: preflight
+    if: needs.preflight.outputs.sdk == 'true'
+    uses: ./.github/workflows/hugegraph-llm-sdk.yml
+    with:
+      python-versions: ${{ needs.preflight.outputs.sdk-pythons }}
+      primary-python: ${{ needs.preflight.outputs.python-version }}
+      uv-version: ${{ needs.preflight.outputs.uv-version }}
+      ty-version: ${{ needs.preflight.outputs.ty-version }}
       version: ${{ needs.preflight.outputs.version }}
 
   llm:
@@ -146,7 +159,7 @@ jobs:
   result:
     name: CI Result
     if: always() && (github.event_name != 'schedule' || github.repository == 'apache/hugegraph-ai')
-    needs: [preflight, quality, client, llm, mcp, dependencies, codeql]
+    needs: [preflight, quality, client, sdk, llm, mcp, dependencies, codeql]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

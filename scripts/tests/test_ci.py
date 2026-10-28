@@ -70,6 +70,22 @@ class TestCISelection(unittest.TestCase):
     def test_client_changes_test_downstream_callers(self):
         self.assert_modules(["hugegraph-python-client/src/pyhugegraph/client.py"], {"client", "llm", "mcp"})
 
+    def test_sdk_changes_keep_isolated_distribution_and_application_contracts(self):
+        for path in (
+            "hugegraph-llm-sdk/src/hugegraph_llm_sdk/api.py",
+            "hugegraph-llm-sdk/README.md",
+            "hugegraph-llm-sdk/examples/basic.py",
+            ".github/workflows/hugegraph-llm-sdk.yml",
+        ):
+            with self.subTest(path=path):
+                self.assert_modules([path], {"sdk", "llm"})
+
+    def test_full_runtimes_drop_python_310_without_expanding_application_support(self):
+        self.assertEqual(["3.11"], ci.FULL_PYTHONS["client"])
+        self.assertEqual(["3.11"], ci.FULL_PYTHONS["llm"])
+        self.assertEqual(["3.11", "3.12"], ci.FULL_PYTHONS["mcp"])
+        self.assertEqual(["3.11", "3.12", "3.13"], ci.FULL_PYTHONS["sdk"])
+
     def test_module_changes_are_isolated(self):
         self.assert_modules(["hugegraph-llm/src/hugegraph_llm/config/hugegraph_config.py"], {"llm"})
         self.assert_modules(["hugegraph-mcp/tests/contracts/write_confirmation_v2.json"], {"mcp"})
@@ -78,7 +94,7 @@ class TestCISelection(unittest.TestCase):
     def test_shared_config_and_workflows_do_not_skip_tests(self):
         for path in ("pyproject.toml", "scripts/ci.py", ".github/actions/setup-python-env/action.yml"):
             with self.subTest(path=path):
-                self.assert_modules([path], {"client", "llm", "mcp"})
+                self.assert_modules([path], {"client", "sdk", "llm", "mcp"})
         self.assert_modules([".github/workflows/hugegraph-llm.yml"], {"llm"})
 
     def test_dependency_review_requires_dependency_changes(self):
@@ -88,6 +104,7 @@ class TestCISelection(unittest.TestCase):
     def test_module_and_nested_pyprojects_always_select_quality(self):
         for path in (
             "hugegraph-llm/pyproject.toml",
+            "hugegraph-llm-sdk/pyproject.toml",
             "hugegraph-python-client/pyproject.toml",
             "hugegraph-mcp/pyproject.toml",
             "hugegraph-ml/pyproject.toml",
