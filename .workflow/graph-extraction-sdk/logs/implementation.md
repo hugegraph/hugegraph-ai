@@ -32,7 +32,7 @@
 
 ## 模型资源所有权
 
-SDK 仅清理 `model_factory` 创建且提供关闭方法的模型；调用方直接传入的模型仍由调用方管理。同步批次调用 close，异步批次优先等待 aclose，只有同步关闭方法时使用线程适配。完成、异常和取消均覆盖清理路径；模型自身的共享全局连接池不由 SDK 接管。
+SDK 仅清理 `model_factory` 创建且提供关闭方法的模型；调用方直接传入的模型仍由调用方管理。工厂模型按最多 `max_workers` 块一组执行，每组结束后清理再启动下一组，限制同时打开的客户端数量。同步入口调用 close，异步入口优先等待 aclose，只有同步关闭方法时使用线程适配。完成、异常和取消均覆盖清理路径；模型自身的共享全局连接池不由 SDK 接管。
 
 同步批次在调用线程完成清理，不承诺模型创建与关闭的线程相同。取消线程适配后的等待不保证停止已经发出的同步请求；关闭可能与请求收尾重叠，文档明确保留此边界。
 
@@ -42,7 +42,62 @@ schema 校验按实际声明信息执行。省略 propertykeys 时不检查全�
 
 ## 最终验收
 
+主代理发现远端已有独立审计修复提交 `f3d16548477d369b3fc2d6864ced972737fed9f7`，将更名提交 rebase 到其上。合并后代码最初为 `602c813`，随后仅整理一处测试 import 空行，经 Ruff 检查后提交为 `d744204ef5a92554167f5c08aef82e05c613d679`，已正常推送，父提交仍为上述远端修复。远端的模型资源限制、类工厂识别、边 schema 约束和 35 项新增回归均保留；README 的资源生命周期说明也保留修复后的合同。独立复审确认 16 个生产模块的 AST 与远端修复作机械更名后的结果一致，没有阻塞问题。本节仅记录同时包含新发行名与审计修复的验收，之前两条工作线的独立结果另列历史记录。
+
+### 合并后产物与独立安装
+
+从工作区之外的 sdist 构建 wheel，确认构建产物中的源码与 README 和合并后文件一致。
+
+- wheel：`hugegraph-llm-sdk/dist/hugegraph_llm_sdk-1.8.0-py3-none-any.whl`，**50,559 bytes**。
+- wheel SHA-256：`db90a5ead169e58c11d3d255837950d91137fb90f73fdee444a516ca441ea1a8`。
+- sdist：`hugegraph-llm-sdk/dist/hugegraph_llm_sdk-1.8.0.tar.gz`，**37,223 bytes**。
+- sdist SHA-256：`4632f64f2ac99b7d02422421235fba556d09f7a1005398780456dec7b6623483`。
+
+四个全新虚拟环境均使用空 `PYTHONPATH`，确认发行名 `hugegraph-llm-sdk` 与 `hugegraph_llm_sdk` 的实际安装位置，旧发行名和旧导入模块不可见。
+
+| Python | 基础环境测试 | 隔离 smoke | sdist 中的三个离线示例 |
+| --- | --- | --- | --- |
+| 3.10.22 | 591 passed，55 skipped | 通过 | 全部通过 |
+| 3.11.14 | 591 passed，55 skipped | 通过 | 全部通过 |
+| 3.12.14 | 591 passed，55 skipped | 通过 | 全部通过 |
+| 3.13.5 | 591 passed，55 skipped | 通过 | 全部通过 |
+
+基础环境未安装厂商 extras，55 项相关测试显式跳过。另建 Python 3.11 环境安装全部 extras，provider 契约为 **54 passed、1 skipped**；跳过项需要未安装的旧应用。隔离 smoke 仍验证不写文件、不联网和不导入旧应用及厂商模块。
+
+验证目录为 `/tmp/hugegraph-sdk-merged-um86cton`，其中 `logs/` 保存测试输出，`validation-summary.json` 保存汇总。此前的产物摘要与 611/556 计数不属于本轮合并后验收。
+
+### 合并后的工作区与同步
+
+主代理在合并后的工作区运行完整 SDK 测试，结果为 **646 passed**。旧入口 **81 passed** 与旧模型、配置 **258 passed、2 skipped** 来自合并前的定向回归，保留于历史记录，不计为合并后的重跑。不同测试集合可能重叠，不能相加为独立测试总数。
+
+合并后另运行旧应用 SDK 兼容与配置快照定向检查，**5 passed**，日志为 `/tmp/hugegraph-merged-legacy-tests.log`。
+
+按用户要求再次获取远端 PR 分支和 main，确认没有 `f3d1654` 之后需要合并的新提交，无需再次 rebase。
+
+### 合并后的 Docker 实测
+
+已重新完整构建包含远端审计修复的应用镜像，使用正常 CMD 启动并通过真实 HTTP 请求验证应用。
+
+- 镜像：`hugegraph-llm:sdk-decoupling`，ID 为 `sha256:d90e878719be0680d2974e869eb2f0ecefa9cdd272cb5d93687bb5aef8e3fb1d`。
+- 容器：`hugegraph-llm-sdk-check`，状态为 **running、healthy**，宿主访问地址为 `http://127.0.0.1:18001/`。
+- 运行用户为非 root（uid **1000**），安装的 `hugegraph-llm-sdk` 版本为 **1.8.0**；旧发行名和旧导入模块均不可见。
+- 镜像中的 **16 个 SDK 源文件**摘要为 `66a85f7baf709597c6c52f710419add14a9376dbeba4a66db814d239cbb8cb02`，与当前源码一致，包含已合并的资源生命周期与边约束修复。
+- Gradio 首页返回 **HTTP 200**；schema 设计、旧抽取入口，以及抽取 → 审阅 → 修复 → 再审阅流程全部通过。
+- 本地 OpenAI 协议 fixture 共 **7 次调用**：probe 1 次、schema 1 次、legacy 1 次、extract 1 次、review 2 次、repair 1 次，最终图包含 **2 个顶点、1 条边**。
+
+证据文件为 `/tmp/hugegraph-merged-smoke.json`、`/tmp/hugegraph-merged-image-metadata.json`、`/tmp/hugegraph-merged-docker-build.log`、`/tmp/hugegraph-merged-runtime.json` 与 `/tmp/hugegraph-merged-app.log`。此前的 `aa88d3…` 镜像仅保留为合并前历史记录。
+
+### PR 与远端检查
+
+更名提交 `d744204` 已正常推送至 [PR #84](https://github.com/hugegraph/hugegraph-ai/pull/84)，与 Docker 构建并行触发 CI。该代码提交的 **6 个 workflow 全部成功**：SDK（包含 5 个 jobs）、LLM、Python Client、MCP、Ruff 和 License。后续文档提交的检查与评审状态以 PR 对应提交的实时记录为准，不把代码提交的结果自动套用到其他提交。
+
+本轮没有调用真实模型服务或图数据库，也没有对外发布包、镜像或部署生产服务。HTTP fixture 使用固定响应，验证应用集成与协议传输，不衡量真实模型质量。
+
+## 仅更名后的验收（合并审计修复前，历史记录）
+
 用户在已有实现和 Docker 验证完成后确认使用 `hugegraph-llm-sdk` / `hugegraph_llm_sdk`。README 已统一命名、安装方式与根级平行目录说明；代码、依赖、CI 和旧应用引用由主代理完成更名。
+
+本节是更名完成、但尚未合入远端独立审计修复时的结果。产物摘要、611/556 测试计数与 `aa88d3…` 镜像均仅作为历史记录，不代表当前最终验收。
 
 ### 新发行名产物与安装
 
@@ -89,7 +144,7 @@ schema 校验按实际声明信息执行。省略 propertykeys 时不检查全�
 
 本次使用真实 HTTP 传输与固定模型响应验证完整流程，没有调用真实模型服务或图数据库，也没有对外发布包、镜像或部署生产服务。
 
-[PR #84](https://github.com/hugegraph/hugegraph-ai/pull/84) 保持 ready，主代理正在按新 SDK 名称更新标题与说明，随后推送更名提交。新提交的远端 CI 状态以 PR 为准，不沿用此前 head 的成功结果。
+本轮记录时 [PR #84](https://github.com/hugegraph/hugegraph-ai/pull/84) 保持 ready，更名提交尚未推送。随后发现并合入远端独立审计修复，因此本轮产物与镜像不再代表最终代码；远端 CI 仍以对应提交为准。
 
 ## 重命名前验收（历史记录）
 
@@ -140,7 +195,7 @@ Python 3.11 的独立 wheel 环境安装全部模型 extras 后，provider 契�
 
 ## 重命名前的 PR 与 Docker 实测（历史记录）
 
-以下镜像 ID 和运行结果来自 SDK 更名前的应用构建；更名后的镜像重建与运行结果待补充。
+以下镜像 ID 和运行结果来自 SDK 更名前的应用构建，仅作为历史记录。
 
 用户追加授权提交 PR 并执行 Docker 实测。草稿 [PR #84](https://github.com/hugegraph/hugegraph-ai/pull/84) 已创建。首次提交除许可证检查外的其他 workflow 均成功。许可证 CI 发现核心 pyproject 缺少 ASF 表头，已补齐，并为移动后的根 .dockerignore 添加同一表头；未修改检查规则。重建后的 wheel 哈希不变，sdist 已更新。远端检查和评审状态以 PR 为准。
 
@@ -160,7 +215,9 @@ Docker 构建将 `.dockerignore` 移至仓库根以覆盖实际构建上下文�
 
 此实测覆盖应用启动、HTTP 合同、OpenAI 协议传输与完整修复流程；fixture 使用固定响应，没有连接真实模型服务或图数据库。
 
-## PR #84 独立交叉审计与修复（2026-10-28）
+## PR #84 独立交叉审计与修复（旧发行名，历史记录，2026-10-28）
+
+本节保留远端工作线的审计与修复证据；这里的产物摘要和 Python 版本组合属于更名前的独立验证。修复合入新发行名后的结果见本文“最终验收”。
 
 用户要求先发布最终评分和 comments，再修复并尝试推送。三个独立审查代理分别覆盖运行时、schema/图数据对抗输入、旧应用/provider/打包，由主审交叉复现与裁决。
 
@@ -175,7 +232,7 @@ Docker 构建将 `.dockerignore` 移至仓库根以覆盖实际构建上下文�
 - 类工厂检查元类构造调用，支持实例具有异步 `__call__` 的普通类及其 partial；真正的异步工厂继续被拒绝。
 - 校验显式边 frequency 与排序键要求，以及排序键与可空键的冲突。省略 frequency 不补默认值；自定义顶点 ID 策略的旧 primary_keys 元数据保持兼容。
 
-### 本轮最终验证
+### 本轮验证（合并新发行名之前）
 
 - 完整核心测试：**646 passed**，比审计基线增加 **35** 个用例。
 - 旧 LLM CI unit/contract 集合：**1,334 passed、3 skipped、18 deselected**；覆盖率 **63.62%**，通过原有 **34%** 门槛。
