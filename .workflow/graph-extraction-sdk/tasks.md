@@ -18,8 +18,9 @@
 
 - [x] 补齐 provider 错误与 token usage 日志脱敏测试，并重新构建、验证最终 wheel。
 - [x] 完成应用 Docker 镜像构建。
-- [ ] 完成容器启动及 HTTP 实测，记录实际覆盖范围。
-- [ ] 提交变更并创建 PR，记录 PR 链接。
+- [x] 完成容器启动及 HTTP 实测，记录实际覆盖范围。
+- [x] 提交变更并创建草稿 [PR #84](https://github.com/hugegraph/hugegraph-ai/pull/84)。
+- [x] 修复新增文件缺失 ASF 表头的问题；远端检查与评审状态由 PR 记录。
 
 包的对外发布和生产部署仍不在本次任务中。
 

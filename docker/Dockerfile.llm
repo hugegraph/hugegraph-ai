@@ -3,17 +3,24 @@ FROM python:3.10.16-bookworm AS builder
 
 WORKDIR /home/work/
 
-# Use uv instead of poetry for a more efficient, elegant, and unified py env management```
-RUN pip install --no-cache-dir uv
+# Optional CA bundle supports TLS-inspecting build proxies without storing it in the image.
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
+    pip install --no-cache-dir uv
 
 # 1.1 Copy source code (merged for efficiency)
 COPY . .
 
-# 1.2 Install dependency
-RUN cd /home/work/ && \
-    uv venv && \
-    . .venv/bin/activate && \
-    uv sync --extra llm
+# 1.2 Install dependencies. Build pycgraph 3.2.2 from the same pinned source
+# used by the application: its published x86_64 wheel requires a newer
+# libstdc++ than Bookworm provides despite its manylinux2014 tag.
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then \
+        export SSL_CERT_FILE=/run/secrets/proxy_ca GIT_SSL_CAINFO=/run/secrets/proxy_ca; \
+    fi; \
+    uv sync --extra llm --no-install-package pycgraph && \
+    uv pip install --python /home/work/.venv/bin/python --no-deps \
+      'pycgraph @ git+https://github.com/ChunelFeng/CGraph.git@f224e02339f8de73b34054c8a9db1236b64ede86#subdirectory=python'
 
 # Stage 2: Runtime stage
 FROM python:3.10.16-slim-bookworm
@@ -30,13 +37,14 @@ WORKDIR /home/work/
 
 # Copy virtual environment and source code
 COPY --from=builder --chown=work:work /home/work/.venv /home/work/.venv
+COPY --from=builder --chown=work:work /home/work/hugegraph-llm-core/src /home/work/hugegraph-llm-core/src
 COPY --from=builder --chown=work:work /home/work/hugegraph-llm/src /home/work/hugegraph-llm/src
 COPY --from=builder --chown=work:work /home/work/hugegraph-llm/pyproject.toml /home/work/hugegraph-llm/pyproject.toml
 COPY --from=builder --chown=work:work /home/work/hugegraph-python-client/src /home/work/hugegraph-python-client/src
 
 USER work
 ENV PATH="/home/work/.venv/bin:$PATH"
-ENV PYTHONPATH="/home/work/hugegraph-llm/src:/home/work/hugegraph-python-client/src"
+ENV PYTHONPATH="/home/work/hugegraph-llm-core/src:/home/work/hugegraph-llm/src:/home/work/hugegraph-python-client/src"
 
 WORKDIR /home/work/hugegraph-llm
 VOLUME ["/home/work/hugegraph-llm/src/hugegraph_llm/resources"]

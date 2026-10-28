@@ -45,8 +45,8 @@ schema 校验按实际声明信息执行。省略 propertykeys 时不检查全�
 - 将核心源码复制到根工作区之外，使用 `--no-sources` 构建 sdist，并由 sdist 构建 wheel，避免根工作区与旧应用版本约束影响验收。
 - 交付 wheel：`hugegraph-llm-core/dist/hugegraph_llm_core-1.8.0-py3-none-any.whl`，49,607 bytes。
 - wheel SHA-256：`73e176003ca8d79026201ee61387adca1b10a2af7e1668f247a66b192cf2ef73`。
-- 交付 sdist：`hugegraph-llm-core/dist/hugegraph_llm_core-1.8.0.tar.gz`，36,032 bytes。
-- sdist SHA-256：`c880200108cae306055ec55b1d8b4d01afc53ac314908f40e12258b922033909`。
+- 交付 sdist：`hugegraph-llm-core/dist/hugegraph_llm_core-1.8.0.tar.gz`，36,171 bytes。
+- sdist SHA-256：`c93f05995090281ee6cc042944b9eae96361df82d1dfef098c665d38bb5e1230`。
 - 外部 Python 3.12 项目通过 `uv add --editable` 安装成功，安装依赖为核心包、Pydantic 及其传递依赖；运行关闭审阅的抽取得到 `validated`。
 
 ### 独立 wheel 验证
@@ -70,7 +70,8 @@ Python 3.11 的独立 wheel 环境安装全部模型 extras 后，provider 契�
 - 旧模块关键兼容 review 测试：**77 passed**。
 - 此前运行的旧模块 integration 集合：**335 passed**。
 - 此前运行的 models、config 与日志相关集合：**222 passed、2 skipped**，跳过项依赖外部服务。
-- 根级 Ruff lint 和 format 检查通过，检查范围共 **558 个文件**；`git diff --check` 通过。
+- 后续完整旧 LLM CI unit 集合：**1,334 passed、3 skipped、18 deselected**；覆盖率 **63.58%**，通过 **34%** 门槛。
+- 根级 Ruff lint 和 format 检查通过，检查范围共 **561 个文件**；`git diff --check` 通过。
 
 旧模块 unit 集合的首次运行是 **597 passed、3 skipped、2 deselected、3 failed、24 errors**。其中 3 项失败来自测试临时环境路径覆盖与默认路径断言冲突；撤去该覆盖后，`test_config.py` 的 **11 项通过**，其中 8 项与首次结果重叠。24 项错误来自缺失 `litellm.log` 的兼容问题；修复后 `test_litellm_probe_logging.py` 的 **24 项通过**。按这些集合去重后的通过数为 **624**，这是定向修复与重跑的汇总，不是单次完整命令输出；上述 335 项接口集成和 77 项最终关键兼容则各自为单次全通过。
 
@@ -80,8 +81,24 @@ Python 3.11 的独立 wheel 环境安装全部模型 extras 后，provider 契�
 
 随后补充 provider 错误与 token usage 日志脱敏：错误日志只包含异常类型，usage 只保留合法数字，不记录响应正文；新增 28 项回归。上表是此修复之后重建产物的最终四版本结果，工作区完整核心测试更新为 611 项，独立 provider 合同更新为 54 项。旧 models、config 与日志集合仍为 **222 passed、2 skipped**。
 
-截至本记录，未调用真实 LLM 或图数据库服务，未对外发布包或进行生产部署。这些回归验证 SDK、安装隔离与兼容合同，不构成真实模型抽取准确率评测。
+截至本记录，未调用真实 LLM 或图数据库服务，未对外发布包、镜像或进行生产部署。这些回归验证 SDK、安装隔离与兼容合同，不构成真实模型抽取准确率评测。
 
 ## 后续授权：PR 与 Docker 实测
 
-用户追加授权提交 PR 并执行 Docker 实测。应用 Docker 镜像已经完成构建；容器启动和 HTTP 实测正在进行，当前不记录为通过。PR 尚未创建，链接与最终容器验证结果待主代理确认后补充。
+用户追加授权提交 PR 并执行 Docker 实测。草稿 [PR #84](https://github.com/hugegraph/hugegraph-ai/pull/84) 已创建。首次提交除许可证检查外的其他 workflow 均成功。许可证 CI 发现核心 pyproject 缺少 ASF 表头，已补齐，并为移动后的根 .dockerignore 添加同一表头；未修改检查规则。重建后的 wheel 哈希不变，sdist 已更新。远端检查和评审状态以 PR 为准。
+
+### 镜像构建与运行
+
+- 镜像：`hugegraph-llm:sdk-decoupling`，ID 为 `sha256:9ec5ef50ea29f075896936600a5b547aa10eb3e55ce455da541070ed28382600`。
+- 容器：`hugegraph-llm-sdk-check`，实测时为 `running`、`healthy`；端口映射为 `127.0.0.1:18001 -> 8001`。
+- 使用镜像正常 CMD 启动，运行用户为非 root（uid 1000）；运行时版本为 Python **3.10.16**、核心包 **1.8.0**、pycgraph **3.2.2**。
+- 首页 HTTP 返回 **200**。
+- 镜像没有包含宿主 `.env`、`config_prompt`、`.git` 或构建时使用的 secret CA。
+
+Docker 构建将 `.dockerignore` 移至仓库根以覆盖实际构建上下文。原 pycgraph wheel 需要镜像没有提供的 `GLIBCXX_3.4.32`，因此 `uv sync` 跳过该 wheel，并从同一锁定 commit 源码编译 pycgraph，保留 Bookworm 与 Python 基线。构建过程中仅通过 build secret 为 pip、uv 和 git 临时提供 CA 信任。
+
+### HTTP 与模型协议实测
+
+容器通过真实 HTTP 请求连接本地 OpenAI 协议 fixture，完成模型探测、schema 设计、旧抽取入口以及审阅修复流程。fixture 共收到 **7 次调用**：probe 1 次、schema 1 次、legacy 1 次、extract 1 次、review 2 次、repair 1 次，最终返回 **2 个顶点、1 条边**。结果保存在 `/tmp/hugegraph-llm-sdk-smoke.json`。
+
+此实测覆盖应用启动、HTTP 合同、OpenAI 协议传输与完整修复流程；fixture 使用固定响应，没有连接真实模型服务或图数据库。
