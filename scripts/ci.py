@@ -62,6 +62,8 @@ def select(paths: list[str], *, full: bool = False, test_set: str = "mainline") 
             continue
         if not is_documentation:
             flags["license"] = True
+        if path == ".gitattributes":
+            flags["client"] = True  # Owns the source-archive build/install guard.
         if path in SHARED or path.startswith(".github/actions/"):
             for key in (*MODULES, "quality"):
                 flags[key] = True

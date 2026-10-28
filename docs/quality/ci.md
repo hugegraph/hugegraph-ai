@@ -16,6 +16,7 @@ in the job summary. A failed diff or preflight fails CI rather than skipping tes
 | Root dependency/release configuration or shared CI setup | Client, SDK, LLM and MCP |
 | Module CI workflow | That module and its downstream consumers |
 | Docker configuration or LLM image build script | LLM |
+| Archive exclusions (`.gitattributes`) | Client archive installation guard and downstream LLM/MCP |
 
 Ruff runs once for Python/lint/shared configuration changes using `uvx`, without
 installing application dependencies. License checks share the preflight runner.

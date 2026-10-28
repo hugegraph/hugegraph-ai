@@ -70,6 +70,9 @@ class TestCISelection(unittest.TestCase):
     def test_client_changes_test_downstream_callers(self):
         self.assert_modules(["hugegraph-python-client/src/pyhugegraph/client.py"], {"client", "llm", "mcp"})
 
+    def test_archive_exclusions_select_source_archive_installation_guard(self):
+        self.assert_modules([".gitattributes"], {"client", "llm", "mcp"})
+
     def test_sdk_changes_keep_isolated_distribution_and_application_contracts(self):
         for path in (
             "hugegraph-llm-sdk/src/hugegraph_llm_sdk/api.py",
