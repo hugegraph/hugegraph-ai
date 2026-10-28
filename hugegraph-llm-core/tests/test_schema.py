@@ -174,6 +174,82 @@ def test_invalid_references_and_enums_are_reported(schema, collection, field, va
     assert schema == before
 
 
+@pytest.mark.parametrize(
+    ("fields", "expected_path"),
+    [
+        ({"sort_keys": ["since"], "nullable_keys": ["since"]}, "edgelabels[0].nullable_keys"),
+        ({"frequency": "SINGLE", "sort_keys": ["since"]}, "edgelabels[0].sort_keys"),
+        ({"frequency": "DEFAULT", "sort_keys": ["since"]}, "edgelabels[0].sort_keys"),
+        ({"frequency": "MULTIPLE"}, "edgelabels[0].sort_keys"),
+        ({"frequency": "MULTIPLE", "sort_keys": []}, "edgelabels[0].sort_keys"),
+        ({"frequency": "unknown"}, "edgelabels[0].frequency"),
+        ({"frequency": None}, "edgelabels[0].frequency"),
+        ({"frequency": []}, "edgelabels[0].frequency"),
+    ],
+)
+def test_invalid_edge_constraints_are_reported_before_sync_or_async_extraction(schema, fields, expected_path):
+    schema["edgelabels"][0].update(fields)
+    before = deepcopy(schema)
+    assert any(issue.path == expected_path for issue in validate_schema(schema))
+    calls = []
+
+    def generate(prompt):
+        calls.append(prompt)
+        return '{"vertices": [], "edges": []}'
+
+    async def agenerate(prompt):
+        return generate(prompt)
+
+    model = FunctionModel(generate=generate, agenerate=agenerate)
+    with pytest.raises(SchemaValidationError) as synchronous:
+        extract_graph("Alice knows Bob", schema=schema, model=model, review=False)
+    with pytest.raises(SchemaValidationError) as asynchronous:
+        asyncio.run(aextract_graph("Alice knows Bob", schema=schema, model=model, review=False))
+    assert all(
+        any(issue.path == expected_path for issue in error.value.issues) for error in (synchronous, asynchronous)
+    )
+    assert calls == [] and schema == before
+
+    def draft_response(prompt):
+        return json.dumps(schema)
+
+    async def async_draft_response(prompt):
+        return draft_response(prompt)
+
+    drafting_model = FunctionModel(generate=draft_response, agenerate=async_draft_response)
+    for draft in (
+        design_schema("Alice knows Bob", model=drafting_model),
+        asyncio.run(adesign_schema("Alice knows Bob", model=drafting_model)),
+    ):
+        assert draft.schema == before
+        assert any(issue.path == expected_path for issue in draft.issues)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {},
+        {"sort_keys": ["since"]},
+        {"frequency": "SINGLE"},
+        {"frequency": "DEFAULT", "sort_keys": []},
+        {"frequency": "MULTIPLE", "sort_keys": ["since"]},
+    ],
+)
+def test_edge_constraints_allow_valid_declarations_without_adding_defaults(schema, fields):
+    schema["edgelabels"][0].update(fields)
+    before = deepcopy(schema)
+    assert validate_schema(schema) == []
+    assert schema == before
+
+
+@pytest.mark.parametrize("strategy", ["CUSTOMIZE_STRING", "CUSTOMIZE_NUMBER", "CUSTOMIZE_UUID"])
+def test_custom_ids_keep_legacy_primary_key_metadata(schema, strategy):
+    schema["vertexlabels"][0].update(id_strategy=strategy, nullable_keys=["name"])
+    before = deepcopy(schema)
+    assert validate_schema(schema) == []
+    assert schema == before
+
+
 @pytest.mark.parametrize("collection", ["vertexlabels", "edgelabels", "propertykeys"])
 def test_duplicate_names_are_reported_in_each_namespace(schema, collection):
     schema[collection].append(deepcopy(schema[collection][0]))

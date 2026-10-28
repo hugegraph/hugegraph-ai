@@ -32,6 +32,9 @@ def _is_async_callable(function) -> bool:
     """Recognize coroutine functions and callable objects without invoking them."""
     while isinstance(function, partial):
         function = function.func
+    if inspect.isclass(function):
+        # Constructing a class calls its metaclass, not an instance's __call__.
+        function = type(function).__call__
     return inspect.iscoroutinefunction(function) or (
         callable(function) and inspect.iscoroutinefunction(function.__call__)
     )

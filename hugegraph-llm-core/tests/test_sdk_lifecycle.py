@@ -15,10 +15,13 @@
 
 import asyncio
 import threading
+from contextlib import ExitStack
+from tempfile import TemporaryFile
 
 import pytest
 
 from hugegraph_llm_core import ExtractionOptions, ThreadedModel, aextract_graph, extract_graph
+from hugegraph_llm_core._lifecycle import OwnedModels
 
 SCHEMA = {"vertexlabels": [], "edgelabels": []}
 EMPTY_GRAPH = '{"vertices": [], "edges": []}'
@@ -133,7 +136,12 @@ def test_sync_cleanup_attempts_all_models_before_reporting_cleanup_failure():
     first, second = BrokenClose(), ClosableModel()
     models = iter([first, second])
     with pytest.raises(RuntimeError):
-        extract_graph(["first", "second"], schema=SCHEMA, model_factory=lambda: next(models))
+        extract_graph(
+            ["first", "second"],
+            schema=SCHEMA,
+            model_factory=lambda: next(models),
+            options=ExtractionOptions(max_workers=2),
+        )
     assert first.closed == second.closed == 1
 
 
@@ -219,7 +227,12 @@ def test_async_cleanup_attempts_all_models_before_reporting_cleanup_failure():
         first, second = BrokenClose(), AsyncClosableModel()
         models = iter([first, second])
         with pytest.raises(RuntimeError):
-            await aextract_graph(["first", "second"], schema=SCHEMA, model_factory=lambda: next(models))
+            await aextract_graph(
+                ["first", "second"],
+                schema=SCHEMA,
+                model_factory=lambda: next(models),
+                options=ExtractionOptions(max_workers=2),
+            )
         assert first.closed == second.closed == 1
 
     asyncio.run(scenario())
@@ -336,7 +349,14 @@ def test_cancellation_during_cleanup_still_awaits_all_owned_models(cancel_count)
             models.append(model)
             return model
 
-        task = asyncio.create_task(aextract_graph(["first", "second"], schema=SCHEMA, model_factory=factory))
+        task = asyncio.create_task(
+            aextract_graph(
+                ["first", "second"],
+                schema=SCHEMA,
+                model_factory=factory,
+                options=ExtractionOptions(max_workers=2),
+            )
+        )
         await asyncio.wait_for(closing.wait(), timeout=2)
         for _ in range(cancel_count):
             task.cancel()
@@ -377,5 +397,208 @@ def test_async_cleanup_offloads_a_sync_close_method():
         finally:
             release.set()
         assert seen_threads and seen_threads[0] != loop_thread
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("max_workers", [1, 3])
+def test_long_batch_respects_open_client_resource_budget(asynchronous, max_workers):
+    budget = threading.BoundedSemaphore(max_workers)
+    lock = threading.Lock()
+    models = []
+    active = peak = 0
+
+    class FileModel:
+        def __init__(self):
+            nonlocal active, peak
+            if not budget.acquire(blocking=False):
+                raise OSError("Open model client resource budget exhausted")
+            with ExitStack() as resources:
+                self.resource = resources.enter_context(TemporaryFile(mode="w+t"))
+                self.resource.write(EMPTY_GRAPH)
+                self.resources = resources.pop_all()
+            self.closed = 0
+            with lock:
+                models.append(self)
+                active += 1
+                peak = max(peak, active)
+
+        def generate(self, *, prompt):
+            self.resource.seek(0)
+            return self.resource.read()
+
+        async def agenerate(self, *, prompt):
+            await asyncio.sleep(0)
+            return self.generate(prompt=prompt)
+
+        def close(self):
+            nonlocal active
+            self.resources.close()
+            self.closed += 1
+            with lock:
+                active -= 1
+            budget.release()
+
+        async def aclose(self):
+            await asyncio.sleep(0)
+            self.close()
+
+    arguments = {
+        "schema": SCHEMA,
+        "model_factory": FileModel,
+        "options": ExtractionOptions(max_workers=max_workers),
+        "review": False,
+    }
+    texts = [f"text {index}" for index in range(37)]
+    result = asyncio.run(aextract_graph(texts, **arguments)) if asynchronous else extract_graph(texts, **arguments)
+    assert result.status == "succeeded"
+    assert [chunk.index for chunk in result.chunks] == list(range(len(texts)))
+    assert len(models) == len(texts)
+    assert peak == max_workers and active == 0
+    assert all(model.closed == 1 and model.resource.closed for model in models)
+
+
+def test_parallel_sync_groups_close_models_on_batch_callers_thread():
+    caller_thread = threading.get_ident()
+    created_on = []
+    closed_on = []
+
+    class ThreadTrackedModel(ClosableModel):
+        def __init__(self):
+            super().__init__()
+            created_on.append(threading.get_ident())
+
+        def close(self):
+            closed_on.append(threading.get_ident())
+            super().close()
+
+    result = extract_graph(
+        ["text"] * 5,
+        schema=SCHEMA,
+        model_factory=ThreadTrackedModel,
+        options=ExtractionOptions(max_workers=2),
+    )
+    assert result.status == "succeeded"
+    assert len(created_on) == len(closed_on) == 5
+    assert all(thread != caller_thread for thread in created_on)
+    assert closed_on == [caller_thread] * 5
+
+
+def test_async_reusing_closed_factory_model_fails_without_closing_it_again():
+    async def scenario():
+        model = AsyncClosableModel()
+        result = await aextract_graph(["first", "second"], schema=SCHEMA, model_factory=lambda: model)
+        assert result.status == "partial"
+        assert result.chunks[0].status == "final"
+        assert result.chunks[1].reason == "prepare_failed: ValueError"
+        assert model.calls == 2 and model.closed == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_cleanup_failure_stops_before_next_factory_group(asynchronous):
+    models = []
+
+    class BrokenClose(ClosableModel):
+        def __init__(self):
+            super().__init__()
+            models.append(self)
+
+        async def agenerate(self, *, prompt):
+            return self.generate(prompt=prompt)
+
+        def close(self):
+            super().close()
+            raise RuntimeError("closing failed")
+
+        async def aclose(self):
+            self.close()
+
+    arguments = {"schema": SCHEMA, "model_factory": BrokenClose}
+    with pytest.raises(RuntimeError, match="Failed to close a model"):
+        if asynchronous:
+            asyncio.run(aextract_graph(["first", "second"], **arguments))
+        else:
+            extract_graph(["first", "second"], **arguments)
+    assert len(models) == 1 and models[0].closed == 1
+
+
+@pytest.mark.parametrize("cancel_during_inference", [False, True])
+def test_client_cleanup_cancellation_closes_siblings_and_preserves_caller_cancellation(cancel_during_inference):
+    async def scenario():
+        started = asyncio.Event()
+        models = []
+        active = 0
+
+        class CancellingClose(AsyncClosableModel):
+            async def agenerate(self, *, prompt):
+                nonlocal active
+                if not cancel_during_inference:
+                    return EMPTY_GRAPH
+                active += 1
+                if active == 2:
+                    started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    active -= 1
+
+            async def aclose(self):
+                assert active == 0, "Closing a client while a group worker is active"
+                await super().aclose()
+                if self is models[-1]:
+                    future = asyncio.get_running_loop().create_future()
+                    future.cancel("client cleanup")
+                    await future
+
+        def factory():
+            model = CancellingClose()
+            models.append(model)
+            return model
+
+        task = asyncio.create_task(
+            aextract_graph(
+                ["first", "second", "third"],
+                schema=SCHEMA,
+                model_factory=factory,
+                options=ExtractionOptions(max_workers=2),
+                review=False,
+            )
+        )
+        if cancel_during_inference:
+            await asyncio.wait_for(started.wait(), timeout=2)
+            task.cancel("caller cancellation")
+        message = "caller cancellation" if cancel_during_inference else "client cleanup"
+        with pytest.raises(asyncio.CancelledError) as exc_info:
+            await asyncio.wait_for(task, timeout=2)
+        # Python 3.10's gather/wait_for can omit the cancellation message when
+        # re-raising; the original cancellation remains in the context chain.
+        cancellation = exc_info.value
+        while not cancellation.args and isinstance(cancellation.__context__, asyncio.CancelledError):
+            cancellation = cancellation.__context__
+        assert str(cancellation) == message
+        assert len(models) == 2
+        assert all(model.closed == 1 and model.sync_closed == 0 for model in models)
+
+    asyncio.run(scenario())
+
+
+def test_client_cleanup_cancellation_preserves_existing_primary_exception():
+    async def scenario():
+        class CancellingClose(AsyncClosableModel):
+            async def aclose(self):
+                await super().aclose()
+                raise asyncio.CancelledError("client cleanup")
+
+        first, second = AsyncClosableModel(), CancellingClose()
+        resources = OwnedModels()
+        with pytest.raises(ValueError, match="original error"):
+            async with resources:
+                resources.add(first)
+                resources.add(second)
+                raise ValueError("original error")
+        assert first.closed == second.closed == 1
 
     asyncio.run(scenario())

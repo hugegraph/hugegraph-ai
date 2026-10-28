@@ -111,6 +111,61 @@ def test_async_callable_partial_hooks_are_rejected_before_any_model_call(asynchr
     assert calls == []
 
 
+@pytest.mark.parametrize("asynchronous", [False, True], ids=["sync", "async"])
+@pytest.mark.parametrize("wrapped", [False, True], ids=["class", "partial-class"])
+def test_model_class_factory_can_have_async_callable_instances(asynchronous, wrapped):
+    instances = []
+
+    class Model:
+        def __init__(self):
+            self.closed = 0
+            instances.append(self)
+
+        async def __call__(self, prompt):
+            return self.generate(prompt=prompt)
+
+        def generate(self, *, prompt):
+            return '{"vertices": [], "edges": []}'
+
+        async def agenerate(self, *, prompt):
+            return await self(prompt)
+
+        def close(self):
+            self.closed += 1
+
+        async def aclose(self):
+            self.close()
+
+    factory = partial(Model) if wrapped else Model
+    arguments = {"schema": SCHEMA, "model_factory": factory, "review": False}
+    result = asyncio.run(aextract_graph("text", **arguments)) if asynchronous else extract_graph("text", **arguments)
+    assert result.status == "succeeded"
+    assert len(instances) == 1 and instances[0].closed == 1
+
+
+@pytest.mark.parametrize("asynchronous", [False, True], ids=["sync", "async"])
+@pytest.mark.parametrize("wrapped", [False, True], ids=["class", "partial-class"])
+def test_async_metaclass_factory_is_rejected_before_construction(asynchronous, wrapped):
+    calls = []
+
+    class AsyncFactory(type):
+        async def __call__(cls):
+            calls.append("factory")
+            return super().__call__()
+
+    class Model(metaclass=AsyncFactory):
+        def __init__(self):
+            calls.append("constructor")
+
+    factory = partial(Model) if wrapped else Model
+    with pytest.raises(TypeError, match="model_factory must be synchronous"):
+        if asynchronous:
+            asyncio.run(aextract_graph("text", schema=SCHEMA, model_factory=factory))
+        else:
+            extract_graph("text", schema=SCHEMA, model_factory=factory)
+    assert calls == []
+
+
 def test_function_model_passes_prompt_to_caller_function():
     calls = []
 

@@ -28,6 +28,7 @@ from hugegraph_llm_core.prompts import DEFAULT_SCHEMA_PROMPT
 
 _DATA_TYPES = frozenset({"OBJECT", "BOOLEAN", "BYTE", "INT", "LONG", "FLOAT", "DOUBLE", "TEXT", "BLOB", "DATE", "UUID"})
 _CARDINALITIES = frozenset({"SINGLE", "LIST", "SET"})
+_FREQUENCIES = frozenset({"DEFAULT", "SINGLE", "MULTIPLE"})
 _ID_STRATEGIES = frozenset(
     {"DEFAULT", "AUTOMATIC", "PRIMARY_KEY", "CUSTOMIZE_STRING", "CUSTOMIZE_NUMBER", "CUSTOMIZE_UUID"}
 )
@@ -195,6 +196,15 @@ def validate_schema(schema: object) -> list[Issue]:
                         if name in references["nullable_keys"]:
                             issue(f"{path}.nullable_keys", f"Primary key {name!r} cannot be nullable")
             else:
+                enum_value(entry, "frequency", _FREQUENCIES, path)
+                frequency = entry.get("frequency")
+                if frequency in ("DEFAULT", "SINGLE") and references["sort_keys"]:
+                    issue(f"{path}.sort_keys", f"{frequency} frequency cannot have sort keys")
+                elif frequency == "MULTIPLE" and not references["sort_keys"]:
+                    issue(f"{path}.sort_keys", "MULTIPLE frequency requires at least one sort key")
+                for name in references["sort_keys"]:
+                    if name in references["nullable_keys"]:
+                        issue(f"{path}.nullable_keys", f"Sort key {name!r} cannot be nullable")
                 for key in ("source_label", "target_label"):
                     name = entry.get(key)
                     if not isinstance(name, str) or not name.strip():

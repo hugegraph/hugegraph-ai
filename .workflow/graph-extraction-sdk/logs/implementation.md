@@ -102,3 +102,44 @@ Docker 构建将 `.dockerignore` 移至仓库根以覆盖实际构建上下文�
 容器通过真实 HTTP 请求连接本地 OpenAI 协议 fixture，完成模型探测、schema 设计、旧抽取入口以及审阅修复流程。fixture 共收到 **7 次调用**：probe 1 次、schema 1 次、legacy 1 次、extract 1 次、review 2 次、repair 1 次，最终返回 **2 个顶点、1 条边**。结果保存在 `/tmp/hugegraph-llm-sdk-smoke.json`。
 
 此实测覆盖应用启动、HTTP 合同、OpenAI 协议传输与完整修复流程；fixture 使用固定响应，没有连接真实模型服务或图数据库。
+
+## PR #84 独立交叉审计与修复（2026-10-28）
+
+用户要求先发布最终评分和 comments，再修复并尝试推送。三个独立审查代理分别覆盖运行时、schema/图数据对抗输入、旧应用/provider/打包，由主审交叉复现与裁决。
+
+对 `cc3bd4521658a6dd86ce1a129cd6ae03363065ff` 的审计先发布了 [8.4/10 评分](https://github.com/hugegraph/hugegraph-ai/pull/84#issuecomment-6461882699) 和 [4 条行级 comments](https://github.com/hugegraph/hugegraph-ai/pull/84#pullrequestreview-5678428711)，确认发布时工作区无源码改动，之后才实施修复。
+
+### 修复与取舍
+
+- 工厂模型按最多 `max_workers` 块一组执行，组结束后关闭客户端，再启动下一组。保留同步调用线程关闭、异步 worker 停止后清理、直接传入模型由调用方管理的合同。该修复替代前述初次实现的整批末尾关闭策略。
+- 保留已关闭模型的身份引用直至批次结束，避免工厂再次返回同一个客户端或对象 ID 复用误判；使用字典代替线性扫描。这里限制打开的资源，不声称批次内存为常数。
+- 每组等待最慢块后再启动下一组，以较小实现范围保留清理线程和取消语义；没有修改旧应用使用的底层调度器。
+- 客户端自己的 `aclose()` 抛出取消时，仍尝试关闭同组其他客户端，再传播取消，并保留原始异常或调用方取消。
+- 类工厂检查元类构造调用，支持实例具有异步 `__call__` 的普通类及其 partial；真正的异步工厂继续被拒绝。
+- 校验显式边 frequency 与排序键要求，以及排序键与可空键的冲突。省略 frequency 不补默认值；自定义顶点 ID 策略的旧 primary_keys 元数据保持兼容。
+
+### 本轮最终验证
+
+- 完整核心测试：**646 passed**，比审计基线增加 **35** 个用例。
+- 旧 LLM CI unit/contract 集合：**1,334 passed、3 skipped、18 deselected**；覆盖率 **63.62%**，通过原有 **34%** 门槛。
+- 另有独立 reviewer 编写的 **5** 项所有权/取消交叉检查全部通过；这些与主测试覆盖重叠，不累加为总数。
+- 原始资源复现：进程 fd 上限 64、100 块、并发 1，从 **61 成功 / 39 失败、峰值 61 个客户端**变为 **100 成功、峰值 1 个客户端**。
+- 原始类工厂复现中 class/lambda 两种方式均成功；关闭取消复现仍传播 CancelledError，关闭状态从 `[False, True]` 变为 `[True, True]`。
+- 根级 Ruff lint/format 通过，检查 **561** 个文件；`git diff --check` 通过。
+
+独立安装从工作区之外的 sdist 构建 wheel；以下基础环境仅安装 wheel、pytest 和基础依赖（Pydantic 2.14.1），未安装 provider extras，因此相应 **55** 项显式跳过：
+
+| Python | 已安装 wheel 测试 | 隔离 smoke | 三个离线示例 |
+| --- | --- | --- | --- |
+| 3.10.22 | 591 passed、55 skipped | 通过 | 全部通过 |
+| 3.11.17 | 591 passed、55 skipped | 通过 | 全部通过 |
+| 3.12.14 | 591 passed、55 skipped | 通过 | 全部通过 |
+| 3.13.16 | 591 passed、55 skipped | 通过 | 全部通过 |
+
+wheel SHA-256：`bd383c3035bfa9fa6bbbe05281a31508c2e66ff069d85356b87e603b7fa839af`。
+
+sdist SHA-256：`d012a30f6c2330b4f8b59bd6fff2e5a8d65a77e8cd239da9e329c3840d6d3df1`。
+
+验证中修正了 Python 3.10 新增测试对取消消息包装方式的假设，沿异常上下文确认原取消原因，生产取消语义不变。旧应用首次全量运行因缺失 NLTK stopwords 数据出现 1 项失败，补齐官方数据后完整重跑得到上述结果。受限执行环境的标准库 asyncio 线程关闭等待问题通过独立最小复现定位，最终测试在正常线程运行环境完成；隔离 smoke 使用独立空目录，避免共享临时目录的并行写入干扰。
+
+本轮未重建 Docker，也未调用真实模型或图数据库；复审不将既有 Docker 记录冒充为此次执行结果。修复提交与新 CI 结论见 PR。

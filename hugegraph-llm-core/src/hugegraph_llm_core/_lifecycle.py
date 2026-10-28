@@ -23,12 +23,16 @@ log = logging.getLogger(__name__)
 class OwnedModels:
     def __init__(self):
         self._models = []
+        # Keep identities across groups so a factory cannot reuse a closed
+        # model. Strong references also prevent false matches from reused ids.
+        self._seen = {}
         self._lock = threading.Lock()
 
     def add(self, model):
         with self._lock:
-            if any(existing is model for existing in self._models):
+            if id(model) in self._seen:
                 raise ValueError("model_factory must create an independent model for each chunk.")
+            self._seen[id(model)] = model
             self._models.append(model)
 
     def __enter__(self):
@@ -36,7 +40,8 @@ class OwnedModels:
 
     def __exit__(self, exc_type, exc, traceback):
         errors = []
-        for model in reversed(self._models):
+        models, self._models = self._models, []
+        for model in reversed(models):
             close = getattr(model, "close", None)
             if callable(close):
                 try:
@@ -59,7 +64,9 @@ class OwnedModels:
                 await asyncio.shield(cleanup)
             except asyncio.CancelledError as error:
                 cancellation = error
-        errors = cleanup.result()
+        errors, close_cancellation = cleanup.result()
+        if cancellation is None and exc_type is None:
+            cancellation = close_cancellation
         self._finish(errors, type(cancellation) if cancellation is not None else exc_type)
         if cancellation is not None:
             raise cancellation
@@ -67,7 +74,9 @@ class OwnedModels:
 
     async def _aclose_all(self):
         errors = []
-        for model in reversed(self._models):
+        cancellation = None
+        models, self._models = self._models, []
+        for model in reversed(models):
             aclose = getattr(model, "aclose", None)
             close = getattr(model, "close", None)
             try:
@@ -75,9 +84,12 @@ class OwnedModels:
                     await aclose()
                 elif callable(close):
                     await asyncio.to_thread(close)
+            except asyncio.CancelledError as error:
+                # A client's own cancelled task must not skip sibling clients.
+                cancellation = error
             except Exception as error:
                 errors.append(error)
-        return errors
+        return errors, cancellation
 
     @staticmethod
     def _finish(errors, primary_error_type):

@@ -131,13 +131,25 @@ def extract_graph(
     instances execute serially. Pass a factory and explicit max_workers for
     concurrency. Invalid input raises before inference; chunk failures are data.
     """
-    with OwnedModels() as resources:
-        chunks, prepare, effective_options = _prepare_inputs(
-            texts, schema, model, model_factory, review, options, prompts, validators, resources, asynchronous=False
-        )
-        return _aggregate(
-            run_chunks(chunks=chunks, prepare=prepare, options=effective_options, review=review), review=review
-        )
+    resources = OwnedModels()
+    chunks, prepare, effective_options = _prepare_inputs(
+        texts, schema, model, model_factory, review, options, prompts, validators, resources, asynchronous=False
+    )
+    # Close factory clients on the caller's thread before starting another
+    # bounded group. Completed chunks must not accumulate open connections.
+    group_size = effective_options.max_workers if model_factory is not None else len(chunks)
+    results = []
+    for start in range(0, len(chunks), group_size):
+        with resources:
+            results.extend(
+                run_chunks(
+                    chunks=chunks[start : start + group_size],
+                    prepare=prepare,
+                    options=effective_options,
+                    review=review,
+                )
+            )
+    return _aggregate(tuple(results), review=review)
 
 
 async def aextract_graph(
@@ -156,9 +168,22 @@ async def aextract_graph(
     A synchronous model requires an explicit ThreadedModel adapter. Factories
     construct models synchronously and must not perform blocking I/O.
     """
-    async with OwnedModels() as resources:
-        chunks, prepare, effective_options = _prepare_inputs(
-            texts, schema, model, model_factory, review, options, prompts, validators, resources, asynchronous=True
-        )
-        results = await arun_chunks(chunks=chunks, prepare=prepare, options=effective_options, review=review)
-        return _aggregate(results, review=review)
+    resources = OwnedModels()
+    chunks, prepare, effective_options = _prepare_inputs(
+        texts, schema, model, model_factory, review, options, prompts, validators, resources, asynchronous=True
+    )
+    group_size = effective_options.max_workers if model_factory is not None else len(chunks)
+    results = []
+    for start in range(0, len(chunks), group_size):
+        # arun_chunks stops and awaits all group workers before client cleanup,
+        # including when inference is cancelled.
+        async with resources:
+            results.extend(
+                await arun_chunks(
+                    chunks=chunks[start : start + group_size],
+                    prepare=prepare,
+                    options=effective_options,
+                    review=review,
+                )
+            )
+    return _aggregate(tuple(results), review=review)
