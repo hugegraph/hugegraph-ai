@@ -20,12 +20,12 @@ import argparse
 import difflib
 import re
 import sys
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULES = (
+    "hugegraph-llm-sdk",
     "hugegraph-llm",
     "hugegraph-python-client",
     "hugegraph-mcp",
@@ -40,6 +40,7 @@ DOCS = (
     "hugegraph-mcp/docs/integration.md",
     "docs/quality/hugegraph-integration.md",
     "docs/quality/test-taxonomy.md",
+    "hugegraph-llm-sdk/README.md",
 )
 DEPLOYMENT = (
     "docker/charts/hg-llm/Chart.yaml",
@@ -88,6 +89,8 @@ def updates(root: Path) -> dict[Path, tuple[str, str]]:
         updated = replace_one(original, r'(\[project\]\n(?:(?!\[).|\n)*?^version = ")[^"]+("[^\n]*)', version, path)
         if module == "hugegraph-mcp":
             updated = replace_one(updated, r'("hugegraph-python>=)[^"<]+(<2")', version + ",", path)
+        if module == "hugegraph-llm":
+            updated = replace_one(updated, r'("hugegraph-llm-sdk==)[^"]+(")', version, path)
         if updated != original:
             result[root / path] = (original, updated)
 
@@ -122,6 +125,7 @@ def updates(root: Path) -> dict[Path, tuple[str, str]]:
         original = (root / path).read_text(encoding="utf-8")
         updated = re.sub(rf"(?<=hugegraph-mcp@){VERSION_PATTERN}", version, original)
         updated = re.sub(rf"(?<=hugegraph_mcp-){VERSION_PATTERN}(?=-py3)", version, updated)
+        updated = re.sub(rf"(?<=hugegraph_llm_sdk-){VERSION_PATTERN}(?=-py3)", version, updated)
         updated = re.sub(r"hugegraph/hugegraph:[\w.:-]+", lambda _: config["server-image"], updated)
         updated = re.sub(rf"hugegraph/rag:{VERSION_PATTERN}", lambda _: f"{config['llm-image']}:{version}", updated)
         if updated != original:

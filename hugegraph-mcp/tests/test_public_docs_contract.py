@@ -95,7 +95,7 @@ def test_source_launch_contract_binds_both_checkout_packages():
     checklist = _section(_text(CHECKLIST), "## 1. Start an Isolated Server", next_level=2)
 
     for section in (english, chinese, checklist):
-        assert "uv venv --python 3.10 .venv-mcp" in section
+        assert "uv venv --python 3.11 .venv-mcp" in section
         assert "uv --no-config pip install --python .venv-mcp" in section
         assert "-e ./hugegraph-python-client -e ./hugegraph-mcp" in section
         assert "/Users/" not in section

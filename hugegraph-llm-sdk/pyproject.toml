@@ -16,11 +16,12 @@
 # under the License.
 
 [project]
+# Release version is synchronized by scripts/version.py from the root pyproject.toml.
 name = "hugegraph-llm-sdk"
 version = "1.8.0"
 description = "Standalone schema design and reviewed property-graph extraction for Python."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{ name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" }]
 dependencies = ["pydantic>=2.10,<3"]

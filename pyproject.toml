@@ -24,7 +24,7 @@ authors = [
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10" # Adjusted to the highest requirement among submodules (hugegraph-llm)
+requires-python = ">=3.11"
 maintainers = [
     { name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" },
 ]
@@ -171,7 +171,7 @@ addopts = "--strict-markers --strict-config"
 # for code format
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 # Select a broad set of rules for comprehensive checks.
@@ -182,6 +182,7 @@ select = ["E", "F", "W", "I", "C", "N", "UP", "B", "SIM", "T20", "RUF"]
 
 # Ignore specific rules
 ignore = [
+    "UP042", # Preserve public str/Enum string representations; StrEnum changes __str__.
     "PYI041", # redundant-numeric-union: keep clear 'int | float' for type hinting
     "N812",    # lowercase-imported-as-non-lowercase
     "N806",    # non-lowercase-variable-in-function

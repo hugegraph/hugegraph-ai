@@ -59,7 +59,7 @@ uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-m
 From the root of the PR checkout, install uv, then create an isolated environment and install both packages from this branch:
 
 ```bash
-uv venv --python 3.10 .venv-mcp
+uv venv --python 3.11 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 ```
 

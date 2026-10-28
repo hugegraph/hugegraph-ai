@@ -7,7 +7,7 @@ Use this checklist to validate the current write-safety contract against a dispo
 Run from the repository root in a POSIX shell. Create the MCP environment first:
 
 ```bash
-uv venv --python 3.10 .venv-mcp
+uv venv --python 3.11 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 
 docker pull hugegraph/hugegraph:latest

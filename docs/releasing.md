@@ -15,7 +15,8 @@ python3.11 scripts/version.py check
 python3.11 scripts/version.py get version
 ```
 
-Synchronization updates the five subpackages, MCP's client dependency minimum,
+Synchronization updates the six subpackages (including the standalone LLM SDK),
+MCP's client dependency minimum, LLM's exact SDK dependency,
 Helm chart/application versions, deployment images and current installation
 examples. Historical migrations, compatibility minimums, backend capability
 evidence and protocol versions are maintained separately. CI rejects drift.
@@ -36,8 +37,10 @@ argument order and defaults to the root version. It checks metadata and the
 release branch version before archiving/signing/uploading. Follow the existing
 ASF release process for signatures, voting and distribution.
 The script resolves the release branch to one commit, extracts a temporary
-snapshot, and checks all synchronized fields in that snapshot before creating
-the distribution archive. The final archive uses the same immutable commit.
+detached worktree, and checks all synchronized fields in the complete checkout
+before creating the distribution archive. The final `git archive` uses the same
+immutable commit and retains `.gitattributes` distribution exclusions. CI also
+builds and installs the resulting source archive without the excluded ML module.
 To check another snapshot directly, use `python3.11 scripts/version.py check --root /path/to/snapshot`.
 
 CI intentionally follows Server `latest` during development. Its core-version
@@ -47,5 +50,6 @@ this leaves the root CI image choice unchanged.
 
 Python publication uses the existing external
 [`hugegraph/actions` workflow](../hugegraph-mcp/docs/releasing.md): validate with
-`publish=false`, publish the client first, then MCP, and verify installation
-from outside the checkout. Already uploaded versions must not be overwritten.
+`publish=false`, publish the client before MCP and the SDK before LLM, and verify
+installation from outside the checkout. LLM requires the matching SDK release;
+before publication, validate them together from source or local wheels. Already uploaded versions must not be overwritten.

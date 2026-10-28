@@ -21,10 +21,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
-
-import tomllib
 
 from scripts import version
 
@@ -59,9 +58,12 @@ class TestReleaseVersion(unittest.TestCase):
             self.assertEqual("1.9.2", project["version"])
             if module == "hugegraph-mcp":
                 self.assertIn("hugegraph-python>=1.9.2,<2", project["dependencies"])
+            if module == "hugegraph-llm":
+                self.assertIn("hugegraph-llm-sdk==1.9.2", project["dependencies"])
         self.assertIn('appVersion: "1.9.2"', (self.root / version.DEPLOYMENT[0]).read_text())
         self.assertIn("hugegraph/rag:1.9.2", (self.root / version.DEPLOYMENT[2]).read_text())
         self.assertIn("hugegraph-mcp@1.9.2", (self.root / version.DOCS[0]).read_text())
+        self.assertIn("hugegraph_llm_sdk-1.9.2-py3", (self.root / "hugegraph-llm-sdk/README.md").read_text())
         self.assertEqual(0, self.run_command("check"))
 
     def test_check_reports_drift_without_writing(self):

@@ -37,7 +37,7 @@ editable source installation and offline examples.
 
 > [!IMPORTANT]
 >
-> - **Python**: 3.10+ (not tested on 3.12)
+> - **Python**: 3.11+ (not tested on 3.12)
 > - **HugeGraph Server**: 1.3+ (recommended: 1.5+)
 > - **UV Package Manager**: 0.7+
 

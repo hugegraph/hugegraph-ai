@@ -40,7 +40,7 @@ SKIP_EXTERNAL_SERVICES=true uv run pytest src/tests/integration/test_graph_rag_p
 ```
 
 - Use narrower `pytest` targets while iterating, but finish with coverage that matches the touched behavior.
-- For Python code changes, run root `uv run ruff format --check .` and `uv run ruff check .` before handoff.
+- For Python code changes, run root `uv run --extra dev ruff format --check .` and `uv run --extra dev ruff check .` before handoff.
 
 ## LLM-specific Rules
 
@@ -51,6 +51,6 @@ SKIP_EXTERNAL_SERVICES=true uv run pytest src/tests/integration/test_graph_rag_p
 
 ## Style
 
-- Python is `>=3.10,<3.12` for this module.
+- Python is `>=3.11,<3.12` for this module.
 - Use `uv` for dependency management; do not document or rely on ad hoc `pip install` workflows.
 - The default toolchain is uv + Ruff + ty. Versions come from the root `pyproject.toml`; lint/type settings come from the applicable `pyproject.toml`. Do not duplicate rule sets here.
