@@ -104,7 +104,8 @@ HugeGraph-LLM SDK is an independently installable Python interface for reusable 
 scope is schema design, validation, and reviewed property-graph extraction. Inject your own model or install an
 optional provider adapter; synchronous and asynchronous APIs share the same graph rules. The SDK and application
 are sibling packages: `hugegraph-llm` depends on `hugegraph-llm-sdk`, while external projects can install the SDK
-alone. See its [integration guide](./hugegraph-llm-sdk/README.md) for source installation and offline examples.
+alone. See its [integration guide](./hugegraph-llm-sdk/README.md) for source installation and offline examples,
+and [architecture](./docs/sdk/architecture.md) for module responsibilities and extension boundaries.
 
 ### [hugegraph-llm](./hugegraph-llm) [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue)](https://deepwiki.com/apache/hugegraph-ai)
 
