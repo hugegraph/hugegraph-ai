@@ -49,8 +49,12 @@ echo "In the work dir: $(pwd)"
 # Validate the exact commit that will be distributed, not just this checkout.
 RELEASE_COMMIT=$(git rev-parse --verify "${GIT_BRANCH}^{commit}")
 SNAPSHOT_DIR=$(mktemp -d)
-trap 'rm -rf "${SNAPSHOT_DIR}"' EXIT
-git -C "${SCRIPT_DIR}/.." archive --format=tar "${RELEASE_COMMIT}" | tar -xf - -C "${SNAPSHOT_DIR}"
+cleanup_snapshot() {
+  git -C "${SCRIPT_DIR}/.." worktree remove --force "${SNAPSHOT_DIR}" >/dev/null 2>&1 || rm -rf "${SNAPSHOT_DIR}"
+}
+trap cleanup_snapshot EXIT
+# Keep export-ignored metadata for validation; apply exclusions only to the archive below.
+git -C "${SCRIPT_DIR}/.." worktree add --detach "${SNAPSHOT_DIR}" "${RELEASE_COMMIT}"
 BRANCH_VERSION=$("${RELEASE_PYTHON}" "${SCRIPT_DIR}/version.py" get version --root "${SNAPSHOT_DIR}")
 if [ "${BRANCH_VERSION}" != "${RELEASE_VERSION}" ]; then
   echo "Release branch version does not match ${RELEASE_VERSION}" >&2

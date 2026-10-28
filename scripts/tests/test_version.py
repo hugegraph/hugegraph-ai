@@ -160,6 +160,7 @@ class TestReleaseVersion(unittest.TestCase):
     def prepare_release_branch(self, *, stale_path=None):
         self.run_command("sync")
         self.copy_scripts("apache-release.sh")
+        shutil.copyfile(version.ROOT / ".gitattributes", self.root / ".gitattributes")
         self.git("init", "-q")
         self.git("config", "user.name", "Release Test")
         self.git("config", "user.email", "release-test@example.invalid")
@@ -203,6 +204,7 @@ class TestReleaseVersion(unittest.TestCase):
             check=False,
         )
         self.assertEqual([], list(snapshots.iterdir()), "Release snapshot must be cleaned up")
+        self.assertEqual(1, self.git("worktree", "list", "--porcelain").count("worktree "))
         return result
 
     def test_release_checks_subpackage_versions_in_actual_release_branch(self):
@@ -221,6 +223,14 @@ class TestReleaseVersion(unittest.TestCase):
         self.assertFalse((self.root / "scripts/dist").exists())
         self.assertFalse((self.root / "external-command-called").exists())
 
+    def test_release_checks_export_ignored_metadata_before_packaging(self):
+        self.prepare_release_branch(stale_path="hugegraph-ml/pyproject.toml")
+        result = self.invoke_release_before_signing()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("hugegraph-ml/pyproject.toml", result.stdout)
+        self.assertFalse((self.root / "scripts/dist").exists())
+        self.assertFalse((self.root / "external-command-called").exists())
+
     def test_release_archives_validated_branch_and_stops_at_test_signer(self):
         self.prepare_release_branch()
         result = self.invoke_release_before_signing()
@@ -229,6 +239,11 @@ class TestReleaseVersion(unittest.TestCase):
         self.assertEqual(1, len(archives))
         current = version.release_config(self.root)["version"]
         with tarfile.open(archives[0]) as archive:
+            prefix = f"apache-hugegraph-ai-{current}-src/"
+            names = archive.getnames()
+            self.assertFalse(any(name.startswith(prefix + "hugegraph-ml/") for name in names))
+            self.assertFalse(any(name.startswith(prefix + "docker/") for name in names))
+            self.assertNotIn(prefix + ".gitattributes", names)
             marker = archive.extractfile(f"apache-hugegraph-ai-{current}-src/release-branch-only.txt")
             assert marker is not None
             self.assertEqual(b"from the selected release commit\n", marker.read())
