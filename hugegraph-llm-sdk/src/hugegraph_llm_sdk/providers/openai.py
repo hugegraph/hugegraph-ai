@@ -165,21 +165,16 @@ class OpenAIClient:
             log.error("LLM call failed (%s)", type(e).__name__)
             raise e
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
-    )
     def generate_streaming(
         self,
         messages: list[dict[str, Any]] | None = None,
         prompt: str | None = None,
         on_token_callback: Callable[[str], None] | None = None,
     ) -> Generator[str, None, None]:
-        """Generate a response to the query messages/prompt in streaming mode.
+        """Yield nonempty text deltas, also passing them to the callback when provided.
 
-        Yields:
-            Accumulated response string after each new token.
+        This adapter does not add retries or replay delivered output. The underlying
+        OpenAI SDK may retry while establishing the request.
         """
         if messages is None:
             assert prompt is not None, "Messages or prompt must be provided."
@@ -227,7 +222,11 @@ class OpenAIClient:
         prompt: str | None = None,
         on_token_callback: Callable | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Comment"""
+        """Yield nonempty text deltas, also passing them to the callback when provided.
+
+        This adapter does not add retries or replay delivered output. The underlying
+        OpenAI SDK may retry while establishing the request.
+        """
         if messages is None:
             assert prompt is not None, "Messages or prompt must be provided."
             messages = [{"role": "user", "content": prompt}]

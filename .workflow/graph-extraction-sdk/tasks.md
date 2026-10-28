@@ -59,3 +59,12 @@
 - [x] 重建并验证包含审计修复的新 Docker 镜像，确认实际 HTTP 流程及镜像源码一致。
 
 更名提交 `d744204` 已正常推送，其 SDK、LLM、Python Client、MCP、Ruff 和 License 共 6 个 workflow 全部成功。最终容器为 running、healthy，HTTP 实测及合并后旧应用兼容快照检查通过。最终 Docker 证据通过后续文档提交补充；该文档提交的检查与评审状态以 PR 对应提交为准。
+
+## 第二轮独立交叉审查与评论处理
+
+- [x] 拉取最新 `0eae982`，由三个代理独立复审 provider、SDK 对抗路径、发行隔离与兼容，并由主审交叉核实。
+- [x] 在 tracked 工作区仍干净时，先发布本轮 9.0/10 评分及一条遗留 P3 行级 comment，回应其他 reviewer 的备注。
+- [x] 移除 OpenAI 同步流式方法的无效 retry，明确逐片段输出和本适配层不重放流的合同。
+- [x] 补齐失败阶段与 callback 异常的回归，完成 SDK、旧应用、独立 wheel 与 Ruff 验证。
+
+本轮范围与对应证据见实施记录；提交、评论回复和远端 CI 以 PR 的实际记录为准。

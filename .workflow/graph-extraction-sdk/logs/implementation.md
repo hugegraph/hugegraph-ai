@@ -276,3 +276,44 @@ sdist SHA-256：`d012a30f6c2330b4f8b59bd6fff2e5a8d65a77e8cd239da9e329c3840d6d3df
 验证中修正了 Python 3.10 新增测试对取消消息包装方式的假设，沿异常上下文确认原取消原因，生产取消语义不变。旧应用首次全量运行因缺失 NLTK stopwords 数据出现 1 项失败，补齐官方数据后完整重跑得到上述结果。受限执行环境的标准库 asyncio 线程关闭等待问题通过独立最小复现定位，最终测试在正常线程运行环境完成；隔离 smoke 使用独立空目录，避免共享临时目录的并行写入干扰。
 
 本轮未重建 Docker，也未调用真实模型或图数据库；复审不将既有 Docker 记录冒充为此次执行结果。修复提交与新 CI 结论见 PR。
+
+## PR #84 第二轮独立交叉审查（2026-10-28）
+
+用户要求拉取更新后的 PR，重新独立交叉 review，先发布评分与 comments，再修复并提交，同时处理其他新增讨论。本轮审查基线为 `0eae98254936306713ee8951202618e83e0bb960`，base 为 `c673c5d`。三个代理分别检查 provider/旧入口、SDK 对抗输入与取消/所有权、发行隔离与集成；主审复核实现、完整测试及独立探针。
+
+在 tracked 工作区仍干净时，先发布了 [9.0/10 评分及讨论结论](https://github.com/hugegraph/hugegraph-ai/pull/84#issuecomment-6462717059) 和 [一条 P3 行级 comment](https://github.com/hugegraph/hugegraph-ai/pull/84#pullrequestreview-5678876400)，之后才开始本轮编辑。未确认新的 P1/P2 缺陷；剩余 P3 是 CodeRabbit 汇总 review 已提出的流式 retry 清理，相关装饰器和不准确 docstring 在 base 中已有。
+
+### 修复前的最新基线验证
+
+- 完整 SDK：**662 passed**（Python 3.11，全部 provider extras 与旧应用可用）。
+- 旧 LLM CI unit/contract 集合：**1,334 passed、3 skipped、18 deselected**；覆盖率 **63.49%**，通过原有 34% 门槛。
+- 额外独立对抗探针：**26 passed**，包括畸形图/审阅结果、嵌套非法 JSON、循环 schema、修复后二次校验，以及重复取消时先停止 worker 再关闭模型。
+- 三类暂时性错误分别在请求创建、首 token 前、首 token 后触发，对比装饰前后共 **18 次执行通过**：provider `create` 仅调用一次，原异常对象、输出和 callback 均一致。
+- 仓库外 sdist → wheel 构建、全新最小 Python 3.11 环境的隔离 smoke 和三个示例通过；21 组 query 归一化与 base Gradio 函数的成功结果/错误消息逐一一致。
+- `0eae982` 对应的 SDK、LLM、Python Client、MCP、Ruff、License 六个远端 workflow 全部成功。
+
+### 其他评论的处理依据
+
+前轮四项审计修复及最新三个 provider 修复均已复核，没有重新打开已有七个已关闭行级线程的依据。OpenAI 的原异常行为也由旧应用继承；Ollama 的旧重试合同没有改变。
+
+共享 schema JSON 解析对重复键、非有限数字和非对象的拒绝有明确测试；query 校验保持旧 UI 合同，直接 Python 调用采用同一严格规则。默认 schema prompt 确有格式规范化，模板字段和约束含义保持；这不证明真实模型输出完全等价。SDK 与应用的未来发行仍需先或同时提供对应 SDK 版本；LiteLLM 的版本上限保留根项目已有的验证范围。Docstring 覆盖率提示按维护建议处理，修正实际误导内容，不为指标批量添加空泛说明。
+
+### 最小修复与修复后验证
+
+只删除 OpenAI 同步流式生成器上不生效的 Tenacity 装饰器，并修正同步/异步流式 docstring。本适配层不重放已交付内容，底层 OpenAI SDK 在建立请求时仍可按自身配置重试；非流式三次重试及旧应用错误处理分支不变。
+
+新增 **10** 项行为回归：三类暂时性异常 × 请求创建/首 token 前/首 token 后共九项，另有 callback 自身抛出暂时性异常的一项。测试直接迭代实际适配器生成器，只替换 provider 请求边界，核对原异常对象、单次调用、输出和 callback 的精确序列。这些用例锁定已有的流式行为，不把删除无效装饰器描述为运行时行为修复。
+
+- 修复后完整 SDK：**672 passed**。
+- SDK provider 与旧应用 OpenAI/output-limit 定向集合：**221 passed**。
+- 独立审查者复核最终 diff，重跑新增流式与既有非流式重试/恢复用例：**18 passed**。
+- 根级 Ruff lint/format 通过，检查 **561** 个文件；`git diff --check` 通过。
+
+最终源码从工作区之外的 sdist 重建 wheel，全新 Python **3.11.17** 环境安装 wheel 与全部 extras，在空 `PYTHONPATH`、启用 installed-wheel 测试模式下运行 provider 集合：**80 passed、1 skipped**。唯一跳过项需要未安装的旧应用，其兼容由上述工作区集合覆盖。实际解析版本为 OpenAI **1.109.1**、Ollama **0.4.9**、LiteLLM **1.61.20**、tiktoken **0.14.0**、Pydantic **2.14.1**、Tenacity **8.5.0**；不同于根应用的固定依赖环境。
+
+仅含基础依赖的最小环境升级最终 wheel 后，隔离 smoke 和三个示例再次通过。wheel、sdist 以及两套环境的已安装源码均与最终 **16 个模块**逐字节一致。发行验证证据位于 `/tmp/pr84-r2-final-integration/evidence.json`。
+
+- wheel SHA-256：`67f7b6c410706f39dfe76cecca54a3f9c7ebfbed372a9c5eb6742e1776605c1f`。
+- sdist SHA-256：`7da4cd9024ab8c77c4d4a9b0e09eb5114173bd1a3c198230cc278ac9c76ce6f8`。
+
+本轮不重建 Docker，不访问真实模型或图数据库，不发布发行包；旧 Docker 与版本矩阵记录不充当此次执行结果。各测试集合有交叉，不累加为独立总数。

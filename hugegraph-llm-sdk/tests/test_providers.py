@@ -395,3 +395,74 @@ def test_openai_retry_can_recover_before_attempts_are_exhausted(provider, mode, 
 
     assert invoke(client, mode) == "recovered"
     assert call.call_count == 2
+
+
+@pytest.mark.parametrize("provider", ["openai"], indirect=True)
+@pytest.mark.parametrize("error_name", ["RateLimitError", "APIConnectionError", "APITimeoutError"])
+@pytest.mark.parametrize("failure_stage", ["request", "before_first_token", "after_first_token"])
+def test_openai_stream_adapter_does_not_retry_or_replay_transient_failures(provider, error_name, failure_stage):
+    import httpx
+    import openai
+
+    _, client, sync_call, async_call = provider
+    request = httpx.Request("POST", "https://model.invalid")
+    if error_name == "RateLimitError":
+        failure = openai.RateLimitError("rate limited", response=httpx.Response(429, request=request), body=None)
+    else:
+        failure = getattr(openai, error_name)(request=request)
+
+    if failure_stage == "request":
+        sync_call.side_effect = failure
+    else:
+
+        def chunks():
+            if failure_stage == "after_first_token":
+                yield SimpleNamespace(
+                    choices=[SimpleNamespace(delta=SimpleNamespace(content="first"), finish_reason=None)]
+                )
+            raise failure
+
+        sync_call.return_value = chunks()
+
+    output, callbacks = [], []
+    with pytest.raises(type(failure)) as caught:
+        for token in client.generate_streaming(prompt="input text", on_token_callback=callbacks.append):
+            output.append(token)
+
+    expected = ["first"] if failure_stage == "after_first_token" else []
+    assert caught.value is failure
+    assert output == expected
+    assert callbacks == expected
+    sync_call.assert_called_once()
+    async_call.assert_not_called()
+
+
+@pytest.mark.parametrize("provider", ["openai"], indirect=True)
+def test_openai_stream_adapter_does_not_replay_output_after_callback_failure(provider):
+    import httpx
+    import openai
+
+    _, client, sync_call, async_call = provider
+    failure = openai.APIConnectionError(request=httpx.Request("POST", "https://model.invalid"))
+    sync_call.return_value = iter(
+        [
+            SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=token), finish_reason=None)])
+            for token in ("first", "second")
+        ]
+    )
+    output, callbacks = [], []
+
+    def on_token(token):
+        callbacks.append(token)
+        if token == "second":
+            raise failure
+
+    with pytest.raises(openai.APIConnectionError) as caught:
+        for token in client.generate_streaming(prompt="input text", on_token_callback=on_token):
+            output.append(token)
+
+    assert caught.value is failure
+    assert output == ["first"]
+    assert callbacks == ["first", "second"]
+    sync_call.assert_called_once()
+    async_call.assert_not_called()
