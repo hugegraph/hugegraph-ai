@@ -87,6 +87,10 @@ After connecting, call `inspect_graph_tool(include_raw_schema=true)` and check t
 
 [Architecture and roadmap](docs/architecture.md) · [Integration checklist](docs/integration.md) · [Release order](docs/releasing.md)
 
+MCP Inspector can verify the connection and run `inspect_graph_tool(include_counts=true)`:
+
+![MCP Inspector graph inspection](../docs/images/mcp/inspector.png)
+
 Structured query `limit` defaults to `100` and must be an integer in `1–500`; values above `500` return `VALIDATION_ERROR`. Valid values are then reduced to `HUGEGRAPH_MCP_MAX_RESULT_ITEMS` when that configured ceiling is smaller (for example, `limit=100` with a ceiling of `50` uses `50`). ID batches exceeding the effective limit are rejected before querying. Responses exceeding the item or byte limit are rejected without truncation or a continuation cursor; these checks do not bound backend execution or transport memory.
 
 ## Public Tool Surface

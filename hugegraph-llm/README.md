@@ -211,7 +211,11 @@ Use the Gradio interface for visual knowledge graph building:
 - **Custom Schema**: JSON format following our [template](https://github.com/apache/hugegraph-ai/blob/aff3bbe25fa91c3414947a196131be812c20ef11/hugegraph-llm/src/hugegraph_llm/config/config_data.py#L125)
 - **HugeGraph Schema**: Use existing graph instance schema (e.g., "hugegraph")
 
-![Knowledge Graph Builder](https://hugegraph.apache.org/docs/images/gradio-kg.png)
+![Knowledge Graph Builder](../docs/images/gradio/graph-extraction.png)
+
+After loading the extracted graph, open **Graph Tools** to run a Gremlin query:
+
+![Graph Tools query](../docs/images/gradio/graph-query.png)
 
 ## 🔧 Configuration
 
@@ -219,6 +223,11 @@ After running the demo, configuration files are automatically generated:
 
 - **Environment**: `hugegraph-llm/.env`
 - **Prompts**: `hugegraph-llm/src/hugegraph_llm/resources/demo/config_prompt.yaml`
+
+Provider settings can also be edited in the web interface. This example uses a
+local model endpoint:
+
+![LLM provider configuration](../docs/images/gradio/configuration.png)
 
 ### Language Support
 
