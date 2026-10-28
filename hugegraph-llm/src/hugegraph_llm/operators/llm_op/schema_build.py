@@ -16,8 +16,10 @@
 # under the License.
 
 import json
-import re
 from typing import Any, Dict, List, Optional
+
+from hugegraph_llm_sdk.prompts import DEFAULT_SCHEMA_PROMPT
+from hugegraph_llm_sdk.schema import build_schema_prompt, parse_schema_response
 
 from hugegraph_llm.models.llms.base import BaseLLM
 from hugegraph_llm.models.llms.init_llm import LLMs
@@ -33,57 +35,14 @@ class SchemaBuilder:
         schema_prompt: Optional[str] = None,
     ):
         self.llm = llm or LLMs().get_chat_llm()
-        # TODO: use a basic format for it
-        self.schema_prompt = (
-            schema_prompt
-            or """
-            You are a Graph Schema Generator for Apache HugeGraph.
-            Based on the following three parts of content, output a Schema JSON that complies with HugeGraph specifications:
-
-            Inputs:
-            1. Few‐Shot Schema Examples (already formatted as valid HugeGraph schema JSON):
-            {few_shot_schema}
-
-            2. Query Examples (each with a question description):
-            {query_examples}
-
-            3. Raw Data Samples (plain text records to model as vertices/edges):
-            {raw_texts}
-
-            Constraints:
-            - Return only the JSON object
-            - Ensure the schema follows HugeGraph specifications
-            - Do not include comments or extra fields.
-        """
-        )
-
-    def _format_raw_texts(self, raw_texts: List[str]) -> str:
-        return "\n".join([f"- {text}" for text in raw_texts])
-
-    def _format_query_examples(self, query_examples: List[str]) -> str:
-        if not query_examples:
-            return "None"
-        examples = []
-        for example in query_examples:
-            examples.append(f"- {example}")
-        return "\n".join(examples)
-
-    def _format_few_shot_schema(self, few_shot_schema: Dict[str, Any]) -> str:
-        if not few_shot_schema:
-            return "None"
-        return json.dumps(few_shot_schema, indent=2, ensure_ascii=False)
+        self.schema_prompt = schema_prompt or DEFAULT_SCHEMA_PROMPT
 
     def _extract_schema(self, response: str) -> Dict[str, Any]:
-        # Try to extract JSON from Markdown code block
-        match = re.search(r"```(?:json)?\s*(.*?)```", response, re.DOTALL)
-        if match:
-            response = match.group(1).strip()
-
         try:
-            return json.loads(response)
-        except json.JSONDecodeError as e:
+            return parse_schema_response(response)
+        except ValueError as exc:
             log.error("Failed to parse LLM response as JSON: %s", response)
-            raise RuntimeError("Invalid JSON response from LLM") from e
+            raise RuntimeError("Invalid JSON response from LLM") from exc
 
     def build_prompt(
         self,
@@ -91,10 +50,11 @@ class SchemaBuilder:
         query_examples: List[Dict[str, str]],
         few_shot_schema: Dict[str, Any],
     ) -> str:
-        return self.schema_prompt.format(
-            raw_texts=self._format_raw_texts(raw_texts),
-            query_examples=self._format_query_examples(query_examples),
-            few_shot_schema=self._format_few_shot_schema(few_shot_schema),
+        return build_schema_prompt(
+            raw_texts,
+            questions=query_examples,
+            example_schema=few_shot_schema,
+            prompt=self.schema_prompt,
         )
 
     def run(self, context: Dict[str, Any]) -> Dict[str, Any]:

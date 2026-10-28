@@ -15,8 +15,8 @@
 
 from pycgraph import CStatus
 
-from hugegraph_llm.config import llm_settings, snapshot_llm_settings
-from hugegraph_llm.extraction_runtime.property_graph import PropertyGraphBundle
+from hugegraph_llm.config import llm_settings, runtime_config_lock, snapshot_llm_settings
+from hugegraph_llm.extraction_runtime.property_graph import PropertyGraphBundle, snapshot_graph_prompts
 from hugegraph_llm.extraction_runtime.review import ChunkInput, run_chunks
 from hugegraph_llm.models.llms.init_llm import get_chat_llm
 from hugegraph_llm.nodes.base_node import BaseNode
@@ -68,7 +68,9 @@ class ExtractNode(BaseNode):
         schema = data_json["schema"]
         example_prompt = self.wk_input.example_prompt
 
-        settings = snapshot_llm_settings()
+        with runtime_config_lock:
+            settings = snapshot_llm_settings()
+            prompts = snapshot_graph_prompts()
 
         def prepare(_chunk):
             # Clients and bundles belong to one chunk; workers never mutate workflow state.
@@ -76,6 +78,7 @@ class ExtractNode(BaseNode):
                 llm=get_chat_llm(settings, limit_output=False, raise_on_truncation=True),
                 schema=schema,
                 example_prompt=example_prompt,
+                prompts=prompts,
             )
 
         results = run_chunks(chunks=chunks, prepare=prepare, options=self.wk_input.review_options)

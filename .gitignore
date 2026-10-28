@@ -4,9 +4,8 @@
 *.pkl
 out/production/
 
-# Local PR review scratch artifacts
-.workflow/pr*-review/
-.workflow/code-scan/
+# Local AI workflow plans, task lists and execution logs
+/.workflow/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
