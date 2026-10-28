@@ -27,9 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class PythonFloorContractTest(unittest.TestCase):
     def test_standalone_ml_matches_client_python_floor(self) -> None:
         ml_config = tomllib.loads((ROOT / "hugegraph-ml" / "pyproject.toml").read_text(encoding="utf-8"))
-        client_config = tomllib.loads(
-            (ROOT / "hugegraph-python-client" / "pyproject.toml").read_text(encoding="utf-8")
-        )
+        client_config = tomllib.loads((ROOT / "hugegraph-python-client" / "pyproject.toml").read_text(encoding="utf-8"))
 
         self.assertEqual(
             client_config["project"]["requires-python"].split(",", 1)[0],
