@@ -33,8 +33,6 @@ dependencies = [
     "hugegraph-llm-sdk==1.8.0",
     # Common dependencies
     "requests>=2.34,<3",
-    # Jieba still imports pkg_resources, removed in setuptools 82.
-    "setuptools>=81,<82",
 
     # Data processing dependencies
     "numpy>=2.5,<3",

@@ -48,8 +48,8 @@ requirements and root-level ML constraints have been removed; ML remains outside
 the workspace.
 
 A few upstream compatibility limits remain: LiteLLM requires OpenAI 2.x and its
-Botocore dependency requires dateutil below 3. Jieba still needs `pkg_resources`,
-so setuptools must stay below 82. `pycgraph` stays on 3.2.2 because 3.3.0 has no
+Botocore dependency requires dateutil below 3. Jieba uses its built-in resource
+fallback without requiring setuptools. `pycgraph` stays on 3.2.2 because 3.3.0 has no
 Linux wheel or source distribution on PyPI. These limits do not prevent using
 Python 3.12, 3.13 or 3.14.
 
