@@ -88,10 +88,9 @@ The source launcher binds to `127.0.0.1` by default and warns when a non-loopbac
 
 #### Graph Machine Learning
 
-ML remains outside this workspace and is not upgraded by the Python 3.12–3.14
-migration. Its current Python range conflicts with the local Python client's
-minimum version; the standalone ML installation needs a separate dependency
-migration before it can use this checkout. See [the ML module](./hugegraph-ml).
+ML remains outside this workspace and is not part of the dependency modernization.
+Its standalone environment requires Python 3.12+ because it uses the local Python
+client. Follow [the ML module](./hugegraph-ml) for installation and examples.
 
 ## 📦 Modules
 

@@ -59,10 +59,13 @@ a C++ compiler and Python development headers (Debian/Ubuntu:
 PyPI before running `uv sync`. The Docker builder includes this toolchain.
 
 NLTK 3.10 refuses data directories writable by other accounts. Use a private,
-user-owned `NLTK_DATA` cache; for an existing cache that you own, remove group
-and world write permissions with `chmod -R go-w "$NLTK_DATA"`, then restart the
-application. A missing or refused stopwords corpus is logged and falls back to
-an empty stopword list. Do not use shared writable corpora as trusted data.
+user-owned `NLTK_DATA` cache. If a cache was ever writable by another account,
+create a new private directory and download the corpora again with
+`python -m nltk.downloader -d "$NLTK_DATA" stopwords punkt punkt_tab`; changing
+permissions cannot restore file integrity. For a cache that was never shared and
+whose contents are trusted, remove group and world write permissions with
+`chmod -R go-w "$NLTK_DATA"`, then restart the application. A missing or refused
+stopwords corpus is logged and falls back to an empty stopword list.
 
 ### Code Quality (uv + Ruff + ty)
 
