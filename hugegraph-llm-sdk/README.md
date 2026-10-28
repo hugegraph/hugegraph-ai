@@ -23,7 +23,7 @@ uv build --no-sources /absolute/path/hugegraph-ai/hugegraph-llm-sdk --out-dir /t
 uv add /tmp/llm-sdk-dist/hugegraph_llm_sdk-1.8.0-py3-none-any.whl
 ```
 
-SDK 支持 Python 3.11–3.13，并通过独立安装矩阵验证。旧 `hugegraph-llm` 应用仍沿用自己的 Python 与依赖约束。修改 editable 安装指向的 SDK 源码后，外部项目下次运行会使用这些改动，无需复制源码或重新安装 wheel。
+SDK 与应用均支持 Python 3.12–3.14，并通过独立安装矩阵验证。修改 editable 安装指向的 SDK 源码后，外部项目下次运行会使用这些改动，无需复制源码或重新安装 wheel。
 
 ## 最小接入
 
@@ -156,6 +156,6 @@ SDK 与应用在仓库根目录下平级：`hugegraph-llm-sdk/` 提供可独立�
 
 ## 验证
 
-CI 在仓库工作区之外构建并安装 wheel，分别验证 Python 3.11、3.12 和 3.13。基础环境运行隔离 smoke、离线示例和 SDK 测试；模型适配器另有安装 extras 的契约测试，网络请求在测试边界替换。
+CI 在仓库工作区之外构建并安装 wheel，分别验证 Python 3.12、3.13 和 3.14。基础环境运行隔离 smoke、离线示例和 SDK 测试；模型适配器另有安装 extras 的契约测试，网络请求在测试边界替换。
 
 源码开发可使用根工作区已有的测试环境运行 SDK 测试。发布前仍需执行独立 wheel 验证，不能用源码路径注入代替安装验收。

@@ -21,15 +21,15 @@ name = "hugegraph-llm-sdk"
 version = "1.8.0"
 description = "Standalone schema design and reviewed property-graph extraction for Python."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "Apache-2.0"
 authors = [{ name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" }]
-dependencies = ["pydantic>=2.10,<3"]
+dependencies = ["pydantic>=2.14,<3"]
 
 [project.optional-dependencies]
-openai = ["openai>=1.61,<2", "tenacity>=8.5,<9", "tiktoken>=0.7,<1"]
-ollama = ["ollama>=0.4.8,<0.5", "tenacity>=8.5,<9"]
-litellm = ["litellm>=1.61.13,<1.62", "tenacity>=8.5,<9", "tiktoken>=0.7,<1"]
+openai = ["openai>=2.20,<3", "tenacity>=9.2,<10", "tiktoken>=0.14,<1"]
+ollama = ["ollama>=0.6.3,<1", "tenacity>=9.2,<10"]
+litellm = ["litellm>=1.106.5,<2", "tenacity>=9.2,<10", "tiktoken>=0.14,<1"]
 
 [project.urls]
 repository = "https://github.com/apache/hugegraph-ai"

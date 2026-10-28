@@ -7,7 +7,7 @@ Use this checklist to validate the current write-safety contract against a dispo
 Run from the repository root in a POSIX shell. Create the MCP environment first:
 
 ```bash
-uv venv --python 3.11 .venv-mcp
+uv venv --python 3.12 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 
 docker pull hugegraph/hugegraph:latest
@@ -349,7 +349,7 @@ For every submitted plan:
 The public tools intentionally provide no fault-injection switch. Run the automated durable-executor fault suite from the repository root:
 
 ```bash
-uv --no-config pip install --python .venv-mcp "pytest~=8.0.0"
+uv --no-config pip install --python .venv-mcp "pytest>=9.2,<10"
 .venv-mcp/bin/python -m pytest hugegraph-mcp/tests/test_write_executor_faults.py -q
 ```
 

@@ -66,9 +66,9 @@ async def run(requests_path: Path | None, interactive: bool):
                 break
             result = await session.call_tool(request["name"], request.get("arguments", {}))
             sys.stdout.write(result.model_dump_json() + "\n")
-            if result.isError:
+            if result.is_error:
                 raise RuntimeError(f"MCP tool failed: {request['name']}")
-            data = result.structuredContent
+            data = result.structured_content
             if data is None:
                 data = json.loads(result.content[0].text)
             if request["name"] == "inspect_graph_tool" and (

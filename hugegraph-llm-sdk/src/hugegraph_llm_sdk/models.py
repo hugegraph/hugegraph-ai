@@ -102,12 +102,13 @@ class ThreadedModel:
         cancellation = None
         while not worker.done():
             try:
-                await asyncio.shield(worker)
+                # wait() does not cancel the executor Future when this task is
+                # cancelled. Unlike shield() on Python 3.14, it also leaves late
+                # worker exceptions for us to retrieve without logging them.
+                await asyncio.wait((worker,))
             except asyncio.CancelledError as error:
                 if cancellation is None:
                     cancellation = error
-            except Exception:
-                break
         if cancellation is not None:
             if not worker.cancelled():
                 worker.exception()  # Retrieve a late failure without replacing cancellation.

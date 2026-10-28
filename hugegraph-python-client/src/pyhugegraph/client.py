@@ -16,7 +16,7 @@
 # under the License.
 
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from pyhugegraph.api.auth import AuthManager
 from pyhugegraph.api.graph import GraphManager
@@ -31,10 +31,8 @@ from pyhugegraph.api.version import VersionManager
 from pyhugegraph.utils.huge_config import HGraphConfig
 from pyhugegraph.utils.huge_requests import HGraphSession
 
-T = TypeVar("T")
 
-
-def manager_builder(fn: Callable[[Any, "HGraphSession"], T]) -> Callable[[Any], T]:
+def manager_builder[T](fn: Callable[[Any, "HGraphSession"], T]) -> Callable[[Any], T]:
     attr_name = "_lazy_" + fn.__name__
 
     def wrapper(self: "PyHugeClient") -> T:

@@ -51,6 +51,6 @@ SKIP_EXTERNAL_SERVICES=true uv run pytest src/tests/integration/test_graph_rag_p
 
 ## Style
 
-- Python is `>=3.11,<3.12` for this module.
+- Python is `>=3.12,<3.15` for this module.
 - Use `uv` for dependency management; do not document or rely on ad hoc `pip install` workflows.
 - The default toolchain is uv + Ruff + ty. Versions come from the root `pyproject.toml`; lint/type settings come from the applicable `pyproject.toml`. Do not duplicate rule sets here.

@@ -25,15 +25,14 @@ authors = [
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 dependencies = [
     # Common dependencies
-    "decorator",
-    "requests",
-    "setuptools",
-    "urllib3",
-    "rich",
+    "decorator>=5.3,<6",
+    "requests>=2.34,<3",
+    "urllib3>=2.8,<3",
+    "rich>=15,<16",
 ]
 
 [project.urls]

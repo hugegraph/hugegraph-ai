@@ -58,7 +58,7 @@ uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-m
 从 PR checkout 的仓库根目录执行。安装 uv 后，创建独立环境并安装同分支的 MCP 与客户端：
 
 ```bash
-uv venv --python 3.11 .venv-mcp
+uv venv --python 3.12 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 ```
 

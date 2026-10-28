@@ -55,6 +55,9 @@ installed with pip before project dependencies are managed with uv. This avoids
 third-party setup actions blocked by ASF's action allowlist. GitHub `cache`
 restores uv/pip downloads by component, Python runtime and relevant manifests;
 uv caches are pruned before upload. LLM jobs also cache NLTK and tiktoken data.
+Coverage uses `sys.monitoring` on the supported Python 3.12–3.14 runtimes. The
+older C tracer makes Jieba's generated POS tables very slow to import on 3.12;
+the coverage thresholds and measured application code are unchanged.
 Ruff, dependency review and CodeQL each have a single job rather than a runtime
 matrix. New PR heads cancel superseded PR runs because each PR diff covers its
 whole branch. Push, scheduled and manual runs use unique run groups and are not
@@ -73,13 +76,13 @@ baseline contains unresolved diagnostics, so a ty failure is visible but does
 not fail `CI Result`. Ruff and tests remain blocking. Clearing that baseline and
 making application type checks blocking is separate work.
 Release/CI scripts have a clean ty baseline and are checked as a blocking step
-in the existing quality runner, using their Python 3.11+ target.
+in the existing quality runner, using their Python 3.12+ target.
 
 ## Full and optional checks
 
 - Weekly on ASF main (Monday 06:00 Asia/Taipei), release-branch pushes, and manual
-  **full** runs validate client/LLM on Python 3.11, MCP on 3.11–3.12,
-  and the SDK on 3.11–3.13, plus CodeQL. Python 3.10 is no longer supported. Docker integration runs
+  **full** runs validate the client, LLM, MCP and SDK on Python 3.12–3.14,
+  plus CodeQL. Python 3.11 and older are no longer supported by these modules. Docker integration runs
   once per module on the primary Python runtime.
 - Use **Run workflow → mainline** for the primary-runtime checks on the selected
   branch, **full** for the complete matrix, **codeql** for security scanning, or

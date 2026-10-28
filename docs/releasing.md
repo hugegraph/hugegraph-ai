@@ -6,13 +6,13 @@ can be built independently and the shared publisher can read their metadata.
 MCP initialization and LLM OpenAPI report the installed distribution version,
 so they follow the same source without another runtime version constant.
 
-With Python 3.11+ at the repository root:
+With Python 3.12+ at the repository root:
 
 ```bash
 # Edit only the root release version, then synchronize generated fields.
-python3.11 scripts/version.py sync
-python3.11 scripts/version.py check
-python3.11 scripts/version.py get version
+python3.12 scripts/version.py sync
+python3.12 scripts/version.py check
+python3.12 scripts/version.py get version
 ```
 
 Synchronization updates the six subpackages (including the standalone LLM SDK),
@@ -28,7 +28,7 @@ hook revision or a separate tool version.
 
 Build the source LLM image with `bash scripts/build_llm_image.sh`. The script
 uses the root image repository and release tag. Set `PYTHON_FOR_RELEASE` to a
-Python 3.11+ executable when `python3` is older. Before images are published,
+Python 3.12+ executable when `python3` is older. Before images are published,
 build locally or follow the source installation instructions; release tags in
 documentation become pullable only after publication.
 
@@ -41,7 +41,7 @@ detached worktree, and checks all synchronized fields in the complete checkout
 before creating the distribution archive. The final `git archive` uses the same
 immutable commit and retains `.gitattributes` distribution exclusions. CI also
 builds and installs the resulting source archive without the excluded ML module.
-To check another snapshot directly, use `python3.11 scripts/version.py check --root /path/to/snapshot`.
+To check another snapshot directly, use `python3.12 scripts/version.py check --root /path/to/snapshot`.
 
 CI intentionally follows Server `latest` during development. Its core-version
 guard fails on drift and logs the digest used. For reproducible Compose

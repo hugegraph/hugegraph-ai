@@ -59,7 +59,7 @@ uvx --no-config --no-cache --with ./hugegraph-python-client --from ./hugegraph-m
 From the root of the PR checkout, install uv, then create an isolated environment and install both packages from this branch:
 
 ```bash
-uv venv --python 3.11 .venv-mcp
+uv venv --python 3.12 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 ```
 
@@ -75,7 +75,7 @@ On Windows PowerShell (set variables with `$env:NAME="value"`):
 .\.venv-mcp\Scripts\python.exe -m hugegraph_mcp.server
 ```
 
-Both packages load from this checkout; no author-specific path or pre-existing environment is required. `--no-config` keeps root LLM dependency constraints out of the standalone MCP environment.
+Both packages load from this checkout; no author-specific path or pre-existing environment is required. `--no-config` keeps installation independent of the root workspace configuration.
 
 For an MCP client, set `command` to the absolute path of this Python interpreter in your own checkout and `args` to `["-m", "hugegraph_mcp.server"]`.
 

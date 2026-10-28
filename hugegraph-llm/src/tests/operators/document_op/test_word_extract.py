@@ -46,7 +46,7 @@ class TestWordExtract(unittest.TestCase):
         # Language is now set from llm_settings
         self.assertIsNotNone(word_extract._language)
 
-    @patch("hugegraph_llm.models.llms.init_llm.LLMs")
+    @patch("hugegraph_llm.operators.document_op.word_extract.LLMs")
     def test_run_with_query_in_context(self, mock_llms_class):
         """Test running with query in context."""
         # Setup mock

@@ -25,18 +25,15 @@ authors = [
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 dependencies = [
     # Common dependencies
-    "decorator",
     "requests",
-    "setuptools",
     "urllib3",
-    "rich",
 
     # Vermeer specific dependencies
-    "python-dateutil",
+    "python-dateutil>=2.9,<3", # Botocore (via LiteLLM) does not support dateutil 3 yet.
 ]
 
 [project.urls]

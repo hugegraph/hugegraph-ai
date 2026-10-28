@@ -24,7 +24,7 @@ set -eo pipefail
 GROUP="hugegraph"
 # current repository name
 REPO="${GROUP}-ai"
-# Python 3.11+; preserve the existing version/username/password argument order.
+# Python 3.12+; preserve the existing version/username/password argument order.
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 RELEASE_PYTHON="${PYTHON_FOR_RELEASE:-python3}"
 "${RELEASE_PYTHON}" "${SCRIPT_DIR}/version.py" check

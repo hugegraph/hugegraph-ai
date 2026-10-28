@@ -28,50 +28,53 @@ maintainers = [
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.12,<3.15"
 dependencies = [
     "hugegraph-llm-sdk==1.8.0",
     # Common dependencies
-    "decorator",
-    "requests",
-    "setuptools",
-    "urllib3",
-    "rich",
+    "requests>=2.34,<3",
+    # Jieba still imports pkg_resources, removed in setuptools 82.
+    "setuptools>=81,<82",
 
     # Data processing dependencies
-    "numpy",
-    "pandas",
-    "pydantic",
-    "tqdm",
-    "scipy",
-    "networkx",
+    "numpy>=2.5,<3",
+    "pandas>=3.1,<4",
+    "pydantic>=2.14,<3",
+    "tqdm>=4.70,<5",
+    "scipy>=1.18,<2",
+    "networkx>=3.6,<4",
+    "regex>=2026.9",
 
     # LLM specific dependencies
-    "openai",
-    "ollama",
-    "tenacity",
-    "tiktoken",
-    "nltk",
-    "gradio",
-    "jieba",
-    "python-docx",
-    "pypdf",
-    "langchain-text-splitters",
-    "faiss-cpu",
-    "python-dotenv",
-    "pyarrow",
-    "openpyxl",
-    "pydantic-settings",
-    "apscheduler",
-    "litellm",
+    "openai>=2.20,<3", # LiteLLM currently requires OpenAI 2.x.
+    "ollama>=0.6.3,<1",
+    "tenacity>=9.2,<10",
+    "tiktoken>=0.14,<1",
+    "nltk>=3.10,<4",
+    "gradio>=6.31,<7",
+    "jieba>=0.42.1",
+    "python-docx>=1.2,<2",
+    "pypdf>=6.21,<7",
+    "langchain-text-splitters>=1.1,<2",
+    "faiss-cpu>=1.15,<2",
+    "python-dotenv>=1.2,<2",
+    "openpyxl>=3.1.5,<4",
+    "pydantic-settings>=2.16,<3",
+    "apscheduler>=3.11,<4",
+    "litellm>=1.106.5,<2",
+    "fastapi>=0.136,<1",
+    "httpx>=0.28,<1",
+    "starlette>=1.0.1,<2",
+    "uvicorn>=0.54,<1",
+    "PyYAML>=6.0.3,<7",
     "hugegraph-python",
-    "pycgraph==3.2.2",
+    "pycgraph==3.2.2", # 3.3.0 has no Linux wheel or source distribution on PyPI.
 ]
 
 [project.optional-dependencies]
 vectordb = [
-    "pymilvus==2.5.9",
-    "qdrant-client==1.14.2",
+    "pymilvus>=2.5.9,<4",
+    "qdrant-client>=1.20,<2",
 ]
 
 [project.urls]

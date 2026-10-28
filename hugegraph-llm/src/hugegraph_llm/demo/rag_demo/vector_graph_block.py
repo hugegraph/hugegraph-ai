@@ -273,7 +273,7 @@ def create_vector_graph_block():
                         value=prompt.doc_input_text,
                         label="Input Doc(s)",
                         lines=20,
-                        show_copy_button=True,
+                        buttons=["copy"],
                     )
                 with gr.Tab("file") as tab_upload_file:
                     input_file = gr.File(
@@ -457,10 +457,12 @@ def create_vector_graph_block():
 
         def on_tab_select(input_f, input_t, evt: gr.SelectData):
             print(f"You selected {evt.value} at {evt.index} from {evt.target}")
+            # A queued tab event can finish after a new edit or upload. Clear
+            # only the other input, without echoing stale values into this one.
             if evt.value == "file":
-                return input_f, ""
+                return gr.skip(), ""
             if evt.value == "text":
-                return [], input_t
+                return [], gr.skip()
             return [], ""
 
         tab_upload_file.select(

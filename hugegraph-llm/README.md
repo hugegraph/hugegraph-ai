@@ -37,9 +37,21 @@ editable source installation and offline examples.
 
 > [!IMPORTANT]
 >
-> - **Python**: 3.11 (`>=3.11,<3.12`; Python 3.12 is not supported)
+> - **Python**: 3.12–3.14 (`>=3.12,<3.15`)
 > - **HugeGraph Server**: 1.3+ (recommended: 1.5+)
-> - **UV Package Manager**: 0.7+
+> - **UV Package Manager**: 0.13.6+
+
+Dependency ranges live in each package's `pyproject.toml`, so standalone installs
+and workspace installs use the same requirements. The application uses Gradio 6,
+Pydantic 2, NumPy 2 and current provider libraries. Unused PyArrow and igraph
+requirements and root-level ML constraints have been removed; ML remains outside
+the workspace.
+
+A few upstream compatibility limits remain: LiteLLM requires OpenAI 2.x and its
+Botocore dependency requires dateutil below 3. Jieba still needs `pkg_resources`,
+so setuptools must stay below 82. `pycgraph` stays on 3.2.2 because 3.3.0 has no
+Linux wheel or source distribution on PyPI. These limits do not prevent using
+Python 3.12, 3.13 or 3.14.
 
 ### Code Quality (uv + Ruff + ty)
 
@@ -65,8 +77,8 @@ The fastest way to get started with both HugeGraph Server and RAG Service:
 
 The image tags in these examples target the release prepared by this checkout.
 They become available after publication. Before publication, build the image
-from the repository root with `bash scripts/build_llm_image.sh` (Python 3.11+
-is required; set `PYTHON_FOR_RELEASE=python3.11` if needed), or use
+from the repository root with `bash scripts/build_llm_image.sh` (Python 3.12+
+is required; set `PYTHON_FOR_RELEASE=python3.12` if needed), or use
 [Build from Source](#option-3-build-from-source).
 
 The bundled Compose file defaults to the rolling Server image used by CI for

@@ -42,7 +42,7 @@ jobs:
       - name: Type check release and CI tooling
         env:
           TY_VERSION: ${{ inputs.ty-version }}
-        run: uvx --from "ty>=$TY_VERSION" ty check --python-version 3.11 --extra-search-path scripts scripts
+        run: uvx --from "ty>=$TY_VERSION" ty check --python-version 3.12 --extra-search-path scripts scripts
       - name: Prune uv cache before upload
         if: always() && steps.python-env.outcome == 'success'
         run: uv cache prune --ci
