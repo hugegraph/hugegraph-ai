@@ -9,6 +9,7 @@
 
 - **[LLM/GraphRAG](./hugegraph-llm/README.md#graphrag)**: Build intelligent question-answering systems with graph-enhanced retrieval
 - **[Knowledge Graph Construction](./hugegraph-llm/README.md#knowledge-graph-construction)**: Automated graph building from text using LLMs
+- **[Python Graph SDK](./hugegraph-llm-core/README.md)**: Design schemas and extract reviewed property graphs in your own project, without a UI or database service
 - **[Graph ML](./hugegraph-ml/README.md)**: Integration with 20+ graph learning algorithms (GCN, GAT, GraphSAGE, etc.)
 - **[HG-Python Client](./hugegraph-python-client/README.md)**: Easy-to-use Python interface for HugeGraph operations
 - **[Vermeer Python Client](./vermeer-python-client/README.md)**: SDK/Interface for Graph Computing with [Vermeer](https://github.com/apache/hugegraph-computer/tree/master/vermeer#readme)
@@ -96,6 +97,12 @@ python examples/your_ml_example.py
 ```
 
 ## 📦 Modules
+
+### [hugegraph-llm-core](./hugegraph-llm-core)
+
+An independently installable Python SDK for schema design, validation, and reviewed property-graph extraction.
+Inject your own model or install an optional provider adapter; synchronous and asynchronous APIs share the same
+graph rules. See its [integration guide](./hugegraph-llm-core/README.md) for source installation and offline examples.
 
 ### [hugegraph-llm](./hugegraph-llm) [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue)](https://deepwiki.com/apache/hugegraph-ai)
 

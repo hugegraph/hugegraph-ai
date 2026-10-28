@@ -1,0 +1,27 @@
+[project]
+name = "hugegraph-llm-core"
+version = "1.8.0"
+description = "Standalone schema design and reviewed property-graph extraction for Python."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" }]
+dependencies = ["pydantic>=2.10,<3"]
+
+[project.optional-dependencies]
+openai = ["openai>=1.61,<2", "tenacity>=8.5,<9", "tiktoken>=0.7,<1"]
+ollama = ["ollama>=0.4.8,<0.5", "tenacity>=8.5,<9"]
+litellm = ["litellm>=1.61.13,<1.62", "tenacity>=8.5,<9", "tiktoken>=0.7,<1"]
+
+[project.urls]
+repository = "https://github.com/apache/hugegraph-ai"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hugegraph_llm_core"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/hugegraph_llm_core", "README.md", "LICENSE", "NOTICE", "examples"]

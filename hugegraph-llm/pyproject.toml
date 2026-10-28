@@ -29,6 +29,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10,<3.12"
 dependencies = [
+    "hugegraph-llm-core==1.8.0",
     # Common dependencies
     "decorator",
     "requests",
@@ -97,6 +98,7 @@ include = [
 allow-direct-references = true
 
 [tool.uv.sources]
+hugegraph-llm-core = { workspace = true }
 hugegraph-python = { workspace = true }
 pycgraph = { git = "https://github.com/ChunelFeng/CGraph.git", subdirectory = "python", tag = "v3.2.2", marker = "platform_machine == 'aarch64'" }
 

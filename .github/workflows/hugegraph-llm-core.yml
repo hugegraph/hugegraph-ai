@@ -1,0 +1,101 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: HugeGraph-LLM Core CI
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'release-*'
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.9.22"
+  PYTHONDONTWRITEBYTECODE: "1"
+  SKIP_EXTERNAL_SERVICES: "true"
+  HUGEGRAPH_LLM_CORE_TEST_INSTALLED: "1"
+
+jobs:
+  independent-wheel:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        run: |
+          curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build outside the application workspace
+        run: |
+          cp -R "$GITHUB_WORKSPACE/hugegraph-llm-core" "$RUNNER_TEMP/core-build"
+          cd "$RUNNER_TEMP"
+          uv build --no-sources "$RUNNER_TEMP/core-build" --out-dir "$RUNNER_TEMP/core-dist"
+          uv venv --python "${{ matrix.python-version }}" "$RUNNER_TEMP/core-venv"
+          uv pip install --python "$RUNNER_TEMP/core-venv/bin/python" "$RUNNER_TEMP"/core-dist/*.whl "pytest>=8,<9"
+      - name: Verify isolated installation and offline examples
+        env:
+          PYTHONPATH: ""
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/core-venv/bin/python" -B "$RUNNER_TEMP/core-build/tests/distribution_smoke.py"
+          "$RUNNER_TEMP/core-venv/bin/python" -B "$RUNNER_TEMP/core-build/examples/basic.py"
+          "$RUNNER_TEMP/core-venv/bin/python" -B "$RUNNER_TEMP/core-build/examples/customization.py"
+          "$RUNNER_TEMP/core-venv/bin/python" -B "$RUNNER_TEMP/core-build/examples/async_example.py"
+      - name: Run core contracts against the installed wheel
+        env:
+          PYTHONPATH: ""
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/core-venv/bin/python" -m pytest "$RUNNER_TEMP/core-build/tests" -q --tb=short
+
+  provider-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: |
+          curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install optional provider adapters from the wheel
+        run: |
+          cp -R "$GITHUB_WORKSPACE/hugegraph-llm-core" "$RUNNER_TEMP/core-build"
+          cd "$RUNNER_TEMP"
+          uv build --no-sources "$RUNNER_TEMP/core-build" --out-dir "$RUNNER_TEMP/core-dist"
+          uv venv --python 3.11 "$RUNNER_TEMP/core-venv"
+          core_wheels=("$RUNNER_TEMP"/core-dist/*.whl)
+          uv pip install --python "$RUNNER_TEMP/core-venv/bin/python" "${core_wheels[0]}[openai,ollama,litellm]" "pytest>=8,<9"
+      - name: Test provider contracts without external requests
+        env:
+          PYTHONPATH: ""
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/core-venv/bin/python" -m pytest "$RUNNER_TEMP/core-build/tests/test_providers.py" -q --tb=short
