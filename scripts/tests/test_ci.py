@@ -35,9 +35,37 @@ class TestCISelection(unittest.TestCase):
         selected = ci.select(paths)
         self.assertEqual(set(expected), {key for key in ci.MODULES if selected[key]})
 
-    def test_docs_only_skip_runtime_and_security_jobs(self):
-        flags = ci.select(["README.md", "hugegraph-mcp/README.zh-CN.md", "hugegraph-llm/docs/config.md"])
+    def test_repository_docs_skip_runtime_and_security_jobs(self):
+        flags = ci.select(["README.md", "docs/quality/ci.md", "docs/design.rst"])
         self.assertFalse(any(flags.values()))
+
+    def test_module_documentation_keeps_owning_contract_tests(self):
+        for path in (
+            "hugegraph-mcp/README.md",
+            "hugegraph-mcp/README.zh-CN.md",
+            "hugegraph-mcp/docs/integration.md",
+        ):
+            with self.subTest(path=path):
+                self.assert_modules([path], {"mcp"})
+                self.assertFalse(ci.select([path])["quality"])
+                self.assertFalse(ci.select([path])["codeql"])
+
+    def test_executable_and_json_examples_under_docs_are_not_skipped(self):
+        example = "hugegraph-llm/docs/examples/reviewed_property_graph.py"
+        self.assert_modules([example], {"llm"})
+        self.assertTrue(ci.select([example])["quality"])
+        self.assertTrue(ci.select([example])["codeql"])
+        self.assert_modules(["hugegraph-llm/docs/examples/reviewed-extraction.json"], {"llm"})
+        self.assertTrue(ci.select(["docs/examples/script.py"])["quality"])
+
+    def test_python_prs_keep_codeql_without_github_default_setup(self):
+        for path in ("hugegraph-mcp/hugegraph_mcp/server.py", "hugegraph-llm/pyproject.toml"):
+            with self.subTest(path=path):
+                selected = ci.select([path])
+                self.assertTrue(selected["codeql"])
+                with patch.object(ci.subprocess, "check_output", return_value='[{"workflows": []}]'):
+                    self.assertEqual("advanced-workflow", ci.codeql_provider(selected, "apache/hugegraph-ai"))
+                self.assertTrue(selected["codeql"])
 
     def test_client_changes_test_downstream_callers(self):
         self.assert_modules(["hugegraph-python-client/src/pyhugegraph/client.py"], {"client", "llm", "mcp"})

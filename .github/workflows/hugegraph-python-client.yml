@@ -71,6 +71,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-python-env
+        id: python-env
         with:
           python-version: ${{ matrix.python-version }}
           uv-version: ${{ inputs.uv-version }}
@@ -106,3 +107,6 @@ jobs:
         run: |
           docker ps -a
           docker logs "${{ job.services.hugegraph.id }}"
+      - name: Prune uv cache before upload
+        if: always() && steps.python-env.outcome == 'success'
+        run: uv cache prune --ci

@@ -7,7 +7,8 @@ in the job summary. A failed diff or preflight fails CI rather than skipping tes
 
 | Change | Default runtime tests |
 | --- | --- |
-| README, Markdown or documentation | No runtime environment, Docker or CodeQL |
+| Repository-level README/Markdown outside tested modules | No runtime environment, Docker or custom CodeQL |
+| Module README/docs, including examples and data files | Owning module, preserving documentation/example contracts |
 | Python client | Client plus downstream LLM and MCP |
 | LLM | LLM |
 | MCP | MCP |
@@ -34,10 +35,15 @@ master image changing its core version is expected to fail this guard. The
 Compose `HUGEGRAPH_SERVER_IMAGE` override supports reproducible deployments with
 a verified release tag or digest without pinning the CI image.
 
-`astral-sh/setup-uv` caches downloads and Python installations by component,
-Python runtime and relevant manifests. LLM jobs also cache NLTK and tiktoken data.
+GitHub-owned `setup-python` selects the interpreter; the root uv version is
+installed with pip before project dependencies are managed with uv. This avoids
+third-party setup actions blocked by ASF's action allowlist. GitHub `cache`
+restores uv/pip downloads by component, Python runtime and relevant manifests;
+uv caches are pruned before upload. LLM jobs also cache NLTK and tiktoken data.
 Ruff, dependency review and CodeQL each have a single job rather than a runtime
-matrix. PR updates and new main pushes cancel superseded runs.
+matrix. New PR heads cancel superseded PR runs because each PR diff covers its
+whole branch. Push, scheduled and manual runs use unique run groups and are not
+cancelled or replaced by later runs, preserving every incremental main-push diff.
 
 The default toolchain is **uv + Ruff + ty**. The uv version is defined in
 `tool.hugegraph.ci`; Ruff and ty use `>=` lower bounds in root development dependencies.
@@ -65,6 +71,12 @@ in the existing quality runner, using their Python 3.11+ target.
   **dependencies** with a base ref for dependency review.
 - **Rerun CI** is manual and accepts a failed run ID. Automatic delayed retries
   were removed; a deterministic test failure no longer allocates retry runners.
+
+Python source/stub and dependency-manifest changes select CodeQL, preserving
+PR/main scanning on repositories without GitHub default setup. Weekly/full and
+manual CodeQL runs are also supported. Module Markdown alone does not select
+CodeQL, but still runs its owning module's contract tests. Non-Markdown files
+under `docs/` use the same source/data rules as other files.
 
 When CodeQL is selected, preflight reads the repository's workflow metadata with
 `actions:read`. An active `dynamic/github-code-scanning/codeql` workflow means

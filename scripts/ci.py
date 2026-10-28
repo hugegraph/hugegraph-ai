@@ -44,10 +44,13 @@ def select(paths: list[str], *, full: bool = False, test_set: str = "mainline") 
         return flags
     for path in paths:
         is_pyproject = Path(path).name == "pyproject.toml"
-        # Documentation changes do not require runtime environments or Docker.
-        if not is_pyproject and (Path(path).suffix.lower() in (".md", ".rst") or "/docs/" in path):
+        is_documentation = Path(path).suffix.lower() in (".md", ".rst")
+        # Module documentation/examples are inputs to contract tests too.
+        in_module = any(path.startswith(module + "/") for module in MODULES.values())
+        if is_documentation and not in_module:
             continue
-        flags["license"] = True
+        if not is_documentation:
+            flags["license"] = True
         if path in SHARED or path.startswith(".github/actions/"):
             for key in (*MODULES, "quality"):
                 flags[key] = True
@@ -56,10 +59,17 @@ def select(paths: list[str], *, full: bool = False, test_set: str = "mainline") 
                 flags[key] = True
         if path.startswith("docker/") or path == "scripts/build_llm_image.sh":
             flags["llm"] = True
-        if is_pyproject or path.endswith(".py") or path in (".pre-commit-config.yaml", ".github/workflows/ruff.yml"):
+        if (
+            is_pyproject
+            or path.endswith((".py", ".pyi"))
+            or path in (".pre-commit-config.yaml", ".github/workflows/ruff.yml")
+        ):
             flags["quality"] = True
+        if path.endswith((".py", ".pyi")):
+            flags["codeql"] = True
         if Path(path).name in ("pyproject.toml", "uv.lock") or Path(path).name.startswith("requirements"):
             flags["dependencies"] = True
+            flags["codeql"] = True
         if path == ".github/workflows/codeql.yml":
             flags["codeql"] = True
         if path == ".github/workflows/check-dependencies.yml":

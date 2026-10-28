@@ -12,6 +12,9 @@ on:
       ty-version:
         type: string
         required: true
+      python-version:
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -24,12 +27,12 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-python-env
+        id: python-env
         with:
-          version: ${{ inputs.uv-version }}
-          enable-cache: true
-          cache-dependency-glob: pyproject.toml
-          cache-suffix: quality
+          uv-version: ${{ inputs.uv-version }}
+          python-version: ${{ inputs.python-version }}
+          component: quality
       - name: Format and lint without installing runtime dependencies
         env:
           RUFF_VERSION: ${{ inputs.ruff-version }}
@@ -40,3 +43,6 @@ jobs:
         env:
           TY_VERSION: ${{ inputs.ty-version }}
         run: uvx --from "ty>=$TY_VERSION" ty check --python-version 3.11 --extra-search-path scripts scripts
+      - name: Prune uv cache before upload
+        if: always() && steps.python-env.outcome == 'success'
+        run: uv cache prune --ci

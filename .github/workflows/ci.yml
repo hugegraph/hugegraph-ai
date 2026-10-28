@@ -23,8 +23,10 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ github.run_attempt == 1 && 'head' || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+  # PR diffs cover the whole branch; incremental push diffs must all finish.
+  # Unique non-PR groups also prevent replacement of older pending push runs.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}-${{ github.run_attempt == 1 && 'head' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   preflight:
@@ -82,6 +84,7 @@ jobs:
       uv-version: ${{ needs.preflight.outputs.uv-version }}
       ruff-version: ${{ needs.preflight.outputs.ruff-version }}
       ty-version: ${{ needs.preflight.outputs.ty-version }}
+      python-version: ${{ needs.preflight.outputs.python-version }}
 
   client:
     needs: preflight
