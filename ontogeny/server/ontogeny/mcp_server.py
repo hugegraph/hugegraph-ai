@@ -289,24 +289,33 @@ class McpSurface:
     def _register_session_tools(self) -> None:
         sc, server = self.sc, self.server
 
+        def external_driver():
+            # None is reserved for the private engine surface. A missing wire
+            # identity must still pass the ownership gate and fail closed.
+            return None if self.engine_mode else (current_mcp_driver() or {})
+
         async def agent_open_session(plugin: str, task: str = "") -> dict[str, Any]:
             """Open an agent session for a declared AgentPlugin; returns the
             session view incl. the tools you may call and the id to pass as
             session_id on every tool call."""
-            return await sc.agents.open_session(plugin, task or "", driver=current_mcp_driver())
+            return await sc.agents.open_session(plugin, task or "", driver=external_driver())
 
         async def agent_get_session(session_id: int) -> dict[str, Any]:
             """Session view: status, budget usage, effective tools, full step
             trail (thought + outcome per step) -- the driver's transcript."""
-            return await sc.agents.get_session(session_id)
+            return await sc.agents.get_session(session_id, principal=external_driver())
 
         async def agent_list_sessions(plugin: str | None = None, limit: int = 50) -> dict[str, Any]:
             """List agent sessions, newest first (optionally per plugin)."""
-            return {"sessions": await sc.agents.list_sessions(plugin=plugin, limit=min(int(limit), 200))}
+            return {
+                "sessions": await sc.agents.list_sessions(
+                    plugin=plugin, limit=min(int(limit), 200), principal=external_driver()
+                )
+            }
 
         async def agent_finish_session(session_id: int, result: dict | None = None) -> dict[str, Any]:
             """Finish a session with a final result (the human-facing act)."""
-            return await sc.agents.finish_session(session_id, result)
+            return await sc.agents.finish_session(session_id, result, principal=external_driver())
 
         for fn in (agent_open_session, agent_get_session, agent_list_sessions, agent_finish_session):
             server.add_tool(fn, structured_output=True)
@@ -454,7 +463,7 @@ def _catalog_tool_fn(sc: ServiceContext, name: str, tdef, engine_mode: bool):
                 kwargs,
                 engine=engine_mode,
                 thought=thought or "",
-                driver=_MCP_DRIVER.get(),
+                driver=None if engine_mode else (current_mcp_driver() or {}),
             )
         return await _readonly_call(sc, name, tdef, plugin, kwargs)
 

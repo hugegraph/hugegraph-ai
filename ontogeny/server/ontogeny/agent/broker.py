@@ -42,7 +42,7 @@ log = logging.getLogger("ontogeny.agent")
 
 
 def _utcnow() -> _dt.datetime:
-    return _dt.datetime.now(_dt.timezone.utc)
+    return _dt.datetime.now(_dt.UTC)
 
 
 def _jsonable(value: Any) -> Any:
@@ -77,6 +77,14 @@ class AgentServiceError(StoreError):
 
 
 class AgentBroker:
+    """Governed execution service shared by transports and trusted engines.
+
+    REST and external MCP must pass the resolved principal, including an empty
+    dict when identity resolution fails. ``principal=None`` is reserved for
+    trusted in-process lifecycle calls; the private MCP engine surface selects
+    it explicitly. Engine tool execution is separately marked ``engine=True``.
+    """
+
     def __init__(self, sc) -> None:
         self.sc = sc
 
@@ -167,7 +175,27 @@ class AgentBroker:
             await session.commit()
             return self._session_view(row, tools)
 
-    async def start_run(self, session_id: int, task: str | None = None) -> dict[str, Any]:
+    @staticmethod
+    def require_session_driver_or_admin(row: AgentSessionRow, principal: dict[str, Any]) -> None:
+        """External callers may access only their own transcript and execution.
+
+        Legacy sessions without a named driver (including anonymous demo
+        sessions) are administrator-only. A missing identity never grants
+        ownership. Internal engines use their private, trusted service path.
+        """
+        if principal.get("is_admin"):
+            return
+        driver_id = (row.driver or {}).get("id") if isinstance(row.driver, dict) else None
+        caller_id = principal.get("id")
+        if not driver_id or driver_id in ("?", "anonymous") or driver_id != caller_id:
+            raise PolicyDeniedError(
+                f"agent session {row.id} requires its driver or an administrator",
+                details={"session_id": row.id},
+            )
+
+    async def start_run(
+        self, session_id: int, task: str | None = None, *, principal: dict | None = None
+    ) -> dict[str, Any]:
         """Direction 3: a session may be driven MANY times. Each run bumps the
         run counter (new steps are tagged with it) and re-opens a finished or
         budget-exhausted session so the engine can drive it again. ``task`` is
@@ -179,6 +207,8 @@ class AgentBroker:
             ).scalar_one_or_none()
             if row is None:
                 raise NotFoundError(f"agent session {session_id} not found")
+            if principal is not None:
+                self.require_session_driver_or_admin(row, principal)
             if self._check_expired(row):
                 raise OOError("agent session expired", details={"code": "AGENT_SESSION_EXPIRED"})
             if row.status == "running":
@@ -198,7 +228,7 @@ class AgentBroker:
         """True when the session is past its expires_at (and marks it)."""
         # SQLite returns naive UTC datetimes; normalize before comparing
         exp = (
-            row.expires_at.replace(tzinfo=_dt.timezone.utc)
+            row.expires_at.replace(tzinfo=_dt.UTC)
             if row.expires_at is not None and row.expires_at.tzinfo is None
             else row.expires_at
         )
@@ -207,13 +237,15 @@ class AgentBroker:
             return True
         return False
 
-    async def get_session(self, session_id: int) -> dict[str, Any]:
+    async def get_session(self, session_id: int, *, principal: dict | None = None) -> dict[str, Any]:
         async with self.sc.sessionmaker() as session:
             row = (
                 await session.execute(select(AgentSessionRow).where(AgentSessionRow.id == session_id))
             ).scalar_one_or_none()
             if row is None:
                 raise NotFoundError(f"agent session {session_id} not found")
+            if principal is not None:
+                self.require_session_driver_or_admin(row, principal)
             steps = (
                 (
                     await session.execute(
@@ -227,10 +259,17 @@ class AgentBroker:
             tools = self._frozen_tools(row, plug)
             return self._session_view(row, tools, steps=[self._step_view(s) for s in steps])
 
-    async def list_sessions(self, *, plugin: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_sessions(
+        self, *, plugin: str | None = None, limit: int = 50, principal: dict | None = None
+    ) -> list[dict[str, Any]]:
         stmt = select(AgentSessionRow).order_by(AgentSessionRow.id.desc()).limit(limit)
         if plugin:
             stmt = stmt.where(AgentSessionRow.plugin == plugin)
+        if principal is not None and not principal.get("is_admin"):
+            caller_id = principal.get("id")
+            if not caller_id or caller_id in ("?", "anonymous"):
+                return []
+            stmt = stmt.where(AgentSessionRow.driver["id"].as_string() == str(caller_id))
         async with self.sc.sessionmaker() as session:
             rows = (await session.execute(stmt)).scalars().all()
         return [self._session_view(r) for r in rows]
@@ -250,13 +289,8 @@ class AgentBroker:
             row = await session.get(AgentSessionRow, session_id)
             if row is None:
                 raise NotFoundError(f"agent session {session_id} not found")
-            if principal is not None and not principal.get("is_admin"):
-                driver_id = (row.driver or {}).get("id") if isinstance(row.driver, dict) else None
-                if driver_id is not None and driver_id != principal.get("id"):
-                    raise PolicyDeniedError(
-                        f"agent session {session_id} belongs to driver {driver_id!r}",
-                        details={"session_id": session_id, "driver": driver_id},
-                    )
+            if principal is not None:
+                self.require_session_driver_or_admin(row, principal)
             approvals = (
                 (await session.execute(select(AgentApprovalRow.id).where(AgentApprovalRow.session_id == session_id)))
                 .scalars()
@@ -284,13 +318,17 @@ class AgentBroker:
             await session.commit()
         return {"deleted": approval_id}
 
-    async def finish_session(self, session_id: int, result: dict | None) -> dict[str, Any]:
+    async def finish_session(
+        self, session_id: int, result: dict | None, *, principal: dict | None = None
+    ) -> dict[str, Any]:
         async with self.sc.sessionmaker() as session:
             row = (
                 await session.execute(select(AgentSessionRow).where(AgentSessionRow.id == session_id))
             ).scalar_one_or_none()
             if row is None:
                 raise NotFoundError(f"agent session {session_id} not found")
+            if principal is not None:
+                self.require_session_driver_or_admin(row, principal)
             if row.status == "finished":
                 raise AgentServiceError(f"agent session {session_id} is already finished")
             row.status = "finished"
@@ -352,7 +390,7 @@ class AgentBroker:
         audited to the human, executions to the plugin principal. A rejection
         refunds the writes slot (the write did not happen).
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from sqlalchemy import select
 
@@ -369,7 +407,7 @@ class AgentBroker:
 
             def _close(status: str) -> None:
                 row.status, row.decided_by = status, principal.get("id", "?")
-                row.decided_at = datetime.now(timezone.utc)
+                row.decided_at = datetime.now(_dt.UTC)
 
             if decision == "rejected":
                 _close("rejected")
@@ -477,7 +515,7 @@ class AgentBroker:
         if started is None:
             return False
         if started.tzinfo is None:  # SQLite returns naive UTC datetimes
-            started = started.replace(tzinfo=_dt.timezone.utc)
+            started = started.replace(tzinfo=_dt.UTC)
         elapsed_ms = (_utcnow() - started).total_seconds() * 1000
         return elapsed_ms > sess.budget_wall_ms
 
@@ -568,6 +606,8 @@ class AgentBroker:
             ).scalar_one_or_none()
             if sess is None:
                 raise NotFoundError(f"agent session {session_id} not found")
+            if not engine and driver is not None:
+                self.require_session_driver_or_admin(sess, driver)
             if sess.status not in ("open", "running", "blocked_on_approval"):
                 return {"outcome": "AGENT_SESSION_CLOSED", "error": f"agent session {session_id} is {sess.status}"}
             if sess.status == "running" and not engine:

@@ -189,12 +189,17 @@ class TestProtocolSurface:
     async def test_running_session_isolation_engine_vs_external(self, sc):
         """§2: while the engine owns a running session, an external MCP caller
         gets the structured refusal; the engine-mode surface drives on."""
-        sid = (await sc.agents.open_session("planning-copilot", "x"))["id"]
+        from ontogeny.mcp_server import _MCP_DRIVER
+
+        driver = {"id": "external-driver"}
+        token = _MCP_DRIVER.set(driver)
+        sid = (await sc.agents.open_session("planning-copilot", "x", driver=driver))["id"]
         await sc.agents.set_status(sid, "running")
 
         async with in_process_mcp_session(sc, engine_mode=False) as external:
             out = await external.call_tool("describe_ontology", {"session_id": sid, "plugin": "planning-copilot"})
             assert out["outcome"] == "AGENT_SESSION_RUNNING"
+        _MCP_DRIVER.reset(token)
         async with in_process_mcp_session(sc) as engine_client:
             out = await engine_client.call_tool("describe_ontology", {"session_id": sid, "plugin": "planning-copilot"})
             assert out["outcome"] == "ok"
@@ -228,7 +233,11 @@ class TestWireSurface:
         transport = httpx.ASGITransport(app=app)
         async with app.router.lifespan_context(app):
             assert any(getattr(r, "path", None) == MCP_HTTP_PATH for r in app.routes)
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as hc:  # noqa: SIM117 -- nested lifespan/client/session contexts read clearer
+            async with httpx.AsyncClient(  # noqa: SIM117 -- nested transport contexts read clearer
+                transport=transport,
+                base_url="http://test",
+                headers={"X-Ontogeny-Principal": json.dumps({"id": "wire-driver"})},
+            ) as hc:
                 async with streamable_http_client(f"http://test{MCP_HTTP_PATH}", http_client=hc) as streams:
                     async with ClientSession(streams[0], streams[1]) as sess:
                         await sess.initialize()

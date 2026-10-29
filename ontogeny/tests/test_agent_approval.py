@@ -99,7 +99,11 @@ async def client(golden_pkg_path, tmp_path):
         await sc.sync(t)
     app = build_app(sc)
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=_hdr({"id": "agent-driver"}),
+    ) as c:
         yield c, sc
 
 
@@ -297,7 +301,11 @@ async def auto_client(golden_pkg_path, tmp_path):
         await sc.sync(t)
     app = build_app(sc)
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=_hdr({"id": "agent-driver"}),
+    ) as c:
         yield c, sc
 
 
