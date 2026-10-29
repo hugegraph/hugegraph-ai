@@ -23,7 +23,6 @@ on:
       - "codex/pr89-ontology-review-fixes"
     paths:
       - ".github/scripts/pr89_backend_fix.py.gz.b64"
-      - ".github/workflows/pr89-backend-fix.yml"
 
 permissions:
   contents: write
@@ -49,9 +48,24 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -e '.[mcp]' pytest pytest-asyncio httpx ruff
-      - name: Static checks
+      - name: Normalize and verify changed Python files
         working-directory: ontogeny
         run: |
+          changed=(
+            server/ontogeny/auth/service.py
+            server/ontogeny/functions/sandbox.py
+            server/ontogeny/api/routes_objects.py
+            server/ontogeny/agent/broker.py
+            server/ontogeny/api/routes_agent.py
+            server/ontogeny/mcp_server.py
+            server/ontogeny/builder_ops.py
+            tests/test_auth_identity.py
+            tests/test_security_regressions.py
+            tests/test_agent.py
+            tests/test_builder.py
+          )
+          .venv/bin/ruff check --fix "${changed[@]}"
+          .venv/bin/ruff format "${changed[@]}"
           .venv/bin/ruff check server tests
           .venv/bin/ruff format --check server tests
           git diff --check
