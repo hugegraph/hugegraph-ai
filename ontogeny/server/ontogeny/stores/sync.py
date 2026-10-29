@@ -181,6 +181,7 @@ class SyncEngine:
 
             seen_pks: set[str] = set()
             max_wm: Any = after
+            observed_wm: Any = None
             pk_props = obj.spec.primaryKey
             ptypes = {p: d.ptype() for p, d in obj.spec.properties.items()}
             required_props = {
@@ -197,8 +198,16 @@ class SyncEngine:
             async for raw in rows:
                 if strategy == "watermark" and watermark_col is not None:
                     wm_val = raw.get(watermark_col)
-                    if wm_val is not None and (max_wm is None or str(wm_val) > str(max_wm)):
-                        max_wm = wm_val
+                    if wm_val is not None:
+                        # Compare the source's native values, never their
+                        # string checkpoints ("10" sorts before "9"). Rows
+                        # returned by a watermark source are >= the checkpoint.
+                        try:
+                            newer = observed_wm is None or wm_val > observed_wm
+                        except TypeError:
+                            newer = str(wm_val) > str(observed_wm)
+                        if newer:
+                            observed_wm = max_wm = wm_val
                 # Presence is independent of whether the other properties can
                 # be coerced. Quarantining an update must preserve the previous
                 # good object, not treat that source row as a snapshot deletion.
