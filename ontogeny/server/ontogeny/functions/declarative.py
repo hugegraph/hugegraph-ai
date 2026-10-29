@@ -367,12 +367,19 @@ class DeclarativeRuntime:
                         )
                     headers[name] = rendered
                 c = await self.client()
-                resp = await c.request(method, url, json=body, headers=headers)
-                text = resp.text[:_MAX_RESPONSE_BYTES]
-                try:
-                    steps[step.id] = {"status": resp.status_code, "json": json.loads(text)}
-                except json.JSONDecodeError:
-                    steps[step.id] = {"status": resp.status_code, "text": text}
+                async with c.stream(method, url, json=body, headers=headers, follow_redirects=False) as resp:
+                    content = bytearray()
+                    async for chunk in resp.aiter_bytes():
+                        if len(content) + len(chunk) > _MAX_RESPONSE_BYTES:
+                            raise SandboxError(f"http response exceeds {_MAX_RESPONSE_BYTES}-byte limit")
+                        content.extend(chunk)
+                    # Count decoded bytes before decoding the complete bounded
+                    # body, so chunk boundaries cannot split Unicode characters.
+                    text = content.decode(resp.encoding or "utf-8", errors="replace")
+                    try:
+                        steps[step.id] = {"status": resp.status_code, "json": json.loads(text)}
+                    except json.JSONDecodeError:
+                        steps[step.id] = {"status": resp.status_code, "text": text}
             else:
                 raise SandboxError(f"unknown step kind {step.kind!r}")
 
