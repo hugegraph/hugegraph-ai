@@ -55,6 +55,7 @@ jobs:
             server/ontogeny/auth/service.py
             server/ontogeny/functions/sandbox.py
             server/ontogeny/api/routes_objects.py
+            server/ontogeny/core/validator.py
             server/ontogeny/agent/broker.py
             server/ontogeny/api/routes_agent.py
             server/ontogeny/mcp_server.py
