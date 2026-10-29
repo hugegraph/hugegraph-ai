@@ -228,7 +228,10 @@ wherever `openai_judge` does:
 ```python
 from hugegraph_llm_eval import ClaudeCodeJudge, CodexAppServerJudge
 
-judge = ClaudeCodeJudge(model="sonnet")  # runs `claude -p`, one process per call
+judge = ClaudeCodeJudge(model="sonnet")  # inherits the CLI's current authentication
+
+# Force the local Claude subscription instead of ambient API credentials:
+judge = ClaudeCodeJudge(model="sonnet", auth_mode="subscription")
 
 with CodexAppServerJudge(model="<a model your account can use>", effort="low", auth_mode="subscription") as judge:
     ...  # one shared `codex app-server` process, one ephemeral thread per call
@@ -248,10 +251,11 @@ What to know before using them:
   environment and settings, so it uses whatever `claude` is signed in to: a
   subscription login, `CLAUDE_CODE_OAUTH_TOKEN`, or a gateway from
   `~/.claude/settings.json`. An exported `ANTHROPIC_API_KEY` is billed to the API, not
-  to the subscription. To force the subscription, pass
-  `scrub_provider_env=True, setting_sources=""`: that removes `ANTHROPIC_*` and
-  `CLAUDE_CODE_USE_*` from the child environment and ignores settings files. Without a
-  login the call then fails with the permanent error `provider_not_authenticated`.
+  to the subscription. To force the subscription, use `auth_mode="subscription"`:
+  that removes `ANTHROPIC_*` and `CLAUDE_CODE_USE_*` from the child environment and
+  ignores settings files. The lower-level `scrub_provider_env=True, setting_sources=""`
+  combination remains available for compatibility. Without a login the call then fails
+  with the permanent error `provider_not_authenticated`.
 - **No tools.** Claude runs with `--tools ""` and rejects `extra_args` that conflict
   with controlled safety/auth/schema flags. Codex runs ephemeral and read-only, with
   approvals off and shell, apps, plugins and user MCP servers disabled. If Codex cannot
