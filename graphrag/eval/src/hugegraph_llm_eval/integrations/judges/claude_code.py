@@ -27,7 +27,7 @@ import weakref
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import JsonValue, ValidationError
 
@@ -114,6 +114,7 @@ class ClaudeCodeJudge(AttemptLoopJudge):
         executable: str = "claude",
         setting_sources: str | None = None,
         scrub_provider_env: bool = False,
+        auth_mode: Literal["inherit", "subscription"] = "inherit",
         max_turns: int | None = None,
         extra_args: Sequence[str] = (),
         call_timeout_seconds: float = 600.0,
@@ -132,9 +133,13 @@ class ClaudeCodeJudge(AttemptLoopJudge):
         conflicts = sorted({arg.split("=", 1)[0] for arg in extra_args} & _PROTECTED_EXTRA_FLAGS)
         if conflicts:
             raise ValueError(f"extra_args cannot override controlled Claude CLI flags: {', '.join(conflicts)}")
+        if auth_mode == "subscription":
+            setting_sources = ""
+            scrub_provider_env = True
         configuration: JsonValue = {
             "cli_version": version if version is not None else cli_version(executable),
             "effort": effort,
+            "auth_mode": auth_mode,
             "setting_sources": setting_sources,
             "scrub_provider_env": scrub_provider_env,
             "max_turns": max_turns,
