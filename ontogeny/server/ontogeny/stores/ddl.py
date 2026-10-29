@@ -20,8 +20,8 @@
 Each ObjectType gets ``ontogeny_obj_<type>`` with typed property columns plus system
 columns (``_rev/_valid_from/_valid_to/_synced_at``). Versioning is
 append-only: updates close the current row and insert a successor; the
-"alive current" state is exactly ``_valid_to IS NULL``. Derived properties are
-never stored (computed at assembly time).
+"alive current" state is exactly ``_valid_to IS NULL``. Expression-derived
+properties are computed on read; function-derived properties are materialized.
 """
 
 from __future__ import annotations
@@ -138,7 +138,9 @@ def object_table(compiled, object_type: str) -> Table:
             Column(
                 compiled.col(prop),
                 sql_type(pdef.ptype()),
-                nullable=not pdef.required,
+                # A required function-derived value is validated by the worker,
+                # but is unavailable until it processes the initial write.
+                nullable=not pdef.required or (pdef.derived_kind() == "function" and compiled.col(prop) not in pk_cols),
                 # composite PK: business key + _valid_from -> versions coexist
                 primary_key=compiled.col(prop) in pk_cols,
             )
