@@ -1423,14 +1423,21 @@ class ServiceContext:
                         red = red or not rep["passed"]
                 if red:
                     async with self.sessionmaker() as s3:
-                        rb = await self.promoter.rollback(s3, self.package_root, result["rollback_dir"])
+                        p = await s3.get(ProposalRow, proposal_id)
+                        if p is not None:
+                            p.status = "rolled_back"
+                            p.rejected_reason = "post-merge eval went red -- auto-reverted"
+                        rb = await self.promoter.rollback(s3, self.package_root, result["rollback_dir"], commit=True)
                     await self.reload()
+                    self.promoter.cleanup_backup(result["rollback_dir"])
                     result = {
                         "status": "promoted_then_rolled_back",
                         "reason": "post-merge eval went red -- auto-reverted",
                         "rollback": rb,
                         "original": result,
                     }
+                else:
+                    self.promoter.cleanup_backup(result["rollback_dir"])
         return result
 
     async def projection_rebuild(self) -> dict[str, int]:
