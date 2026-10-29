@@ -123,7 +123,9 @@ class CodexAppServerJudge(AttemptLoopJudge):
         features = provided.pop("features", {})
         if not isinstance(features, Mapping):
             raise ValueError("config.features must be a mapping")
-        unsafe_features = [name for name, enabled in features.items() if name in _DEFAULT_CONFIG["features"] and enabled is True]
+        unsafe_features = [
+            name for name, enabled in features.items() if name in _DEFAULT_CONFIG["features"] and enabled is True
+        ]
         if unsafe_features:
             raise ValueError(f"Codex judge cannot enable tool capabilities: {', '.join(sorted(unsafe_features))}")
         merged: dict[str, JsonValue] = {
