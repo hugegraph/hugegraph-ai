@@ -27,10 +27,11 @@ applies, keeping transactions/audit/policy inside the engine.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..core import expr as _expr
 from ..core.models import (
@@ -193,13 +194,20 @@ class ActionRuntime:
             raise NotFoundError(f"unknown action {action_name!r}")
 
         # 1) idempotent replay
+        idempotency_key = idempotency_key or None
+        principal_id = str(principal.get("id", "anonymous"))
         if idempotency_key:
+            if session.get_bind().dialect.name == "postgresql":
+                # Serialize concurrent callers before checking for a replay.
+                # The unique index remains the final guard on both databases.
+                scope = json.dumps([action_name, principal_id, idempotency_key], separators=(",", ":"))
+                await session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(scope, 0))))
             existing = (
                 await session.execute(
                     select(RevisionRow).where(
                         RevisionRow.idempotency_key == idempotency_key,
                         RevisionRow.action == action_name,
-                        RevisionRow.principal == str(principal.get("id", "anonymous")),
+                        RevisionRow.principal == principal_id,
                     )
                 )
             ).scalar_one_or_none()
@@ -223,7 +231,7 @@ class ActionRuntime:
                 action=action_name,
                 object_type=action.spec.target,
                 object_id=str(obj_id or target_id or ""),
-                principal=str(principal.get("id", "anonymous")),
+                principal=principal_id,
                 params=_jsonable(params),
                 before=_jsonable(before),
                 after=_jsonable(after),
