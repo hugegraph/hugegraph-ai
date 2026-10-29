@@ -164,6 +164,20 @@ def test_provider_variables_are_scrubbed_but_subscription_credentials_survive(mo
     assert inherited.calls[0].env["ANTHROPIC_BASE_URL"] == "x"
 
 
+def test_subscription_auth_mode_scrubs_provider_env_and_settings(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "api-key")
+    monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+    runner = FakeRunner(completed(success()))
+
+    judge = make_judge(runner, auth_mode="subscription")
+    judge.judge(cli_request(), ONCE)
+
+    call = runner.calls[0]
+    assert not [name for name in call.env if name.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_"))]
+    assert call.argv[call.argv.index("--setting-sources") + 1] == ""
+    assert judge.descriptor.configuration_digest != make_judge(FakeRunner()).descriptor.configuration_digest
+
+
 def test_json_in_result_text_is_accepted_when_structured_output_is_absent() -> None:
     payload = success(structured_output=None, result='{"verdict":"no","note":"x"}')
 
