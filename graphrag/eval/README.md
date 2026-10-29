@@ -30,6 +30,9 @@ Optional extras add vendor-specific metrics and transports:
 | `rouge` | ROUGE-L answer scoring (`rouge-score`, `jieba`) |
 | `openai` | OpenAI-compatible judge transport (`openai`) |
 
+`ClaudeCodeJudge` and `CodexAppServerJudge` need no extra; they drive the `claude`
+or `codex` CLI found on `PATH`.
+
 The base install depends on Pydantic only. Python 3.12–3.14 are supported.
 
 ## Quick start
@@ -216,6 +219,55 @@ python examples/real_model.py
 It scores a small property graph against its source text and prints the
 measurements plus each unsupported item. Without configuration it explains what
 to set and exits with code 2.
+
+## Judges on a Claude or Codex subscription
+
+Two judges run on a logged-in coding-agent CLI instead of an API key. Both plug in
+wherever `openai_judge` does:
+
+```python
+from hugegraph_llm_eval import ClaudeCodeJudge, CodexAppServerJudge
+
+judge = ClaudeCodeJudge(model="sonnet")  # runs `claude -p`, one process per call
+
+with CodexAppServerJudge(model="<a model your account can use>", effort="low") as judge:
+    ...  # one shared `codex app-server` process, one ephemeral thread per call
+```
+
+| | `ClaudeCodeJudge` | `CodexAppServerJudge` |
+| --- | --- | --- |
+| Authentication | `claude` login or `CLAUDE_CODE_OAUTH_TOKEN` | `codex` ChatGPT login |
+| Process | one `claude -p` per call | one long-lived `codex app-server`, started on first use |
+| Concurrency | any | calls share the process; the shared limiter still bounds them |
+| Cleanup | none | `close()`, a `with` block, or interpreter exit |
+| Structured output | `--json-schema` | `outputSchema` (OpenAI strict mode, derived from the response model) |
+
+What to know before using them:
+
+- **Same login as your terminal.** `ClaudeCodeJudge` starts `claude -p` with your
+  environment and settings, so it uses whatever `claude` is signed in to: a
+  subscription login, `CLAUDE_CODE_OAUTH_TOKEN`, or a gateway from
+  `~/.claude/settings.json`. An exported `ANTHROPIC_API_KEY` is billed to the API, not
+  to the subscription. To force the subscription, pass
+  `scrub_provider_env=True, setting_sources=""`: that removes `ANTHROPIC_*` and
+  `CLAUDE_CODE_USE_*` from the child environment and ignores settings files. Without a
+  login the call then fails with the permanent error `provider_not_authenticated`.
+- **No tools.** Claude runs with `--tools ""`. Codex runs ephemeral, read-only, with
+  approvals off and shell, apps, plugins and your configured MCP servers disabled.
+  Codex hooks from `~/.codex/hooks.json` still fire; they cannot be switched off from
+  the client.
+- **Tokens, not cost.** Both report token counts and leave `cost_usd` empty. With
+  `budget_usd` set, that unknown cost stops later samples and metrics, so leave the
+  budget unset and bound a subscription run with `max_samples`, `max_concurrency` and
+  a deadline.
+- **Not reproducible.** Neither CLI exposes temperature or seed, and each call carries
+  the CLI's own prompt overhead (roughly 5K input tokens for Claude, 11K for Codex).
+  The CLI version, effort and isolation settings are part of the judge descriptor, so
+  results from different versions are distinguishable.
+- **Usage limits.** A subscription limit surfaces as the permanent failure
+  `provider_usage_limit` and is not retried.
+- **Codex needs an explicit `model`**; the account default may be unavailable to
+  app-server clients.
 
 ## Input builders
 

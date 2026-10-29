@@ -15,15 +15,20 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Score a graph against its source text with a real OpenAI-compatible model.
+"""Score a graph against its source text with a real model.
 
-Prerequisites:
+OpenAI-compatible endpoint (the default backend):
 
     pip install "hugegraph-llm-eval[openai]"
     export EVAL_JUDGE_MODEL=<model name>
     export EVAL_JUDGE_API_KEY=<api key>
     # optional for self-hosted or gateway endpoints
     export EVAL_JUDGE_BASE_URL=<base url>
+
+Claude or Codex subscription (needs the logged-in `claude` or `codex` CLI on PATH):
+
+    export EVAL_JUDGE_BACKEND=claude-code   # or: codex
+    export EVAL_JUDGE_MODEL=<model name or alias>
 
 Run:
 
@@ -34,6 +39,8 @@ import os
 import sys
 
 from hugegraph_llm_eval import (
+    ClaudeCodeJudge,
+    CodexAppServerJudge,
     EvaluationOptions,
     GraphFaithfulnessEvaluator,
     InMemoryArtifactStore,
@@ -87,20 +94,44 @@ CANDIDATE = {
 }
 
 
-def main() -> int:
+def build_judge():
+    backend = os.environ.get("EVAL_JUDGE_BACKEND", "openai")
     model = os.environ.get("EVAL_JUDGE_MODEL")
+    if backend == "claude-code" and model:
+        return ClaudeCodeJudge(model=model)
+    if backend == "codex" and model:
+        return CodexAppServerJudge(model=model)
     api_key = os.environ.get("EVAL_JUDGE_API_KEY")
-    if not model or not api_key:
+    if backend == "openai" and model and api_key:
+        return openai_judge(
+            model=model,
+            api_key=api_key,
+            base_url=os.environ.get("EVAL_JUDGE_BASE_URL"),
+            provider=os.environ.get("EVAL_JUDGE_PROVIDER", "openai"),
+        )
+    if backend not in ("openai", "claude-code", "codex"):
+        print(f"Unknown EVAL_JUDGE_BACKEND {backend!r}; use openai, claude-code or codex.", file=sys.stderr)
+    elif backend == "openai":
         print("Set EVAL_JUDGE_MODEL and EVAL_JUDGE_API_KEY to run this example.", file=sys.stderr)
         print("Install the transport with: pip install 'hugegraph-llm-eval[openai]'", file=sys.stderr)
-        return 2
+    else:
+        print("Set EVAL_JUDGE_MODEL to run this example.", file=sys.stderr)
+    return None
 
-    judge = openai_judge(
-        model=model,
-        api_key=api_key,
-        base_url=os.environ.get("EVAL_JUDGE_BASE_URL"),
-        provider=os.environ.get("EVAL_JUDGE_PROVIDER", "openai"),
-    )
+
+def main() -> int:
+    judge = build_judge()
+    if judge is None:
+        return 2
+    try:
+        return run(judge)
+    finally:
+        close = getattr(judge, "close", None)
+        if close is not None:
+            close()
+
+
+def run(judge) -> int:
     store = InMemoryArtifactStore()
     evaluation_input = graph_review_input(
         store,

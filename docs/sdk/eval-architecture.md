@@ -69,7 +69,7 @@ hugegraph-llm/    负责把这些能力串成流程，并持有配置、持久�
 
 - 新增指标：实现 `Evaluator` 协议（或继承 `JudgedEvaluatorLifecycle`），在对应 `integrations/` 下注册
   输入 schema 与物化逻辑，并补齐行为测试。
-- 接入新模型：实现 `Judge.judge`，或直接用 `openai_judge` 适配 OpenAI 兼容端点。
+- 接入新模型：实现 `Judge.judge`，或直接用 `openai_judge` 适配 OpenAI 兼容端点；用订阅额度时可用 `ClaudeCodeJudge`（`claude -p`）或 `CodexAppServerJudge`（`codex app-server`），三者共享 `AttemptLoopJudge` 的重试、退避与截止时间逻辑。订阅类 Judge 只报告 token、不报告费用，因此 `budget_usd` 不适用。
 - 新增数据形态：在 `samples.py` 增加构造 helper，保持 evaluator 面向 artifact 契约不变。
 - 持久化、报告、CLI 和产品字段映射：留在调用方或 `hugegraph-llm`，通过结构化结果衔接。
 

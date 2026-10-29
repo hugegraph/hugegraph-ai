@@ -23,14 +23,14 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, TypeVar
 
-from pydantic import Field, JsonValue, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from hugegraph_llm_eval.contracts.base import AwareDatetime, StrictModel, VersionedModel
 from hugegraph_llm_eval.contracts.digests import ContentDigest, canonical_digest
 from hugegraph_llm_eval.contracts.domain.artifacts import ArtifactRef
 from hugegraph_llm_eval.contracts.domain.judge import JudgeCallRecord, JudgeCallStatus
-from hugegraph_llm_eval.contracts.domain.observation import SpanContextRef
 from hugegraph_llm_eval.contracts.domain.operation import PortName
+from hugegraph_llm_eval.contracts.domain.trace import SpanContextRef
 from hugegraph_llm_eval.contracts.errors import FailureDetail
 from hugegraph_llm_eval.contracts.identity import (
     EvaluationInputId,
@@ -89,32 +89,6 @@ class Measurement(VersionedModel):
             msg = "measurement value must be finite"
             raise ValueError(msg)
         return value
-
-
-class MetricDefinition(VersionedModel):
-    """MetricDefinition — evaluator-authored contract declaring a metric name, unit, direction,
-    tolerance, and optional target.
-
-    Belongs here (contracts), not in reporting: evaluators declare their own metrics
-    at registration-time and the definition is consumed by both reporting projections
-    and the evaluation suite runtime itself."""
-
-    name: str = Field(min_length=1, max_length=127, pattern=MEASUREMENT_NAME_PATTERN)
-    invocation_key: str | None = Field(default=None, min_length=1, max_length=127, pattern=r"^[a-z][a-z0-9_.-]*$")
-    unit: str = Field(min_length=1, max_length=63, pattern=r"^[a-z][a-z0-9_.-]*$")
-    direction: MeasurementDirection
-    tolerance: float = Field(default=0, ge=0, allow_inf_nan=False)
-    target: float | None = Field(default=None, allow_inf_nan=False)
-
-    @model_validator(mode="after")
-    def _validate_target(self) -> "MetricDefinition":
-        if self.direction is MeasurementDirection.TARGET_IS_BETTER and self.target is None:
-            raise ValueError("target-is-better metric requires a target")
-        if self.direction is not MeasurementDirection.TARGET_IS_BETTER and self.target is not None:
-            raise ValueError("only target-is-better metric may declare a target")
-        if self.direction is MeasurementDirection.INFORMATIONAL:
-            raise ValueError("informational measurement cannot rank Runs")
-        return self
 
 
 class EvidenceLink(VersionedModel):
@@ -177,30 +151,6 @@ class EvaluationRecordDraft(VersionedModel):
 class EvaluationRecord(EvaluationRecordDraft):
     record_id: EvaluationRecordId
     run_id: EvaluationRunId
-
-
-class EvaluationRunSummary(VersionedModel):
-    record_count: int = Field(ge=0)
-    completed_count: int = Field(ge=0)
-    not_applicable_count: int = Field(ge=0)
-    failed_count: int = Field(ge=0)
-    cancelled_count: int = Field(ge=0)
-    total_latency_ms: int = Field(ge=0)
-    known_cost_usd: float = Field(ge=0)
-    unknown_cost_records: int = Field(ge=0)
-    input_tokens: int = Field(ge=0)
-    output_tokens: int = Field(ge=0)
-
-    @model_validator(mode="after")
-    def _validate_counts(self) -> "EvaluationRunSummary":
-        statuses = self.completed_count + self.not_applicable_count + self.failed_count + self.cancelled_count
-        if statuses != self.record_count:
-            msg = "evaluation summary status counts must equal record_count"
-            raise ValueError(msg)
-        if not math.isfinite(self.known_cost_usd):
-            msg = "known evaluation cost must be finite"
-            raise ValueError(msg)
-        return self
 
 
 def _validate_run_coverage(
@@ -298,50 +248,6 @@ class EvaluationDefinitionItem(VersionedModel):
     configuration_digest: ContentDigest | None = None
 
 
-class EvaluationDefinition(VersionedModel):
-    name: str = Field(min_length=1, max_length=127, pattern=r"^[a-z][a-z0-9_.-]*$")
-    revision: str = Field(min_length=1, max_length=127, pattern=r"^[a-zA-Z][a-zA-Z0-9_.-]*$")
-    input_schema: SchemaRef
-    items: tuple[EvaluationDefinitionItem, ...] = Field(min_length=1)
-    digest: ContentDigest
-
-    @model_validator(mode="after")
-    def _validate_definition(self) -> "EvaluationDefinition":
-        keys = tuple(item.invocation_key for item in self.items)
-        if len(keys) != len(set(keys)):
-            msg = "evaluation invocation keys must be unique"
-            raise ValueError(msg)
-        payload = self.model_dump(mode="json", exclude={"digest"})
-        if self.digest != canonical_digest(payload):
-            msg = "evaluation definition digest does not match content"
-            raise ValueError(msg)
-        return self
-
-    @classmethod
-    def create(
-        cls,
-        *,
-        name: str,
-        revision: str,
-        input_schema: SchemaRef,
-        items: tuple[EvaluationDefinitionItem, ...],
-    ) -> "EvaluationDefinition":
-        payload: JsonValue = {
-            "schema_version": 1,
-            "name": name,
-            "revision": revision,
-            "input_schema": input_schema.model_dump(mode="json"),
-            "items": [item.model_dump(mode="json") for item in items],
-        }
-        return cls(
-            name=name,
-            revision=revision,
-            input_schema=input_schema,
-            items=items,
-            digest=canonical_digest(payload),
-        )
-
-
 class EvaluationCorrelation(StrictModel):
     run_case_id: RunCaseId | None = None
     execution_id: ExecutionId | None = None
@@ -372,7 +278,6 @@ class EvaluationRun(VersionedModel):
     completed_required_count: int = Field(ge=0)
     supersedes_id: EvaluationRunId | None = None
     failure: FailureDetail | None = None
-    summary: EvaluationRunSummary | None = None
     trace_context: SpanContextRef | None = None
     correlation: EvaluationCorrelation | None = None
     created_at: AwareDatetime
@@ -382,9 +287,6 @@ class EvaluationRun(VersionedModel):
     def _validate_coverage(self) -> "EvaluationRun":
         if self.updated_at is not None and self.updated_at < self.created_at:
             msg = "evaluation run updated_at cannot precede created_at"
-            raise ValueError(msg)
-        if self.summary is not None and self.summary.record_count != len(self.record_ids):
-            msg = "evaluation summary record_count must match record_ids"
             raise ValueError(msg)
         _validate_run_coverage(self.status, self.required_count, self.completed_required_count)
         _validate_run_failure(self.status, self.failure)

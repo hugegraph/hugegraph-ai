@@ -67,6 +67,8 @@ from hugegraph_llm_eval.integrations.graph_extraction.evaluators.semantic import
     SemanticEntityEvaluator,
     SemanticTripleEvaluator,
 )
+from hugegraph_llm_eval.integrations.judges.claude_code import ClaudeCodeJudge
+from hugegraph_llm_eval.integrations.judges.codex_app_server import CodexAppServerJudge
 from hugegraph_llm_eval.integrations.judges.openai_client import OpenAIClientTransport, openai_judge
 from hugegraph_llm_eval.integrations.retrieval.evaluators.context_quality import (
     ContextPrecisionEvaluator,
@@ -97,6 +99,8 @@ __all__ = [
     "AnswerCorrectnessEvaluator",
     "AnswerFaithfulnessEvaluator",
     "CancellationToken",
+    "ClaudeCodeJudge",
+    "CodexAppServerJudge",
     "ContextEntityRecallEvaluator",
     "ContextPrecisionEvaluator",
     "ContextRelevancyEvaluator",

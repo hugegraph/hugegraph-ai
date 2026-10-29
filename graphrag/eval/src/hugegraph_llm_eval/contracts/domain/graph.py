@@ -20,12 +20,6 @@
 from pydantic import AliasChoices, Field, JsonValue, model_validator
 
 from hugegraph_llm_eval.contracts.base import VersionedModel
-from hugegraph_llm_eval.contracts.identity import SchemaRef
-
-EXTRACTION_SOURCE_SCHEMA = SchemaRef(namespace="graph", name="extraction_dataset", version=1)
-GRAPH_CANDIDATE_ARTIFACT_SCHEMA = SchemaRef(namespace="graph", name="candidate", version=1)
-GRAPH_SCHEMA_ARTIFACT_SCHEMA = SchemaRef(namespace="graph", name="schema", version=1)
-SOURCE_TEXT_ARTIFACT_SCHEMA = SchemaRef(namespace="graph", name="source_text", version=1)
 
 
 class GraphVertex(VersionedModel):

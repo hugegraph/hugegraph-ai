@@ -27,7 +27,7 @@ from hugegraph_llm_eval.contracts.domain.evaluation import (
     MAX_SAMPLES,
     EvaluationCorrelation,
 )
-from hugegraph_llm_eval.contracts.domain.observation import SpanContextRef
+from hugegraph_llm_eval.contracts.domain.trace import SpanContextRef
 from hugegraph_llm_eval.contracts.identity import EvaluationRunId
 
 MAX_ATTEMPTS = 20

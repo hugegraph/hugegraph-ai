@@ -15,20 +15,15 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Stable business Operation and named-port references."""
+"""Named-port references."""
 
 import re
 
 from pydantic import field_validator
 
 from hugegraph_llm_eval.contracts.base import StrictModel
-from hugegraph_llm_eval.contracts.identity import ComponentRef
 
 _PORT_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
-
-
-class OperationRef(ComponentRef):
-    """Semantic component identity independent of Span names and IDs."""
 
 
 class PortName(StrictModel):

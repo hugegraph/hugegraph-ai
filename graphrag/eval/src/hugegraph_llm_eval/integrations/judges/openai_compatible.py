@@ -28,29 +28,24 @@ from typing import Protocol, cast
 from pydantic import Field, JsonValue, field_validator
 
 from hugegraph_llm_eval.contracts.base import StrictModel
-from hugegraph_llm_eval.contracts.domain.judge import (
-    JudgeProvenance,
-    ProviderAttempt,
-    ProviderAttemptStatus,
-    ProviderUsage,
-)
+from hugegraph_llm_eval.contracts.domain.judge import ProviderUsage
 from hugegraph_llm_eval.contracts.errors import FailureCategory, FailureDetail
 from hugegraph_llm_eval.evaluation.judges.base import (
-    JudgeCallError,
     JudgeDescriptor,
-    JudgeOptions,
     JudgeRequest,
-    JudgeResult,
     OutputT,
 )
-from hugegraph_llm_eval.integrations.judges.openai_response import (
+from hugegraph_llm_eval.integrations.judges.attempts import (
     AttemptFailureError,
+    AttemptLoopJudge,
     AttemptOutcome,
+    failure,
+)
+from hugegraph_llm_eval.integrations.judges.openai_response import (
     OpenAIResponse,
     OpenAIResponseUsage,
     classify_exception,
     exception_usage,
-    failure,
     provider_outcome,
 )
 
@@ -87,10 +82,6 @@ class OpenAICompatibleSettings(StrictModel):
         return value
 
 
-def _backoff(options: JudgeOptions, attempt_index: int) -> float:
-    return min(options.max_backoff_seconds, options.initial_backoff_seconds * (2.0 ** (attempt_index - 1)))
-
-
 def _configuration_payload(
     settings: OpenAICompatibleSettings,
     pricing: OpenAICompatiblePricing,
@@ -125,7 +116,7 @@ def _structured_messages(
     return [instruction, *messages]
 
 
-class OpenAICompatibleJudge:
+class OpenAICompatibleJudge(AttemptLoopJudge):
     """Adapts one chat-completions parse transport to the Judge port."""
 
     def __init__(
@@ -139,13 +130,10 @@ class OpenAICompatibleJudge:
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
+        super().__init__(descriptor=descriptor, clock=clock, monotonic=monotonic, sleep=sleep)
         self._transport = transport
-        self.descriptor = descriptor
         self._pricing = pricing
         self._settings = settings
-        self._clock = clock
-        self._monotonic = monotonic
-        self._sleep = sleep
         expected = JudgeDescriptor.create(
             provider=descriptor.provider,
             model=descriptor.model,
@@ -155,49 +143,13 @@ class OpenAICompatibleJudge:
             msg = "JudgeDescriptor configuration digest does not match OpenAI-compatible settings"
             raise ValueError(msg)
 
-    def judge(self, request: JudgeRequest[OutputT], options: JudgeOptions) -> JudgeResult[OutputT]:
-        attempts: list[ProviderAttempt] = []
-        for attempt_index in range(1, options.max_attempts + 1):
-            timeout = self._remaining_seconds(options)
-            if timeout is not None and timeout <= 0:
-                failure_detail = failure(FailureCategory.TIMEOUT, "judge_deadline_exceeded", True)
-                attempts.append(self._failed_attempt(attempt_index, 0, failure_detail))
-                self._raise(request, attempts, failure_detail)
-            started = self._monotonic()
-            try:
-                outcome = self._call(request, timeout)
-            except Exception as exc:  # Provider transport and response parsing boundary.
-                failure_detail = exc.failure if isinstance(exc, AttemptFailureError) else classify_exception(exc)
-                latency_ms = self._latency_ms(started)
-                attempts.append(
-                    self._failed_attempt(
-                        attempt_index,
-                        latency_ms,
-                        failure_detail,
-                        usage=exception_usage(exc, self._usage),
-                    )
-                )
-                if not failure_detail.retryable or attempt_index == options.max_attempts:
-                    self._raise(request, attempts, failure_detail)
-                delay = _backoff(options, attempt_index)
-                remaining = self._remaining_seconds(options)
-                self._sleep(delay if remaining is None else min(delay, max(0, remaining)))
-                continue
-            attempts.append(self._completed_attempt(attempt_index, self._latency_ms(started), outcome.usage))
-            provenance = self._provenance(
-                request,
-                attempts,
-                response_id=outcome.response_id,
-                response_model=outcome.response_model,
-            )
-            return JudgeResult(
-                output=request.response_type.model_validate(outcome.output),
-                provenance=provenance,
-                usage=outcome.usage,
-            )
-        raise AssertionError("positive max_attempts guarantees a result or JudgeCallError")
+    def _classify(self, error: Exception) -> FailureDetail:
+        return classify_exception(error)
 
-    def _call(self, request: JudgeRequest[OutputT], timeout: float | None) -> AttemptOutcome:
+    def _billed_usage(self, error: Exception) -> ProviderUsage | None:
+        return exception_usage(error, self._usage)
+
+    def _attempt(self, request: JudgeRequest[OutputT], timeout: float | None) -> AttemptOutcome:
         kwargs: dict[str, object] = {
             "model": self.descriptor.model,
             "messages": _structured_messages(
@@ -238,73 +190,3 @@ class OpenAICompatibleJudge:
             cost_usd=cost,
             reported=raw is not None,
         )
-
-    def _completed_attempt(
-        self,
-        attempt_index: int,
-        latency_ms: int,
-        usage: ProviderUsage,
-    ) -> ProviderAttempt:
-        return ProviderAttempt(
-            attempt_index=attempt_index,
-            provider=self.descriptor.provider,
-            model=self.descriptor.model,
-            status=ProviderAttemptStatus.COMPLETED,
-            latency_ms=latency_ms,
-            usage=usage,
-        )
-
-    def _failed_attempt(
-        self,
-        attempt_index: int,
-        latency_ms: int,
-        failure: FailureDetail,
-        *,
-        usage: ProviderUsage | None = None,
-    ) -> ProviderAttempt:
-        return ProviderAttempt(
-            attempt_index=attempt_index,
-            provider=self.descriptor.provider,
-            model=self.descriptor.model,
-            status=ProviderAttemptStatus.FAILED,
-            latency_ms=latency_ms,
-            usage=usage,
-            failure=failure,
-        )
-
-    def _provenance(
-        self,
-        request: JudgeRequest[OutputT],
-        attempts: list[ProviderAttempt],
-        response_id: str | None,
-        response_model: str | None,
-    ) -> JudgeProvenance:
-        return JudgeProvenance(
-            provider=self.descriptor.provider,
-            model=self.descriptor.model,
-            configuration_digest=self.descriptor.configuration_digest,
-            prompt=request.prompt,
-            rubric=request.rubric,
-            attempts=tuple(attempts),
-            response_id=response_id,
-            response_model=response_model,
-        )
-
-    def _raise(
-        self,
-        request: JudgeRequest[OutputT],
-        attempts: list[ProviderAttempt],
-        failure: FailureDetail,
-    ) -> None:
-        raise JudgeCallError(
-            failure,
-            self._provenance(request, attempts, response_id=None, response_model=None),
-        )
-
-    def _remaining_seconds(self, options: JudgeOptions) -> float | None:
-        if options.deadline is None:
-            return None
-        return (options.deadline - self._clock()).total_seconds()
-
-    def _latency_ms(self, started: float) -> int:
-        return max(0, round((self._monotonic() - started) * 1_000))

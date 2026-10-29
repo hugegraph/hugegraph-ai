@@ -24,10 +24,6 @@ from pydantic import Field
 from hugegraph_llm_eval.contracts.base import VersionedModel
 
 
-class PersistenceError(RuntimeError):
-    """A durable backend could not satisfy the persistence contract."""
-
-
 class FailureCategory(StrEnum):
     INVALID_INPUT = "invalid_input"
     USER_CODE = "user_code"
@@ -42,7 +38,6 @@ class FailureCategory(StrEnum):
     STORAGE_UNAVAILABLE = "storage_unavailable"
     STORAGE_CONFLICT = "storage_conflict"
     STORAGE_CORRUPT = "storage_corrupt"
-    OBSERVATION_OVERFLOW = "observation_overflow"
     INTERNAL = "internal"
 
 

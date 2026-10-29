@@ -18,7 +18,6 @@
 """Validate and classify OpenAI-compatible structured responses."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel, ValidationError
@@ -26,6 +25,7 @@ from pydantic import BaseModel, ValidationError
 from hugegraph_llm_eval.contracts.domain.judge import ProviderUsage
 from hugegraph_llm_eval.contracts.errors import FailureCategory, FailureDetail
 from hugegraph_llm_eval.evaluation.judges.base import JudgeRequest, OutputT
+from hugegraph_llm_eval.integrations.judges.attempts import AttemptFailureError, AttemptOutcome, failure
 
 if TYPE_CHECKING:
     pass
@@ -61,21 +61,6 @@ class OpenAIResponse(Protocol):
     model: str
     choices: tuple[_ResponseChoice, ...]
     usage: OpenAIResponseUsage | None
-
-
-@dataclass(frozen=True, slots=True)
-class AttemptOutcome:
-    output: BaseModel
-    usage: ProviderUsage
-    response_id: str
-    response_model: str
-
-
-class AttemptFailureError(RuntimeError):
-    def __init__(self, failure: FailureDetail, *, usage: ProviderUsage | None = None) -> None:
-        super().__init__(failure.message)
-        self.failure = failure
-        self.usage = usage
 
 
 def provider_outcome(
@@ -129,15 +114,6 @@ def _structured_output(request: JudgeRequest[OutputT], choice: _ResponseChoice) 
     except ValidationError as exc:
         detail = failure(FailureCategory.INVALID_PROVIDER_OUTPUT, "invalid_structured_output", True)
         raise AttemptFailureError(detail) from exc
-
-
-def failure(category: FailureCategory, code: str, retryable: bool) -> FailureDetail:
-    return FailureDetail(
-        category=category,
-        code=code,
-        message=f"judge provider failure: {code}",
-        retryable=retryable,
-    )
 
 
 def classify_exception(error: Exception) -> FailureDetail:

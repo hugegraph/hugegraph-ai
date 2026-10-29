@@ -65,44 +65,12 @@ class ArtifactId(ContentAddressedId):
     prefix = "artifact:"
 
 
-class ImportId(ContentAddressedId):
-    prefix = "import:"
-
-
-class DatasetViewId(ContentAddressedId):
-    prefix = "dataset-view:"
-
-
-class ExperimentManifestId(ContentAddressedId):
-    prefix = "experiment-manifest:"
-
-
-class DatasetId(ContentAddressedId):
-    prefix = "dataset:"
-
-
-class DatasetCaseId(GeneratedId):
-    prefix = "case:"
-
-
 class ExecutionId(GeneratedId):
     prefix = "execution:"
 
 
-class ObservationDeliveryId(GeneratedId):
-    prefix = "observation-delivery:"
-
-
-class RunId(GeneratedId):
-    prefix = "run:"
-
-
 class RunCaseId(GeneratedId):
     prefix = "run-case:"
-
-
-class ExperimentId(GeneratedId):
-    prefix = "experiment:"
 
 
 class EvaluationInputId(ContentAddressedId):
@@ -115,10 +83,6 @@ class EvaluationRunId(GeneratedId):
 
 class EvaluationRecordId(GeneratedId):
     prefix = "evaluation-record:"
-
-
-class ReviewResultId(GeneratedId):
-    prefix = "review-result:"
 
 
 class SchemaRef(StrictModel):
@@ -157,15 +121,3 @@ class ComponentRef(StrictModel):
 
 class EvaluatorRef(ComponentRef):
     """Versioned semantic identity for one Evaluator implementation contract."""
-
-
-class TargetRef(ComponentRef):
-    """Versioned semantic identity resolved through a registered Target Provider."""
-
-
-class DatasetRef(ComponentRef):
-    """Versioned semantic identity resolved through a registered Dataset Provider."""
-
-
-class EvaluationPlanRef(ComponentRef):
-    """Versioned semantic identity resolved through the experiment catalog."""

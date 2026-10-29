@@ -29,8 +29,6 @@ from hugegraph_llm_eval.contracts.digests import ContentDigest
 from hugegraph_llm_eval.contracts.domain.artifacts import ArtifactRef
 from hugegraph_llm_eval.contracts.domain.evaluation import (
     EvaluationContext,
-    EvaluationDefinition,
-    EvaluationDefinitionItem,
     EvaluationInput,
     EvaluationRecordDraft,
     EvaluationRecordStatus,
@@ -174,22 +172,3 @@ class FakeEvaluator:
             latency_ms=1,
             created_at=NOW,
         )
-
-
-def definition(*evaluators: FakeEvaluator, required: tuple[bool, ...] | None = None) -> EvaluationDefinition:
-    """definition."""
-    requirements = required or (True,) * len(evaluators)
-    return EvaluationDefinition.create(
-        name="test_definition",
-        revision="v1",
-        input_schema=INPUT_SCHEMA,
-        items=tuple(
-            EvaluationDefinitionItem(
-                invocation_key=evaluator.descriptor.evaluator.name,
-                evaluator=evaluator.descriptor.evaluator,
-                implementation_digest=evaluator.descriptor.implementation_digest,
-                required=is_required,
-            )
-            for evaluator, is_required in zip(evaluators, requirements, strict=True)
-        ),
-    )
