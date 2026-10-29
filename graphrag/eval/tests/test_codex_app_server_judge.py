@@ -190,10 +190,10 @@ def test_custom_mcp_servers_are_rejected_when_isolation_is_enabled(tmp_path: Pat
         make_judge(tmp_path, config={"mcp_servers": {"external": {"command": "unsafe"}}})
 
 
-def test_empty_user_mcp_config_still_overrides_custom_config(tmp_path: Path) -> None:
-    judge = make_judge(tmp_path, disable_user_mcp_servers=False, config={"mcp_servers": {"custom": {"command": "x"}}})
+def test_empty_user_mcp_config_is_explicitly_disabled(tmp_path: Path) -> None:
+    judge = make_judge(tmp_path)
     judge._mcp_overrides = {}
-    assert judge._thread_params(None)["config"]["mcp_servers"] == {"custom": {"command": "x"}}
+    assert judge._thread_params(None)["config"]["mcp_servers"] == {}
 
 
 def test_mcp_isolation_fails_closed_when_config_cannot_be_read(tmp_path: Path) -> None:
