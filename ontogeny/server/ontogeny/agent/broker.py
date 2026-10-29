@@ -444,6 +444,9 @@ class AgentBroker:
                     target = await self.sc.repo.get(s, object_type, row.target_id)
                     if target is None:
                         raise NotFoundError(f"{object_type}/{row.target_id} not found")
+                    from ..engine.service import assemble_row
+
+                    target = assemble_row(self.sc.compiled, object_type, target)
                 self.sc.policy.require(principal, row.action, target)
 
             if decision == "rejected":

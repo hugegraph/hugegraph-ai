@@ -24,6 +24,7 @@ from test_agent_approval import client as _approval_client
 
 from ontogeny.action.models import RevisionRow
 from ontogeny.agent.models import AgentApprovalRow
+from ontogeny.core.models import PropertyDef
 from ontogeny.policy.engine import PolicyEngine
 from ontogeny.stores.repo import utcnow
 
@@ -107,3 +108,44 @@ async def test_human_permit_does_not_replace_plugin_execution_policy(approval_cl
             await db.execute(select(AgentApprovalRow).where(AgentApprovalRow.id == pending["approval_id"]))
         ).scalar_one()
         assert order["status"] == "PLANNED" and approval.status == "failed"
+
+
+@pytest.mark.parametrize("decision", ["approved", "rejected"])
+async def test_marked_expression_derived_field_uses_real_value_for_approval(approval_client, decision):
+    client, sc = approval_client
+    async with sc.sessionmaker() as db:
+        await sc.repo.action_update(db, "production-order", "PO-1002", {"priority": "HIGH"}, utcnow())
+        await db.commit()
+    sc.compiled.objects["production-order"].spec.properties["priority_copy"] = PropertyDef(
+        type="string", marking="internal", derived="target.priority"
+    )
+    _policy(sc, POLICY.replace("resource.priority !=", "resource.priority_copy !="))
+    pending = await _pending_approval(client)
+    visible = await client.get("/api/v1/objects/production-order/PO-1002", headers=_hdr(REVIEWER))
+    assert visible.json()["priority_copy"] == "__masked__"
+    response = await client.post(
+        f"/api/v1/agent/approvals/{pending['approval_id']}/decision",
+        json={"decision": decision},
+        headers=_hdr(REVIEWER),
+    )
+    assert response.status_code == 403, response.text
+    async with sc.sessionmaker() as db:
+        approval = await db.get(AgentApprovalRow, pending["approval_id"])
+        assert approval.status == "pending" and approval.decided_by is None
+
+
+async def test_unmasked_expression_derived_value_can_authorize_reviewer(approval_client):
+    client, sc = approval_client
+    sc.compiled.objects["production-order"].spec.properties["priority_copy"] = PropertyDef(
+        type="string", marking="internal", derived="target.priority"
+    )
+    _policy(sc, POLICY.replace("resource.priority !=", "resource.priority_copy !="))
+    pending = await _pending_approval(client)
+    visible = await client.get("/api/v1/objects/production-order/PO-1002", headers=_hdr(REVIEWER))
+    assert visible.json()["priority_copy"] == "__masked__"
+    response = await client.post(
+        f"/api/v1/agent/approvals/{pending['approval_id']}/decision",
+        json={"decision": "approved"},
+        headers=_hdr(REVIEWER),
+    )
+    assert response.status_code == 200 and response.json()["status"] == "executed"
