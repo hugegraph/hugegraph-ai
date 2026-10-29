@@ -47,6 +47,12 @@ PROVIDER = "claude-code"
 _MAX_SYSTEM_PROMPT_BYTES = 100_000
 _PROVIDER_ENV_PREFIXES = ("ANTHROPIC_", "CLAUDE_CODE_USE_")
 _USAGE_LIMIT_MARKERS = ("usage limit", "limit reached", "limit will reset")
+_PROTECTED_EXTRA_FLAGS = frozenset({
+    "--tools", "--setting-sources", "--strict-mcp-config", "--no-session-persistence",
+    "--disable-slash-commands", "--json-schema", "--model", "--output-format",
+    "--permission-mode", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions",
+    "--mcp-config",
+})
 
 
 class ProcessRunner(Protocol):
@@ -113,6 +119,9 @@ class ClaudeCodeJudge(AttemptLoopJudge):
         if max_turns is not None and max_turns < 1:
             msg = "max_turns must be at least 1"
             raise ValueError(msg)
+        conflicts = sorted({arg.split("=", 1)[0] for arg in extra_args} & _PROTECTED_EXTRA_FLAGS)
+        if conflicts:
+            raise ValueError(f"extra_args cannot override controlled Claude CLI flags: {', '.join(conflicts)}")
         configuration: JsonValue = {
             "cli_version": version if version is not None else cli_version(executable),
             "effort": effort,

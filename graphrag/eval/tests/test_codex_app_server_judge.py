@@ -175,9 +175,49 @@ def test_missing_executable_is_reported_as_permanent(tmp_path: Path) -> None:
     assert len(error.provenance.attempts) == 1
 
 
+def test_custom_features_preserve_safe_defaults_and_reject_tool_enablement(tmp_path: Path) -> None:
+    judge = make_judge(tmp_path, config={"features": {"multi_agent": False}})
+    features = judge._config["features"]
+    assert features["shell_tool"] is False
+    assert features["browser_use"] is False
+    assert features["plugins"] is False
+    with pytest.raises(ValueError, match="cannot enable tool capabilities"):
+        make_judge(tmp_path, config={"features": {"shell_tool": True}})
+
+
+def test_mcp_isolation_fails_closed_when_config_cannot_be_read(tmp_path: Path) -> None:
+    from hugegraph_llm_eval.integrations.judges.codex_connection import RpcError
+
+    class BrokenConnection:
+        def request(self, method, params, timeout):
+            raise RpcError("config unavailable")
+
+    judge = make_judge(tmp_path)
+    with pytest.raises(RuntimeError, match="cannot verify"):
+        judge._disabled_mcp_servers(BrokenConnection(), 1.0)
+
+
+def test_subscription_auth_mode_removes_ambient_api_key(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.example.invalid/v1")
+    captured: dict[str, str] = {}
+    log = tmp_path / "server.jsonl"
+
+    def spawn(argv, *, cwd, env):
+        captured.update(env)
+        return spawn_app_server([sys.executable, "-I", str(SERVER)], cwd=cwd, env={**env, "FAKE_CODEX_LOG": str(log)})
+
+    with CodexAppServerJudge(model="fake-model", version="x", auth_mode="subscription", spawn=spawn) as judge:
+        judge.judge(cli_request(), ONCE)
+
+    assert "OPENAI_API_KEY" not in captured
+    assert "OPENAI_BASE_URL" not in captured
+
+
 def test_descriptor_changes_with_cli_version_and_effort(tmp_path: Path) -> None:
     base = make_judge(tmp_path).descriptor
     other_effort = make_judge(tmp_path, effort="high").descriptor
     other_version = CodexAppServerJudge(model="fake-model", version="codex-cli 9.9.9").descriptor
 
-    assert len({base.configuration_digest, other_effort.configuration_digest, other_version.configuration_digest}) == 3
+    account_mode = CodexAppServerJudge(model="fake-model", version="codex-cli 0.0.0", auth_mode="subscription").descriptor
+    assert len({base.configuration_digest, other_effort.configuration_digest, other_version.configuration_digest, account_mode.configuration_digest}) == 4

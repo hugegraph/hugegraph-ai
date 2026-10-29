@@ -115,6 +115,12 @@ def test_command_line_disables_tools_and_settings_and_sends_the_prompt_on_stdin(
     assert Path(call.cwd).is_dir()
 
 
+@pytest.mark.parametrize("flag", ["--tools", "--setting-sources", "--model", "--permission-mode", "--mcp-config"])
+def test_extra_args_cannot_override_controlled_flags(flag: str) -> None:
+    with pytest.raises(ValueError, match="cannot override controlled Claude CLI flags"):
+        ClaudeCodeJudge(model="sonnet", version="x", extra_args=(flag, "unsafe"))
+
+
 def test_optional_flags_are_omitted_when_unset() -> None:
     runner = FakeRunner(completed(success()))
 

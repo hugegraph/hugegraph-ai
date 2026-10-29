@@ -28,7 +28,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from types import TracebackType
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import JsonValue, ValidationError
 
@@ -105,6 +105,7 @@ class CodexAppServerJudge(AttemptLoopJudge):
         effort: str | None = None,
         executable: str = "codex",
         config: Mapping[str, JsonValue] | None = None,
+        auth_mode: Literal["inherit", "subscription"] = "inherit",
         disable_user_mcp_servers: bool = True,
         call_timeout_seconds: float = 600.0,
         version: str | None = None,
@@ -116,10 +117,24 @@ class CodexAppServerJudge(AttemptLoopJudge):
         if call_timeout_seconds <= 0:
             msg = "call_timeout_seconds must be positive"
             raise ValueError(msg)
-        merged: dict[str, JsonValue] = {**_DEFAULT_CONFIG, **(config or {})}
+        provided = dict(config or {})
+        features = provided.pop("features", {})
+        if not isinstance(features, Mapping):
+            raise ValueError("config.features must be a mapping")
+        unsafe_features = [name for name, enabled in features.items() if name in _DEFAULT_CONFIG["features"] and enabled is True]
+        if unsafe_features:
+            raise ValueError(f"Codex judge cannot enable tool capabilities: {', '.join(sorted(unsafe_features))}")
+        merged: dict[str, JsonValue] = {
+            **_DEFAULT_CONFIG,
+            **provided,
+            "features": {**_DEFAULT_CONFIG["features"], **features},
+        }
+        if merged.get("web_search") != "disabled":
+            raise ValueError("Codex judge requires web_search to remain disabled")
         configuration: JsonValue = {
             "cli_version": version if version is not None else cli_version(executable),
             "effort": effort,
+            "auth_mode": auth_mode,
             "config": merged,
             "disable_user_mcp_servers": disable_user_mcp_servers,
             "sandbox": "read-only",
@@ -134,6 +149,7 @@ class CodexAppServerJudge(AttemptLoopJudge):
         self._executable = executable
         self._effort = effort
         self._config = merged
+        self._auth_mode = auth_mode
         self._disable_user_mcp_servers = disable_user_mcp_servers
         self._call_timeout = call_timeout_seconds
         self._spawn = spawn
@@ -169,7 +185,7 @@ class CodexAppServerJudge(AttemptLoopJudge):
             return connection
 
     def _start(self, timeout: float) -> AppServerConnection:
-        process = self._spawn([self._executable, "app-server"], cwd=self._workdir, env=dict(os.environ))
+        process = self._spawn([self._executable, "app-server"], cwd=self._workdir, env=self._environment())
         connection = AppServerConnection(process)
         try:
             connection.request("initialize", {"clientInfo": {"name": "hugegraph-llm-eval", "version": "1"}}, timeout)
@@ -180,16 +196,28 @@ class CodexAppServerJudge(AttemptLoopJudge):
             raise
         return connection
 
+    def _environment(self) -> dict[str, str]:
+        env = dict(os.environ)
+        if self._auth_mode == "subscription":
+            # Use the account stored by codex login, not ambient API-key overrides.
+            for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID", "OPENAI_PROJECT_ID"):
+                env.pop(name, None)
+        return env
+
     def _disabled_mcp_servers(self, connection: AppServerConnection, timeout: float) -> dict[str, JsonValue]:
         if not self._disable_user_mcp_servers:
             return {}
         try:
             result = connection.request("config/read", {"cwd": self._workdir, "includeLayers": False}, timeout)
-        except RpcError:
-            return {}
+        except RpcError as exc:
+            raise RuntimeError("Cannot verify that user MCP servers are disabled") from exc
         config = result.get("config")
-        servers = config.get("mcp_servers") if isinstance(config, dict) else None
-        return {name: {"enabled": False} for name in servers} if isinstance(servers, dict) else {}
+        if not isinstance(config, dict):
+            raise RuntimeError("Codex app-server returned no effective configuration; cannot verify MCP isolation")
+        servers = config.get("mcp_servers", {})
+        if not isinstance(servers, dict):
+            raise RuntimeError("Codex app-server returned an invalid MCP configuration")
+        return {name: {"enabled": False} for name in servers}
 
     def _attempt(self, request: JudgeRequest[OutputT], timeout: float | None) -> AttemptOutcome:
         limit = self._call_timeout if timeout is None else min(timeout, self._call_timeout)

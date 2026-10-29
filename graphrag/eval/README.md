@@ -230,13 +230,13 @@ from hugegraph_llm_eval import ClaudeCodeJudge, CodexAppServerJudge
 
 judge = ClaudeCodeJudge(model="sonnet")  # runs `claude -p`, one process per call
 
-with CodexAppServerJudge(model="<a model your account can use>", effort="low") as judge:
+with CodexAppServerJudge(model="<a model your account can use>", effort="low", auth_mode="subscription") as judge:
     ...  # one shared `codex app-server` process, one ephemeral thread per call
 ```
 
 | | `ClaudeCodeJudge` | `CodexAppServerJudge` |
 | --- | --- | --- |
-| Authentication | `claude` login or `CLAUDE_CODE_OAUTH_TOKEN` | `codex` ChatGPT login |
+| Authentication | `claude` login or `CLAUDE_CODE_OAUTH_TOKEN` | `codex` ChatGPT login; `auth_mode="subscription"` ignores ambient OpenAI API-key/base-URL overrides |
 | Process | one `claude -p` per call | one long-lived `codex app-server`, started on first use |
 | Concurrency | any | calls share the process; the shared limiter still bounds them |
 | Cleanup | none | `close()`, a `with` block, or interpreter exit |
@@ -252,10 +252,12 @@ What to know before using them:
   `scrub_provider_env=True, setting_sources=""`: that removes `ANTHROPIC_*` and
   `CLAUDE_CODE_USE_*` from the child environment and ignores settings files. Without a
   login the call then fails with the permanent error `provider_not_authenticated`.
-- **No tools.** Claude runs with `--tools ""`. Codex runs ephemeral, read-only, with
-  approvals off and shell, apps, plugins and your configured MCP servers disabled.
-  Codex hooks from `~/.codex/hooks.json` still fire; they cannot be switched off from
-  the client.
+- **No tools.** Claude runs with `--tools ""` and rejects `extra_args` that conflict
+  with controlled safety/auth/schema flags. Codex runs ephemeral and read-only, with
+  approvals off and shell, apps, plugins and user MCP servers disabled. If Codex cannot
+  read the effective MCP configuration, the judge fails closed instead of continuing
+  without verifying isolation. Codex hooks from `~/.codex/hooks.json` still fire; they
+  cannot be switched off from the client.
 - **Tokens, not cost.** Both report token counts and leave `cost_usd` empty. With
   `budget_usd` set, that unknown cost stops later samples and metrics, so leave the
   budget unset and bound a subscription run with `max_samples`, `max_concurrency` and
@@ -267,7 +269,12 @@ What to know before using them:
 - **Usage limits.** A subscription limit surfaces as the permanent failure
   `provider_usage_limit` and is not retried.
 - **Codex needs an explicit `model`**; the account default may be unavailable to
-  app-server clients.
+  app-server clients. `auth_mode="inherit"` (default) preserves the CLI environment;
+  use `auth_mode="subscription"` to remove `OPENAI_API_KEY`, `OPENAI_BASE_URL`,
+  `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID` from the child process and select the
+  account saved by `codex login`. For API-key billing, use `openai_judge(...)` with an
+  explicit key and endpoint instead. This makes account/API switching explicit rather
+  than depending on ambient environment variables.
 
 ## Input builders
 
