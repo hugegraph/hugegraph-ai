@@ -41,6 +41,7 @@ from .models import (
     ModifyLinkedEffect,
     ModifyTargetEffect,
     ObjectTypeResource,
+    PolicySetResource,
     SetLinkEffect,
     WebhookEffect,
 )
@@ -145,7 +146,6 @@ def validate(pkg: OntologyPackage) -> ValidationReport:
     actions = {a.metadata.name: a for a in pkg.actions()}
     policies = {p.metadata.name: p for p in pkg.policies()}
     stores = {s.metadata.name: s for s in pkg.stores()}
-    functions = {f.metadata.name: f for f in pkg.functions()}
 
     # ---- duplicates -------------------------------------------------------
     seen: set[tuple[str, str]] = set()
@@ -339,7 +339,7 @@ def validate(pkg: OntologyPackage) -> ValidationReport:
         if target is None:
             rep.error("ACTION-TARGET", res_id, f"target {act.spec.target!r} is not an ObjectType")
             continue
-        _validate_action_against(pkg, rep, act, target, objects, links, policies, functions)
+        _validate_action_against(rep, act, target, objects, links, policies)
 
     # ---- functions --------------------------------------------------------
     for fn in pkg.functions():
@@ -631,14 +631,12 @@ def _strings(value) -> list[str]:
 
 
 def _validate_action_against(
-    pkg: OntologyPackage,
     rep: ValidationReport,
     act: ActionResource,
     target: ObjectTypeResource,
     objects: dict[str, ObjectTypeResource],
     links: dict[str, LinkTypeResource],
-    policies: dict[str, str],
-    functions: dict[str, FunctionResource],
+    policies: dict[str, PolicySetResource],
 ) -> None:
     res_id = f"Action/{act.metadata.name}"
     spec = act.spec
@@ -685,6 +683,8 @@ def _validate_action_against(
             lnk = links.get(eff.link)
             if lnk is None:
                 rep.error("ACTION-LINK", res_id, f"modify-linked references unknown link {eff.link!r}")
+            elif spec.target not in (lnk.spec.source, lnk.spec.target):
+                rep.error("ACTION-LINK-TARGET", res_id, f"modify-linked link {eff.link!r} is not attached to target")
             else:
                 other = lnk.spec.target if lnk.spec.source == spec.target else lnk.spec.source
                 other_obj = objects.get(other)

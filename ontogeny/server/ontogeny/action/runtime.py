@@ -44,6 +44,7 @@ from ..core.models import (
 )
 from ..errors import (
     ConflictError,
+    DSLValidationError,
     NotFoundError,
     OOError,
     RuleRejectedError,
@@ -295,11 +296,18 @@ class ActionRuntime:
             if self.function_runner is None:
                 raise OOError("function-backed action requires a configured function runner")
             plan = await self.function_runner(session, action.spec.execution.entry, params, ctx)
-            effects = [self._materialize_plan_entry(entry) for entry in plan]
+            try:
+                if not isinstance(plan, list):
+                    raise ValueError("effect plan must be a list")
+                effects = [self._materialize_plan_entry(entry) for entry in plan]
+            except (ValueError, TypeError) as exc:
+                raise DSLValidationError(f"invalid function effect plan: {exc}") from exc
+            self._validate_effect_plan(action, effects)
 
         before = dict(target) if target else None
         after: dict | None = None
         created_id: str | None = None
+        created_ids: list[str] = []
         linked_pairs: list[tuple[str, str]] = []  # (object_type, id) changed via modify-linked
         ts = utcnow()
         applied_effects = []
@@ -313,6 +321,8 @@ class ActionRuntime:
             applied_effects.append(eff)
             if outcome is not None:
                 after, created_id = outcome[0], outcome[1] or created_id
+                if outcome[1] is not None:
+                    created_ids.append(outcome[1])
                 linked_pairs.extend(outcome[2] or [])
 
         # 5) audit revision + outbox (same transaction)
@@ -322,7 +332,7 @@ class ActionRuntime:
         rev = await _record(
             "executed", None, before=before, after=after, rules_hit=rules_hit, decision=decision, obj_id=effective_id
         )
-        events = self._outbox_events(applied_effects, before, after, effective_id, linked_pairs)
+        events = self._outbox_events(applied_effects, before, after, effective_id, linked_pairs, created_ids, target_id)
         for op, oid, payload in events:
             session.add(
                 OutboxRow(
@@ -444,6 +454,7 @@ class ActionRuntime:
                 if fk_written:
                     return ctx.target, None, []
             else:
+                from_source = lnk.spec.source == action.spec.target
                 for entry in eff.add:
                     resolved = await session.run_sync(
                         lambda _, entry=entry: {
@@ -455,8 +466,9 @@ class ActionRuntime:
                         continue
                     # join-table links: entry keys are target-side props; the single
                     # resolved value is the destination PK (v0)
-                    dst = next(iter(resolved.values()))
-                    await self.repo.link_add(session, eff.link, str(target_id), str(dst), ts)
+                    other_id = str(next(iter(resolved.values())))
+                    src, dst = (str(target_id), other_id) if from_source else (other_id, str(target_id))
+                    await self.repo.link_add(session, eff.link, src, dst, ts)
                 for entry in eff.remove:
                     resolved = await session.run_sync(
                         lambda _, entry=entry: {
@@ -465,9 +477,9 @@ class ActionRuntime:
                         }
                     )
                     if resolved:
-                        await self.repo.link_remove(
-                            session, eff.link, str(target_id), str(next(iter(resolved.values()))), ts
-                        )
+                        other_id = str(next(iter(resolved.values())))
+                        src, dst = (str(target_id), other_id) if from_source else (other_id, str(target_id))
+                        await self.repo.link_remove(session, eff.link, src, dst, ts)
             return None, None, []
 
         if isinstance(eff, ModifyLinkedEffect):
@@ -544,7 +556,35 @@ class ActionRuntime:
             )
         return eff
 
-    def _outbox_events(self, effects, before, after, obj_id, linked_pairs=None):
+    def _validate_effect_plan(self, action, effects) -> None:
+        """Apply the same semantic checks used for package-authored effects."""
+        from ..core.validator import ValidationReport, _validate_action_against
+
+        # Plain function results are data, not DSL; only explicit $expr
+        # values should go through the static expression checker.
+        checked = []
+        for effect in effects:
+            updates = {}
+            for field in ("properties", "set"):
+                values = getattr(effect, field, None)
+                if values is not None:
+                    updates[field] = {k: "'literal'" if isinstance(v, Literal) else v for k, v in values.items()}
+            checked.append(effect.model_copy(update=updates))
+        candidate = action.model_copy(update={"spec": action.spec.model_copy(update={"effects": checked})})
+        report = ValidationReport()
+        _validate_action_against(
+            report,
+            candidate,
+            self.compiled.objects[action.spec.target],
+            self.compiled.objects,
+            self.compiled.links,
+            self.compiled.policies,
+        )
+        if not report.ok:
+            issues = [{"code": issue.code, "message": issue.message} for issue in report.issues]
+            raise DSLValidationError("function effect plan rejected by validator", details={"issues": issues})
+
+    def _outbox_events(self, effects, before, after, obj_id, linked_pairs=None, created_ids=None, target_id=None):
         events: list[tuple[str, str | None, dict]] = []
         for eff in effects:
             if isinstance(eff, WebhookEffect):
@@ -564,7 +604,12 @@ class ActionRuntime:
                 )
             elif isinstance(eff, EmitEventEffect):
                 events.append(("event", obj_id, {"kind": "emit", "payload": eff.payload}))
-        if after is not None and before is None:
+        if created_ids:
+            for created in dict.fromkeys(created_ids):
+                events.append(("upsert", created, {"origin": "action:create"}))
+            if before is not None and target_id not in created_ids:
+                events.append(("upsert", target_id, {"origin": "action:modify"}))
+        elif after is not None and before is None:
             events.append(("upsert", obj_id, {"origin": "action:create"}))
         elif after is not None:
             events.append(("upsert", obj_id, {"origin": "action:modify"}))
