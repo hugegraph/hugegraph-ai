@@ -185,6 +185,7 @@ class ActionRuntime:
         *,
         expected_revision: int | None = None,
         idempotency_key: str | None = None,
+        commit_rejections: bool = True,
     ) -> RevisionRow:
         action = self.compiled.actions.get(action_name)
         if action is None:
@@ -259,7 +260,8 @@ class ActionRuntime:
                 # Rules run before any data write, so the session holds nothing but
                 # this audit row: commit it here and the rejection is recorded no
                 # matter which shell (REST/MCP/CLI/eval) invoked the action.
-                await session.commit()
+                if commit_rejections:
+                    await session.commit()
                 raise RuleRejectedError(
                     rule.message or f"rule rejected: {rule.expr}",
                     details={"revision_id": rev.id, "rule": rule.expr},
@@ -269,7 +271,8 @@ class ActionRuntime:
         decision = self.policy.decide(principal, action_name, target)
         if not decision.allow:
             rev = await _record("denied_policy", decision.reason, before=target, rules_hit=rules_hit, decision=decision)
-            await session.commit()  # same reasoning as the rule-rejection path
+            if commit_rejections:
+                await session.commit()  # same reasoning as the rule-rejection path
             from ..errors import PolicyDeniedError
 
             raise PolicyDeniedError(

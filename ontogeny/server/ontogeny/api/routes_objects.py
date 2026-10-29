@@ -268,15 +268,7 @@ def register(r: APIRouter, sc: ServiceContext) -> None:
         if not principal.get("authenticated") and principal.get("via") != "dev-header":
             raise AuthenticationError("function invoke requires an authenticated principal")
         invoke_action = f"invoke-{name}"
-        if any(r.action == invoke_action for _, r in sc.policy.rules_for(invoke_action)):
-            decision = sc.policy.decide(principal, invoke_action, {"function": name})
-            if not decision.allow:
-                from ..errors import PolicyDeniedError
-
-                raise PolicyDeniedError(
-                    f"policy denied invoke of {name!r}: {decision.reason}",
-                    details={"function": name},
-                )
+        sc.policy.require_if_defined(principal, invoke_action, {"function": name})
         if body.version is not None:
             current = sc.compiled.function_versions.get(name)
             if current is not None and body.version != current:

@@ -121,11 +121,6 @@ def register(r: APIRouter, sc: ServiceContext) -> None:
         kind = plug.spec.engine.kind
         if sess["status"] == "running":
             return {"id": session_id, "status": "running"}
-        # direction 3: a session may be driven many times -- every run bumps
-        # the counter and its steps are tagged, so each pass leaves its own
-        # trace. A finished/exhausted session is re-opened for the new drive.
-        await sc.agents.start_run(session_id, task=(body.task if body else None), principal=principal)
-
         if kind == "external-pull":
             raise OOError(
                 "this plugin is driven by an external engine",
@@ -158,13 +153,23 @@ def register(r: APIRouter, sc: ServiceContext) -> None:
                 details={"code": "LLM_NOT_CONFIGURED"},
             )
 
+        # Claim before handing work to a background task. The database CAS is
+        # shared across processes; only the winner starts an engine.
+        claim = await sc.agents.start_run(
+            session_id, task=(body.task if body else None), principal=principal, claim=True
+        )
+        if not claim["started"]:
+            return {"id": session_id, "status": "running"}
+
         async def _drive():
             try:
                 await engine.drive(session_id)
             except Exception as exc:
                 # still release the session (back to `open`, error recorded --
                 # a crashed run must not strand the session in `running`)
-                await sc.agents.set_status(session_id, "open", {"error": f"engine crashed: {exc}"})
+                await sc.agents.set_status(
+                    session_id, "open", {"error": f"engine crashed: {exc}"}, expected_run=claim["run_count"]
+                )
 
         # async background task: Starlette awaits it on the event loop AFTER the
         # response is sent. (Wrapping in asyncio.create_task ran it via a worker
@@ -246,6 +251,7 @@ def register(r: APIRouter, sc: ServiceContext) -> None:
                     "target_id": a.target_id,
                     "rationale": a.rationale,
                     "status": a.status,
+                    "failure_reason": a.failure_reason,
                     "decided_by": a.decided_by,
                     "decided_at": a.decided_at.isoformat() if a.decided_at else None,
                     "requested_at": a.requested_at.isoformat() if a.requested_at else None,

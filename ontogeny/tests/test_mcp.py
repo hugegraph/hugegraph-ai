@@ -87,7 +87,11 @@ async def _make_sc(golden_pkg_path, tmp_path):
 
 @pytest_asyncio.fixture()
 async def sc(golden_pkg_path, tmp_path):
-    return await _make_sc(golden_pkg_path, tmp_path)
+    context = await _make_sc(golden_pkg_path, tmp_path)
+    try:
+        yield context
+    finally:
+        await context.engine.dispose()
 
 
 async def _open(mcp, plugin: str = "planning-copilot", task: str = "t") -> int:
@@ -224,11 +228,10 @@ class TestWireSurface:
     """The mounted /mcp endpoint, driven by a real streamable-HTTP MCP client
     over the ASGI transport (no sockets): what Claude Desktop et al. do."""
 
-    async def test_streamable_http_end_to_end(self, golden_pkg_path, tmp_path):
+    async def test_streamable_http_end_to_end(self, sc):
         from mcp.client.session import ClientSession
         from mcp.client.streamable_http import streamable_http_client
 
-        sc = await _make_sc(golden_pkg_path, tmp_path)
         app = build_app(sc)
         transport = httpx.ASGITransport(app=app)
         async with app.router.lifespan_context(app):
@@ -263,8 +266,7 @@ class TestWireSurface:
                         assert res.structured_content["outcome"] == "ok"
                         assert res.structured_content["detail"]["total"] == 2
 
-    async def test_mcp_route_is_never_shadowed(self, golden_pkg_path, tmp_path):
-        sc = await _make_sc(golden_pkg_path, tmp_path)
+    async def test_mcp_route_is_never_shadowed(self, sc):
         app = build_app(sc)
         transport = httpx.ASGITransport(app=app)
         async with app.router.lifespan_context(app):  # noqa: SIM117 -- nested lifespan/client/session contexts read clearer

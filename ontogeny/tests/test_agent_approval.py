@@ -105,7 +105,10 @@ async def client(golden_pkg_path, tmp_path):
         base_url="http://test",
         headers=_hdr({"id": "agent-driver"}),
     ) as c:
-        yield c, sc
+        try:
+            yield c, sc
+        finally:
+            await sc.engine.dispose()
 
 
 async def _pending_approval(c) -> dict:
@@ -346,7 +349,10 @@ async def auto_client(golden_pkg_path, tmp_path):
         base_url="http://test",
         headers=_hdr({"id": "agent-driver"}),
     ) as c:
-        yield c, sc
+        try:
+            yield c, sc
+        finally:
+            await sc.engine.dispose()
 
 
 class TestAutoApproval:
