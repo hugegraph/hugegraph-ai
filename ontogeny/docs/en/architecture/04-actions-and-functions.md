@@ -43,6 +43,8 @@
 
 For declarative HTTP step URLs and header values, only bare `UPPER_SNAKE` deployment references such as `${API_BASE}` are resolved from the environment. Lowercase parameters (`${order_id}`) and prior-step references (`${lookup.order_id}`) remain templates, even if similarly named environment variables exist. Deployment references resolve first, then call templates; the final URL must pass the HTTP allowlist, and parameter or step-result values cannot inject another `${...}` reference into either URL or headers.
 
+HTTP responses are streamed with a 256 KiB limit on decoded body bytes. Exceeding the limit closes the response and fails the function; the runtime does not download the complete oversized body or return a truncated result.
+
 ## 4.2 Functional actions: effect plans (the Function proposes, the Action disposes)
 
 ```yaml

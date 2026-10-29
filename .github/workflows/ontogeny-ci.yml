@@ -137,6 +137,7 @@ jobs:
           .venv/bin/pytest -q tests/test_source_snapshot_and_native_values.py 2>&1 | sed "s/${audit_password}/[redacted]/g"
           .venv/bin/pytest -q tests/test_postgres_watermark_sync.py 2>&1 | sed "s/${audit_password}/[redacted]/g"
           .venv/bin/pytest -q tests/test_outbox_receipts.py tests/test_object_live_uniqueness.py 2>&1 | sed "s/${audit_password}/[redacted]/g"
+          .venv/bin/pytest -q tests/test_postgres_object_keys.py tests/test_auth_postgres_concurrency.py 2>&1 | sed "s/${audit_password}/[redacted]/g"
       - name: Stop temporary PostgreSQL
         if: always()
         run: |

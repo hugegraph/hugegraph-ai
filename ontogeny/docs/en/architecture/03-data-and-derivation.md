@@ -29,6 +29,8 @@ Quarantined native database values are converted recursively to JSON-safe diagno
 
 The object tables enforce at most one current row per complete business primary key with a partial unique index (`_valid_to IS NULL`); historical versions remain allowed. On upgrade, existing duplicate current rows block index creation with a clear error. Review and repair those duplicates before retrying; startup does not delete data automatically.
 
+Object reads and writes coerce supplied key values to their declared property types; string keys retain leading zeroes. Snapshot reconciliation compares complete business-key tuples, so deleting one composite-key row does not retain it merely because another row shares its first key component. A quarantined row with an identifiable complete key still preserves the last valid object.
+
 Domains in one database share the physical table namespace. Publishing or activating a domain rejects object-table or join-table link names reserved by another domain, including retired resource definitions; use distinct names or a separate database. Old resource names remain conservatively reserved when backing or join kind changes. Data already mixed across domains before this guard is not automatically separated or recovered. Before switching, stop old-domain writes and source sync, wait for in-flight operations, and dispatch and confirm all old events; resolve failed deliveries first. The name check does not isolate or reroute pending outbox events by domain.
 
 ## 3.3 The outbox: the only exit for derived data (four consumers, per-event receipts)
