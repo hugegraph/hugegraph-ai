@@ -41,7 +41,7 @@
 
 **Sandbox boundary (shared by all capabilities)**: an isolated subprocess + rlimits + wall-clock kill + PYTHONDONTWRITEBYTECODE; cross-boundary RPC is adjudicated by the parent process against the declared capabilities; returned objects are API-shaped (**fixed: derived properties used to be invisible inside the sandbox, driving inventory computations to zero**).
 
-For declarative HTTP step URLs, only bare `UPPER_SNAKE` deployment references such as `${API_BASE}` are resolved from the environment. Lowercase parameters (`${order_id}`) and prior-step references (`${lookup.order_id}`) remain templates, even if similarly named environment variables exist. Deployment references resolve first, then call templates; the final URL must pass the HTTP allowlist, and parameter values cannot inject another `${...}` reference.
+For declarative HTTP step URLs and header values, only bare `UPPER_SNAKE` deployment references such as `${API_BASE}` are resolved from the environment. Lowercase parameters (`${order_id}`) and prior-step references (`${lookup.order_id}`) remain templates, even if similarly named environment variables exist. Deployment references resolve first, then call templates; the final URL must pass the HTTP allowlist, and parameter or step-result values cannot inject another `${...}` reference into either URL or headers.
 
 ## 4.2 Functional actions: effect plans (the Function proposes, the Action disposes)
 
@@ -66,3 +66,5 @@ spec:
 ```
 
 **Why expressions and data are distinguished**: values in declarative effects are expressions (statically checkable), while function plans carry runtime data — without the distinction `"EQ-01"` would be parsed as `EQ - 01`.
+
+Before applying a function plan, the runtime runs the same semantic checks as static effects (including property ownership and link references), handles join-table links from either endpoint, and emits an outbox change event for every created object.
