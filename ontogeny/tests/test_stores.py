@@ -289,7 +289,7 @@ class TestRepository:
         async with env["maker"]() as s:
             await env["sync"].sync(s, "work-center")
             await s.commit()
-        ts = dt.datetime.now(dt.timezone.utc)
+        ts = dt.datetime.now(dt.UTC)
         async with env["maker"]() as s:
             new = await repo.action_update(s, "work-center", "WC-01", {"name": "Serviced"}, ts)
             await s.commit()
@@ -303,7 +303,7 @@ class TestRepository:
         async with env["maker"]() as s:
             await env["sync"].sync(s, "work-center")
             await s.commit()
-        ts = dt.datetime.now(dt.timezone.utc)
+        ts = dt.datetime.now(dt.UTC)
         from ontogeny.errors import ConflictError
 
         async with env["maker"]() as s:
@@ -315,11 +315,11 @@ class TestRepository:
         async with env["maker"]() as s:
             await env["sync"].sync(s, "work-center")
             await s.commit()
-        t0 = dt.datetime.now(dt.timezone.utc)  # after sync: version 1 is current
+        t0 = dt.datetime.now(dt.UTC)  # after sync: version 1 is current
         import asyncio
 
         await asyncio.sleep(0.002)  # ensure strictly increasing version timestamps
-        t1 = dt.datetime.now(dt.timezone.utc)
+        t1 = dt.datetime.now(dt.UTC)
         async with env["maker"]() as s:
             await repo.action_update(s, "work-center", "WC-01", {"name": "Renamed"}, t1)
             await s.commit()
@@ -331,7 +331,7 @@ class TestRepository:
 
     async def test_join_table_links(self, env):
         repo = env["repo"]
-        ts = dt.datetime.now(dt.timezone.utc)
+        ts = dt.datetime.now(dt.UTC)
         async with env["maker"]() as s:
             await repo.link_add(s, "work-center-materials", "WC-01", "M-1", ts)
             await repo.link_add(s, "work-center-materials", "WC-01", "M-9", ts)  # not exists yet, link table allows
@@ -344,7 +344,7 @@ class TestRepository:
         """link_add -> link_remove -> link_add used to die on the (src, dst)-only
         primary key colliding with the soft-closed row."""
         repo = env["repo"]
-        t0 = dt.datetime.now(dt.timezone.utc)
+        t0 = dt.datetime.now(dt.UTC)
         t1 = t0 + dt.timedelta(microseconds=10)
         t2 = t0 + dt.timedelta(microseconds=20)
         async with env["maker"]() as s:

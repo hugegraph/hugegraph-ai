@@ -213,7 +213,7 @@ class TestNewId:
                         "qty": 1,
                         "status": "PLANNED",
                     },
-                    dt.datetime.now(dt.timezone.utc),
+                    dt.datetime.now(dt.UTC),
                 )
 
 

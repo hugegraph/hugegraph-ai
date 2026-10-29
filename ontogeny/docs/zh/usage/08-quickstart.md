@@ -8,7 +8,7 @@
 ## 8.1 一条命令启动
 
 ```bash
-uv venv && source .venv/bin/activate && uv pip install -e .
+uv venv --python 3.12 && source .venv/bin/activate && uv pip install -e .
 cd web && npm install && cd ..
 ontogeny serve --demo --open        # → http://127.0.0.1:8000/（UI 与 API 同端口）
 # 可选接大模型（助手 + RSI 提案器共用）：

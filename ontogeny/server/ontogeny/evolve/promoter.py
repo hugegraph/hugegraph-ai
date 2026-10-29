@@ -81,7 +81,7 @@ class Promoter:
     # --------------------------------------------------------------- budget
 
     async def _budget_check_and_use(self, session, namespace: str, cap: int) -> int:
-        week = _iso_week(_dt.datetime.now(_dt.timezone.utc))
+        week = _iso_week(_dt.datetime.now(_dt.UTC))
         row = (
             await session.execute(select(BudgetRow).where(BudgetRow.namespace == namespace, BudgetRow.week == week))
         ).scalar_one_or_none()
@@ -270,7 +270,7 @@ class Promoter:
         from ..registry.compiled import compile_package
 
         candidate = compile_package(apply_mutations(load_package(pkg_root), diff))
-        cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=since_days)
+        cutoff = _dt.datetime.now(_dt.UTC) - _dt.timedelta(days=since_days)
         changed = sorted({m["action"] for m in diff if m.get("mutation") == "rule-tighten" and m.get("action")})
         actions: list[dict[str, Any]] = []
         clean = True

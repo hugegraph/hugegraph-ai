@@ -35,7 +35,7 @@ from .ddl import ensure_tables, object_table
 
 
 def utcnow() -> _dt.datetime:
-    return _dt.datetime.now(_dt.timezone.utc)
+    return _dt.datetime.now(_dt.UTC)
 
 
 def _and(*conds):
