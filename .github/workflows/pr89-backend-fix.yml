@@ -22,7 +22,7 @@ on:
     branches:
       - "codex/pr89-ontology-review-fixes"
     paths:
-      - ".github/scripts/pr89_backend_fix.py.gz.b64"
+      - ".github/scripts/pr89_backend_fix.ready"
 
 permissions:
   contents: write
@@ -38,9 +38,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - name: Apply reviewed backend patch
+      - name: Reassemble and apply reviewed backend patch
         run: |
-          base64 -d .github/scripts/pr89_backend_fix.py.gz.b64 | gzip -dc > .github/scripts/pr89_backend_fix.py
+          cat .github/scripts/pr89_backend_fix.py.gz.b64.part-* > /tmp/pr89_backend_fix.py.gz.b64
+          echo "cbd648112377003b0140eb5a8a9b71a38c590caf109a3d0fc4ec196681edbf7b  /tmp/pr89_backend_fix.py.gz.b64" | sha256sum -c -
+          base64 -d /tmp/pr89_backend_fix.py.gz.b64 | gzip -dc > .github/scripts/pr89_backend_fix.py
+          echo "881938f1c96b3c60b3598df28730128e8dc6ad027074deab36d0f83d9e057c81  .github/scripts/pr89_backend_fix.py" | sha256sum -c -
           python .github/scripts/pr89_backend_fix.py
       - name: Install backend verification environment
         working-directory: ontogeny
@@ -76,7 +79,9 @@ jobs:
       - name: Commit verified backend fixes
         run: |
           rm -f .github/scripts/pr89_backend_fix.py.gz.b64
+          rm -f .github/scripts/pr89_backend_fix.py.gz.b64.part-*
           rm -f .github/scripts/pr89_backend_fix.py
+          rm -f .github/scripts/pr89_backend_fix.ready
           rm -f .github/workflows/pr89-backend-fix.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
