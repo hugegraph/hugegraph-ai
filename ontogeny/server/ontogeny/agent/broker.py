@@ -386,9 +386,10 @@ class AgentBroker:
     async def decide(self, approval_id: int, decision: str, principal: dict) -> dict:
         """Human gate for agent writes (I3), shared by the API and tests.
 
-        The approver must THEMSELVES hold the action's permit; decisions are
-        audited to the human, executions to the plugin principal. A rejection
-        refunds the writes slot (the write did not happen).
+        Approval always requires the action's Cedar permit. Rejection requires
+        the session driver, an administrator, or that same permit. Unauthorized
+        decisions leave both the approval and its reserved budget untouched.
+        Decisions are audited to the human; execution uses the plugin principal.
         """
         from datetime import datetime
 
@@ -405,11 +406,30 @@ class AgentBroker:
             if row.status != "pending":
                 raise OOError(f"approval {approval_id} is already {row.status}", details={"status": row.status})
 
+            async def _require_action_permit() -> None:
+                target = None
+                if row.target_id:
+                    target = await self.sc.query.get(
+                        s, self.sc.compiled.action_target(row.action), row.target_id, principal
+                    )
+                self.sc.policy.require(principal, row.action, target)
+
             def _close(status: str) -> None:
                 row.status, row.decided_by = status, principal.get("id", "?")
                 row.decided_at = datetime.now(_dt.UTC)
 
             if decision == "rejected":
+                if not principal.get("is_admin"):
+                    owner = await s.get(AgentSessionRow, row.session_id)
+                    try:
+                        if owner is None:
+                            raise PolicyDeniedError("approval has no owning session")
+                        self.require_session_driver_or_admin(owner, principal)
+                    except PolicyDeniedError:
+                        # A human action approver may reject another driver's
+                        # request, but an arbitrary caller guessing its ID may
+                        # not consume the intent or refund its reserved budget.
+                        await _require_action_permit()
                 _close("rejected")
                 # refund the writes slot atomically (the write did not happen)
                 await s.execute(
@@ -421,17 +441,7 @@ class AgentBroker:
                 await s.commit()
                 return {"id": row.id, "status": "rejected", "decided_by": row.decided_by}
 
-            target = None
-            if row.target_id:
-                target = await self.sc.query.get(
-                    s, self.sc.compiled.action_target(row.action), row.target_id, principal
-                )
-            try:
-                self.sc.policy.require(principal, row.action, target)
-            except Exception:
-                _close("rejected")
-                await s.commit()
-                raise
+            await _require_action_permit()
             _close("approved")
 
             plug = self.sc.compiled.agent_plugins.get(row.plugin)
