@@ -291,7 +291,7 @@ def register(r: APIRouter, sc: ServiceContext) -> None:
         return {"value": value}
 
     @r.get("/functions/{name}/source")
-    async def function_source(name: str, sc: ServiceContext = Depends(get_sc)):
+    async def function_source(name: str, _: dict = Depends(require_admin), sc: ServiceContext = Depends(get_sc)):
         """What actually runs for this function — read-only.
 
         A **code** function's DSL only *names* its file (``spec.entry``:
@@ -414,3 +414,4 @@ def register(r: APIRouter, sc: ServiceContext) -> None:
     async def algorithm(body: dict, sc: ServiceContext = Depends(get_sc)):
         if sc.projection_client is None:
             raise HTTPException(501, "graph algorithms require the HugeGraph projection (not declared)")
+        raise HTTPException(501, "graph algorithms are not implemented")
