@@ -1058,6 +1058,8 @@ export const en: Record<string, string> = {
   'ed.propCount': '{count} prop',
 
   'nav.access': 'Access control',
+  'auth.unavailable': 'Could not check your session. Check the connection and try again.',
+  'auth.retry': 'Retry',
   'login.title': 'Sign in',
   'login.subtitle': 'Sign in to ONTOGENY with your account',
   'login.username': 'Account',

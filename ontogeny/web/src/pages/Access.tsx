@@ -788,7 +788,7 @@ function Identity() {
     // a live session outranks the header, so becoming someone else means
     // leaving this account first; signOut clears the override, so re-set it
     if (via === 'session' || via === 'bearer') {
-      await signOut()
+      try { await signOut() } catch { return } // auth gate displays the failure
       setPrincipal(p)
       await refresh()
     } else {

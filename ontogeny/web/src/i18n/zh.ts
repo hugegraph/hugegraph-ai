@@ -1057,6 +1057,8 @@ export const zh: Record<string, string> = {
   'ed.propCount': '{count} 属性',
 
   'nav.access': '权限与角色',
+  'auth.unavailable': '无法检查登录状态，请检查网络连接后重试。',
+  'auth.retry': '重试',
   'login.title': '登录',
   'login.subtitle': '用你的账号进入 ONTOGENY',
   'login.username': '账号',
