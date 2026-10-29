@@ -49,6 +49,7 @@ from hugegraph_llm_eval.integrations.judges.openai_response import (
     OpenAIResponse,
     OpenAIResponseUsage,
     classify_exception,
+    exception_usage,
     failure,
     provider_outcome,
 )
@@ -168,7 +169,14 @@ class OpenAICompatibleJudge:
             except Exception as exc:  # Provider transport and response parsing boundary.
                 failure_detail = exc.failure if isinstance(exc, AttemptFailureError) else classify_exception(exc)
                 latency_ms = self._latency_ms(started)
-                attempts.append(self._failed_attempt(attempt_index, latency_ms, failure_detail))
+                attempts.append(
+                    self._failed_attempt(
+                        attempt_index,
+                        latency_ms,
+                        failure_detail,
+                        usage=exception_usage(exc, self._usage),
+                    )
+                )
                 if not failure_detail.retryable or attempt_index == options.max_attempts:
                     self._raise(request, attempts, failure_detail)
                 delay = _backoff(options, attempt_index)
@@ -251,6 +259,8 @@ class OpenAICompatibleJudge:
         attempt_index: int,
         latency_ms: int,
         failure: FailureDetail,
+        *,
+        usage: ProviderUsage | None = None,
     ) -> ProviderAttempt:
         return ProviderAttempt(
             attempt_index=attempt_index,
@@ -258,6 +268,7 @@ class OpenAICompatibleJudge:
             model=self.descriptor.model,
             status=ProviderAttemptStatus.FAILED,
             latency_ms=latency_ms,
+            usage=usage,
             failure=failure,
         )
 

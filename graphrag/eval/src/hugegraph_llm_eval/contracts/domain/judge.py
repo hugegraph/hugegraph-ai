@@ -137,11 +137,7 @@ class JudgeCallRecord(VersionedModel):
 
 
 def judge_call_cost_is_unknown(call: JudgeCallRecord) -> bool:
-    usage = call.usage
-    if usage is not None and (not usage.reported or usage.cost_usd is None):
-        return True
-    if usage is None:
-        return True
+    """Report whether any provider attempt lacks a reported cost."""
     return any(
         attempt.usage is None or not attempt.usage.reported or attempt.usage.cost_usd is None
         for attempt in call.provenance.attempts

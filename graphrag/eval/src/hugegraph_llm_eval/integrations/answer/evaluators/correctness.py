@@ -28,7 +28,6 @@ from hugegraph_llm_eval.contracts.domain.evaluation import (
     EvaluationContext,
     EvaluationInput,
     EvaluationRecordDraft,
-    EvidenceLink,
     Finding,
     FindingSeverity,
     Measurement,
@@ -39,6 +38,7 @@ from hugegraph_llm_eval.evaluation.judges.base import Judge, JudgeCallError
 from hugegraph_llm_eval.evaluation.judges.content import JudgeContent
 from hugegraph_llm_eval.integrations.answer.evaluators.claims import (
     NLIVerdict,
+    claim_evidence,
     complete_verdicts,
     decompose,
     ordered_verdicts,
@@ -136,7 +136,9 @@ class AnswerCorrectnessEvaluator(JudgedAnswerEvaluator):
         artifacts = {item.port.value: item.artifact for item in evaluation_input.subjects}
         return self.completed(
             _count_measurements("answer_correctness", "answer", score, tp, fp, fn),
-            _correctness_findings(output, artifacts["answer_candidate"], artifacts["answer_reference"]),
+            _correctness_findings(
+                output, artifacts["answer_candidate"], artifacts["answer_reference"], candidate, reference
+            ),
             f"answer correctness classified {tp} TP, {fp} FP, and {fn} FN claims",
             session,
         )
@@ -191,10 +193,10 @@ class FactualCorrectnessEvaluator(JudgedAnswerEvaluator):
         score = _f1(tp, fp, fn)
         artifacts = {item.port.value: item.artifact for item in evaluation_input.subjects}
         findings = tuple(
-            _nli_finding("factual_correctness", item, artifacts["answer_candidate"], "text")
+            _nli_finding("factual_correctness", item, artifacts["answer_candidate"], "text", candidate)
             for item in precision_ordered
         ) + tuple(
-            _nli_finding("factual_correctness.reference", item, artifacts["answer_reference"], "answers")
+            _nli_finding("factual_correctness.reference", item, artifacts["answer_reference"], "answers", reference)
             for item in recall_ordered
         )
         return self.completed(
@@ -246,6 +248,8 @@ def _correctness_findings(
     output: CorrectnessOutput,
     candidate_artifact: ArtifactRef,
     reference_artifact: ArtifactRef,
+    candidate: tuple[str, ...],
+    reference: tuple[str, ...],
 ) -> tuple[Finding, ...]:
     matched = tuple(
         Finding(
@@ -253,8 +257,12 @@ def _correctness_findings(
             severity=FindingSeverity.INFO,
             message=item.reason,
             evidence=(
-                EvidenceLink(artifact=candidate_artifact, locator=f"text#statement-{item.candidate_index}"),
-                EvidenceLink(artifact=reference_artifact, locator=f"answers#statement-{item.reference_index}"),
+                claim_evidence(
+                    candidate_artifact, f"text#statement-{item.candidate_index}", candidate[item.candidate_index]
+                ),
+                claim_evidence(
+                    reference_artifact, f"answers#statement-{item.reference_index}", reference[item.reference_index]
+                ),
             ),
         )
         for item in output.matches
@@ -264,7 +272,11 @@ def _correctness_findings(
             code="answer_correctness.fp",
             severity=FindingSeverity.ERROR,
             message=item.reason,
-            evidence=(EvidenceLink(artifact=candidate_artifact, locator=f"text#statement-{item.statement_index}"),),
+            evidence=(
+                claim_evidence(
+                    candidate_artifact, f"text#statement-{item.statement_index}", candidate[item.statement_index]
+                ),
+            ),
         )
         for item in output.false_positives
     )
@@ -273,17 +285,25 @@ def _correctness_findings(
             code="answer_correctness.fn",
             severity=FindingSeverity.ERROR,
             message=item.reason,
-            evidence=(EvidenceLink(artifact=reference_artifact, locator=f"answers#statement-{item.statement_index}"),),
+            evidence=(
+                claim_evidence(
+                    reference_artifact, f"answers#statement-{item.statement_index}", reference[item.statement_index]
+                ),
+            ),
         )
         for item in output.false_negatives
     )
     return (*matched, *false_positives, *false_negatives)
 
 
-def _nli_finding(prefix: str, verdict: NLIVerdict, artifact: ArtifactRef, locator: str) -> Finding:
+def _nli_finding(
+    prefix: str, verdict: NLIVerdict, artifact: ArtifactRef, locator: str, claims: tuple[str, ...]
+) -> Finding:
     return Finding(
         code=f"{prefix}.entailed" if verdict.entailed else f"{prefix}.not_entailed",
         severity=FindingSeverity.INFO if verdict.entailed else FindingSeverity.ERROR,
         message=verdict.reason,
-        evidence=(EvidenceLink(artifact=artifact, locator=f"{locator}#statement-{verdict.statement_index}"),),
+        evidence=(
+            claim_evidence(artifact, f"{locator}#statement-{verdict.statement_index}", claims[verdict.statement_index]),
+        ),
     )

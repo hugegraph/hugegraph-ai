@@ -213,106 +213,91 @@ def graph_judge_rubric(kind: str, language: str = "zh") -> str:
 
 
 def semantic_verdict_prompt(kind: str, language: str = "zh") -> str:
-    """Adapt the historical semantic-matching few-shot prompt to batched verdicts."""
-    prompt_name = {
-        "entity": "ENTITY_SEMANTIC_MATCH_PROMPT",
-        "triple": "TRIPLE_SEMANTIC_MATCH_PROMPT",
-    }.get(kind)
-    if prompt_name is None:
+    """Propose semantic pairs without discarding alternatives before assignment."""
+    if kind not in {"entity", "triple"}:
         raise ValueError(f"Unsupported semantic graph item kind: {kind}")
-    historical = get_prompt(prompt_name, language)
-    rule_override = {
-        "entity": (
-            "当前运行时实体匹配规则覆盖上面的历史规则：即使 label 不一致，只要 candidate.name 与 reference.name"
-            " 语义等价，也必须判定为命中，返回 candidate_index，并在 match_issues 中加入 label_mismatch；"
-            "不得仅因 label 不一致返回 candidate_index=null。"
-        ),
+    if language == "zh":
+        rules = {
+            "entity": (
+                "实体名称的语义等价是命中条件。label 不一致仍可命中，记录 label_mismatch；"
+                "不得仅因 label 不一致返回 candidate_index=null。properties 只作辅助证据，"
+                "属性差异记录 property_mismatch，不影响实体匹配。名称含义不对应则不得命中。"
+                "例如 Component/auth service 与 Service/authentication service 可以命中并记录"
+                " label_mismatch；不能仅因同为 Service 就把 auth service 和 log service 判为等价。"
+            ),
+            "triple": (
+                "关系边是有方向的事实。关系类型只是名称表达，同义词、别名或缩写可命中并记录"
+                " relation_mismatch。起点 out_v 和终点 in_v 必须分别语义对应，反向边不得命中。"
+                "out_v_label 和 in_v_label 不同仅记录 endpoint_label_mismatch，不能否决名称对应的端点。"
+                "properties 只作辅助证据，属性差异记录 property_mismatch。"
+                "例如 A DEPENDS_ON B 与 A REQUIRES B 可以命中；B REQUIRES A 不能与前者匹配。"
+            ),
+        }[kind]
+        protocol = (
+            "candidates 是当前候选窗口，references 是完整文档标准答案。对每个 reference_index，"
+            "返回当前窗口中所有语义等价候选的独立 pair，不要只选最高分候选，也不要在窗口内做一对一分配。"
+            "同一个 reference_index 可以对应多个 candidate_index，同一个 candidate_index 也可以对应多个"
+            " reference_index；由后处理对所有窗口返回的 pair 统一做最大总权重的一对一匹配。"
+            "每个 (reference_index, candidate_index) 只能出现一次；仅当该 reference 在当前窗口完全没有"
+            "语义等价候选时，返回一条 candidate_index=null 的记录，不得与该 reference 的命中 pair 混用。"
+            "每个 reference 都必须被覆盖，不能输出未提供的 reference 或当前窗口以外的 candidate。"
+            "命中时给出 0 到 100 的 match_score；未命中时 match_score=null 并包含 no_semantic_match。"
+            "reason 必须说明对应名称、关系、方向或属性的具体依据，不能只写语义等价，不得编造输入证据。"
+        )
+        output_rule = "只返回下面形式的 JSON；示例展示多个备选 pair，索引仅用于说明结构："
+    else:
+        rules = {
+            "entity": (
+                "Match semantically equivalent entity names. A label difference is a soft label_mismatch; "
+                "never reject equivalent names solely because their labels differ. Properties are supporting "
+                "evidence only; report property_mismatch without rejecting an otherwise valid match. "
+                "For example, Component/auth service and Service/authentication service may match with "
+                "label_mismatch, whereas auth service and log service are not equivalent just because "
+                "both have the Service label."
+            ),
+            "triple": (
+                "Match the same directed fact: out_v and in_v must correspond separately and direction "
+                "must agree. Relation aliases may match with relation_mismatch; different facts may not. "
+                "Differences in out_v_label/in_v_label are soft endpoint_label_mismatch issues. Property "
+                "differences are soft property_mismatch issues. For example, A DEPENDS_ON B and A REQUIRES B "
+                "may match, but B REQUIRES A reverses the fact and must not match."
+            ),
+        }[kind]
+        protocol = (
+            "candidates is the current candidate window; references is the complete reference graph. "
+            "For every reference_index, return ALL semantically valid candidate pairs in this window. "
+            "Do not keep only the best candidate and do not assign one-to-one within a window. "
+            "Both reference_index and candidate_index may occur in multiple distinct pairs. The caller "
+            "selects a maximum-total-weight one-to-one matching over all pairs from all windows. "
+            "Each (reference_index, candidate_index) pair must be unique. Only when a reference has no "
+            "valid candidate in this window, return exactly one null candidate_index for it; never mix "
+            "a null verdict with matched pairs for the same reference. Cover every reference and use "
+            "only supplied global indices. Matched pairs require match_score in [0, 100]; unmatched "
+            "verdicts require match_score=null and no_semantic_match. Give a concrete reason grounded "
+            "in the supplied names, relation, direction or properties; do not invent evidence."
+        )
+        output_rule = "Return only JSON in this shape; the illustrative indices show alternative pairs:"
+    issues = {
+        "entity": "label_mismatch, property_mismatch, name_mismatch, no_semantic_match",
         "triple": (
-            "当前运行时关系边匹配规则覆盖上面的历史规则。关系边表示一条有方向的事实，必须同时判断关系类型、"
-            "起点端点、终点端点和方向。关系类型只是名称表达：如果候选关系类型与标准关系类型是同义词、别名、"
-            "缩写或不同表述但表达同一个事实关系，必须判定为命中，并加入 relation_mismatch；只有表达了不同事实"
-            "时才不得命中。起点 out_v 和终点 in_v 的名称需要分别语义对应；端点名称不对应时不得命中，并加入"
-            " endpoint_mismatch。out_v_label 和 in_v_label 只是端点类型的辅助信息：端点名称对应但类型不同仍可"
-            "判定为命中，并加入 endpoint_label_mismatch，不得仅因端点类型不同否决。方向是硬条件：候选 out_v 必须"
-            "对应标准 out_v，候选 in_v 必须对应标准 in_v；反向边不得命中，并加入 direction_mismatch 和"
-            " no_semantic_match。边 properties 只作辅助证据，属性差异不影响关系命中，但必须在 reason 中具体说明。"
+            "relation_mismatch, endpoint_label_mismatch, endpoint_mismatch, direction_mismatch, "
+            "property_mismatch, no_semantic_match"
         ),
     }[kind]
-    reason_guidance = {
-        "entity": (
-            "实体匹配以 label 和 name 为主；properties 中的属性名和值只作辅助证据，不要求所有属性完全一致。"
-            "命中时，reason 必须具体说明类型是否一致、候选名称与标准名称为何等价（例如全称/缩写/同义表达），"
-            "如果属性名或属性值存在差异，必须写出具体属性名和简短差异摘要，并明确说明“不影响实体匹配”；"
-            "属性差异本身不能否决命中，也不能作为未命中的唯一理由；不能只写“语义等价”。实体未命中时，必须说明类型或名称不匹配的具体原因；"
-            "如果窗口中有最接近候选，写出其 candidate_index 和冲突字段，否则明确写“无近似候选”。"
-        ),
-        "triple": (
-            "关系命中时，reason 必须具体说明：关系类型是否相同或为何语义等价、起点和终点是否分别对应、端点"
-            "类型是否一致或存在差异、方向是否一致，以及关键属性是否一致或存在差异；不能只写“语义等价”。"
-            "如果关系类型或端点类型存在差异但仍命中，必须说明这是名称表达或类型标注差异，不影响关系事实匹配。"
-            "关系未命中时，必须说明是端点不对应、方向相反还是关系类型表达了不同事实；如果窗口中有最接近关系，"
-            "写出其 candidate_index 和冲突字段，否则明确写“无近似候选”。"
-        ),
-    }[kind]
-    reason_examples = {
-        "entity": (
-            "命中示例：“类型不一致但名称语义匹配；候选名称“认证服务超时指示灯”与标准名称“认证超时告警”匹配；名称为全称和缩写对应；属性差异：description（表述不同）；不影响实体匹配。”；"
-            "未命中示例：“未命中；最接近候选=23；名称相近但类型为 Warning、标准答案类型为 Feature。”"
-        ),
-        "triple": (
-            "命中示例：“关系类型名称不同但事实语义等价（候选 HAS_COMPONENT，标准声明依赖）；起点和终点分别对应同一服务和网关服务；端点类型一致；方向一致；属性差异：description（表述不同）；不影响关系匹配。”；"
-            "未命中示例：“未命中；最接近候选=23；关系类型语义一致但终点名称不对应且方向相反。”"
-        ),
-    }[kind]
-    issue_guidance = {
-        "entity": (
-            "match_issues 必须是以下分类的数组：label_mismatch、property_mismatch、name_mismatch、"
-            "no_semantic_match。名称和语义匹配但类型不同，仍然算命中，并返回 label_mismatch；"
-            "属性不同只返回 property_mismatch，不得因此返回 no_semantic_match。完全没有问题时返回空数组。"
-        ),
-        "triple": (
-            "match_issues 必须是以下分类的数组：relation_mismatch、endpoint_label_mismatch、endpoint_mismatch、"
-            "direction_mismatch、property_mismatch、no_semantic_match。关系类型只是别名或表述差异但事实语义"
-            "相同时，命中并列出 relation_mismatch；端点名称对应但端点类型不同，命中并列出"
-            " endpoint_label_mismatch；属性不同只列出 property_mismatch。endpoint_mismatch 或 direction_mismatch"
-            "表示硬冲突，必须同时返回 candidate_index=null 和 no_semantic_match。完全没有问题时返回空数组。"
-        ),
-    }[kind]
-    matched_reason_example, unmatched_reason_example = {
-        "entity": (
-            "类型不一致但名称语义匹配；候选名称“认证服务超时指示灯”与标准名称“认证超时告警”匹配；名称为全称和缩写对应；属性差异：description（表述不同）；不影响实体匹配。",
-            "未命中；最接近候选=23；名称相近但类型不一致。",
-        ),
-        "triple": (
-            "关系类型名称不同但事实语义等价；起点和终点对应；端点类型一致；方向一致；关键属性无冲突。",
-            "未命中；最接近候选=23；关系类型语义一致但终点不对应且方向相反。",
-        ),
-    }[kind]
-    return f"""{historical}
+    return f"""{rules}
 
----
+{protocol}
 
-当前批处理协议覆盖上面的旧输出格式：candidates 是本次候选窗口，references
-是完整文档标准答案。对每一个 reference_index，必须在当前 candidates 窗口中找至多
-一个语义等价候选；若当前窗口没有命中，则 candidate_index 必须为 null。不同候选
-窗口会重复判断同一个 reference，后处理阶段再做全局一对一去重。
-同一个 candidate_index 不能匹配多个 reference_index。
-{rule_override}
+Allowed match_issues: {issues}. Use [] when none apply. name_mismatch,
+endpoint_mismatch and direction_mismatch are hard conflicts: never put them on
+an accepted pair. Use no_semantic_match only on an unmatched reference verdict.
 
-{reason_guidance}
-{reason_examples}
-{issue_guidance}
-
-只返回下列 JSON 对象，且 verdicts 中必须恰好有一项对应每个 reference_index。命中时
-必须给出 0 到 100 的 match_score，数值越大表示语义匹配置信度越高；未命中时
-match_score 必须为 null：
+{output_rule}
 {{
   "verdicts": [
-    {{"reference_index": 0, "candidate_index": 12, "match_score": 88, "match_issues": ["label_mismatch", "property_mismatch"], "reason": "{matched_reason_example}"}},
-    {{"reference_index": 1, "candidate_index": null, "match_score": null, "match_issues": ["no_semantic_match"], "reason": "{unmatched_reason_example}"}}
+    {{"reference_index": 0, "candidate_index": 12, "match_score": 88, "match_issues": [], "reason": "Evidence for pair 0/12"}},
+    {{"reference_index": 0, "candidate_index": 13, "match_score": 92, "match_issues": [], "reason": "Evidence for alternative 0/13"}},
+    {{"reference_index": 1, "candidate_index": 12, "match_score": 86, "match_issues": [], "reason": "Evidence for alternative 1/12"}},
+    {{"reference_index": 2, "candidate_index": null, "match_score": null, "match_issues": ["no_semantic_match"], "reason": "No valid candidate in this window"}}
   ]
-}}
-
-candidate_index 必须是当前 candidates 中显示的全局索引。reason 必须简短、具体，并严格依据输入内容，
-不得编造输入中不存在的属性或证据。
-不得返回 matches、reasoning 或任何其他键。"""
+}}"""

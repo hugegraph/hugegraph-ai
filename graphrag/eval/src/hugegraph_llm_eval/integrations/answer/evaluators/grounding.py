@@ -26,7 +26,6 @@ from hugegraph_llm_eval.contracts.domain.evaluation import (
     EvaluationContext,
     EvaluationInput,
     EvaluationRecordDraft,
-    EvidenceLink,
     Finding,
     FindingSeverity,
     Measurement,
@@ -39,6 +38,7 @@ from hugegraph_llm_eval.evaluation.judges.session import JudgeSession
 from hugegraph_llm_eval.integrations.answer.evaluators.claims import (
     NLIVerdict,
     NLIVerdictsOutput,
+    claim_evidence,
     complete_verdicts,
     decompose,
     ordered_verdicts,
@@ -107,7 +107,7 @@ class FaithfulnessEvaluator(JudgedAnswerEvaluator):
         supported = sum(item.entailed for item in ordered)
         score = supported / len(ordered) if ordered else 1.0
         artifact = _subject(evaluation_input, "answer_candidate")
-        findings = tuple(_faithfulness_finding(item, artifact) for item in ordered)
+        findings = tuple(_faithfulness_finding(item, artifact, claims) for item in ordered)
         return self.completed(
             (_ratio("faithfulness", round(score, 4)),),
             findings,
@@ -173,7 +173,7 @@ class NoiseSensitivityEvaluator(JudgedAnswerEvaluator):
         score = sum(caused) / len(caused) if caused else 0.0
         artifact = _subject(evaluation_input, "answer_candidate")
         findings = tuple(
-            _noise_finding(index, verdict, caused[index], artifact)
+            _noise_finding(index, verdict, caused[index], artifact, judgements.candidate_claims[index])
             for index, verdict in enumerate(ordered_verdicts(judgements.correctness))
         )
         return self.completed(
@@ -243,12 +243,14 @@ def _subject(evaluation_input: EvaluationInput, port: str) -> ArtifactRef:
     return next(item.artifact for item in evaluation_input.subjects if item.port.value == port)
 
 
-def _faithfulness_finding(verdict: NLIVerdict, artifact: ArtifactRef) -> Finding:
+def _faithfulness_finding(verdict: NLIVerdict, artifact: ArtifactRef, claims: tuple[str, ...]) -> Finding:
     return Finding(
         code="answer_faithfulness.supported" if verdict.entailed else "answer_faithfulness.unsupported",
         severity=FindingSeverity.INFO if verdict.entailed else FindingSeverity.ERROR,
         message=verdict.reason,
-        evidence=(EvidenceLink(artifact=artifact, locator=f"text#statement-{verdict.statement_index}"),),
+        evidence=(
+            claim_evidence(artifact, f"text#statement-{verdict.statement_index}", claims[verdict.statement_index]),
+        ),
     )
 
 
@@ -274,7 +276,7 @@ def _caused_errors(
     )
 
 
-def _noise_finding(index: int, verdict: NLIVerdict, caused: bool, artifact: ArtifactRef) -> Finding:
+def _noise_finding(index: int, verdict: NLIVerdict, caused: bool, artifact: ArtifactRef, claim: str) -> Finding:
     if verdict.entailed:
         code, severity = "noise_sensitivity.correct", FindingSeverity.INFO
     elif caused:
@@ -285,5 +287,5 @@ def _noise_finding(index: int, verdict: NLIVerdict, caused: bool, artifact: Arti
         code=code,
         severity=severity,
         message=verdict.reason,
-        evidence=(EvidenceLink(artifact=artifact, locator=f"text#statement-{index}"),),
+        evidence=(claim_evidence(artifact, f"text#statement-{index}", claim),),
     )

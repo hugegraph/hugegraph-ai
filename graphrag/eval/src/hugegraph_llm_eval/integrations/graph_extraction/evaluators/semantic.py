@@ -73,7 +73,7 @@ SemanticMatchIssue = Literal[
 
 
 class SemanticVerdict(StrictModel):
-    """Required LLM verdict for one reference graph item."""
+    """One proposed semantic pair, or a reference with no match in this batch."""
 
     reference_index: int = Field(ge=0)
     candidate_index: int | None = Field(default=None, ge=0)
@@ -113,10 +113,15 @@ class SemanticVerdictOutput(StrictModel):
     verdicts: tuple[SemanticVerdict, ...]
 
     @model_validator(mode="after")
-    def _unique_reference_indices(self) -> "SemanticVerdictOutput":
-        indices = tuple(item.reference_index for item in self.verdicts)
-        if len(indices) != len(set(indices)):
-            raise ValueError("semantic verdict reference indices must be unique")
+    def _consistent_pairs(self) -> "SemanticVerdictOutput":
+        candidates_by_reference: dict[int, set[int | None]] = {}
+        for item in self.verdicts:
+            candidates = candidates_by_reference.setdefault(item.reference_index, set())
+            if item.candidate_index in candidates:
+                raise ValueError("semantic verdict candidate/reference pairs must be unique")
+            candidates.add(item.candidate_index)
+            if None in candidates and len(candidates) > 1:
+                raise ValueError("unmatched semantic verdict cannot accompany matches for the same reference")
         return self
 
 
@@ -163,8 +168,8 @@ class _SemanticGraphEvaluator:
             implementation_digest=canonical_digest(
                 {
                     "algorithm": f"graph-semantic-{spec.kind}",
-                    "version": 7,
-                    "matching": "candidate-batch-per-full-reference-verdict-global-max-weight-one-to-one",
+                    "version": 8,
+                    "matching": "candidate-batch-alternative-pairs-global-max-weight-one-to-one",
                     "judge": judge.descriptor.model_dump(mode="json"),
                     "prompt": prompt.reference.model_dump(mode="json"),
                     "rubric": rubric.reference.model_dump(mode="json"),
@@ -489,7 +494,7 @@ def _invalid_verdict(
     reference_indices = {index for index, _ in reference}
     verdict_indices = {item.reference_index for item in output.verdicts}
     if verdict_indices != reference_indices:
-        return "semantic judge must return exactly one verdict for every supplied reference"
+        return "semantic judge must cover every supplied reference with matches or one unmatched verdict"
     if any(
         item.candidate_index is not None and item.candidate_index not in candidate_indices for item in output.verdicts
     ):

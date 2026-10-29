@@ -41,12 +41,7 @@ from hugegraph_llm_eval.contracts.domain.graph import (
     GraphExtractionInput,
     GraphReviewInput,
 )
-from hugegraph_llm_eval.contracts.domain.judge import (
-    JudgeCallRecord,
-    JudgeCallStatus,
-    JudgeProvenance,
-    ProviderUsage,
-)
+from hugegraph_llm_eval.contracts.domain.judge import JudgeCallRecord
 from hugegraph_llm_eval.contracts.errors import FailureCategory, FailureDetail
 from hugegraph_llm_eval.contracts.identity import EvaluatorRef, SchemaRef
 from hugegraph_llm_eval.evaluation.judges.base import (
@@ -57,6 +52,7 @@ from hugegraph_llm_eval.evaluation.judges.base import (
     JudgeRequest,
 )
 from hugegraph_llm_eval.evaluation.judges.content import JudgeContent
+from hugegraph_llm_eval.evaluation.judges.session import JudgeSession
 from hugegraph_llm_eval.integrations.graph_extraction.evaluators.faithfulness_output import (
     FaithfulnessIssueGroup as FaithfulnessIssueGroup,
 )
@@ -123,20 +119,24 @@ class FaithfulnessEvaluator:
         if not materialized.candidate.vertices and not materialized.candidate.edges:
             return self._empty_candidate()
         request = _judge_request(materialized, self._prompt, self._rubric)
+        session = JudgeSession(
+            self._judge,
+            JudgeOptions(
+                deadline=context.deadline,
+                max_attempts=context.max_attempts,
+                initial_backoff_seconds=context.retry_backoff_seconds,
+            ),
+            cancellation=context.cancellation,
+            limiter=context.limiter,
+            clock=self._clock,
+        )
         try:
-            result = self._judge.judge(
-                request,
-                JudgeOptions(
-                    deadline=context.deadline,
-                    max_attempts=context.max_attempts,
-                    initial_backoff_seconds=context.retry_backoff_seconds,
-                ),
-            )
+            output = session.call("evaluate_items", request)
         except JudgeCallError as exc:
-            return self._judge_failure(exc)
-        verdicts = result.output.verdicts()
+            return self._judge_failure(exc, session)
+        verdicts = output.verdicts()
         coverage_failure = _coverage_failure(materialized.candidate, verdicts)
-        judge_call = _completed_judge_call(result.provenance, result.usage)
+        judge_call = session.calls[0]
         if coverage_failure is not None:
             return self._failure(
                 "incomplete_faithfulness_verdicts",
@@ -183,13 +183,13 @@ class FaithfulnessEvaluator:
             created_at=self._clock(),
         )
 
-    def _judge_failure(self, error: JudgeCallError) -> EvaluationRecordDraft:
+    def _judge_failure(self, error: JudgeCallError, session: JudgeSession) -> EvaluationRecordDraft:
         return self._failure(
             error.failure.code,
             error.failure.message,
             error.failure.category,
             retryable=error.failure.retryable,
-            judge_call=_failed_judge_call(error),
+            judge_call=session.calls[0],
         )
 
     def _failure(
@@ -291,7 +291,7 @@ def _implementation_identity(
 ) -> JsonValue:
     return {
         "algorithm": "graph-item-faithfulness",
-        "version": 6,
+        "version": 7,
         "score_semantics": "supported_candidate_claims_micro_average_with_vertex_edge_diagnostics",
         "empty_candidate": "not_applicable",
         "input_schema": input_schema.model_dump(mode="json"),
@@ -299,26 +299,6 @@ def _implementation_identity(
         "prompt": prompt.reference.model_dump(mode="json"),
         "rubric": rubric.reference.model_dump(mode="json"),
     }
-
-
-def _completed_judge_call(provenance: JudgeProvenance, usage: ProviderUsage) -> JudgeCallRecord:
-    return JudgeCallRecord(
-        call_index=1,
-        call_key="evaluate_items",
-        status=JudgeCallStatus.COMPLETED,
-        provenance=provenance,
-        usage=usage,
-    )
-
-
-def _failed_judge_call(error: JudgeCallError) -> JudgeCallRecord:
-    return JudgeCallRecord(
-        call_index=1,
-        call_key="evaluate_items",
-        status=JudgeCallStatus.FAILED,
-        provenance=error.provenance,
-        failure=error.failure,
-    )
 
 
 def _judge_call_latency(call: JudgeCallRecord) -> int:

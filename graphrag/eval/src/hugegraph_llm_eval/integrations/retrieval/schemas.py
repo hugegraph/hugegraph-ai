@@ -34,7 +34,7 @@ class RetrievalReference(VersionedModel):
 
 
 class RetrievalQuery(VersionedModel):
-    question: str = Field(min_length=1, max_length=100_000)
+    question: str = Field(max_length=100_000)
 
 
 class RetrievalComparisonInput(StrictModel):

@@ -306,7 +306,7 @@ Expected JSON:
 {{
   "verdicts": [
     {{"idx": 0, "verdict": "Yes", "reason": "Text mentions 'OAuth 2.0 tokens', supporting the Component 认证服务."}},
-    {{"idx": 1, "verdict": "Yes", "reason": "Text states 'Rotate tokens every 24 hours', supporting the 24-hour cycle."}},
+    {{"idx": 1, "verdict": "No", "reason": "Text describes token rotation every 24 hours or 10,000 requests, not service replacement every two years; both the action and the interval lack support."}},
     {{"idx": 2, "verdict": "No", "reason": "Text specifies OAuth 2.0, but item claims OAuth 1.0 — contradicts the source."}},
     {{"idx": 3, "verdict": "No", "reason": "Text never mentions the log service — this is a hallucination."}}
   ]
@@ -355,7 +355,7 @@ _EXTRACTION_FAITHFULNESS_PROMPT_ZH = """\
 {{
   "verdicts": [
     {{"idx": 0, "verdict": "Yes", "reason": "文中提到'OAuth 2.0 认证服务'，支持 Component 认证服务。"}},
-    {{"idx": 1, "verdict": "Yes", "reason": "文中说'每2年更换认证服务'，支持2年更换周期。"}},
+    {{"idx": 1, "verdict": "No", "reason": "原文要求每24小时或10,000次请求轮换令牌，没有支持每2年更换认证服务；操作对象和时间间隔均不符。"}},
     {{"idx": 2, "verdict": "No", "reason": "文中的是OAuth 2.0，该项声称OAuth 1.0，与原文矛盾。"}},
     {{"idx": 3, "verdict": "No", "reason": "文中从未提及日志服务，属于幻觉。"}}
   ]

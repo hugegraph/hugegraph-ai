@@ -76,7 +76,7 @@ class SchemaValidityEvaluator:
             implementation_digest=canonical_digest(
                 {
                     "algorithm": "graph-schema-validity",
-                    "version": 2,
+                    "version": 3,
                     "input_schema": input_schema.model_dump(mode="json"),
                 }
             ),
@@ -159,7 +159,9 @@ def _validate_schema(
     edges = materialized.candidate.edges
     vertex_schemas = {item.name.casefold(): item for item in schema.vertexlabels}
     edge_schemas = {item.name.casefold(): item for item in schema.edgelabels}
-    labels_by_name = {item.name.casefold(): item.label.casefold() for item in vertices}
+    labels_by_name: dict[str, set[str]] = {}
+    for vertex in vertices:
+        labels_by_name.setdefault(vertex.name.casefold(), set()).add(vertex.label.casefold())
     candidate_artifact = next(
         item.artifact for item in evaluation_input.subjects if item.port.value == "candidate_graph"
     )
@@ -195,7 +197,11 @@ def _validate_vertices(
             )
             continue
         valid_types += 1
-        missing = tuple(key for key in declared.primary_keys if not str(vertex.properties.get(key, "")).strip())
+        missing = tuple(
+            key
+            for key in declared.primary_keys
+            if vertex.properties.get(key) is None or not str(vertex.properties[key]).strip()
+        )
         if missing:
             message = f"vertex {vertex.name!r} is missing required properties: {', '.join(missing)}"
             findings.append(_finding("schema.missing_required_property", message, artifact, f"vertices[{index}]"))
@@ -207,15 +213,15 @@ def _validate_vertices(
 def _validate_edges(
     edges: tuple[GraphEdge, ...],
     edge_schemas: dict[str, GraphEdgeLabel],
-    labels_by_name: dict[str, str],
+    labels_by_name: dict[str, set[str]],
     artifact: ArtifactRef,
     findings: list[Finding],
 ) -> int:
     illegal = 0
     for index, edge in enumerate(edges):
         declared = edge_schemas.get(edge.label.casefold())
-        actual_source = (edge.out_v_label or labels_by_name.get(edge.out_v.casefold(), "")).casefold()
-        actual_target = (edge.in_v_label or labels_by_name.get(edge.in_v.casefold(), "")).casefold()
+        actual_source = _endpoint_label(edge.out_v, edge.out_v_label, labels_by_name)
+        actual_target = _endpoint_label(edge.in_v, edge.in_v_label, labels_by_name)
         valid = declared is not None
         if declared is not None:
             valid = (
@@ -224,9 +230,18 @@ def _validate_edges(
         if valid:
             continue
         illegal += 1
-        message = f"edge {edge.label!r} has an unknown label or illegal endpoint types"
+        message = f"edge {edge.label!r} has an unknown label or missing, ambiguous, or incompatible endpoints"
         findings.append(_finding("schema.illegal_edge", message, artifact, f"edges[{index}]"))
     return illegal
+
+
+def _endpoint_label(name: str, label: str | None, labels_by_name: dict[str, set[str]]) -> str | None:
+    """Resolve a real vertex type, requiring a label to disambiguate names."""
+    labels = labels_by_name.get(name.casefold(), set())
+    if label is not None:
+        normalized = label.casefold()
+        return normalized if normalized in labels else None
+    return next(iter(labels)) if len(labels) == 1 else None
 
 
 def _finding(code: str, message: str, artifact: ArtifactRef, locator: str) -> Finding:

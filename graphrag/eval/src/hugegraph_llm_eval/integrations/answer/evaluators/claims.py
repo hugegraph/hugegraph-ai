@@ -20,6 +20,8 @@
 from pydantic import Field, model_validator
 
 from hugegraph_llm_eval.contracts.base import StrictModel
+from hugegraph_llm_eval.contracts.domain.artifacts import ArtifactRef
+from hugegraph_llm_eval.contracts.domain.evaluation import EvidenceLink
 from hugegraph_llm_eval.evaluation.judges.session import JudgeSession
 from hugegraph_llm_eval.integrations.answer.evaluators.judged_common import JudgedAnswerEvaluator
 
@@ -98,3 +100,10 @@ def complete_verdicts(output: NLIVerdictsOutput, count: int) -> bool:
 
 def ordered_verdicts(output: NLIVerdictsOutput) -> tuple[NLIVerdict, ...]:
     return tuple(sorted(output.verdicts, key=lambda item: item.statement_index))
+
+
+def claim_evidence(artifact: ArtifactRef, locator: str, claim: str) -> EvidenceLink:
+    """Retain the judged claim because its generated index is not in the source artifact."""
+    suffix = "… [truncated]"
+    description = claim if len(claim) <= 2_000 else claim[: 2_000 - len(suffix)] + suffix
+    return EvidenceLink(artifact=artifact, locator=locator, description=description)

@@ -70,7 +70,12 @@ class _RankingEvaluator:
         self.descriptor = EvaluatorDescriptor(
             evaluator=spec.evaluator,
             implementation_digest=canonical_digest(
-                {"algorithm": spec.algorithm, "version": 2, "k_values": list(k_values)}
+                {
+                    "algorithm": spec.algorithm,
+                    "version": 2,
+                    "k_values": list(k_values),
+                    "question_required": False,
+                }
             ),
             input_schema=RETRIEVAL_COMPARISON_INPUT_SCHEMA,
             output_schema=SchemaRef(namespace="retrieval", name=f"{spec.algorithm}_record", version=1),

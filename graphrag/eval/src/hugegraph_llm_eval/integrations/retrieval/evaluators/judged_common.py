@@ -63,13 +63,21 @@ class JudgedRetrievalEvaluator(JudgedEvaluatorLifecycle):
             prompt=prompt,
             rubric=rubric,
             clock=clock,
+            implementation={"question_required": True},
         )
 
     def materialize(self, evaluation_input: EvaluationInput) -> RetrievalComparisonInput | EvaluationRecordDraft:
         try:
-            return self._materializer.comparison(evaluation_input)
+            value = self._materializer.comparison(evaluation_input)
         except RetrievalMaterializationError as exc:
             return self.failure("retrieval_materialization_failed", str(exc), FailureCategory.INVALID_INPUT)
+        if not value.query.question.strip():
+            return self.failure(
+                "retrieval_question_required",
+                "judged retrieval metrics require a non-empty question",
+                FailureCategory.INVALID_INPUT,
+            )
+        return value
 
     def completed(
         self,

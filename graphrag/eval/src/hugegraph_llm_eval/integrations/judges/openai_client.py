@@ -67,8 +67,8 @@ def openai_judge(
     """Create a judge for OpenAI or any compatible endpoint.
 
     Without ``client``, the ``openai`` extra is imported lazily. Pricing stays
-    unknown unless both rates are supplied, so budgets only apply when the caller
-    can price the model.
+    unknown unless both rates are supplied. In budgeted runs, unknown costs stop
+    later samples and metrics after the current evaluator finishes.
     """
     settings = OpenAICompatibleSettings(temperature=temperature, seed=seed, max_tokens=max_tokens)
     pricing = OpenAICompatiblePricing(

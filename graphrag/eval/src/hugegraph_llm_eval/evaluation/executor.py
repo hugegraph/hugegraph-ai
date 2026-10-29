@@ -65,7 +65,7 @@ class EvaluatorExecutor:
                 return self._finish(drafts, resolved[offset:], run.run_id, failure)
             outcomes = self._execute_batch(batch, evaluation_input, run, options, limits)
             drafts.extend(outcomes)
-            failure = _postflight(options, limits, self._clock)
+            failure = _preflight(options, limits, self._clock)
             if failure is not None:
                 remaining = resolved[offset + len(batch) :]
                 return self._finish(drafts, remaining, run.run_id, failure)
@@ -190,29 +190,11 @@ def _preflight(
             "evaluation cost budget exhausted",
             retryable=False,
         )
-    return None
-
-
-def _postflight(
-    options: EvaluationOptions,
-    limits: RunLimits,
-    clock: Callable[[], datetime],
-) -> FailureDetail | None:
-    operational = _preflight(options, limits, clock)
-    if operational is not None:
-        return operational
     if limits.budget.unverifiable():
         return _failure(
             FailureCategory.BUDGET_EXHAUSTED,
             "evaluation_budget_unverifiable",
             "evaluation cost budget cannot be verified because provider cost is unknown",
-            retryable=False,
-        )
-    if limits.budget.exceeded():
-        return _failure(
-            FailureCategory.BUDGET_EXHAUSTED,
-            "evaluation_budget_exceeded",
-            "evaluation cost exceeded its configured budget",
             retryable=False,
         )
     return None

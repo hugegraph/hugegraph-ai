@@ -57,7 +57,10 @@ class JudgedAnswerEvaluator(JudgedEvaluatorLifecycle):
     ) -> None:
         self._materializer = materializer
         self._use_default_task_prompts = use_default_task_prompts
-        implementation: dict[str, JsonValue] = {"use_default_task_prompts": use_default_task_prompts}
+        implementation: dict[str, JsonValue] = {
+            "use_default_task_prompts": use_default_task_prompts,
+            "claim_evidence_version": 1,
+        }
         if use_default_task_prompts:
             implementation["default_prompt_digest"] = answer_judge_prompt_digest()
         super().__init__(

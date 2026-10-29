@@ -255,6 +255,10 @@ def test_answer_correctness_preserves_matches_false_positives_and_false_negative
         "answer_correctness.tp",
         "answer_correctness.fp",
     ]
+    assert [[link.description for link in item.evidence] for item in draft.findings] == [
+        ["Paris is the capital", "Paris is the capital"],
+        ["France is in Europe"],
+    ]
     assert "Apply the answer_correctness_prompt instructions" in judge.requests[0].messages[0].content
     assert "Apply the answer_correctness_prompt instructions" in judge.requests[2].messages[0].content
 
@@ -295,7 +299,7 @@ def test_factual_correctness_runs_bidirectional_claim_verification(tmp_path: Pat
     judge = ScriptedJudge(
         (
             _claims("Paris is the capital", "France is in Europe"),
-            _nli((0, True, "entailed"), (1, False, "not entailed")),
+            _nli((1, False, "not entailed"), (0, True, "entailed")),
             _claims("Paris is the capital"),
             _nli((0, True, "covered")),
         )
@@ -316,6 +320,11 @@ def test_factual_correctness_runs_bidirectional_claim_verification(tmp_path: Pat
     }
     assert len(draft.judge_calls) == 4
     assert len(draft.findings) == 3
+    assert [item.evidence[0].description for item in draft.findings] == [
+        "Paris is the capital",
+        "France is in Europe",
+        "Paris is the capital",
+    ]
     assert "Apply the factual_correctness_prompt instructions" in judge.requests[1].messages[0].content
 
 
@@ -325,7 +334,7 @@ def test_answer_faithfulness_keeps_every_claim_verdict(tmp_path: Path) -> None:
     judge = ScriptedJudge(
         (
             _claims("Paris is the capital", "France is in Europe"),
-            _nli((0, True, "supported"), (1, False, "unsupported")),
+            _nli((1, False, "unsupported"), (0, True, "supported")),
         )
     )
     draft = FaithfulnessEvaluator(
@@ -342,6 +351,10 @@ def test_answer_faithfulness_keeps_every_claim_verdict(tmp_path: Path) -> None:
         "answer_faithfulness.supported",
         "answer_faithfulness.unsupported",
     ]
+    assert [item.evidence[0].description for item in draft.findings] == [
+        "Paris is the capital",
+        "France is in Europe",
+    ]
 
 
 def test_noise_sensitivity_attributes_wrong_claim_to_relevant_context(tmp_path: Path) -> None:
@@ -355,7 +368,7 @@ def test_noise_sensitivity_attributes_wrong_claim_to_relevant_context(tmp_path: 
             _nli((0, True, "supported"), (1, True, "noise also supports this")),
             _nli((0, False, "reference absent from context 1")),
             _nli((0, False, "absent"), (1, True, "supported")),
-            _nli((0, True, "correct"), (1, False, "incorrect")),
+            _nli((1, False, "incorrect"), (0, True, "correct")),
         )
     )
     draft = NoiseSensitivityEvaluator(
@@ -373,6 +386,73 @@ def test_noise_sensitivity_attributes_wrong_claim_to_relevant_context(tmp_path: 
     assert draft.measurements[0].direction.value == "lower_is_better"
     assert len(draft.judge_calls) == 7
     assert draft.findings[1].code == "noise_sensitivity.caused_error"
+    assert [item.evidence[0].description for item in draft.findings] == [
+        "Paris is the capital",
+        "France is in Europe",
+    ]
+
+
+def test_correctness_claim_evidence_uses_match_indices_and_retains_missing_claims() -> None:
+    store = _store()
+    judge = ScriptedJudge(
+        (
+            _claims("Alice lives in Paris", "Bob lives in Rome"),
+            _claims("Bob is based in Rome", "Alice is based in Paris", "Carol lives in Lyon"),
+            CorrectnessOutput(
+                matches=(
+                    CorrectnessMatch(candidate_index=1, reference_index=0, reason="same fact"),
+                    CorrectnessMatch(candidate_index=0, reference_index=1, reason="same fact"),
+                ),
+                false_positives=(),
+                false_negatives=(UnmatchedClaim(statement_index=2, reason="missing fact"),),
+            ),
+        )
+    )
+    draft = AnswerCorrectnessEvaluator(
+        AnswerArtifactMaterializer(store),
+        judge=judge,
+        prompt=_content("correctness_prompt"),
+        rubric=_content("correctness_rubric"),
+        clock=lambda: NOW,
+    ).evaluate(
+        _input(
+            store,
+            candidate="Alice lives in Paris. Bob lives in Rome.",
+            references=("Bob is based in Rome. Alice is based in Paris. Carol lives in Lyon.",),
+        ),
+        _context(),
+    )
+
+    assert draft.status is EvaluationRecordStatus.COMPLETED
+    assert [[link.description for link in item.evidence] for item in draft.findings] == [
+        ["Bob lives in Rome", "Bob is based in Rome"],
+        ["Alice lives in Paris", "Alice is based in Paris"],
+        ["Carol lives in Lyon"],
+    ]
+
+
+@pytest.mark.parametrize("claim_length", (2_000, 2_001, 10_000))
+def test_claim_evidence_keeps_valid_results_and_marks_truncated_previews(claim_length) -> None:
+    store = _store()
+    claim = "Fact: " + "x" * (claim_length - 6)
+    judge = ScriptedJudge((_claims(claim), _nli((0, True, "supported"))))
+    draft = FaithfulnessEvaluator(
+        AnswerArtifactMaterializer(store),
+        judge=judge,
+        prompt=_content("faithfulness_prompt"),
+        rubric=_content("faithfulness_rubric"),
+        clock=lambda: NOW,
+    ).evaluate(_input(store, candidate=claim), _context())
+
+    assert draft.status is EvaluationRecordStatus.COMPLETED
+    description = draft.findings[0].evidence[0].description
+    assert isinstance(description, str)
+    if claim_length <= 2_000:
+        assert description == claim
+    else:
+        assert len(description) <= 2_000
+        assert description.startswith(claim[:100])
+        assert description.endswith("… [truncated]")
 
 
 def test_default_task_prompt_flag_changes_evaluator_identity() -> None:

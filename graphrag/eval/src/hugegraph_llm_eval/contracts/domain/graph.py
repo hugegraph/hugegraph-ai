@@ -70,7 +70,14 @@ class GraphEdge(VersionedModel):
 
 
 class GraphCandidate(VersionedModel):
-    """Canonical graph candidate artifact value."""
+    """Canonical graph artifact, including invalid candidates to be evaluated.
+
+    Schema validity treats this as a complete graph: every edge endpoint must
+    identify a vertex in ``vertices``. Explicit endpoint labels disambiguate
+    equal names with different types; an omitted label requires a unique type.
+    Invalid endpoint references remain representable so evaluators can report
+    them as findings instead of rejecting the candidate during construction.
+    """
 
     chunk_id: str = Field(default="", max_length=2_000)
     heading_path: str = Field(default="", max_length=10_000)

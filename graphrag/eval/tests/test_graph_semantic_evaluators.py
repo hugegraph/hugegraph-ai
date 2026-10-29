@@ -93,39 +93,35 @@ def _verdicts(*items: tuple[int, int | None, str]) -> SemanticVerdictOutput:
     )
 
 
-def test_semantic_verdict_prompt_preserves_few_shots_and_overrides_the_old_output_shape() -> None:
-    """The new exhaustive protocol must retain the domain-neutral judging examples."""
-    entity = semantic_verdict_prompt("entity")
-    triple = semantic_verdict_prompt("triple")
+@pytest.mark.parametrize("language", ["zh", "en"])
+def test_semantic_verdict_prompt_uses_one_protocol_and_preserves_alternatives(language) -> None:
+    """Current examples and rules must agree before sending a model request."""
+    entity = semantic_verdict_prompt("entity", language)
+    triple = semantic_verdict_prompt("triple", language)
 
-    assert "认证超时告警" in entity
-    assert '"matches"' in entity
-    assert '"verdicts"' in entity
-    assert '"match_score"' in entity
-    assert "候选窗口" in entity
-    assert "完整文档标准答案" in entity
-    assert "label 不一致" in entity
-    assert "不得仅因 label 不一致返回 candidate_index=null" in entity
-    assert "以 label 和 name 为主" in entity
-    assert "只作辅助证据" in entity
-    assert "候选名称“认证服务超时指示灯”与标准名称“认证超时告警”匹配" in entity
-    assert "属性差异" in entity
-    assert "不影响实体匹配" in entity
-    assert "match_issues" in entity
+    for prompt in (entity, triple):
+        assert '"matches"' not in prompt
+        assert '"verdicts"' in prompt
+        assert '"match_score"' in prompt
+        assert '"reference_index": 0, "candidate_index": 12' in prompt
+        assert '"reference_index": 0, "candidate_index": 13' in prompt
+        assert '"reference_index": 1, "candidate_index": 12' in prompt
+        assert "no_semantic_match" in prompt
+    assert "auth service" in entity
     assert "label_mismatch" in entity
-    assert "类型是否一致" in entity
-    assert "冲突字段" in entity
-    assert "无近似候选" in entity
-    assert "HAS_STATUS" in triple
-    assert "方向" in triple
-    assert "方向是否一致" in triple
-    assert "起点和终点" in triple
-    assert "关系类型只是名称表达" in triple
+    assert "property_mismatch" in entity
+    assert "DEPENDS_ON" in triple
     assert "relation_mismatch" in triple
     assert "endpoint_label_mismatch" in triple
-    assert "反向边不得命中" in triple
-    assert "out_v_label" in triple
-    assert '"verdicts"' in triple
+    assert "direction_mismatch" in triple
+    if language == "zh":
+        assert "所有语义等价候选" in entity
+        assert "不要在窗口内做一对一分配" in entity
+        assert "反向边不得命中" in triple
+    else:
+        assert "ALL semantically valid candidate pairs" in entity
+        assert "do not assign one-to-one within a window" in entity
+        assert "direction must agree" in triple
 
 
 def test_semantic_entity_matching_preserves_global_indices(tmp_path) -> None:

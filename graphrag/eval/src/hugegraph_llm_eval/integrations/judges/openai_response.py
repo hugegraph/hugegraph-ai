@@ -72,9 +72,10 @@ class AttemptOutcome:
 
 
 class AttemptFailureError(RuntimeError):
-    def __init__(self, failure: FailureDetail) -> None:
+    def __init__(self, failure: FailureDetail, *, usage: ProviderUsage | None = None) -> None:
         super().__init__(failure.message)
         self.failure = failure
+        self.usage = usage
 
 
 def provider_outcome(
@@ -82,21 +83,38 @@ def provider_outcome(
     response: OpenAIResponse,
     usage_factory: Callable[[OpenAIResponseUsage | None], ProviderUsage],
 ) -> AttemptOutcome:
+    usage = None
     try:
+        usage = usage_factory(response.usage)
         if not response.choices:
             raise AttemptFailureError(failure(FailureCategory.INVALID_PROVIDER_OUTPUT, "missing_choice", False))
         output = _structured_output(request, response.choices[0])
         return AttemptOutcome(
             output=output,
-            usage=usage_factory(response.usage),
+            usage=usage,
             response_id=response.id,
             response_model=response.model,
         )
-    except AttemptFailureError:
-        raise
+    except AttemptFailureError as exc:
+        raise AttemptFailureError(exc.failure, usage=usage) from exc
     except (AttributeError, IndexError, TypeError) as exc:
         detail = failure(FailureCategory.INVALID_PROVIDER_OUTPUT, "malformed_provider_response", False)
-        raise AttemptFailureError(detail) from exc
+        raise AttemptFailureError(detail, usage=usage) from exc
+
+
+def exception_usage(
+    error: Exception,
+    usage_factory: Callable[[OpenAIResponseUsage | None], ProviderUsage],
+) -> ProviderUsage | None:
+    """Retain billed usage even when a structured response was rejected."""
+    if isinstance(error, AttemptFailureError):
+        return error.usage
+    if isinstance(error, _openai().LengthFinishReasonError):
+        try:
+            return usage_factory(error.completion.usage)
+        except (AttributeError, TypeError, ValueError, AttemptFailureError):
+            return None
+    return None
 
 
 def _structured_output(request: JudgeRequest[OutputT], choice: _ResponseChoice) -> BaseModel:

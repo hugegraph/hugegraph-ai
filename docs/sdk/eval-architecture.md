@@ -8,7 +8,7 @@
 `graphrag/eval/` 是**度量层**：评分规则、Judge 协议和执行语义只在这里维护。整条链路的分工是
 
 ```
-graphrag/sdk/     负责把文本变成图（schema 设计 + 抽取）
+hugegraph-llm-sdk/ 负责把文本变成图（schema 设计 + 抽取）
 graphrag/eval/    负责判断图、检索和答案的质量（本包）
 hugegraph-llm/    负责把这些能力串成流程，并持有配置、持久化、报告和 UI
 ```
@@ -42,6 +42,9 @@ hugegraph-llm/    负责把这些能力串成流程，并持有配置、持久�
 - `max_attempts` 约束**单次 Judge 调用**的 provider 重试（上限 20）；执行器不会重试已经产生 Judge
   调用的失败，因此不会出现重试次数相乘。多步评测器（如答案正确性、语义匹配分批）一次评测会发起多次
   Judge 调用，总请求数是调用次数乘以 `max_attempts`，预算在评测器结束后结算。
+  已知费用按 `JudgeCallRecord.provenance.attempts` 汇总，包括输出校验失败但返回 usage 的尝试；
+  `JudgeCallRecord.usage` 只表示最终成功响应，不能重复累加。设置预算后，未知或未定价成本会阻止
+  后续样本和指标启动，保留已完成记录；这不是对在飞请求或多步评测器的硬费用上限。
 - OpenAI 适配器关闭了 SDK 自带重试（`max_retries=0`），超时预算只由本包的重试策略消耗。
 - `retry_backoff_seconds` 同时用于 Judge 重试的初始退避与执行器层重试。
 - 截止时间与取消是协作式的，在批次前后与**每次 Judge 调用前**检查；取消或超时会把对应记录标记为
@@ -50,6 +53,17 @@ hugegraph-llm/    负责把这些能力串成流程，并持有配置、持久�
 - 记录级失败是数据而不是异常：输入不可物化、provider 失败、评测器返回非法值都会落到具体记录上；
   评测器抛出的 `KeyboardInterrupt`/`SystemExit` 之外的所有异常都转成失败记录，不会丢掉同批次的其他结果。
 - 通过引擎执行时，评测器与 Judge 实现会被不同线程并发调用，必须是无共享可变状态的实现。
+
+## 评分协议
+
+- 语义匹配按 256 个候选分窗，每个窗口返回所有可行的 candidate/reference 配对，保留同一项的备选；
+  没有匹配的 reference 才返回唯一 null。统一使用已有最大总权重求解器选出一对一匹配，窗口内不提前分配。
+  最优性仅覆盖 Judge 实际返回的配对，不保证模型穷尽真实语义关系；歧义密集时输出 token 可能增加，
+  请求次数和分窗大小保持不变，自定义 Judge/prompt 也应遵循这一协议。
+- 答案的原子主张保存在 findings 的 `evidence.description`；超过 2,000 字符时明确截断，避免仅留下
+  无法从原始字符串还原的动态 statement 编号。完整模型输出仍由调用方负责持久化。
+- 多 reference 聚合、重复 claim 权重和 relevant-context noise 模式的边界见使用指南，不能把这些指标
+  直接解读为覆盖所有正确答案或所有噪声条件的完整质量结论。
 
 ## 扩展应该放在哪里
 

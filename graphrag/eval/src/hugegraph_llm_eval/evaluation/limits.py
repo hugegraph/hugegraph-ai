@@ -70,8 +70,13 @@ class CostBudget:
             return self._spent
 
     def charge(self, calls: Sequence[JudgeCallRecord]) -> None:
-        """Accumulate the cost of finished judge calls."""
-        known = sum(call.usage.cost_usd or 0 for call in calls if call.usage is not None)
+        """Accumulate reported attempt costs, including billed output failures."""
+        known = sum(
+            attempt.usage.cost_usd or 0
+            for call in calls
+            for attempt in call.provenance.attempts
+            if attempt.usage is not None
+        )
         unknown = any(judge_call_cost_is_unknown(call) for call in calls)
         with self._lock:
             self._spent += known
