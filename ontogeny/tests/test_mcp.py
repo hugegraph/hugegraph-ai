@@ -359,3 +359,50 @@ class TestRefreshOnPromote:
         names = {t.name for t in tools}
         assert "search_work_center" not in names
         assert "search_production_order" in names
+
+    async def test_prepared_catalog_remains_private_until_applied(self, sc):
+        from dataclasses import replace
+
+        from ontogeny.mcp_server import McpSurface
+
+        surface = McpSurface(sc, engine_mode=True)
+        surface.build()
+        live_server = surface.server
+        original_manager = live_server._tool_manager
+        original_compiled = sc.compiled
+        sc.compiled = replace(
+            original_compiled, objects={k: v for k, v in original_compiled.objects.items() if k != "work-center"}
+        )
+        try:
+            prepared = surface.prepare_refresh()
+        finally:
+            sc.compiled = original_compiled
+        assert surface.server is live_server
+        assert surface.server._tool_manager is original_manager
+        assert "search_work_center" in {t.name for t in await surface.server.list_tools()}
+        surface.apply_refresh(prepared)
+        assert surface.server is live_server
+        assert surface.server._tool_manager is prepared
+        assert "search_work_center" not in {t.name for t in await surface.server.list_tools()}
+        assert "agent_get_session" in {t.name for t in await surface.server.list_tools()}
+
+    async def test_failed_catalog_preparation_preserves_live_tools(self, sc, monkeypatch):
+        import pytest
+
+        from ontogeny.mcp_server import McpSurface
+
+        surface = McpSurface(sc, engine_mode=True)
+        surface.build()
+        original_manager = surface.server._tool_manager
+        original_names = {t.name for t in await surface.server.list_tools()}
+        register = McpSurface._register_catalog_tools
+
+        def register_then_fail(candidate):
+            register(candidate)
+            raise RuntimeError("registration failed after adding catalog tools")
+
+        monkeypatch.setattr(McpSurface, "_register_catalog_tools", register_then_fail)
+        with pytest.raises(RuntimeError, match="registration failed"):
+            surface.prepare_refresh()
+        assert surface.server._tool_manager is original_manager
+        assert {t.name for t in await surface.server.list_tools()} == original_names

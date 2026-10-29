@@ -270,10 +270,27 @@ class McpSurface:
         self._register_catalog_tools()
         self._register_session_tools()
 
+    def prepare_refresh(self) -> Any:
+        """Build a replacement catalog without mutating the mounted server.
+
+        ServiceContext prepares this synchronously against a candidate runtime,
+        then swaps it only after the registry transaction has committed. Keep
+        the mounted server/transport instance intact across that swap.
+        """
+        if self.server is None:
+            return None
+        candidate = type(self)(self.sc, engine_mode=self.engine_mode)
+        candidate.sdk = self.sdk
+        candidate.build()
+        return candidate.server._tool_manager if candidate.server is not None else None
+
+    def apply_refresh(self, prepared: Any) -> None:
+        if prepared is not None and self.server is not None:
+            self.server._tool_manager = prepared
+
     def refresh(self) -> None:
-        """Rebuild tool registrations after the compiled snapshot changed."""
-        if self.server is not None:
-            self.build()
+        """Replace tool registrations atomically after the snapshot changed."""
+        self.apply_refresh(self.prepare_refresh())
 
     def _register_catalog_tools(self) -> None:
         from .agent.catalog import build_catalog
