@@ -16,6 +16,8 @@ Contributor workflows: [CI selection and full validation](docs/quality/ci.md), [
 - **[HG-Python Client](./hugegraph-python-client/README.md)**: Easy-to-use Python interface for HugeGraph operations
 - **[Vermeer Python Client](./vermeer-python-client/README.md)**: SDK/Interface for Graph Computing with [Vermeer](https://github.com/apache/hugegraph-computer/tree/master/vermeer#readme)
 
+- **[Ontogeny](./ontogeny/README.md)**: Model business objects, relationships, actions and policies as Git-managed YAML, with a governed API and bilingual console
+
 ## 🚀 Quick Start
 
 > [!NOTE]
@@ -81,6 +83,25 @@ python -m hugegraph_llm.demo.rag_demo.app
 
 The source launcher binds to `127.0.0.1` by default and warns when a non-loopback `--host` is selected.
 
+### Ontogeny demo
+
+Ontogeny is an independently installed module requiring Python 3.12+. To try its
+manufacturing example with Docker:
+
+```bash
+cd ontogeny
+docker compose up -d
+docker compose exec ontogeny cat /data/admin-bootstrap-password  # first boot's owner-only credential
+```
+
+Compose binds this demo to `127.0.0.1:8000` by default. Open **http://localhost:8000** and sign in as `admin`. Set
+`ONTOGENY_ADMIN_PASSWORD` before starting Compose to choose the initial password.
+See the [module guide](./ontogeny/README.md) for source installation and configuration.
+
+![Ontogeny architecture](./ontogeny/docs/en/img/arch-board.png)
+
+![Ontogeny console](./ontogeny/docs/en/img/qs-dashboard.png)
+
 ### Basic Usage Examples
 
 > [!NOTE]
@@ -140,6 +161,14 @@ Python client for HugeGraph operations, distributed as `hugegraph-python` (`uv p
 - **CRUD Operations**: Create, read, update, delete graph data
 - **Gremlin Queries**: Execute graph traversal queries
 - **REST API**: Complete HugeGraph REST API coverage
+
+### [ontogeny](./ontogeny/README.md)
+
+A Git-managed operational ontology platform: DSL compilation, object queries,
+actions and policies, audit trails, Agent/MCP sessions, optional HugeGraph
+projection, and a bilingual web console. It runs independently of the existing
+modules. See the [architecture and usage guides](./ontogeny/docs/en/README.md)
+for details.
 
 ## 📚 Learn More
 

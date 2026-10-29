@@ -1,0 +1,124 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and
+# limitations under the License.
+
+"""Outbox and revision tables -- the durable core of the kinetic layer.
+
+Both live in ``ontogeny.action.models`` because they are written by the action
+runtime AND by the sync engine (sync-driven changes are outbox events too, so
+projections stay consistent regardless of who wrote the object).
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+from typing import Any
+
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from ..db import Base
+
+
+def _bigid() -> BigInteger:
+    """BIGINT primary key that still autoincrements on SQLite (INTEGER PK)."""
+    return BigInteger().with_variant(Integer(), "sqlite")
+
+
+def _utcnow() -> _dt.datetime:
+    return _dt.datetime.now(_dt.UTC)
+
+
+class IdSequenceRow(Base):
+    """Last allocated ID for a prefix, updated in the action transaction."""
+
+    __tablename__ = "ontogeny_id_sequence"
+
+    prefix: Mapped[str] = mapped_column(String(500), primary_key=True)
+    value: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class RevisionRow(Base):
+    """Immutable audit record of one action execution (or approval step)."""
+
+    __tablename__ = "ontogeny_revision"
+
+    id: Mapped[int] = mapped_column(_bigid(), primary_key=True, autoincrement=True)
+    action: Mapped[str] = mapped_column(String(200), index=True)
+    object_type: Mapped[str] = mapped_column(String(200), index=True)
+    object_id: Mapped[str] = mapped_column(String(500), index=True)
+    principal: Mapped[str] = mapped_column(String(200))
+    params: Mapped[dict[str, Any]] = mapped_column(JSON)
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    rules_hit: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    policy_decision: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    outcome: Mapped[str] = mapped_column(
+        String(32), default="executed"
+    )  # executed | rejected_rule | denied_policy | pending_approval | approved
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(200), index=True)
+    created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Match the runtime's replay lookup: keys are scoped to an action and
+    # principal. The partial predicate applies on both supported databases.
+    __table_args__ = (
+        Index(
+            "uq_revision_idem_scope",
+            "action",
+            "principal",
+            "idempotency_key",
+            unique=True,
+            sqlite_where=idempotency_key.is_not(None),
+            postgresql_where=idempotency_key.is_not(None),
+        ),
+    )
+
+
+class OutboxRow(Base):
+    """Transactional-outbox: the ONLY bridge from committed state to the world."""
+
+    __tablename__ = "ontogeny_outbox"
+
+    id: Mapped[int] = mapped_column(_bigid(), primary_key=True, autoincrement=True)
+    object_type: Mapped[str] = mapped_column(String(200), index=True)
+    object_id: Mapped[str] = mapped_column(String(500))
+    op: Mapped[str] = mapped_column(String(32))  # upsert | archive | link | event
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    revision_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    published_at: Mapped[_dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OutboxConsumerRow(Base):
+    """Legacy cursor and receipt-migration state for each consumer."""
+
+    __tablename__ = "ontogeny_outbox_cursor"
+
+    consumer: Mapped[str] = mapped_column(String(100), primary_key=True)
+    last_id: Mapped[int] = mapped_column(BigInteger, default=0)
+    receipts_initialized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    failures: Mapped[int] = mapped_column(default=0)
+    updated_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+
+class OutboxReceiptRow(Base):
+    """Committed delivery acknowledgement independent of ID/commit order."""
+
+    __tablename__ = "ontogeny_outbox_receipt"
+
+    consumer: Mapped[str] = mapped_column(String(100), primary_key=True)
+    event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
