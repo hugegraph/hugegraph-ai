@@ -27,6 +27,8 @@ A sync is one explicit operation: run `ontogeny sync <type>` with the service’
 
 Quarantined native database values are converted recursively to JSON-safe diagnostics: Decimal/UUID values become strings, dates/times use ISO text and binary values use hex. A bad native value must not prevent valid rows in the same sync from committing.
 
+Declared array/struct columns encode nested dates and timestamps at the JSON storage boundary and restore their declared types on read. Publish, reload, existing-registry startup and domain activation commit schema changes before installing the new runtime and MCP tools.
+
 The object tables enforce at most one current row per complete business primary key with a partial unique index (`_valid_to IS NULL`); historical versions remain allowed. On upgrade, existing duplicate current rows block index creation with a clear error. Review and repair those duplicates before retrying; startup does not delete data automatically.
 
 Object reads and writes coerce supplied key values to their declared property types; string keys retain leading zeroes. Snapshot reconciliation compares complete business-key tuples, so deleting one composite-key row does not retain it merely because another row shares its first key component. A quarantined row with an identifiable complete key still preserves the last valid object.

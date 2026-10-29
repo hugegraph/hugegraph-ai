@@ -45,6 +45,8 @@ For declarative HTTP step URLs and header values, only bare `UPPER_SNAKE` deploy
 
 HTTP responses are streamed with a 256 KiB limit on decoded body bytes. Exceeding the limit closes the response and fails the function; the runtime does not download the complete oversized body or return a truncated result.
 
+Python sandbox JSON frames (initialization, RPC and results, including batch results) are also bounded at 256 KiB, including framing; oversized messages raise `SandboxError` and the child is cleaned up. This supports normal results above asyncio's default 64 KiB line limit. SDK query sorting is applied before its limit.
+
 ## 4.2 Functional actions: effect plans (the Function proposes, the Action disposes)
 
 ```yaml
@@ -70,3 +72,5 @@ spec:
 **Why expressions and data are distinguished**: values in declarative effects are expressions (statically checkable), while function plans carry runtime data — without the distinction `"EQ-01"` would be parsed as `EQ - 01`.
 
 Before applying a function plan, the runtime runs the same semantic checks as static effects (including property ownership and link references), handles join-table links from either endpoint, and emits an outbox change event for every created object.
+
+Action idempotency keys are scoped to `(action, principal, key)`; an empty key means unset. PostgreSQL serializes same-scope requests before replay lookup. Upgrade replaces the former global unique index without deleting audit revisions.
