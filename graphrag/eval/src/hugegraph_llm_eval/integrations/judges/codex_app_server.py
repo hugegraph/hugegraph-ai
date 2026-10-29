@@ -247,11 +247,7 @@ class CodexAppServerJudge(AttemptLoopJudge):
             connection.fire("thread/unsubscribe", {"threadId": thread_id})
 
     def _thread_params(self, system: str | None) -> dict[str, object]:
-        config = (
-            {**self._config, "mcp_servers": self._mcp_overrides}
-            if self._disable_user_mcp_servers
-            else self._config
-        )
+        config = {**self._config, "mcp_servers": self._mcp_overrides} if self._disable_user_mcp_servers else self._config
         return {
             "model": self.descriptor.model,
             "ephemeral": True,
