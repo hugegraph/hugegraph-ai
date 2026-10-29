@@ -131,6 +131,8 @@ jobs:
           .venv/bin/pytest -q tests/test_agent_identity_and_run_claim.py::test_concurrent_run_claim_on_postgres 2>&1 | sed "s/${audit_password}/[redacted]/g"
           PYTHONPATH=tests .venv/bin/pytest -p pg_agent_plugin tests/test_agent_atomicity.py \
             -k 'failed_second_effect or simultaneous_decisions or approval_preserves' -q 2>&1 | sed "s/${audit_password}/[redacted]/g"
+          PYTHONPATH=tests .venv/bin/pytest -p pg_agent_plugin tests/test_action_effect_order.py -q 2>&1 | sed "s/${audit_password}/[redacted]/g"
+          .venv/bin/pytest -q tests/test_source_snapshot_and_native_values.py 2>&1 | sed "s/${audit_password}/[redacted]/g"
       - name: Stop temporary PostgreSQL
         if: always()
         run: |
