@@ -88,6 +88,8 @@ def _coerce_row(
     props: dict[str, PropertyType],
     mapped: dict[str, str],
     raw: dict[str, Any],
+    *,
+    required: set[str] | None = None,
 ) -> tuple[dict[str, Any] | None, str | None, str | None]:
     """raw source row -> typed property dict; on failure return quarantine info."""
     out: dict[str, Any] = {}
@@ -104,6 +106,9 @@ def _coerce_row(
             return None, "TYPE_MISMATCH", exc.message
     for prop in (k for k in mapped if k not in out):
         out[prop] = None
+    missing = sorted(prop for prop in required or () if out.get(prop) is None)
+    if missing:
+        return None, "REQUIRED_PROPERTY", f"required source properties missing/None: {', '.join(missing)}"
     return out, None, None
 
 
@@ -175,6 +180,11 @@ class SyncEngine:
             max_wm: Any = after
             pk_props = obj.spec.primaryKey
             ptypes = {p: d.ptype() for p, d in obj.spec.properties.items()}
+            required_props = {
+                p
+                for p, definition in obj.spec.properties.items()
+                if definition.required and not definition.derived and p not in pk_props
+            }
 
             rows = source.fetch(
                 backing.source,
@@ -200,7 +210,13 @@ class SyncEngine:
                         pass  # an invalid key cannot identify an existing object
                     else:
                         seen_pks.add(str(source_pk))
-                props, code, reason = _coerce_row(object_type, ptypes, mapped, raw)
+                props, code, reason = _coerce_row(
+                    object_type,
+                    ptypes,
+                    mapped,
+                    raw,
+                    required=required_props,
+                )
                 pk = None
                 if props is not None:
                     pk = str(props.get(pk_props[0]))

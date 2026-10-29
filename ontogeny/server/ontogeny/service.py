@@ -690,8 +690,8 @@ class ServiceContext:
             async with self.sessionmaker() as session:
                 return await self.projection_worker.handle_event(self.repo, session, event)
 
-        async def _derivation_hook(event) -> bool:
-            return await self.derivation.handle_event(event)
+        async def _derivation_hook(event, session) -> bool:
+            return await self.derivation.handle_event(event, session)
 
         async def _derivation_drain() -> dict[str, int]:
             return await self.derivation.drain()

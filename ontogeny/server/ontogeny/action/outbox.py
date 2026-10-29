@@ -72,7 +72,7 @@ class OutboxDispatcher:
         *,
         sse: SseBroker | None = None,
         projection_hook: Consumer | None = None,
-        derivation_hook: Consumer | None = None,
+        derivation_hook: Callable[[OutboxRow, Any], Awaitable[bool]] | None = None,
         derivation_drain=None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
@@ -155,22 +155,22 @@ class OutboxDispatcher:
         )
         return True
 
-    async def _deliver_derivation(self, event: OutboxRow) -> bool:
+    async def _deliver_derivation(self, event: OutboxRow, session) -> bool:
         if self.derivation_hook is None:
             return True
-        return bool(await self.derivation_hook(event))
+        return bool(await self.derivation_hook(event, session))
 
     # --------------------------------------------------------------- driving
 
     async def dispatch_pending(self, *, limit: int = 100) -> dict[str, int]:
-        consumers: dict[str, Consumer] = {
-            "webhook": self._deliver_webhook,
-            "projection": self._deliver_projection,
-            "derivation": self._deliver_derivation,
-            "sse": self._deliver_sse,
-        }
         stats: dict[str, int] = {}
         async with self.session_factory() as session:
+            consumers: dict[str, Consumer] = {
+                "webhook": self._deliver_webhook,
+                "projection": self._deliver_projection,
+                "derivation": lambda event: self._deliver_derivation(event, session),
+                "sse": self._deliver_sse,
+            }
             for name, deliver in consumers.items():
                 cursor = (
                     await session.execute(select(OutboxConsumerRow).where(OutboxConsumerRow.consumer == name))
