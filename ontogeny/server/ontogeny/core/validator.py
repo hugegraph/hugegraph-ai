@@ -301,12 +301,19 @@ def validate(pkg: OntologyPackage) -> ValidationReport:
 
     _check_col_collisions(pkg, rep)
 
+    from ..policy.engine import _policy_text, _statement_matches, parse_forbids
+
     # ---- policies: resource-scoped statements are unsupported, fail closed -
     for pol in pkg.policies():
         text = pkg.sidecar_text("PolicySet", pol.metadata.name, pol.spec.source)
         import re as _re2
 
-        for m2 in _re2.finditer(r"(?:permit|forbid)\s*\([^)]*,\s*([^,)]+)\s*\)", text, _re2.S):
+        try:
+            clean, quoted = _policy_text(text)
+        except ValueError:
+            continue  # reported by the fail-closed policy check below
+        pattern = _re2.compile(r"(?:permit|forbid)\s*\([^)]*,\s*([^,)]+)\s*\)", _re2.S)
+        for m2 in _statement_matches(clean, quoted, pattern):
             res = m2.group(1).strip()
             if res not in ("resource", "*"):
                 rep.error(
@@ -319,12 +326,16 @@ def validate(pkg: OntologyPackage) -> ValidationReport:
     # ---- policies: unparseable forbid must not ride silently --------------
     import re as _re
 
-    from ..policy.engine import parse_forbids
-
     for pol in pkg.policies():
         text = pkg.sidecar_text("PolicySet", pol.metadata.name, pol.spec.source)
-        authored = len(_re.findall(r"\bforbid\s*\(", text))
-        if authored and authored != len(parse_forbids(text)):
+        try:
+            clean, quoted = _policy_text(text)
+            authored = sum(1 for match in _re.finditer(r"\bforbid\s*\(", clean) if match.start() not in quoted)
+            parsed = len(parse_forbids(text))
+        except ValueError as exc:
+            rep.error("POLICY-FORBID", f"PolicySet/{pol.metadata.name}", f"invalid policy comments: {exc}")
+            continue
+        if authored != parsed:
             rep.error(
                 "POLICY-FORBID",
                 f"PolicySet/{pol.metadata.name}",
