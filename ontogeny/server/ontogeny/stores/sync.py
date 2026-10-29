@@ -29,7 +29,10 @@ Execution semantics (data-layer §3.2):
 from __future__ import annotations
 
 import datetime as _dt
+import math
+from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import JSON, DateTime, Integer, String, Text, select
 from sqlalchemy.orm import Mapped, mapped_column
@@ -281,13 +284,27 @@ class SyncEngine:
         return summary
 
 
-def _jsonable(raw: dict[str, Any]) -> dict[str, Any]:
-    import datetime as d
+def _jsonable(value: Any) -> Any:
+    """Keep source diagnostics JSON-safe without losing decimal precision.
 
-    out = {}
-    for k, v in raw.items():
-        if isinstance(v, d.datetime | d.date):
-            out[k] = v.isoformat()
-        else:
-            out[k] = v
-    return out
+    Drivers return native Decimal, UUID, datetime and binary values even for
+    rows rejected by schema coercion. Conversion must recurse through native
+    arrays/JSON too, otherwise one quarantined row can abort the whole sync.
+    """
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, list | tuple | set | frozenset):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, _dt.datetime | _dt.date | _dt.time):
+        return value.isoformat()
+    if isinstance(value, Decimal | UUID):
+        return str(value)
+    if isinstance(value, bytes | bytearray | memoryview):
+        return bytes(value).hex()
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    # Preserve a useful diagnostic for other driver-specific scalar types
+    # (for example intervals/ranges), rather than failing to quarantine them.
+    return str(value)
