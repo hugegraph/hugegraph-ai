@@ -27,20 +27,26 @@ A sync is one explicit operation: run `ontogeny sync <type>` with the service’
 
 Quarantined native database values are converted recursively to JSON-safe diagnostics: Decimal/UUID values become strings, dates/times use ISO text and binary values use hex. A bad native value must not prevent valid rows in the same sync from committing.
 
-## 3.3 The outbox: the only exit for derived data (four consumers, independent cursors)
+The object tables enforce at most one current row per complete business primary key with a partial unique index (`_valid_to IS NULL`); historical versions remain allowed. On upgrade, existing duplicate current rows block index creation with a clear error. Review and repair those duplicates before retrying; startup does not delete data automatically.
+
+## 3.3 The outbox: the only exit for derived data (four consumers, per-event receipts)
 
 | Consumer | Does | Failure semantics |
 |---|---|---|
 | `webhook` | POST outbound, allowlisted | outside the allowlist: warn & consume; `${VAR}` unconfigured → warn & consume, **replay after fixing** (never rolls back the business transaction) |
-| `projection` | row changes → HugeGraph vertices/edges | monotonic per object by outbox id; upsert idempotent, cursor rewinds on failure |
+| `projection` | row changes → HugeGraph vertices/edges | idempotent upserts; a failed event remains unacknowledged for retry |
 | `derivation` | enqueues recompute (incl. cross-object `triggers` routing) | drain failures only warn; resumes next time |
 | `sse` | real-time streaming | subscriber queue full → events dropped (storage unaffected) |
 
 `ontogeny serve` (the ASGI factory) starts an outbox consumer loop and polls about once per second. It delivers **committed outbox events**, then drains pending derivations; it does not perform source sync. The loop follows the current dispatcher after a publish or domain switch. `POST /api/v1/admin/outbox/dispatch` remains available for an immediate manual tick; both paths share the same process lock. Shutdown cancels and awaits the workers before closing clients and database resources.
 
-Delivery is at least once: a crash after an external POST but before its cursor commit can cause a retry, so receivers must be idempotent. HTTP 5xx/connection failures retain that consumer’s cursor; rejected 4xx requests, unconfigured URLs and allowlist denials are logged and consumed for later operator replay. A failing consumer does not prevent the others from advancing.
+Delivery is at least once: a crash after an external POST but before its receipt commit can cause a retry, so receivers must be idempotent. HTTP 5xx/connection failures leave that consumer’s event unacknowledged; rejected 4xx requests, unconfigured URLs and allowlist denials are logged and consumed for later operator replay. A failing consumer does not prevent the others from advancing. Pending work is selected by missing `(consumer, event_id)` receipts, so a lower-ID transaction committed later is not lost behind a high-water cursor.
+
+On the first dispatch after upgrade, each legacy cursor is migrated once by acknowledging currently visible events with `id <= last_id`; old webhooks are not blindly resent. An already-visible historical event that an older cursor skipped cannot be distinguished automatically from a successful delivery. Audit such ranges and explicitly use the internal `await sc.outbox.replay('webhook', from_id=..., through_id=...)`, then dispatch again; this can duplicate external delivery. The same bounded replay applies to the other consumers. Archive outbox rows and their receipts together.
 
 ## 3.4 The derivation worker: function-derived materialization (one batch = one process = one transaction)
+
+Read-time expression derivations are evaluated in dependency order, irrespective of YAML field order. Cycles and all fields depending on them return `null` (`None` in Python) with a warning; independent fields still evaluate.
 
 The journey of one drain (functions/derivation.py):
 
