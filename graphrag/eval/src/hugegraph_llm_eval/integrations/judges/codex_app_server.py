@@ -118,6 +118,8 @@ class CodexAppServerJudge(AttemptLoopJudge):
             msg = "call_timeout_seconds must be positive"
             raise ValueError(msg)
         provided = dict(config or {})
+        if disable_user_mcp_servers and "mcp_servers" in provided:
+            raise ValueError("config.mcp_servers cannot be set when disable_user_mcp_servers=True")
         features = provided.pop("features", {})
         if not isinstance(features, Mapping):
             raise ValueError("config.features must be a mapping")
@@ -243,7 +245,11 @@ class CodexAppServerJudge(AttemptLoopJudge):
             connection.fire("thread/unsubscribe", {"threadId": thread_id})
 
     def _thread_params(self, system: str | None) -> dict[str, object]:
-        config = {**self._config, "mcp_servers": self._mcp_overrides} if self._mcp_overrides else self._config
+        config = (
+            {**self._config, "mcp_servers": self._mcp_overrides}
+            if self._disable_user_mcp_servers
+            else self._config
+        )
         return {
             "model": self.descriptor.model,
             "ephemeral": True,
