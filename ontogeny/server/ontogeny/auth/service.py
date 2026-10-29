@@ -35,6 +35,7 @@ from __future__ import annotations
 import datetime as _dt
 import logging
 import os
+import secrets
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -44,11 +45,6 @@ from .models import SessionRow, UserRow
 from .passwords import hash_password, new_token, token_fingerprint, verify_password
 
 log = logging.getLogger("ontogeny.auth")
-
-# Dev bootstrap credential (see ensure_admin): used only when the database has
-# no active admin and ONTOGENY_ADMIN_PASSWORD is unset. Deployments must set
-# the env var or change the password after first login.
-BOOTSTRAP_ADMIN_PASSWORD = "ontogeny@2026"
 
 SESSION_TTL = _dt.timedelta(hours=12)
 MIN_PASSWORD = 8
@@ -203,10 +199,10 @@ class AuthService:
                 SessionRow(
                     token_hash=token_fingerprint(token),
                     user_id=row.id,
-                    expires_at=_dt.datetime.now(_dt.timezone.utc) + SESSION_TTL,
+                    expires_at=_dt.datetime.now(_dt.UTC) + SESSION_TTL,
                 )
             )
-            row.last_login_at = _dt.datetime.now(_dt.timezone.utc)
+            row.last_login_at = _dt.datetime.now(_dt.UTC)
             await session.commit()
             return token, row.principal()
 
@@ -214,7 +210,7 @@ class AuthService:
         """A bearer token -> principal, or None when unknown/expired/disabled."""
         if not token:
             return None
-        now = _dt.datetime.now(_dt.timezone.utc)
+        now = _dt.datetime.now(_dt.UTC)
         async with self.sc.sessionmaker() as session:
             sess = (
                 await session.execute(select(SessionRow).where(SessionRow.token_hash == token_fingerprint(token)))
@@ -223,7 +219,7 @@ class AuthService:
                 return None
             expires = sess.expires_at
             if expires is not None and expires.tzinfo is None:
-                expires = expires.replace(tzinfo=_dt.timezone.utc)
+                expires = expires.replace(tzinfo=_dt.UTC)
             if expires is None or expires < now:
                 await session.delete(sess)
                 await session.commit()
@@ -269,8 +265,8 @@ class AuthService:
         """Make sure at least one active administrator exists.
 
         On a fresh database this creates the bootstrap account. The username
-        defaults to ``admin``; the initial password defaults to the fixed
-        bootstrap value ``ontogeny@2026`` unless ``ONTOGENY_ADMIN_PASSWORD`` overrides it.
+        defaults to ``admin``. Unless ``ONTOGENY_ADMIN_PASSWORD`` is set, a
+        random password is generated and logged once after account creation.
         """
         async with self.sc.sessionmaker() as session:
             existing = (
@@ -284,25 +280,17 @@ class AuthService:
                 return None
 
         username = os.environ.get("ONTOGENY_ADMIN_USER", "admin")
-        # the documented dev bootstrap default: a random value that is never
-        # retrievable afterwards would lock every fresh non-env deployment out
-        password = os.environ.get("ONTOGENY_ADMIN_PASSWORD") or BOOTSTRAP_ADMIN_PASSWORD
-        # self-heal instead of crashing: the bootstrap account may already
-        # exist as non-admin or disabled (demoted by a buggy older path), and
-        # create_user would raise "username exists" on the next restart
+        # Never silently restore privileges to a disabled or demoted account.
+        # A deployment with this inconsistent state needs explicit recovery.
         async with self.sc.sessionmaker() as session:
             row = await self._user(session, username)
             if row is not None:
-                row.is_admin = True
-                row.status = "active"
-                row.roles = sorted(set(row.roles) | {"admin"})
-                await session.commit()
-                log.warning(
-                    "re-activated the bootstrap administrator %r (it existed but was "
-                    "not an active admin); set ONTOGENY_ADMIN_PASSWORD and change it",
-                    username,
+                raise ConflictError(
+                    f"no active administrator exists and bootstrap user {username!r} already exists; "
+                    "restore an administrator explicitly or select a new ONTOGENY_ADMIN_USER"
                 )
-                return self._view(row)
+        configured_password = os.environ.get("ONTOGENY_ADMIN_PASSWORD")
+        password = configured_password or secrets.token_urlsafe(24)
         user = await self.create_user(
             username=username,
             password=password,
@@ -310,11 +298,10 @@ class AuthService:
             roles=["admin"],
             is_admin=True,
         )
-        log.info(
-            "created the bootstrap administrator %r (default password ontogeny@2026; "
-            "set ONTOGENY_ADMIN_PASSWORD to override before first start)",
-            username,
-        )
+        if configured_password:
+            log.info("created the bootstrap administrator %r with the configured password", username)
+        else:
+            log.warning("created bootstrap administrator %r; generated password: %s", username, password)
         return user
 
     async def user_roles(self) -> list[str]:

@@ -26,7 +26,7 @@
 | `ONTOGENY_PACKAGE_ROOT` | — | the Git working copy of the ontology package; function sources are located through it when the DB rebuilds snapshots |
 | `ONTOGENY_UI_DIR` | `web/dist` | the same-origin frontend build (baked into containers) |
 | `ONTOGENY_WEBHOOK_ALLOWLIST` | empty = all refused | the outbound webhook domain allowlist (anti-SSRF) |
-| `ONTOGENY_DEV_AUTH` | `1` | accept the X-Ontogeny-Principal header (off in production, replaced by OIDC) |
+| `ONTOGENY_DEV_AUTH` | `0` | Set to `1` only for development to accept the X-Ontogeny-Principal header. |
 | `ONTOGENY_LLM_BASE_URL / ONTOGENY_LLM_MODEL` | unconfigured | the Ollama endpoint and model; unconfigured → assistant 503, everything else unaffected |
 | in-DSL `${ERP_DSN}` etc. | — | business config injected by the deployment; a missing webhook variable only affects delivery, never transactions |
 

@@ -215,9 +215,8 @@ class TestSimulationIsDecidedByCedar:
 
 class TestBootstrapCredential:
     @pytest_asyncio.fixture()
-    async def default_pw_ctx(self, golden_pkg_path, tmp_path, monkeypatch):
-        """A fresh context with ONTOGENY_ADMIN_PASSWORD unset: initialize()
-        bootstraps the admin with the documented default."""
+    async def default_pw_ctx(self, golden_pkg_path, tmp_path, monkeypatch, caplog):
+        """Initialize a fresh context without a configured password."""
         import shutil as _shutil
 
         monkeypatch.setenv("ONTOGENY_ADMIN_USER", "root")
@@ -227,27 +226,65 @@ class TestBootstrapCredential:
         settings = Settings(dev_auth=True, db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'auth.db'}")
         sc = ServiceContext(settings, str(pkg_root))
         await sc.initialize()
-        return sc
+        messages = [r.getMessage() for r in caplog.records if "generated password: " in r.getMessage()]
+        assert len(messages) == 1
+        return sc, messages[0].split("generated password: ", 1)[1]
 
-    async def test_unset_env_boots_with_documented_default(self, default_pw_ctx):
-        """Without ONTOGENY_ADMIN_PASSWORD the bootstrap account uses the
-        documented default (README + daemon.sh) and login works with it --
-        a random unrecoverable value would lock fresh deployments out."""
-        from ontogeny.auth.service import BOOTSTRAP_ADMIN_PASSWORD
+    async def test_unset_env_generates_a_usable_password_once(self, default_pw_ctx, caplog, monkeypatch):
+        from ontogeny.errors import AuthenticationError
 
-        assert BOOTSTRAP_ADMIN_PASSWORD == "ontogeny@2026"
-        sc = default_pw_ctx
-        token, principal = await sc.auth.login("root", BOOTSTRAP_ADMIN_PASSWORD)
+        sc, password = default_pw_ctx
+        assert len(password) >= 32
+        token, principal = await sc.auth.login("root", password)
         assert token and principal["id"] == "root"
+        with pytest.raises(AuthenticationError):
+            await sc.auth.login("root", "ontogeny@2026")
+        monkeypatch.setenv("ONTOGENY_ADMIN_PASSWORD", "new-password")
+        caplog.clear()
+        assert await sc.auth.ensure_admin() is None
+        assert not any("generated password: " in r.getMessage() for r in caplog.records)
+        assert (await sc.auth.login("root", password))[0]
+        with pytest.raises(AuthenticationError):
+            await sc.auth.login("root", "new-password")
 
     async def test_env_override_wins_over_default(self, client):
-        """The env var (the deployment path) decides the credential; the
-        documented default must NOT also authenticate."""
-        from ontogeny.auth.service import BOOTSTRAP_ADMIN_PASSWORD
+        """The environment variable selects the initial credential."""
         from ontogeny.errors import AuthenticationError
 
         _c, sc = client
         token, principal = await sc.auth.login("root", "root-password")
         assert token and principal["id"] == "root"
         with pytest.raises(AuthenticationError):
-            await sc.auth.login("root", BOOTSTRAP_ADMIN_PASSWORD)
+            await sc.auth.login("root", "ontogeny@2026")
+
+    async def test_independent_databases_get_distinct_passwords(
+        self, default_pw_ctx, golden_pkg_path, tmp_path, caplog
+    ):
+        first, first_password = default_pw_ctx
+        caplog.clear()
+        pkg_root = tmp_path / "second-pkg"
+        shutil.copytree(golden_pkg_path, pkg_root)
+        settings = Settings(db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'second-auth.db'}")
+        second = ServiceContext(settings, str(pkg_root))
+        await second.initialize()
+        messages = [r.getMessage() for r in caplog.records if "generated password: " in r.getMessage()]
+        assert len(messages) == 1
+        second_password = messages[0].split("generated password: ", 1)[1]
+        assert first_password != second_password
+        assert (await first.auth.login("root", first_password))[0]
+        assert (await second.auth.login("root", second_password))[0]
+
+    async def test_configured_password_is_not_logged(self, golden_pkg_path, tmp_path, monkeypatch, caplog):
+        import logging
+
+        password = "operator-configured-password"
+        monkeypatch.setenv("ONTOGENY_ADMIN_USER", "root")
+        monkeypatch.setenv("ONTOGENY_ADMIN_PASSWORD", password)
+        caplog.set_level(logging.INFO, logger="ontogeny.auth")
+        pkg_root = tmp_path / "configured-pkg"
+        shutil.copytree(golden_pkg_path, pkg_root)
+        settings = Settings(db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'configured-auth.db'}")
+        sc = ServiceContext(settings, str(pkg_root))
+        await sc.initialize()
+        assert (await sc.auth.login("root", password))[0]
+        assert all(password not in record.getMessage() for record in caplog.records)
