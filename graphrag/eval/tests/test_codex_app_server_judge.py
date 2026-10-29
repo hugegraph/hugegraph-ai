@@ -230,5 +230,17 @@ def test_descriptor_changes_with_cli_version_and_effort(tmp_path: Path) -> None:
     other_effort = make_judge(tmp_path, effort="high").descriptor
     other_version = CodexAppServerJudge(model="fake-model", version="codex-cli 9.9.9").descriptor
 
-    account_mode = CodexAppServerJudge(model="fake-model", version="codex-cli 0.0.0", auth_mode="subscription").descriptor
-    assert len({base.configuration_digest, other_effort.configuration_digest, other_version.configuration_digest, account_mode.configuration_digest}) == 4
+    account_mode = CodexAppServerJudge(
+        model="fake-model", version="codex-cli 0.0.0", auth_mode="subscription"
+    ).descriptor
+    assert (
+        len(
+            {
+                base.configuration_digest,
+                other_effort.configuration_digest,
+                other_version.configuration_digest,
+                account_mode.configuration_digest,
+            }
+        )
+        == 4
+    )
