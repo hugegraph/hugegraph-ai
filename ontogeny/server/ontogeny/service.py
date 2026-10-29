@@ -1069,6 +1069,12 @@ class ServiceContext:
         )
 
     async def activate_domain(self, package_root: str | Path) -> CompiledOntology:
+        # Activation and ordinary publish must not concurrently claim the same
+        # materialized table for two domains in this process.
+        async with self._publish_lock:
+            return await self._activate_domain(package_root)
+
+    async def _activate_domain(self, package_root: str | Path) -> CompiledOntology:
         """Switch the active domain with a hard preflight on both sides.
 
         The requirement is asymmetric on purpose: a broken *target* must never
