@@ -720,7 +720,6 @@ export const en: Record<string, string> = {
   'agent.engine.external-push': 'delegated (push)',
   'agent.running': 'engine running…',
   'agent.runHint': 'the builtin-llm engine picks tools autonomously inside the session budget and approval gates',
-  'agent.llmMissing': 'the builtin LLM engine needs ONTOGENY_LLM_BASE_URL (an Ollama endpoint) configured to run',
   'agent.blocked': 'a write is awaiting human approval; approve it, then resume the session',
   'agent.goApprovals': 'Go to approvals',
   'agent.example': 'Plugin example',

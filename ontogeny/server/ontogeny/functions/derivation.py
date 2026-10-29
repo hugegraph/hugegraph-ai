@@ -128,7 +128,7 @@ class DerivationWorker:
                 from sqlalchemy.dialects.postgresql import insert
             else:
                 raise RuntimeError("durable derivation queue requires SQLite or PostgreSQL")
-            values = [{"object_type": owner, "object_id": oid, "generation": secrets.token_hex(16)} for oid in ids]
+            values = [{"object_type": owner, "object_id": str(oid), "generation": secrets.token_hex(16)} for oid in ids]
             for start in range(0, len(values), 300):
                 stmt = insert(DerivationPendingRow).values(values[start : start + 300])
                 await session.execute(

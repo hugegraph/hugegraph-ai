@@ -719,7 +719,6 @@ export const zh: Record<string, string> = {
   'agent.engine.external-push': '平台委托（push）',
   'agent.running': '引擎执行中…',
   'agent.runHint': '由 builtin-llm 引擎在会话预算与审批闸内自主选择工具完成任务',
-  'agent.llmMissing': '内置 LLM 引擎需要配置 ONTOGENY_LLM_BASE_URL（Ollama 端点）后才能运行',
   'agent.blocked': '有写入待人工审批；批准后回到会话即可续跑',
   'agent.goApprovals': '去审批',
   'agent.example': 'Agent 运行',

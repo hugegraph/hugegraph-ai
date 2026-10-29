@@ -24,13 +24,14 @@ path (authorization is not implemented twice).
 
 Two REST dialects are supported, selected by ``api`` (``auto`` probes once):
 
-``1.7``  graphspace-scoped: ``/graphspaces/{space}/graphs/{graph}/...``
+``1.7``  graphspace-scoped (including current 1.8 servers): ``/graphspaces/{space}/graphs/{graph}/...``
          upserts go through the *batch* endpoints (the single-edge POST rejects
          composite ids), composite primary-key ids must be double-quoted in URL
          segments, and writes need an explicit ``update_strategies`` map
          (we use OVERRIDE = last write wins, the only sane projection semantic).
-``1.5``  the historical ``/apis/...?graph=`` shape, kept for the compose
-         profile that pins ``hugegraph/hugegraph:1.5.0``.
+``1.5``  the historical ``/apis/...?graph=`` shape, retained for older servers.
+
+Deployment examples use ``hugegraph/hugegraph:latest`` by default.
 """
 
 from __future__ import annotations
@@ -549,10 +550,18 @@ class HugeGraphClient:
             full = await self.vertex_id(label, vertex_id)
             if full is None:
                 return
-            # 1.7 only parses a string id when it is double-quoted in the path;
-            # a missing vertex is the desired end state, so 404 counts as success.
+            # Graphspace APIs parse string IDs only when quoted. Some 1.8
+            # servers report a missing vertex as a 400 instead of a 404.
             quoted = quote(f'"{full}"', safe="")
-            await self._request("DELETE", self._g(f"/graph/vertices/{quoted}"), ok=(200, 204, 404))
+            path = self._g(f"/graph/vertices/{quoted}")
+            resp = await self._request("DELETE", path, ok=(200, 204, 404, 400))
+            if resp.status_code == 400:
+                try:
+                    message = resp.json().get("message")
+                except (ValueError, AttributeError):
+                    message = None
+                if not isinstance(message, str) or not message.startswith("No such vertex with id:"):
+                    raise StoreError(f"hugegraph DELETE {path} failed: 400 {resp.text[:200]}")
         else:
             await self._request(
                 "DELETE", "/apis/graph/vertices", params={"graph": self.graph, "label": label, "id": vertex_id}
