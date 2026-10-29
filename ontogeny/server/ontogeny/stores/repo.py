@@ -38,6 +38,13 @@ def utcnow() -> _dt.datetime:
     return _dt.datetime.now(_dt.UTC)
 
 
+def _next_version_time(current: _dt.datetime, proposed: _dt.datetime) -> _dt.datetime:
+    """Keep version intervals strictly increasing, including SQLite's naive UTC timestamps."""
+    old = current if current.tzinfo is not None else current.replace(tzinfo=_dt.UTC)
+    new = proposed if proposed.tzinfo is not None else proposed.replace(tzinfo=_dt.UTC)
+    return proposed if new > old else old + _dt.timedelta(microseconds=1)
+
+
 def _and(*conds):
     """and_() that drops None conditions (build_filter returns None for no filter)."""
     real = [c for c in conds if c is not None]
@@ -67,13 +74,22 @@ class ObjectRepository:
 
     def _pk(self, object_type: str, t) -> list:
         """Primary-key Column objects for the object's table."""
-        return [getattr(t.c, c) for c in self._pk_cols(object_type)]
+        return [t.c[c] for c in self._pk_cols(object_type)]
 
     def row_to_props(self, object_type: str, row: RowMapping) -> dict[str, Any]:
         """Column dict -> property dict (adds _rev/_valid_from/_valid_to/_synced_at)."""
-        out: dict[str, Any] = {k: v for k, v in row.items() if not k.startswith("_")}
+        out = {
+            prop: row[self.compiled.col(prop)]
+            for prop in self.compiled.objects[object_type].spec.properties
+            if self.compiled.col(prop) in row
+        }
         out.update({k: row.get(k) for k in ("_rev", "_valid_from", "_valid_to", "_synced_at")})
         return out
+
+    def _to_columns(self, object_type: str, props: dict[str, Any]) -> dict[str, Any]:
+        """Translate declared property names only at the SQL write boundary."""
+        declared = self.compiled.objects[object_type].spec.properties
+        return {self.compiled.col(p): value for p, value in props.items() if p in declared}
 
     async def ensure(self, session) -> None:
         await session.connection()
@@ -179,7 +195,7 @@ class ObjectRepository:
                     f"cannot filter {object_type}.{name}: marked property",
                     details={"object_type": object_type, "field": name},
                 )
-            col = getattr(t.c, self.compiled.col(name), None)
+            col = t.c.get(self.compiled.col(name))
             if col is None:
                 raise NotFoundError(f"unknown filter field {name!r} on {object_type}")
             if op == "eq":
@@ -221,13 +237,19 @@ class ObjectRepository:
         total = (await session.execute(select(func.count()).select_from(t).where(where))).scalar_one()
         stmt = select(t).where(where)
         if isinstance(sort, str):
-            sort = [sort.rsplit("-", 1) if "-" in sort else [sort, "asc"]]
+            parts = sort.rsplit("-", 1)
+            declared = self.compiled.objects[object_type].spec.properties
+            sort = [
+                parts
+                if sort not in declared and len(parts) == 2 and parts[1].lower() in ("asc", "desc")
+                else [sort, "asc"]
+            ]
         for s in sort or []:
             if isinstance(s, str):
                 name, direction = s, "asc"
             else:
                 name, direction = s[0], s[1]
-            col = getattr(t.c, self.compiled.col(name), None)
+            col = t.c.get(self.compiled.col(name))
             if col is None:
                 raise NotFoundError(f"unknown sort field {name!r}")
             # sorting by a marked property the principal lacks is an oracle
@@ -257,7 +279,7 @@ class ObjectRepository:
         where = _and(self._current_where(object_type, None), self.build_filter(object_type, filt, principal))
         # NOTE: `col if col else ...` truth-tests a Column and raises
         # "Boolean value of this clause is not defined" -- compare with None.
-        col = getattr(t.c, self.compiled.col(field)) if field else None
+        col = t.c[self.compiled.col(field)] if field else None
         marked = self._marked_props(object_type, principal)
         if field and self.compiled.col(field) in {self.compiled.col(p) for p in marked}:
             raise PolicyDeniedError(
@@ -283,11 +305,12 @@ class ObjectRepository:
         - update: overwrites ONLY source-owned properties; carries the rest forward
         """
         t = self._table(object_type)
+        props = self._to_columns(object_type, props)
         pk_cols = self._pk_cols(object_type)
         missing = [c for c in pk_cols if props.get(c) is None]
         if missing:
             raise StoreError(f"sync row missing primary key {missing}")
-        where = _and(t.c._valid_to.is_(None), *[getattr(t.c, c) == props[c] for c in pk_cols])
+        where = _and(t.c._valid_to.is_(None), *[t.c[c] == props[c] for c in pk_cols])
         current = (await session.execute(select(t).where(where).limit(1).with_for_update())).mappings().first()
 
         if current is None:
@@ -308,6 +331,7 @@ class ObjectRepository:
             await session.execute(update(t).where(where).values(_synced_at=ts))
             return "noop"
 
+        ts = _next_version_time(current["_valid_from"], ts)
         await session.execute(update(t).where(where).values(_valid_to=ts))
         merged = {c: current.get(c) for c in self._prop_cols(object_type)}
         merged.update({c: current.get(c) for c in self._materialized_cols(object_type)})
@@ -339,18 +363,28 @@ class ObjectRepository:
 
     async def action_insert(self, session, object_type: str, props: dict[str, Any], ts: _dt.datetime) -> dict[str, Any]:
         t = self._table(object_type)
+        props = self._to_columns(object_type, props)
         pk_cols = self._pk_cols(object_type)
         pk_vals = [props.get(c) for c in pk_cols]
         # The versioned schema keys rows by (business key, _valid_from), so a
         # duplicate business key does NOT violate any table constraint: without
         # this guard it produced two alive rows and `get` silently picked one
         # (newId() used to collide across executions exactly this way).
-        where = _and(t.c._valid_to.is_(None), *[getattr(t.c, c) == v for c, v in zip(pk_cols, pk_vals, strict=False)])
+        key_where = _and(*[t.c[c] == v for c, v in zip(pk_cols, pk_vals, strict=False)])
+        where = _and(t.c._valid_to.is_(None), key_where)
         if (await session.execute(select(func.count()).select_from(t).where(where))).scalar_one():
             raise ConflictError(
                 f"{object_type}/{pk_vals} already exists",
                 details={"object_type": object_type, "id": pk_vals},
             )
+        # Reusing an archived key must start after all prior version bounds.
+        # A multi-effect action can archive and recreate with the same `ts`.
+        latest_start, latest_end = (
+            await session.execute(select(func.max(t.c._valid_from), func.max(t.c._valid_to)).where(key_where))
+        ).one()
+        for bound in (latest_start, latest_end):
+            if bound is not None:
+                ts = _next_version_time(bound, ts)
         values = {c: props.get(c) for c in self._prop_cols(object_type)}
         values.update({"_rev": 1, "_valid_from": ts, "_valid_to": None})
         await session.execute(t.insert().values(**values))
@@ -377,19 +411,25 @@ class ObjectRepository:
                 f"revision conflict: expected {expected_revision}, current {current['_rev']}",
                 details={"expected": expected_revision, "current": current["_rev"]},
             )
+        ts = _next_version_time(current["_valid_from"], ts)
         await session.execute(update(t).where(where).values(_valid_to=ts))
         merged = {c: current.get(c) for c in self._prop_cols(object_type)}
         # materialized function-derived values survive the version transition
         merged.update({c: current.get(c) for c in self._materialized_cols(object_type)})
-        merged.update({self.compiled.col(k): v for k, v in changes.items()})
-        merged.update({"_rev": current["_rev"] + 1, "_valid_from": ts, "_valid_to": None})
+        merged.update(self._to_columns(object_type, changes))
+        merged.update({"_rev": current["_rev"] + 1, "_valid_from": ts, "_valid_to": None, "_synced_at": None})
         await session.execute(t.insert().values(**merged))
-        return dict(current) | merged
+        return self.row_to_props(object_type, dict(current) | merged)
 
     async def archive(self, session, object_type: str, obj_id: str, ts: _dt.datetime) -> None:
         t = self._table(object_type)
         pk = self._pk(object_type, t)[0]
-        await session.execute(update(t).where(_and(t.c._valid_to.is_(None), pk == obj_id)).values(_valid_to=ts))
+        where = _and(t.c._valid_to.is_(None), pk == obj_id)
+        current = (
+            await session.execute(select(t.c._valid_from).where(where).limit(1).with_for_update())
+        ).scalar_one_or_none()
+        if current is not None:
+            await session.execute(update(t).where(where).values(_valid_to=_next_version_time(current, ts)))
 
     # ------------------------------------------------------------------ links
 
@@ -458,7 +498,7 @@ class ObjectRepository:
         """
         t = self._table(object_type)
         pk = self._pk(object_type, t)[0]
-        col = getattr(t.c, self.compiled.col(prop))
+        col = t.c[self.compiled.col(prop)]
         await session.execute(update(t).where(_and(t.c._valid_to.is_(None), pk == obj_id)).values({col.name: value}))
 
     # FK links are read from the object tables themselves
@@ -485,15 +525,15 @@ class ObjectRepository:
         if from_source:
             # obj is a source-side object id; return target-side PKs where fk == obj_id
             t = self._table(tgt_obj)
-            fk_col = getattr(t.c, self.compiled.col(tgt_prop))
-            pk_col = getattr(t.c, self._pk_cols(tgt_obj)[0])
+            fk_col = t.c[self.compiled.col(tgt_prop)]
+            pk_col = t.c[self._pk_cols(tgt_obj)[0]]
             stmt = select(pk_col).where(_and(self._current_where(tgt_obj, at), fk_col == obj_id))
             return [str(v) for v in (await session.execute(stmt)).scalars()]
         # obj is a target-side object id; read its fk value as the source id
         row = await self.get(session, tgt_obj, obj_id, at=at)
         if row is None:
             return []
-        value = row.get(self.compiled.col(tgt_prop))
+        value = row.get(tgt_prop)
         return [str(value)] if value is not None else []
 
     async def fk_link_pairs(self, session, link_name: str, *, at: _dt.datetime | None = None) -> list[tuple[str, str]]:
@@ -514,8 +554,8 @@ class ObjectRepository:
         tgt_obj, tgt_prop = tgt_side.split(".", 1)
 
         t = self._table(tgt_obj)
-        fk_col = getattr(t.c, self.compiled.col(tgt_prop))
-        pk_col = getattr(t.c, self._pk_cols(tgt_obj)[0])
+        fk_col = t.c[self.compiled.col(tgt_prop)]
+        pk_col = t.c[self._pk_cols(tgt_obj)[0]]
         where = _and(self._current_where(tgt_obj, at), fk_col.is_not(None))
         rows = (await session.execute(select(fk_col, pk_col).where(where))).all()
         return [(str(r[0]), str(r[1])) for r in rows]
