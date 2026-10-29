@@ -234,6 +234,23 @@ class DeclarativeRuntime:
                 return cfg if isinstance(cfg, dict) else {}
         return None
 
+    def _resolve_deployment_refs(self, text: str) -> str:
+        """Resolve only bare deployment names before parameter interpolation."""
+
+        def sub(ref: re.Match[str]) -> str:
+            if ref.group(2) or not _ENV_NAME_RE.fullmatch(ref.group(1)):
+                return ref.group(0)
+            if self.resolve_ref is None:
+                raise SandboxError(f"deployment reference {ref.group(0)} has no environment scope")
+            try:
+                return self.resolve_ref(ref.group(0))
+            except KeyError:
+                # Report the reference, never a partially resolved header that
+                # may already contain another deployment secret.
+                raise SandboxError(f"deployment reference {ref.group(0)} is not configured") from None
+
+        return _REF.sub(sub, text)
+
     def _allowed_hosts(self, fn) -> list[str]:
         """Allowed hosts, with ``${VAR}`` entries resolved against the deployment.
 
@@ -330,19 +347,7 @@ class DeclarativeRuntime:
                 # deployment ${VAR} first, THEN caller parameters: rendering
                 # the caller's value first let a parameter like "${WMS_WEBHOOK}"
                 # be re-resolved into a host the allowlist never checked
-                url = step.url or ""
-                if "${" in url and self.resolve_ref is not None:
-                    # Match the validator's deployment-name convention. Lower
-                    # case parameters and earlier steps belong to _Template,
-                    # even when the deployment has a variable with that name.
-                    url = _REF.sub(
-                        lambda ref: (
-                            self.resolve_ref(ref.group(0))
-                            if not ref.group(2) and _ENV_NAME_RE.fullmatch(ref.group(1))
-                            else ref.group(0)
-                        ),
-                        url,
-                    )
+                url = self._resolve_deployment_refs(step.url or "")
                 url = tpl.render_text(url)
                 if "${" in url:
                     raise SandboxError(
@@ -352,7 +357,15 @@ class DeclarativeRuntime:
                 await self._check_http_url(fn, url)
                 method = (step.method or "GET").upper()
                 body = tpl.render(step.body) if step.body is not None else None
-                headers = {k: tpl.render_text(v) for k, v in (step.headers or {}).items()}
+                headers = {}
+                for name, value in (step.headers or {}).items():
+                    rendered = tpl.render_text(self._resolve_deployment_refs(value))
+                    if "${" in rendered:
+                        raise SandboxError(
+                            "header still contains ${...} after parameter substitution: "
+                            "a parameter value must not inject a new reference"
+                        )
+                    headers[name] = rendered
                 c = await self.client()
                 resp = await c.request(method, url, json=body, headers=headers)
                 text = resp.text[:_MAX_RESPONSE_BYTES]
