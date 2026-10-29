@@ -73,6 +73,7 @@ class TestCompose:
         env = compose["services"]["ontogeny"]["environment"]
         assert env["ONTOGENY_ADMIN_USER"] == "${ONTOGENY_ADMIN_USER:-admin}"
         assert env["ONTOGENY_ADMIN_PASSWORD"] == "${ONTOGENY_ADMIN_PASSWORD:-}"
+        assert env["ONTOGENY_DATA_DIR"] == "${ONTOGENY_DATA_DIR:-/data}"
 
     def test_optional_profiles_are_declared_and_referenced(self, compose):
         # service name -> profile name (they differ for the graph profile)

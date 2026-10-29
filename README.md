@@ -91,7 +91,7 @@ manufacturing example with Docker:
 ```bash
 cd ontogeny
 docker compose up -d
-docker compose logs ontogeny  # first boot prints the generated admin password
+docker compose exec ontogeny cat /data/admin-bootstrap-password  # first boot's owner-only credential
 ```
 
 Open **http://localhost:8000** and sign in as `admin`. Set

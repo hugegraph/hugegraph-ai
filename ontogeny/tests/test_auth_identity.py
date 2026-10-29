@@ -226,9 +226,11 @@ class TestBootstrapCredential:
         settings = Settings(dev_auth=True, db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'auth.db'}")
         sc = ServiceContext(settings, str(pkg_root))
         await sc.initialize()
-        messages = [r.getMessage() for r in caplog.records if "generated password: " in r.getMessage()]
-        assert len(messages) == 1
-        return sc, messages[0].split("generated password: ", 1)[1]
+        path = tmp_path / "admin-bootstrap-password"
+        password = path.read_text().strip()
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert all(password not in r.getMessage() for r in caplog.records)
+        return sc, password
 
     async def test_unset_env_generates_a_usable_password_once(self, default_pw_ctx, caplog, monkeypatch):
         from ontogeny.errors import AuthenticationError
@@ -242,7 +244,10 @@ class TestBootstrapCredential:
         monkeypatch.setenv("ONTOGENY_ADMIN_PASSWORD", "new-password")
         caplog.clear()
         assert await sc.auth.ensure_admin() is None
-        assert not any("generated password: " in r.getMessage() for r in caplog.records)
+        assert not any("credential file: " in r.getMessage() for r in caplog.records)
+        from ontogeny.auth.service import bootstrap_password_path
+
+        assert bootstrap_password_path(sc.settings).read_text().strip() == password
         assert (await sc.auth.login("root", password))[0]
         with pytest.raises(AuthenticationError):
             await sc.auth.login("root", "new-password")
@@ -264,12 +269,13 @@ class TestBootstrapCredential:
         caplog.clear()
         pkg_root = tmp_path / "second-pkg"
         shutil.copytree(golden_pkg_path, pkg_root)
-        settings = Settings(db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'second-auth.db'}")
+        second_dir = tmp_path / "second"
+        second_dir.mkdir()
+        settings = Settings(db_dsn=f"sqlite+aiosqlite:///{second_dir / 'second-auth.db'}")
         second = ServiceContext(settings, str(pkg_root))
         await second.initialize()
-        messages = [r.getMessage() for r in caplog.records if "generated password: " in r.getMessage()]
-        assert len(messages) == 1
-        second_password = messages[0].split("generated password: ", 1)[1]
+        second_password = (second_dir / "admin-bootstrap-password").read_text().strip()
+        assert all(second_password not in r.getMessage() for r in caplog.records)
         assert first_password != second_password
         assert (await first.auth.login("root", first_password))[0]
         assert (await second.auth.login("root", second_password))[0]
@@ -288,3 +294,57 @@ class TestBootstrapCredential:
         await sc.initialize()
         assert (await sc.auth.login("root", password))[0]
         assert all(password not in record.getMessage() for record in caplog.records)
+        assert not (tmp_path / "admin-bootstrap-password").exists()
+
+    async def test_existing_credential_file_is_not_overwritten(self, golden_pkg_path, tmp_path, monkeypatch):
+        from ontogeny.errors import StoreError
+
+        monkeypatch.delenv("ONTOGENY_ADMIN_PASSWORD", raising=False)
+        path = tmp_path / "admin-bootstrap-password"
+        path.write_text("preserve me")
+        settings = Settings(db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'auth.db'}")
+        sc = ServiceContext(settings, str(golden_pkg_path))
+        with pytest.raises(StoreError, match="credential file already exists"):
+            await sc.initialize()
+        assert path.read_text() == "preserve me"
+
+    async def test_credential_symlink_is_not_followed(self, golden_pkg_path, tmp_path, monkeypatch):
+        from ontogeny.errors import StoreError
+
+        monkeypatch.delenv("ONTOGENY_ADMIN_PASSWORD", raising=False)
+        target = tmp_path / "target"
+        target.write_text("keep target")
+        (tmp_path / "admin-bootstrap-password").symlink_to(target)
+        settings = Settings(db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'auth.db'}")
+        sc = ServiceContext(settings, str(golden_pkg_path))
+        with pytest.raises(StoreError, match="credential file already exists"):
+            await sc.initialize()
+        assert target.read_text() == "keep target"
+
+    async def test_explicit_data_dir_receives_credential(self, golden_pkg_path, tmp_path, monkeypatch):
+        monkeypatch.delenv("ONTOGENY_ADMIN_PASSWORD", raising=False)
+        data_dir = tmp_path / "private-state"
+        settings = Settings(db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'auth.db'}", data_dir=str(data_dir))
+        sc = ServiceContext(settings, str(golden_pkg_path))
+        await sc.initialize()
+        password = (data_dir / "admin-bootstrap-password").read_text().strip()
+        assert (await sc.auth.login("admin", password))[0]
+        assert not (tmp_path / "admin-bootstrap-password").exists()
+
+    async def test_file_survives_error_after_account_commit(self, golden_pkg_path, tmp_path, monkeypatch):
+        from ontogeny.auth.service import AuthService
+
+        monkeypatch.delenv("ONTOGENY_ADMIN_PASSWORD", raising=False)
+        settings = Settings(db_dsn=f"sqlite+aiosqlite:///{tmp_path / 'auth.db'}")
+        original = AuthService.create_user
+
+        async def create_then_fail(self, **kwargs):
+            await original(self, **kwargs)
+            raise RuntimeError("after commit")
+
+        monkeypatch.setattr(AuthService, "create_user", create_then_fail)
+        sc = ServiceContext(settings, str(golden_pkg_path))
+        with pytest.raises(RuntimeError, match="after commit"):
+            await sc.initialize()
+        password = (tmp_path / "admin-bootstrap-password").read_text().strip()
+        assert (await sc.auth.login("admin", password))[0]

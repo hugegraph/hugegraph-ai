@@ -36,11 +36,12 @@ import datetime as _dt
 import logging
 import os
 import secrets
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, func, select
 
-from ..errors import AuthenticationError, ConflictError, DSLValidationError, NotFoundError
+from ..errors import AuthenticationError, ConflictError, DSLValidationError, NotFoundError, StoreError
 from .models import SessionRow, UserRow
 from .passwords import hash_password, new_token, token_fingerprint, verify_password
 
@@ -48,6 +49,40 @@ log = logging.getLogger("ontogeny.auth")
 
 SESSION_TTL = _dt.timedelta(hours=12)
 MIN_PASSWORD = 8
+
+
+def bootstrap_password_path(settings) -> Path:
+    """Choose a persistent location for a generated bootstrap credential."""
+    if settings.data_dir:
+        directory = Path(settings.data_dir)
+    else:
+        from sqlalchemy.engine import make_url
+
+        url = make_url(settings.db_dsn)
+        if url.drivername.startswith("sqlite") and url.database and url.database != ":memory:":
+            directory = Path(url.database).parent
+        else:
+            directory = Path(".ontogeny")
+    return directory.absolute() / "admin-bootstrap-password"
+
+
+def _write_bootstrap_password(path: Path, password: str) -> None:
+    """Create a private file without following or overwriting an existing path."""
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as exc:
+        raise StoreError(
+            f"bootstrap credential file already exists: {path}; "
+            "remove it after securing it or set ONTOGENY_ADMIN_PASSWORD"
+        ) from exc
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            stream.write(password + "\n")
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
 
 
 class AuthService:
@@ -266,7 +301,7 @@ class AuthService:
 
         On a fresh database this creates the bootstrap account. The username
         defaults to ``admin``. Unless ``ONTOGENY_ADMIN_PASSWORD`` is set, a
-        random password is generated and logged once after account creation.
+        random password is written to an owner-only credential file.
         """
         async with self.sc.sessionmaker() as session:
             existing = (
@@ -291,6 +326,11 @@ class AuthService:
                 )
         configured_password = os.environ.get("ONTOGENY_ADMIN_PASSWORD")
         password = configured_password or secrets.token_urlsafe(24)
+        credential_path = None if configured_password else bootstrap_password_path(self.sc.settings)
+        if credential_path is not None:
+            _write_bootstrap_password(credential_path, password)
+        # Keep the file if account creation fails: an error or cancellation can
+        # occur after the database commit, and deleting it could lock the user out.
         user = await self.create_user(
             username=username,
             password=password,
@@ -301,7 +341,7 @@ class AuthService:
         if configured_password:
             log.info("created the bootstrap administrator %r with the configured password", username)
         else:
-            log.warning("created bootstrap administrator %r; generated password: %s", username, password)
+            log.warning("created bootstrap administrator %r; credential file: %s", username, credential_path)
         return user
 
     async def user_roles(self) -> list[str]:

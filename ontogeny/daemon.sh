@@ -51,6 +51,7 @@ export ONTOGENY_ADMIN_USER=${ONTOGENY_ADMIN_USER:-admin}
 HOST=${HOST:-0.0.0.0}
 PORT=${PORT:-8000}
 DATA_DIR=${DATA_DIR:-.ontogeny-daemon}
+# 首次自动生成的管理员密码写入此目录下的 admin-bootstrap-password（权限 0600）。
 PID_FILE=${PID_FILE:-.ontogeny-daemon/ontogeny.pid}
 PORT_FILE=${PORT_FILE:-.ontogeny-daemon/ontogeny.port}
 LOG_FILE=${LOG_FILE:-.ontogeny-daemon/ontogeny.log}

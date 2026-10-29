@@ -23,6 +23,8 @@
 | Variable | Default | Purpose |
 |---|---|---|
 | `ONTOGENY_DB_DSN` | `sqlite+aiosqlite:///./ontogeny.db` | metadata + object tables + outbox (Postgres asyncpg in production) |
+| `ONTOGENY_DATA_DIR` | demo data directory; otherwise SQLite database directory or `.ontogeny/` | directory for the owner-only `admin-bootstrap-password` file; an existing file is never overwritten |
+| `ONTOGENY_ADMIN_PASSWORD` | unset | explicit initial administrator password; when set, no bootstrap credential file is created |
 | `ONTOGENY_PACKAGE_ROOT` | — | the Git working copy of the ontology package; function sources are located through it when the DB rebuilds snapshots |
 | `ONTOGENY_UI_DIR` | `web/dist` | the same-origin frontend build (baked into containers) |
 | `ONTOGENY_WEBHOOK_ALLOWLIST` | empty = all refused | the outbound webhook domain allowlist (anti-SSRF) |
