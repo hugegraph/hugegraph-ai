@@ -157,14 +157,24 @@ class HugeGraphClient:
         raise StoreError(f"hugegraph {method} {path} failed: {resp.status_code} {resp.text[:200]}")
 
     async def dialect(self) -> str:
-        """``1.7`` when the endpoint exposes graphspaces, else the legacy shape."""
+        """Probe the graph listing, including standalone graphspace servers."""
         if self._dialect is None:
-            c = await self.client()
             try:
-                resp = await c.get(f"{self.base}/graphspaces", headers=self._auth())
-                self._dialect = "1.7" if resp.status_code == 200 else "1.5"
-            except httpx.HTTPError:
-                self._dialect = "1.5"
+                resp = await self._request("GET", f"/graphspaces/{self.graphspace}/graphs", ok=(200, 404, 405))
+                if resp.status_code in (404, 405):
+                    resp = await self._request("GET", "/graphs")
+                    dialect = "1.5"
+                else:
+                    dialect = "1.7"
+                try:
+                    names = resp.json().get("graphs")
+                except (ValueError, AttributeError) as exc:
+                    raise StoreError("hugegraph dialect probe returned an invalid graph list") from exc
+                if not isinstance(names, list):
+                    raise StoreError("hugegraph dialect probe returned an invalid graph list")
+                self._dialect = dialect
+            except httpx.HTTPError as exc:
+                raise StoreError(f"hugegraph dialect probe failed: {type(exc).__name__}") from exc
             log.info("hugegraph dialect at %s: %s", self.base, self._dialect)
         return self._dialect
 
