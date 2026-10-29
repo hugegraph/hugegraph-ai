@@ -46,7 +46,7 @@
 
 HTTP 响应采用流式读取，解码后的正文最多 256 KiB；超限会立即关闭响应并使函数失败，不再完整下载过大的正文或返回截断结果。
 
-Python 沙箱的初始化、RPC、结果及批量结果 JSON 帧同样最多 256 KiB（含协议封装）；超限抛出 `SandboxError` 并清理子进程，正常结果可超过 asyncio 默认的 64 KiB 行限制。SDK 查询先应用排序，再应用 limit。
+Python 沙箱输出的 JSON 帧（含批量结果及协议封装）最多 256 KiB；超限抛出 `SandboxError` 并清理子进程，正常结果可超过 asyncio 默认的 64 KiB 行限制。大输入和大查询应答仍可在子进程中聚合为小结果。SDK 查询先应用排序，再应用 limit。
 
 ## 4.2 函数型动作：效果计划（Function 出主意，Action 落地）
 

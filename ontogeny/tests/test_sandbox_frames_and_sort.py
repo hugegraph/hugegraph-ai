@@ -81,13 +81,12 @@ async def test_result_frame_has_explicit_byte_boundary_and_always_reaps_process(
     assert spawned and all(process.returncode is not None for process in spawned)
 
 
-async def test_oversized_invocation_frame_is_rejected_before_spawn(client, tmp_path, spawned):
+async def test_large_invocation_input_can_return_a_small_result(client, tmp_path, spawned):
     _, sc = client
     sandbox, fn = sandbox_for(sc, tmp_path, "def probe(value):\n    return len(value)\n")
     async with sc.sessionmaker() as session:
-        with pytest.raises(SandboxError, match=r"frame.*limit"):
-            await sandbox.run(session, fn, {"value": "x" * FRAME_LIMIT})
-    assert spawned == []
+        assert await sandbox.run(session, fn, {"value": "x" * FRAME_LIMIT}) == FRAME_LIMIT
+    assert spawned and all(process.returncode is not None for process in spawned)
 
 
 async def test_oversized_child_rpc_frame_is_rejected_and_reaped(client, tmp_path, spawned):
@@ -117,7 +116,7 @@ async def test_large_query_rpc_reply_supports_more_than_64k(client, tmp_path):
     assert len(values) == 100 and all(len(value["name"]) == 1000 for value in values)
 
 
-async def test_oversized_parent_rpc_reply_is_rejected_and_reaps_waiting_child(client, tmp_path, spawned):
+async def test_oversized_child_result_after_large_query_reply_is_rejected_and_reaped(client, tmp_path, spawned):
     _, sc = client
     await seed(sc, "work-center", [{"work_center_id": f"WC-{number}", "name": "x" * 100000} for number in range(3)])
     source = 'def probe():\n    return ontogeny.query("work-center")\n'
@@ -156,4 +155,24 @@ async def test_forwarded_sort_keeps_repository_marking_guard(client, tmp_path, s
     async with sc.sessionmaker() as session:
         with pytest.raises(PolicyDeniedError, match="marked property"):
             await sandbox.run(session, fn, {})
+    assert spawned and all(process.returncode is not None for process in spawned)
+
+
+async def test_large_map_input_can_return_one_hundred_small_values(client, tmp_path, spawned):
+    _, sc = client
+    sandbox, fn = sandbox_for(sc, tmp_path, 'def probe(obj):\n    return len(obj["text"])\n')
+    rows = [{"text": "x" * 3000} for _ in range(100)]
+    assert len(json.dumps(rows).encode()) > FRAME_LIMIT
+    async with sc.sessionmaker() as session:
+        assert await sandbox.map_rows(session, fn, rows) == [3000] * 100
+    assert spawned and all(process.returncode is not None for process in spawned)
+
+
+async def test_large_query_reply_can_be_aggregated_to_a_small_result(client, tmp_path, spawned):
+    _, sc = client
+    await seed(sc, "work-center", [{"work_center_id": f"WC-{number}", "name": "x" * 100000} for number in range(3)])
+    source = 'def probe():\n    return sum(len(row["name"]) for row in ontogeny.query("work-center"))\n'
+    sandbox, fn = sandbox_for(sc, tmp_path, source, allowed=["work-center"])
+    async with sc.sessionmaker() as session:
+        assert await sandbox.run(session, fn, {}) == 300000
     assert spawned and all(process.returncode is not None for process in spawned)

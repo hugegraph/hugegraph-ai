@@ -41,16 +41,6 @@ from ..stores.repo import ObjectRepository
 from .declarative import _MAX_RESPONSE_BYTES as _MAX_FRAME_BYTES
 
 
-def _encode_frame(message: dict[str, Any]) -> bytes:
-    # Reuse the function response cap for a complete JSON line, including its
-    # newline. Both directions stay bounded, while ordinary >64 KiB batches
-    # are no longer rejected by asyncio's unrelated default stream limit.
-    frame = (json.dumps(message) + "\n").encode()
-    if len(frame) > _MAX_FRAME_BYTES:
-        raise SandboxError(f"sandbox protocol frame exceeds {_MAX_FRAME_BYTES}-byte limit")
-    return frame
-
-
 def _limits() -> None:  # pragma: no cover -- preexec in the child process
     try:
         import resource
@@ -253,7 +243,6 @@ class FunctionSandbox:
 
         server_dir = str(Path(__file__).resolve().parent.parent.parent)
         env = sandbox_env(server_dir)
-        init_frame = _encode_frame(init_message)
 
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -264,6 +253,9 @@ class FunctionSandbox:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
+            # Bound child stdout frames, using the existing response cap.
+            # Parent inputs/RPC replies keep the original stdin contract: a
+            # child may aggregate a large input into a small bounded result.
             limit=_MAX_FRAME_BYTES,
             env=env,
             preexec_fn=_limits if os.name == "posix" else None,
@@ -275,7 +267,7 @@ class FunctionSandbox:
         llm_used = 0
 
         async def child_main() -> Any:
-            proc.stdin.write(init_frame)
+            proc.stdin.write((json.dumps(init_message) + "\n").encode())
             await proc.stdin.drain()
             nonlocal llm_used
             while True:
@@ -302,7 +294,7 @@ class FunctionSandbox:
                         result = await self._handle_llm_rpc(msg, llm_cfg)
                     else:
                         result = await self._handle_rpc(session, msg, allowed)
-                    proc.stdin.write(_encode_frame({"id": msg["id"], **result}))
+                    proc.stdin.write((json.dumps({"id": msg["id"], **result}) + "\n").encode())
                     await proc.stdin.drain()
                 elif msg.get("type") in ("result", "values"):
                     return msg.get("value", msg.get("values"))

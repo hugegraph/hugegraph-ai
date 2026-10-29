@@ -45,7 +45,7 @@ For declarative HTTP step URLs and header values, only bare `UPPER_SNAKE` deploy
 
 HTTP responses are streamed with a 256 KiB limit on decoded body bytes. Exceeding the limit closes the response and fails the function; the runtime does not download the complete oversized body or return a truncated result.
 
-Python sandbox JSON frames (initialization, RPC and results, including batch results) are also bounded at 256 KiB, including framing; oversized messages raise `SandboxError` and the child is cleaned up. This supports normal results above asyncio's default 64 KiB line limit. SDK query sorting is applied before its limit.
+Python sandbox output JSON frames, including batch results, are bounded at 256 KiB including framing; oversized output raises `SandboxError` and the child is cleaned up. This supports normal results above asyncio's default 64 KiB line limit. Large inputs and query replies can still be processed into small results. SDK query sorting is applied before its limit.
 
 ## 4.2 Functional actions: effect plans (the Function proposes, the Action disposes)
 
