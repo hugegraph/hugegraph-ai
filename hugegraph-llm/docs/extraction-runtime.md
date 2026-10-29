@@ -18,10 +18,10 @@ configured token limit.
 
 ## Setup and a runnable example
 
-Use Python 3.10 or 3.11 and run from the repository root:
+Use Python 3.12–3.14 and run from the repository root:
 
 ```bash
-uv sync --python 3.11 --extra llm --extra dev
+uv sync --python 3.12 --extra llm --extra dev
 ```
 
 Configure a supported chat model using the existing

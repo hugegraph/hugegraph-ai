@@ -1,4 +1,4 @@
-# HugeGraph-LLM [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/apache/hugegraph-ai)
+# HugeGraph-LLM [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue)](https://deepwiki.com/apache/hugegraph-ai)
 
 > **Bridge the gap between Graph Databases and Large Language Models**
 
@@ -23,23 +23,63 @@ option keep the existing extraction path.
 See the [runtime guide](docs/extraction-runtime.md) for a runnable example and
 response semantics, and the [architecture explanation (中文)](docs/extraction-runtime-architecture.zh-CN.md).
 
+### Use Graph Design and Extraction in Another Python Project
+
+The independent [HugeGraph-LLM SDK](../hugegraph-llm-sdk/README.md) currently provides schema design,
+validation, and reviewed extraction without Gradio, the application server, or a graph database connection.
+Use synchronous or asynchronous calls, inject your existing model, and customize prompts, validators, or
+individual pipeline steps. The application retains its existing UI, HTTP, and configuration contracts while
+sharing the SDK implementation. The sibling `hugegraph-llm-sdk/` package can be installed separately from this
+application; graph retrieval, persistence, and indexing remain application features. See the SDK guide for
+editable source installation and offline examples.
+
 ## 📋 Prerequisites
 
 > [!IMPORTANT]
 >
-> - **Python**: 3.10+ (not tested on 3.12)
+> - **Python**: 3.12–3.14 (`>=3.12,<3.15`)
 > - **HugeGraph Server**: 1.3+ (recommended: 1.5+)
-> - **UV Package Manager**: 0.7+
+> - **UV Package Manager**: 0.13.6+
 
-### Code Quality (ruff + pre-commit)
+Dependency ranges live in each package's `pyproject.toml`, so standalone installs
+and workspace installs use the same requirements. The application uses Gradio 6,
+Pydantic 2, NumPy 2 and current provider libraries. Unused PyArrow and igraph
+requirements and root-level ML constraints have been removed; ML remains outside
+the workspace.
+
+A few upstream compatibility limits remain: LiteLLM requires OpenAI 2.x and its
+Botocore dependency requires dateutil below 3. Jieba uses its built-in resource
+fallback without requiring setuptools. `pycgraph` stays on 3.2.2 because 3.3.0 has no
+CPython 3.14 Linux wheel or source distribution on PyPI. These limits do not prevent using
+Python 3.12, 3.13 or 3.14.
+
+Linux source installs build pycgraph from the pinned GitHub commit. Install Git,
+a C++ compiler and Python development headers (Debian/Ubuntu:
+`apt-get install git build-essential python3-dev`) and allow access to GitHub and
+PyPI before running `uv sync`. The Docker builder includes this toolchain.
+
+NLTK 3.10 refuses data directories writable by other accounts. Use a private,
+user-owned `NLTK_DATA` cache. If a cache was ever writable by another account,
+create a new private directory and download the corpora again with
+`python -m nltk.downloader -d "$NLTK_DATA" stopwords punkt punkt_tab`; changing
+permissions cannot restore file integrity. For a cache that was never shared and
+whose contents are trusted, remove group and world write permissions with
+`chmod -R go-w "$NLTK_DATA"`, then restart the application. A missing or refused
+stopwords corpus is logged and falls back to an empty stopword list.
+
+### Code Quality (uv + Ruff + ty)
+
+Run all quality commands from the repository root.
 
 - Ruff is used for linting and formatting:
-  - `ruff format .`
-  - `ruff check .`
+  - `uv run --extra dev ruff format --check .`
+  - `uv run --extra dev ruff check .`
+- Type checking: `uv run --extra dev ty check hugegraph-llm/src/hugegraph_llm` from the repository root.
+  CI runs it for affected modules in the existing test runner; existing diagnostics are advisory.
 - Enable Git hooks via pre-commit:
-  - `pre-commit install` (in the root dir)
-  - `pre-commit run --all-files`
-- Config: [../.pre-commit-config.yaml](../.pre-commit-config.yaml)
+  - `uv run --extra dev pre-commit install` (in the root dir)
+  - `uv run --extra dev pre-commit run --all-files`
+- Tool requirements: root `pyproject.toml` (`>=` for Ruff and ty). The [Ruff hooks](../.pre-commit-config.yaml) run through uv and inherit that range.
 
 ## 🚀 Quick Start
 
@@ -48,6 +88,17 @@ Choose your preferred deployment method:
 ### Option 1: Docker Compose (Recommended)
 
 The fastest way to get started with both HugeGraph Server and RAG Service:
+
+The image tags in these examples target the release prepared by this checkout.
+They become available after publication. Before publication, build the image
+from the repository root with `bash scripts/build_llm_image.sh` (Python 3.12+
+is required; set `PYTHON_FOR_RELEASE=python3.12` if needed), or use
+[Build from Source](#option-3-build-from-source).
+
+The bundled Compose file defaults to the rolling Server image used by CI for
+development/testing. For reproducible deployments, set `HUGEGRAPH_SERVER_IMAGE`
+in `docker/.env` to a verified release tag or immutable digest. The override
+does not change the CI image policy.
 
 ```bash
 # 1. Set up environment
@@ -77,7 +128,7 @@ For more control over individual components:
 
 #### Available Images
 
-- **`hugegraph/rag`** - Development image with source code access
+- **`hugegraph/rag:1.8.0`** - Development image with source code access
 - **`hugegraph/rag-bin`** - Production-optimized binary (compiled with Nuitka)
 
 ```bash
@@ -85,13 +136,13 @@ For more control over individual components:
 docker network create -d bridge hugegraph-net
 
 # 2. Start HugeGraph Server
-docker run -itd --name=server -p 8080:8080 --network hugegraph-net hugegraph/hugegraph
+docker run -itd --name=server -p 8080:8080 --network hugegraph-net hugegraph/hugegraph:latest
 
 # 3. Start RAG Service
-docker pull hugegraph/rag:latest
+docker pull hugegraph/rag:1.8.0
 docker run -itd --name rag \
   -v /path/to/your/hugegraph-llm/.env:/home/work/hugegraph-llm/.env \
-  -p 127.0.0.1:8001:8001 --network hugegraph-net hugegraph/rag
+  -p 127.0.0.1:8001:8001 --network hugegraph-net hugegraph/rag:1.8.0
 
 # 4. Monitor logs
 docker logs -f rag
@@ -103,7 +154,7 @@ For development and customization:
 
 ```bash
 # 1. Start HugeGraph Server
-docker run -itd --name=server -p 8080:8080 hugegraph/hugegraph
+docker run -itd --name=server -p 8080:8080 hugegraph/hugegraph:latest
 
 # 2. Install UV package manager (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -174,7 +225,11 @@ Use the Gradio interface for visual knowledge graph building:
 - **Custom Schema**: JSON format following our [template](https://github.com/apache/hugegraph-ai/blob/aff3bbe25fa91c3414947a196131be812c20ef11/hugegraph-llm/src/hugegraph_llm/config/config_data.py#L125)
 - **HugeGraph Schema**: Use existing graph instance schema (e.g., "hugegraph")
 
-![Knowledge Graph Builder](https://hugegraph.apache.org/docs/images/gradio-kg.png)
+![Knowledge Graph Builder](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/graph-extraction.png)
+
+After loading the extracted graph, open **Graph Tools** to run a Gremlin query:
+
+![Graph Tools query](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/graph-query.png)
 
 ## 🔧 Configuration
 
@@ -182,6 +237,11 @@ After running the demo, configuration files are automatically generated:
 
 - **Environment**: `hugegraph-llm/.env`
 - **Prompts**: `hugegraph-llm/src/hugegraph_llm/resources/demo/config_prompt.yaml`
+
+Provider settings can also be edited in the web interface. This example uses a
+local model endpoint:
+
+![LLM provider configuration](https://raw.githubusercontent.com/hugegraph/hugegraph-ai/fb6a3d91c26fc82cc4e0a98667e9d49418659bcf/docs/images/gradio/configuration.png)
 
 ### Language Support
 

@@ -1,0 +1,117 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: HugeGraph-LLM SDK CI
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        type: string
+        required: true
+      primary-python:
+        type: string
+        required: true
+      uv-version:
+        type: string
+        required: true
+      ty-version:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  SKIP_EXTERNAL_SERVICES: "true"
+  HUGEGRAPH_LLM_SDK_TEST_INSTALLED: "1"
+
+jobs:
+  tests:
+    name: sdk / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(inputs.python-versions) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+        id: python-env
+        with:
+          python-version: ${{ matrix.python-version }}
+          uv-version: ${{ inputs.uv-version }}
+          component: sdk
+      - name: Build outside the application workspace
+        run: |
+          cp -R "$GITHUB_WORKSPACE/hugegraph-llm-sdk" "$RUNNER_TEMP/sdk-build"
+          cd "$RUNNER_TEMP"
+          uv --no-config build --no-sources "$RUNNER_TEMP/sdk-build" --out-dir "$RUNNER_TEMP/sdk-dist"
+      - name: Verify wheel and sdist isolation and offline examples
+        env:
+          PYTHONPATH: ""
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          cd "$RUNNER_TEMP"
+          for format in whl tar.gz; do
+            uv --no-config venv "$RUNNER_TEMP/sdk-venv-$format"
+            uv --no-config pip install --python "$RUNNER_TEMP/sdk-venv-$format/bin/python" \
+              "$RUNNER_TEMP"/sdk-dist/*.$format 'pytest>=9.2,<10'
+            "$RUNNER_TEMP/sdk-venv-$format/bin/python" -c \
+              'import os; from importlib.metadata import version; assert version("hugegraph-llm-sdk") == os.environ["EXPECTED_VERSION"]'
+            "$RUNNER_TEMP/sdk-venv-$format/bin/python" -B "$RUNNER_TEMP/sdk-build/tests/distribution_smoke.py"
+            "$RUNNER_TEMP/sdk-venv-$format/bin/python" -B "$RUNNER_TEMP/sdk-build/examples/basic.py"
+            "$RUNNER_TEMP/sdk-venv-$format/bin/python" -B "$RUNNER_TEMP/sdk-build/examples/customization.py"
+            "$RUNNER_TEMP/sdk-venv-$format/bin/python" -B "$RUNNER_TEMP/sdk-build/examples/async_example.py"
+          done
+      - name: Run SDK contracts against the installed wheel
+        env:
+          PYTHONPATH: ""
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/sdk-venv-whl/bin/python" -m pytest "$RUNNER_TEMP/sdk-build/tests" -q --tb=short
+      - name: Install optional provider adapters from the wheel
+        if: matrix.python-version == inputs.primary-python
+        run: |
+          cd "$RUNNER_TEMP"
+          sdk_wheels=("$RUNNER_TEMP"/sdk-dist/*.whl)
+          uv --no-config pip install --python "$RUNNER_TEMP/sdk-venv-whl/bin/python" \
+            "${sdk_wheels[0]}[openai,ollama,litellm]"
+      - name: Test provider contracts without external requests
+        if: matrix.python-version == inputs.primary-python
+        env:
+          PYTHONPATH: ""
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/sdk-venv-whl/bin/python" -m pytest "$RUNNER_TEMP/sdk-build/tests/test_providers.py" -q --tb=short
+      - name: Type check SDK (advisory while existing diagnostics are resolved)
+        if: matrix.python-version == inputs.primary-python
+        continue-on-error: true
+        env:
+          TY_VERSION: ${{ inputs.ty-version }}
+        run: >-
+          uvx --from "ty>=$TY_VERSION" ty check
+          --python "$RUNNER_TEMP/sdk-venv-whl/bin/python"
+          hugegraph-llm-sdk/src/hugegraph_llm_sdk
+      - name: Prune uv cache before upload
+        if: always() && steps.python-env.outcome == 'success'
+        run: uv cache prune --ci

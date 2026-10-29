@@ -1,0 +1,288 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+import asyncio
+import logging
+from collections.abc import AsyncGenerator, Callable, Generator
+from typing import Any
+
+import openai
+import tiktoken
+from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, OpenAI, RateLimitError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+from hugegraph_llm_sdk.errors import LLMOutputTruncatedError
+from hugegraph_llm_sdk.providers._diagnostics import token_usage
+
+log = logging.getLogger(__name__)
+
+
+class OpenAIClient:
+    """Wrapper for OpenAI Client."""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        api_base: str | None = None,
+        model_name: str = "gpt-4.1-mini",
+        max_tokens: int | None = None,
+        temperature: float = 0.01,
+        raise_on_truncation: bool = True,
+        *,
+        client: Any = None,
+        async_client: Any = None,
+    ) -> None:
+        api_key = api_key or "EMPTY"
+        self.client = client if client is not None else OpenAI(api_key=api_key, base_url=api_base)
+        self.aclient = async_client if async_client is not None else AsyncOpenAI(api_key=api_key, base_url=api_base)
+        self.model = model_name
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        # Reviewed extraction also needs provider errors instead of legacy error text.
+        self.raise_on_truncation = raise_on_truncation
+
+    def close(self) -> None:
+        """Release the synchronous client; async callers should use aclose."""
+        self.client.close()
+
+    async def aclose(self) -> None:
+        """Release both transports without blocking the caller's event loop."""
+        try:
+            await self.aclient.close()
+        finally:
+            await asyncio.to_thread(self.close)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
+        reraise=True,
+    )
+    def generate(
+        self,
+        messages: list[dict[str, Any]] | None = None,
+        prompt: str | None = None,
+    ) -> str:
+        """Generate a response to the query messages/prompt."""
+        if messages is None:
+            assert prompt is not None, "Messages or prompt must be provided."
+            messages = [{"role": "user", "content": prompt}]
+        try:
+            completions = self.client.chat.completions.create(
+                model=self.model,
+                temperature=self.temperature,
+                **({"max_tokens": self.max_tokens} if self.max_tokens is not None else {}),
+                messages=messages,
+            )
+            if not completions.choices:
+                raise RuntimeError(f"Empty choices in LLM response: {str(completions)[:200]}")
+            if completions.usage:
+                log.info("Token usage: %s", token_usage(completions.usage))
+            if self.raise_on_truncation and completions.choices[0].finish_reason == "length":
+                raise LLMOutputTruncatedError()
+            return completions.choices[0].message.content
+        # catch context length / do not retry
+        except openai.BadRequestError as e:
+            if self.raise_on_truncation:
+                raise
+            log.critical("OpenAI call failed (%s)", type(e).__name__)
+            return str(f"Error: {e}")
+        # catch authorization errors / do not retry
+        except openai.AuthenticationError:
+            if self.raise_on_truncation:
+                raise
+            log.critical("The provided OpenAI API key is invalid")
+            return "Error: The provided OpenAI API key is invalid"
+        except LLMOutputTruncatedError:
+            raise
+        except Exception as e:
+            log.error("LLM call failed (%s)", type(e).__name__)
+            raise e
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
+        reraise=True,
+    )
+    async def agenerate(
+        self,
+        messages: list[dict[str, Any]] | None = None,
+        prompt: str | None = None,
+    ) -> str:
+        """Generate a response to the query messages/prompt."""
+        if messages is None:
+            assert prompt is not None, "Messages or prompt must be provided."
+            messages = [{"role": "user", "content": prompt}]
+        try:
+            completions = await self.aclient.chat.completions.create(
+                model=self.model,
+                temperature=self.temperature,
+                **({"max_tokens": self.max_tokens} if self.max_tokens is not None else {}),
+                messages=messages,
+            )
+            if not completions.choices:
+                raise RuntimeError(f"Empty choices in LLM response: {str(completions)[:200]}")
+            if completions.usage:
+                log.info("Token usage: %s", token_usage(completions.usage))
+            if self.raise_on_truncation and completions.choices[0].finish_reason == "length":
+                raise LLMOutputTruncatedError()
+            return completions.choices[0].message.content
+        # catch context length / do not retry
+        except openai.BadRequestError as e:
+            if self.raise_on_truncation:
+                raise
+            log.critical("OpenAI call failed (%s)", type(e).__name__)
+            return str(f"Error: {e}")
+        # catch authorization errors / do not retry
+        except openai.AuthenticationError:
+            if self.raise_on_truncation:
+                raise
+            log.critical("The provided OpenAI API key is invalid")
+            return "Error: The provided OpenAI API key is invalid"
+        except LLMOutputTruncatedError:
+            raise
+        except Exception as e:
+            log.error("LLM call failed (%s)", type(e).__name__)
+            raise e
+
+    def generate_streaming(
+        self,
+        messages: list[dict[str, Any]] | None = None,
+        prompt: str | None = None,
+        on_token_callback: Callable[[str], None] | None = None,
+    ) -> Generator[str, None, None]:
+        """Yield nonempty text deltas, also passing them to the callback when provided.
+
+        This adapter does not add retries or replay delivered output. The underlying
+        OpenAI SDK may retry while establishing the request.
+        """
+        if messages is None:
+            assert prompt is not None, "Messages or prompt must be provided."
+            messages = [{"role": "user", "content": prompt}]
+
+        try:
+            completions = self.client.chat.completions.create(
+                model=self.model,
+                temperature=self.temperature,
+                **({"max_tokens": self.max_tokens} if self.max_tokens is not None else {}),
+                messages=messages,
+                stream=True,
+            )
+
+            for chunk in completions:
+                if not chunk.choices:
+                    log.debug("Received empty choices in streaming chunk")
+                    continue
+                if self.raise_on_truncation and chunk.choices[0].finish_reason == "length":
+                    raise LLMOutputTruncatedError()
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    token = delta.content
+                    if on_token_callback:
+                        on_token_callback(token)
+                    yield token
+
+        except openai.BadRequestError as e:
+            if self.raise_on_truncation:
+                raise
+            log.critical("OpenAI call failed (%s)", type(e).__name__)
+            yield str(f"Error: {e}")
+        except openai.AuthenticationError:
+            if self.raise_on_truncation:
+                raise
+            log.critical("The provided API key is invalid")
+            yield "Error: The provided API key is invalid"
+        except Exception as e:
+            log.error("Streaming LLM call failed (%s)", type(e).__name__)
+            raise e
+
+    async def agenerate_streaming(
+        self,
+        messages: list[dict[str, Any]] | None = None,
+        prompt: str | None = None,
+        on_token_callback: Callable | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Yield nonempty text deltas, also passing them to the callback when provided.
+
+        This adapter does not add retries or replay delivered output. The underlying
+        OpenAI SDK may retry while establishing the request.
+        """
+        if messages is None:
+            assert prompt is not None, "Messages or prompt must be provided."
+            messages = [{"role": "user", "content": prompt}]
+
+        try:
+            completions = await self.aclient.chat.completions.create(
+                model=self.model,
+                temperature=self.temperature,
+                **({"max_tokens": self.max_tokens} if self.max_tokens is not None else {}),
+                messages=messages,
+                stream=True,
+            )
+            async for chunk in completions:
+                if not chunk.choices:
+                    log.debug("Received empty choices in streaming chunk")
+                    continue
+                if self.raise_on_truncation and chunk.choices[0].finish_reason == "length":
+                    raise LLMOutputTruncatedError()
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    token = delta.content
+                    if on_token_callback:
+                        on_token_callback(token)
+                    yield token
+        # catch context length / do not retry
+        except openai.BadRequestError as e:
+            if self.raise_on_truncation:
+                raise
+            log.critical("OpenAI call failed (%s)", type(e).__name__)
+            yield str(f"Error: {e}")
+        # catch authorization errors / do not retry
+        except openai.AuthenticationError:
+            if self.raise_on_truncation:
+                raise
+            log.critical("The provided OpenAI API key is invalid")
+            yield "Error: The provided OpenAI API key is invalid"
+        except LLMOutputTruncatedError:
+            raise
+        except Exception as e:
+            log.error("LLM call failed (%s)", type(e).__name__)
+            raise e
+
+    def num_tokens_from_string(self, string: str) -> int:
+        """Get token count from a string."""
+        try:
+            encoding = tiktoken.encoding_for_model(self.model)
+        except KeyError:
+            # Unknown compatible models use the same local estimate as LiteLLM.
+            return len(string) // 4
+        num_tokens = len(encoding.encode(string))
+        return num_tokens
+
+    def max_allowed_token_length(self) -> int:
+        """Get max-allowed token length"""
+        # TODO: list all models and their max tokens from api
+        return 8192
+
+    def get_llm_type(self) -> str:
+        return "openai"

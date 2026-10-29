@@ -1,6 +1,6 @@
 # HugeGraph Integration Test Service
 
-Default image: `hugegraph/hugegraph:1.7.0`
+Default image: `hugegraph/hugegraph:latest`
 
 ## Environment
 

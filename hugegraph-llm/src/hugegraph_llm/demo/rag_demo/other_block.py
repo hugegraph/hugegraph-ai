@@ -31,7 +31,7 @@ from hugegraph_llm.utils.log import log
 def create_other_block():
     gr.Markdown("""## Other Tools """)
     with gr.Row():
-        inp = gr.Textbox(value="g.V().limit(10)", label="Gremlin query", show_copy_button=True, lines=8)
+        inp = gr.Textbox(value="g.V().limit(10)", label="Gremlin query", buttons=["copy"], lines=8)
         out = gr.Code(label="Output", language="json", elem_classes="code-container-show")
     btn = gr.Button("Run Gremlin query")
     btn.click(fn=run_gremlin_query, inputs=[inp], outputs=out)  # pylint: disable=no-member
@@ -39,13 +39,13 @@ def create_other_block():
     gr.Markdown("---")
     with gr.Row():
         inp = []
-        out = gr.Textbox(label="Backup Graph Manually (Auto backup at 1:00 AM everyday)", show_copy_button=True)
+        out = gr.Textbox(label="Backup Graph Manually (Auto backup at 1:00 AM everyday)", buttons=["copy"])
     btn = gr.Button("Backup Graph Data")
     btn.click(fn=backup_data, inputs=inp, outputs=out)  # pylint: disable=no-member
     with gr.Accordion("Init HugeGraph test data (🚧)", open=False):
         with gr.Row():
             inp = []
-            out = gr.Textbox(label="Init Graph Demo Result", show_copy_button=True)
+            out = gr.Textbox(label="Init Graph Demo Result", buttons=["copy"])
         btn = gr.Button("(BETA) Init HugeGraph test data (🚧)")
         btn.click(fn=init_hg_test_data, inputs=inp, outputs=out)  # pylint: disable=no-member
 

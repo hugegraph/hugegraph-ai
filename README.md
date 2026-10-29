@@ -15,6 +15,8 @@ The whole system on one board — this is the console's Overview dashboard, and 
 
 *Top: the eight first-class DSL citizens (Action = the only write gate, EvalSuite = the selection box). Middle: the online pipeline (build → explore → act → control → audit) and the offline RSI loop, joined by the agent spine — its reads/writes cross the same gates, its traces and approvals flow back as evolution signals. Bottom: the supporting layer and the three cross-cutting invariants (ownership, one gate, Git as source).*
 
+Contributor workflows: [CI selection and full validation](docs/quality/ci.md), [release preparation](docs/releasing.md).
+
 ## ✨ Key Features
 
 - **Git-native ontology** — modeling is YAML + pull requests; consensus happens in code review, not a locked GUI
@@ -91,17 +93,21 @@ These modules predate Ontogeny and continue to work standalone. **They are being
 
 | Module | What it does today | Role in Ontogeny's roadmap |
 |---|---|---|
+| [hugegraph-llm-sdk](./hugegraph-llm-sdk) | Standalone SDK for schema design, validation, and reviewed property-graph extraction; see its [integration guide](./hugegraph-llm-sdk/README.md) and [architecture](./docs/sdk/architecture.md) | Provides reusable graph construction capabilities |
 | [hugegraph-llm](./hugegraph-llm) | LLM integration for graph applications: **GraphRAG** (retrieval-augmented generation with graph data), **knowledge-graph construction** from text, natural-language graph querying, AI agents for graph reasoning | **Step 2**: GraphRAG Q&A over the ontology's HugeGraph projection; text-to-ontology proposals feeding the RSI loop (LLM proposes, deterministic evals select) |
 | [hugegraph-mcp](./hugegraph-mcp) | MCP server for safe HugeGraph access — typed graph/schema/Gremlin/extraction tools, read-only defaults, dry-run and single-use confirmation for writes | Referenced as a library behind Ontogeny's governed MCP surface (one tool surface, not two) |
 | [hugegraph-ml](./hugegraph-ml) | Graph machine learning: node classification (GCN, GAT, GraphSAGE, APPNP), graph classification, embeddings (DeepWalk, Node2Vec, GRACE), link prediction (SEAL, GATNE) | **Step 3**: semantic search over objects; analytics as derived signals for the evolution loop |
 | [hugegraph-python-client](./hugegraph-python-client) | Full-coverage Python client for HugeGraph (schema management, CRUD, Gremlin, REST), distributed as `hugegraph-python` | Used inside Ontogeny's extensions where full REST coverage is needed (async adapters remain the primary path) |
 | [vermeer-python-client](./vermeer-python-client) | SDK for graph computing with [Vermeer](https://github.com/apache/hugegraph-computer/tree/master/vermeer#readme) | **Step 3**: powers `POST /graph/algorithm` (pagerank / community / shortest-path) — results return as ID sets re-assembled through the governed query path |
 
+The LLM application, SDK, Python client and MCP require Python 3.12–3.14. Ontogeny is a standalone package requiring Python 3.10 or later; `hugegraph-ml` is outside the uv workspace and requires Python 3.12 or later. See each module’s README for setup.
+
 ## 📚 Learn More
 
 - [Project Homepage](https://hugegraph.apache.org/docs/quickstart/hugegraph-ai/)
 - [Ontogeny module docs](./ontogeny/README.md) — architecture & usage documentation index
 - [LLM Quick Start Guide](./hugegraph-llm/quick_start.md)
+- [Reviewed Property-Graph Extraction](./hugegraph-llm/docs/extraction-runtime.md)
 - [DeepWiki AI Documentation](https://deepwiki.com/apache/hugegraph-ai)
 
 ## 🔗 Related HugeGraph Projects
@@ -152,15 +158,21 @@ cd ../hugegraph-python-client && pytest
 cd .. && ./style/code_format_and_analysis.sh
 ```
 
-### Code Quality (ruff + pre-commit)
+### Code Quality (uv + Ruff + ty)
 
-- Ruff is used for linting and formatting:
-  - `ruff format .`
-  - `ruff check .`
-- Enable Git hooks via pre-commit:
-  - `pre-commit install`
-  - `pre-commit run --all-files`
-- Config: [.pre-commit-config.yaml](.pre-commit-config.yaml). CI enforces these checks.
+From the repository root:
+
+```bash
+uv run --extra dev ruff format --check .
+uv run --extra dev ruff check .
+uv run --extra dev ty check hugegraph-llm/src/hugegraph_llm hugegraph-python-client/src/pyhugegraph
+```
+
+Ruff and ty use `>=` requirements in root `pyproject.toml`.
+The [pre-commit hooks](.pre-commit-config.yaml) run Ruff through uv and inherit that range.
+Enable hooks with `uv run --extra dev pre-commit install`. CI runs Ruff and affected-module ty
+checks in existing runners; application type checks remain advisory while the
+existing diagnostic baseline is resolved. See [CI policy](docs/quality/ci.md).
 
 **Key Points:**
 

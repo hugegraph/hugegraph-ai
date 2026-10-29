@@ -242,7 +242,7 @@ def create_rag_block():
             inp = gr.Textbox(
                 value=prompt.default_question,
                 label="Question",
-                show_copy_button=True,
+                buttons=["copy"],
                 lines=3,
             )
 
@@ -250,37 +250,37 @@ def create_rag_block():
             gr.Markdown("Basic LLM Answer", elem_classes="output-box-label")
             raw_out = gr.Markdown(
                 elem_classes="output-box",
-                show_copy_button=True,
+                buttons=["copy"],
                 latex_delimiters=[{"left": "$", "right": "$", "display": False}],
             )
             gr.Markdown("Vector-only Answer", elem_classes="output-box-label")
             vector_only_out = gr.Markdown(
                 elem_classes="output-box",
-                show_copy_button=True,
+                buttons=["copy"],
                 latex_delimiters=[{"left": "$", "right": "$", "display": False}],
             )
             gr.Markdown("Graph-only Answer", elem_classes="output-box-label")
             graph_only_out = gr.Markdown(
                 elem_classes="output-box",
-                show_copy_button=True,
+                buttons=["copy"],
                 latex_delimiters=[{"left": "$", "right": "$", "display": False}],
             )
             gr.Markdown("Graph-Vector Answer", elem_classes="output-box-label")
             graph_vector_out = gr.Markdown(
                 elem_classes="output-box",
-                show_copy_button=True,
+                buttons=["copy"],
                 latex_delimiters=[{"left": "$", "right": "$", "display": False}],
             )
             answer_prompt_input = gr.Textbox(
                 value=prompt.answer_prompt,
                 label="Query Prompt",
-                show_copy_button=True,
+                buttons=["copy"],
                 lines=7,
             )
             keywords_extract_prompt_input = gr.Textbox(
                 value=prompt.keywords_extract_prompt,
                 label="Keywords Extraction Prompt",
-                show_copy_button=True,
+                buttons=["copy"],
                 lines=7,
             )
 

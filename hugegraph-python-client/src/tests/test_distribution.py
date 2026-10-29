@@ -26,5 +26,5 @@ pytestmark = pytest.mark.contract
 def test_distribution_preserves_import_contract():
     installed = distribution("hugegraph-python")
     assert installed.metadata["Name"] == "hugegraph-python"
-    assert installed.metadata["Requires-Python"] == ">=3.10"
+    assert installed.metadata["Requires-Python"] == ">=3.12"
     assert PyHugeClient.__module__ == "pyhugegraph.client"

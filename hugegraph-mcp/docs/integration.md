@@ -1,18 +1,19 @@
 # Integration Checklist
 
-Use this checklist to validate the current write-safety contract against a disposable HugeGraph 1.7.0 Docker instance. Never use a production graph.
+Use this checklist to validate the current write-safety contract against a disposable HugeGraph Server from the configured CI image. Never use a production graph. The recorded 1.7.0 capability evidence remains historical evidence; testing a newer server does not enable additional writes.
 
 ## 1. Start an Isolated Server
 
 Run from the repository root in a POSIX shell. Create the MCP environment first:
 
 ```bash
-uv venv --python 3.10 .venv-mcp
+uv venv --python 3.12 .venv-mcp
 uv --no-config pip install --python .venv-mcp -e ./hugegraph-python-client -e ./hugegraph-mcp
 
-docker pull hugegraph/hugegraph:1.7.0
-docker run --rm -d --name hg-mcp-check -p 127.0.0.1:18080:8080 hugegraph/hugegraph:1.7.0
+docker pull hugegraph/hugegraph:latest
+docker run --rm -d --name hg-mcp-check -e PASSWORD=admin -p 127.0.0.1:18080:8080 hugegraph/hugegraph:latest
 until curl -fsS http://127.0.0.1:18080/versions >/dev/null; do sleep 1; done
+HUGEGRAPH_URL=http://127.0.0.1:18080 bash scripts/check_hugegraph.sh "$(.venv-mcp/bin/python scripts/version.py get version)" hg-mcp-check
 
 export HUGEGRAPH_URL=http://127.0.0.1:18080
 export HUGEGRAPH_GRAPH_PATH=DEFAULT/hugegraph
@@ -348,7 +349,7 @@ For every submitted plan:
 The public tools intentionally provide no fault-injection switch. Run the automated durable-executor fault suite from the repository root:
 
 ```bash
-uv --no-config pip install --python .venv-mcp "pytest~=8.0.0"
+uv --no-config pip install --python .venv-mcp "pytest>=9.2,<10"
 .venv-mcp/bin/python -m pytest hugegraph-mcp/tests/test_write_executor_faults.py -q
 ```
 

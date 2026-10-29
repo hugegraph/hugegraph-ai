@@ -259,15 +259,15 @@ def create_text2gremlin_block() -> Tuple:
             input_box = gr.Textbox(
                 value=prompt.default_question,
                 label="Nature Language Query",
-                show_copy_button=True,
+                buttons=["copy"],
             )
             match = gr.Code(
                 label="Similar Template (TopN)",
                 language="javascript",
                 elem_classes="code-container-show",
             )
-            initialized_out = gr.Textbox(label="Gremlin With Template", show_copy_button=True)
-            raw_out = gr.Textbox(label="Gremlin Without Template", show_copy_button=True)
+            initialized_out = gr.Textbox(label="Gremlin With Template", buttons=["copy"])
+            raw_out = gr.Textbox(label="Gremlin Without Template", buttons=["copy"])
             tmpl_exec_out = gr.Code(
                 label="Query With Template Output",
                 language="json",
@@ -285,13 +285,13 @@ def create_text2gremlin_block() -> Tuple:
                 value=prompt.text2gql_graph_schema,
                 label="Schema",
                 lines=2,
-                show_copy_button=True,
+                buttons=["copy"],
             )
             prompt_box = gr.Textbox(
                 value=prompt.gremlin_generate_prompt,
                 label="Prompt",
                 lines=20,
-                show_copy_button=True,
+                buttons=["copy"],
             )
             btn = gr.Button("Text2Gremlin", variant="primary")
     btn.click(  # pylint: disable=no-member

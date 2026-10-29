@@ -1,5 +1,6 @@
 # Stage 1: Build stage (Isolating the build env)
-FROM python:3.10.16-bookworm AS builder
+ARG PYTHON_VERSION=3.12
+FROM python:${PYTHON_VERSION}-bookworm AS builder
 
 WORKDIR /build/
 
@@ -21,7 +22,7 @@ RUN apt update && \
     mv app.* ..
 
 # Stage 2: Runtime stage
-FROM python:3.10.16-slim-bookworm
+FROM python:${PYTHON_VERSION}-slim-bookworm
 LABEL maintainer="HugeGraph Docker Maintainers <dev@hugegraph.apache.org>"
 
 # Create non-root user & install 'curl' for healthcheck

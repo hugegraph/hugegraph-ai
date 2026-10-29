@@ -16,26 +16,24 @@
 # under the License.
 
 [project]
+# Release version is synchronized by scripts/version.py from the root pyproject.toml.
 name = "vermeer-python-client"
-version = "1.7.0" # Independently managed version for the vermeer-python-client package
+version = "1.8.0"
 description = "A Python client library for interacting with Vermeer, a tool for managing and analyzing large-scale graph data."
 authors = [
     { name = "Apache HugeGraph Contributors", email = "dev@hugegraph.apache.org" }
 ]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 
 dependencies = [
     # Common dependencies
-    "decorator",
     "requests",
-    "setuptools",
     "urllib3",
-    "rich",
 
     # Vermeer specific dependencies
-    "python-dateutil",
+    "python-dateutil>=2.9,<3", # Botocore (via LiteLLM) does not support dateutil 3 yet.
 ]
 
 [project.urls]

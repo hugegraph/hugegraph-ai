@@ -9,7 +9,7 @@
 ## Layer B: HugeGraph Server Contract
 
 - Markers: `integration` and `hugegraph`.
-- Requires HugeGraph Server, default `hugegraph/hugegraph:1.7.0`.
+- Requires HugeGraph Server, default `hugegraph/hugegraph:latest`.
 - If selected with `HUGEGRAPH_REQUIRED=true`, service connection failures fail.
 - Must import production code and validate real server behavior.
 

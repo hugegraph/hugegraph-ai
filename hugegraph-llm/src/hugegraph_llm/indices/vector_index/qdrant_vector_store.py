@@ -117,7 +117,11 @@ class QdrantVectorIndex(VectorStoreBase):
         return remove_num
 
     def search(self, query_vector: List[float], top_k: int = 5, dis_threshold: float = 0.9):
-        search_result = self.client.search(collection_name=self.name, query_vector=query_vector, limit=top_k)
+        search_result = self.client.query_points(
+            collection_name=self.name,
+            query=query_vector,
+            limit=top_k,
+        ).points
 
         result_properties = []
 
