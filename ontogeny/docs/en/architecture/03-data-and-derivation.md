@@ -17,11 +17,15 @@ The declaration alone kills the classic "source system's full push wipes action 
 
 | Strategy | Applies to | Mechanism | Guarantee / limit |
 |---|---|---|---|
-| `snapshot` full snapshot | initialization / small tables | full load → upsert by PK; **absent rows archived** (optional) | idempotent, rerunnable anytime |
-| `watermark` incremental | 90% of cases | `watermark column > last watermark`; the watermark advances **after commit** | deletions invisible by default — needs soft-delete markers or changelog |
-| `changelog` CDC | high-frequency / delete-aware | consumes the Debezium changelog (**capture not self-built**) | consumer in place, depends on a Kafka source |
+| `snapshot` full snapshot | initialization / small tables | one streamed SQL result → upsert by PK; **absent rows archived** (optional) | idempotent, rerunnable anytime |
+| `watermark` incremental | 90% of cases | `watermark column >= last committed watermark` (replay equality ties); the watermark advances **after commit** | deletions invisible by default — needs soft-delete markers or changelog |
+| `changelog` | reserved for an external CDC integration | the current SQL/CSV source adapters do not consume Kafka/Debezium | requires a separate adapter; not a built-in CDC service |
 
 **Four iron laws**: ① batches are atomic and idempotent ② at-least-once ③ deletion semantics declared explicitly ④ **bad rows go to quarantine, never blocking the batch** (bad-row rate = an RSI signal). Schema drift → alert & stop writing; mapping changes go through PRs.
+
+A sync is one explicit operation: run `ontogeny sync <type>` with the service’s database DSN, or call `POST /api/v1/admin/sync/{type}`. `sync.schedule` is metadata for an external scheduler; the server does not poll source databases on that schedule. A fresh `--demo` performs its initial sync once. SQL snapshots keep one result open across fetch batches, so deleting an already-read row cannot shift later pages and falsely archive a live object. This is a snapshot of one source query, not a transaction spanning every object type. The sync commits atomically; fetch batches are not separate commits.
+
+Quarantined native database values are converted recursively to JSON-safe diagnostics: Decimal/UUID values become strings, dates/times use ISO text and binary values use hex. A bad native value must not prevent valid rows in the same sync from committing.
 
 ## 3.3 The outbox: the only exit for derived data (four consumers, independent cursors)
 
@@ -31,6 +35,10 @@ The declaration alone kills the classic "source system's full push wipes action 
 | `projection` | row changes → HugeGraph vertices/edges | monotonic per object by outbox id; upsert idempotent, cursor rewinds on failure |
 | `derivation` | enqueues recompute (incl. cross-object `triggers` routing) | drain failures only warn; resumes next time |
 | `sse` | real-time streaming | subscriber queue full → events dropped (storage unaffected) |
+
+`ontogeny serve` (the ASGI factory) starts an outbox consumer loop and polls about once per second. It delivers **committed outbox events**, then drains pending derivations; it does not perform source sync. The loop follows the current dispatcher after a publish or domain switch. `POST /api/v1/admin/outbox/dispatch` remains available for an immediate manual tick; both paths share the same process lock. Shutdown cancels and awaits the workers before closing clients and database resources.
+
+Delivery is at least once: a crash after an external POST but before its cursor commit can cause a retry, so receivers must be idempotent. HTTP 5xx/connection failures retain that consumer’s cursor; rejected 4xx requests, unconfigured URLs and allowlist denials are logged and consumed for later operator replay. A failing consumer does not prevent the others from advancing.
 
 ## 3.4 The derivation worker: function-derived materialization (one batch = one process = one transaction)
 

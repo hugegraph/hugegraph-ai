@@ -75,6 +75,7 @@ class OutboxDispatcher:
         derivation_hook: Callable[[OutboxRow, Any], Awaitable[bool]] | None = None,
         derivation_drain=None,
         http_client: httpx.AsyncClient | None = None,
+        dispatch_lock: asyncio.Lock | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
@@ -85,6 +86,7 @@ class OutboxDispatcher:
         self.derivation_hook = derivation_hook
         self.derivation_drain = derivation_drain
         self.http = http_client
+        self._dispatch_lock = dispatch_lock or asyncio.Lock()
 
     async def _client(self) -> httpx.AsyncClient:
         if self.http is None:
@@ -163,6 +165,12 @@ class OutboxDispatcher:
     # --------------------------------------------------------------- driving
 
     async def dispatch_pending(self, *, limit: int = 100) -> dict[str, int]:
+        # The background loop and the admin endpoint share cursors and must
+        # never dispatch the same batch concurrently in this process.
+        async with self._dispatch_lock:
+            return await self._dispatch_pending(limit=limit)
+
+    async def _dispatch_pending(self, *, limit: int = 100) -> dict[str, int]:
         stats: dict[str, int] = {}
         async with self.session_factory() as session:
             consumers: dict[str, Consumer] = {

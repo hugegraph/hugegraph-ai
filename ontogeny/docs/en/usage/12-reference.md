@@ -11,7 +11,7 @@
 | `validate <pkg>` · `lint <pkg>` · `docs <pkg>` | package validation / conventions / docs generation |
 | `diff <old-pkg> <new-pkg>` | semantic comparison of two packages |
 | `publish <pkg>` | validate + persist + compile a database snapshot; pass the same `--db` used by the service |
-| `sync <type>` | incremental sync of one type (atomic; schedulable by Airflow) |
+| `sync <type>` | run one type’s configured sync strategy once (atomic; use an external scheduler for repetition) |
 | `serve [--demo] [--copy-package] [--reseed] [--data-dir DIR]` | serve (--demo fully self-contained; --open opens the browser; --no-build-ui skips the build) |
 | `evolve signals \| promote <id>` | aggregate fitness signals / promote proposals by policy |
 | `projection rebuild` | rebuild the graph projection (drop space → schema → Loader backfill) |
@@ -62,6 +62,8 @@ CLI database commands use `ONTOGENY_DB_DSN` or `--db`; they do not infer the run
 | **agent** | `/agent/approvals…` | GET/POST | the approval queue and decisions |
 
 Other groups: **audit** (/audit/revisions) · **evolve** (/evolve/signals · aggregate · diagnose · proposals[/eval|promote]) · **assistant** (/assistant/chat, grounding + propose modes) · **admin** (llm/status · publish · sync/{t} · outbox/dispatch · derive · projection/rebuild · **domains[/import] (zip ontology package import)**) · **subscriptions** (SSE). The complete list is at `/docs` (OpenAPI).
+
+The normal `serve`/ASGI factory runs an outbox dispatch tick about every second and drains derivations. This does not schedule source synchronization: `sync.schedule` is declarative, and repeated source pulls require an external scheduler calling the CLI or admin sync endpoint. Manual `/api/v1/admin/outbox/dispatch` remains available and shares the background loop’s process lock.
 
 ## 12.5 Frontend routes
 

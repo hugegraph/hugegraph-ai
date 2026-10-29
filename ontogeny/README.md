@@ -114,6 +114,7 @@ Governance you can point at: every execution and every refusal lands in an immut
 ## Production Notes
 
 - **Single-process kernel**: registry, outbox, derivation, evolve and projection workers all live in the one server process. Do NOT scale with `uvicorn --workers N`; scale by domain (one process per database).
+- **Background delivery**: `ontogeny serve` polls committed outbox events about once per second, then drains pending derivations. Source sync runs when explicitly requested (or once on a fresh demo); `sync.schedule` requires an external scheduler.
 - **Observability**: `GET /api/v1/admin/metrics` — query/action/agent/outbox counters from the platform's own tables, zero extra dependencies.
 - **Query baseline**: `python tools/bench_query.py` (p50/p95 for search/filter/traverse).
 

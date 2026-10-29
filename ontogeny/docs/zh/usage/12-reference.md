@@ -12,7 +12,7 @@
 | `validate <pkg>` · `lint <pkg>` · `docs <pkg>` | 包校验 / 规范检查 / 生成文档 |
 | `diff <old-pkg> <new-pkg>` | 比较两个包的语义差异 |
 | `publish <pkg>` | 校验、持久化并编译数据库快照；`--db` 应与服务一致 |
-| `sync <type>` | 单类型增量同步（原子，可被 Airflow 调） |
+| `sync <type>` | 按该类型配置的策略同步一次（原子；重复执行需外部调度器） |
 | `serve [--demo] [--copy-package] [--reseed] [--data-dir DIR]` | 起服务（--demo 全自包含；--open 自动开浏览器；--no-build-ui 跳过构建） |
 | `evolve signals \| promote <id>` | 聚合适应度信号 / 按策略晋升提案 |
 | `projection rebuild` | 重建图投影（删空间 → schema → Loader 回填） |
@@ -63,6 +63,8 @@ CLI 数据库命令使用 `ONTOGENY_DB_DSN` 或 `--db`，不会根据运行中�
 | **agent** | `/agent/approvals…` | GET/POST | 审批队列与决策 |
 
 其余组：**audit**（/audit/revisions）· **evolve**（/evolve/signals · aggregate · diagnose · proposals[/eval|promote]）· **assistant**（/assistant/chat，grounding + propose 模式）· **admin**（llm/status · publish · sync/{t} · outbox/dispatch · derive · projection/rebuild · **domains[/import]（zip 本体包导入）**）· **subscriptions**（SSE）。完整清单以 `/docs`（OpenAPI）为准。
+
+正常 `serve`/ASGI factory 会约每秒处理一次 outbox 并 drain 派生任务；这不等于定时拉取源库。`sync.schedule` 只是声明，周期性源同步需外部调度器调用 CLI 或管理员同步端点。仍可手动调用 `/api/v1/admin/outbox/dispatch`，它与后台循环共用进程内锁。
 
 ## 12.5 前端路由
 
