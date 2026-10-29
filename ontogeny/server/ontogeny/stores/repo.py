@@ -28,10 +28,11 @@ from typing import Any
 
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.engine import RowMapping
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import ColumnElement
 
 from ..errors import ConflictError, NotFoundError, PolicyDeniedError, StoreError
-from .ddl import ensure_tables, object_table
+from .ddl import ensure_tables, live_index_name, object_table
 
 
 def utcnow() -> _dt.datetime:
@@ -90,6 +91,43 @@ class ObjectRepository:
         """Translate declared property names only at the SQL write boundary."""
         declared = self.compiled.objects[object_type].spec.properties
         return {self.compiled.col(p): value for p, value in props.items() if p in declared}
+
+    async def _insert_current(self, session, table, object_type: str, values: dict[str, Any]) -> None:
+        """Keep the transaction usable after a concurrent unique conflict."""
+        keys = self._pk_cols(object_type)
+        try:
+            if session.get_bind().dialect.name == "sqlite":
+                # SQLite aborts only the failed statement. A SAVEPOINT opened
+                # before its first write can otherwise become the outermost
+                # transaction and RELEASE would commit the insertion early.
+                await session.execute(table.insert().values(**values))
+            else:
+                # PostgreSQL requires rolling back a failed statement to a
+                # savepoint before the surrounding transaction can continue.
+                async with session.begin_nested():
+                    await session.execute(table.insert().values(**values))
+        except IntegrityError as exc:
+            orig = exc.orig
+            state = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+            message = str(orig)
+            pg_conflict = state == "23505" and (
+                live_index_name(table.name) in message or f"{table.name}_pkey" in message
+            )
+            sqlite_columns = ", ".join(f"{table.name}.{key}" for key in keys)
+            sqlite_pk_columns = ", ".join(f"{table.name}.{column.name}" for column in table.primary_key.columns)
+            sqlite_conflict = getattr(orig, "sqlite_errorname", "") in (
+                "SQLITE_CONSTRAINT_UNIQUE",
+                "SQLITE_CONSTRAINT_PRIMARYKEY",
+            ) and message in (
+                f"UNIQUE constraint failed: {sqlite_columns}",
+                f"UNIQUE constraint failed: {sqlite_pk_columns}",
+            )
+            if not (pg_conflict or sqlite_conflict):
+                raise
+            ids = [values.get(key) for key in keys]
+            raise ConflictError(
+                f"{object_type}/{ids} already exists", details={"object_type": object_type, "id": ids}
+            ) from exc
 
     async def ensure(self, session) -> None:
         await session.connection()
@@ -316,7 +354,7 @@ class ObjectRepository:
         if current is None:
             values = {c: props.get(c) for c in self._prop_cols(object_type) if c in props}
             values.update({"_rev": 1, "_valid_from": ts, "_valid_to": None, "_synced_at": ts})
-            await session.execute(t.insert().values(**values))
+            await self._insert_current(session, t, object_type, values)
             return "inserted"
 
         changes = {
@@ -387,7 +425,7 @@ class ObjectRepository:
                 ts = _next_version_time(bound, ts)
         values = {c: props.get(c) for c in self._prop_cols(object_type)}
         values.update({"_rev": 1, "_valid_from": ts, "_valid_to": None})
-        await session.execute(t.insert().values(**values))
+        await self._insert_current(session, t, object_type, values)
         return await self.get(session, object_type, pk_vals)
 
     async def action_update(
