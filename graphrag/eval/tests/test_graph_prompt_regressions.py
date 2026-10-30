@@ -15,25 +15,39 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Validate shipped faithfulness examples in the actual assembled prompt."""
 
-import json
+"""Validate the shipped faithfulness prompt as the Judge sees it."""
+
+import re
 
 import pytest
 
+from hugegraph_llm_eval.integrations.graph_extraction.evaluators.faithfulness_output import (
+    FaithfulnessJudgeOutput,
+)
 from hugegraph_llm_eval.prompt import graph_judge_prompt
 
+_EXAMPLE_OUTPUT_HEADING = {"en": "Example output:\n", "zh": "示例输出：\n"}
 
-@pytest.mark.parametrize(
-    ("language", "example_heading", "next_heading"),
-    (("en", "Expected JSON:\n", "\n\nNow evaluate:"), ("zh", "期望输出：\n", "\n\n现在请评估：")),
-)
-def test_faithfulness_example_rejects_the_unsupported_two_year_cycle(language, example_heading, next_heading) -> None:
+
+@pytest.mark.parametrize("language", ("en", "zh"))
+def test_faithfulness_example_output_matches_the_judge_schema(language: str) -> None:
     prompt = graph_judge_prompt("faithfulness", language)
-    example = prompt.split(example_heading, 1)[1].split(next_heading, 1)[0]
-    verdicts = json.loads(example.replace("{{", "{").replace("}}", "}"))["verdicts"]
+    output = FaithfulnessJudgeOutput.model_validate_json(prompt.split(_EXAMPLE_OUTPUT_HEADING[language], 1)[1])
 
-    # Item 1 claims a two-year service-replacement cycle. The source only says
-    # to rotate tokens every 24 hours or 10,000 requests.
-    verdict = next(item for item in verdicts if item["idx"] == 1)
-    assert verdict["verdict"] == "No", verdict["reason"]
+    unsupported_vertices = {index for group in output.unsupported_vertex_groups for index in group.item_indices}
+    assert output.supported_vertex_indices == (0,)
+    assert 1 in unsupported_vertices
+
+
+@pytest.mark.parametrize("language", ("en", "zh"))
+def test_faithfulness_prompt_defines_edge_direction(language: str) -> None:
+    prompt = graph_judge_prompt("faithfulness", language)
+
+    assert "out_v" in prompt
+    assert "in_v" in prompt
+    assert "{{" not in prompt
+
+
+def test_english_faithfulness_prompt_has_no_chinese() -> None:
+    assert re.search(r"[\u4e00-\u9fff]", graph_judge_prompt("faithfulness", "en")) is None

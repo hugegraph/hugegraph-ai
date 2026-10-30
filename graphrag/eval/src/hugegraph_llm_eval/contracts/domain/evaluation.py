@@ -30,15 +30,12 @@ from hugegraph_llm_eval.contracts.digests import ContentDigest, canonical_digest
 from hugegraph_llm_eval.contracts.domain.artifacts import ArtifactRef
 from hugegraph_llm_eval.contracts.domain.judge import JudgeCallRecord, JudgeCallStatus
 from hugegraph_llm_eval.contracts.domain.operation import PortName
-from hugegraph_llm_eval.contracts.domain.trace import SpanContextRef
 from hugegraph_llm_eval.contracts.errors import FailureDetail
 from hugegraph_llm_eval.contracts.identity import (
     EvaluationInputId,
     EvaluationRecordId,
     EvaluationRunId,
     EvaluatorRef,
-    ExecutionId,
-    RunCaseId,
     SchemaRef,
 )
 
@@ -244,50 +241,21 @@ class EvaluationDefinitionItem(VersionedModel):
     invocation_key: str = Field(min_length=1, max_length=127, pattern=r"^[a-z][a-z0-9_.-]*$")
     evaluator: EvaluatorRef
     implementation_digest: ContentDigest
-    required: bool = True
-    configuration_digest: ContentDigest | None = None
-
-
-class EvaluationCorrelation(StrictModel):
-    run_case_id: RunCaseId | None = None
-    execution_id: ExecutionId | None = None
-    execution_attempt: int | None = Field(default=None, ge=0)
-    plan_digest: ContentDigest | None = None
-    source_completion_event_id: str | None = Field(default=None, min_length=3, max_length=255)
-    subject_span: SpanContextRef | None = None
-
-    @model_validator(mode="after")
-    def _validate_execution(self) -> "EvaluationCorrelation":
-        execution_details = (self.execution_attempt, self.source_completion_event_id, self.subject_span)
-        if self.execution_id is None and any(value is not None for value in execution_details):
-            raise ValueError("evaluation execution details require an Execution")
-        if self.execution_id is not None and self.execution_attempt is None:
-            raise ValueError("Execution-correlated evaluation requires an attempt")
-        return self
 
 
 class EvaluationRun(VersionedModel):
     run_id: EvaluationRunId
     request_key: str = Field(min_length=1, max_length=255)
-    attempt: int = Field(ge=0)
     definition_digest: ContentDigest
     input_digest: ContentDigest
     status: EvaluationRunStatus
-    record_ids: tuple[EvaluationRecordId, ...] = ()
     required_count: int = Field(ge=0)
     completed_required_count: int = Field(ge=0)
-    supersedes_id: EvaluationRunId | None = None
     failure: FailureDetail | None = None
-    trace_context: SpanContextRef | None = None
-    correlation: EvaluationCorrelation | None = None
     created_at: AwareDatetime
-    updated_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def _validate_coverage(self) -> "EvaluationRun":
-        if self.updated_at is not None and self.updated_at < self.created_at:
-            msg = "evaluation run updated_at cannot precede created_at"
-            raise ValueError(msg)
         _validate_run_coverage(self.status, self.required_count, self.completed_required_count)
         _validate_run_failure(self.status, self.failure)
         return self
@@ -326,8 +294,6 @@ class EvaluationContext:
     max_attempts: int = 1
     retry_backoff_seconds: float = 0
     limiter: ConcurrencyLimiter | None = None
-    trace_context: SpanContextRef | None = None
-    correlation: EvaluationCorrelation | None = None
 
     def __post_init__(self) -> None:
         if not self.request_key.strip() or len(self.request_key) > 255:

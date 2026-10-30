@@ -88,8 +88,6 @@ class EvaluatorExecutor:
             max_attempts=options.max_attempts,
             retry_backoff_seconds=options.retry_backoff_seconds,
             limiter=limits.limiter,
-            trace_context=options.trace_context,
-            correlation=options.correlation,
         )
         if len(batch) == 1:
             return (self._invoke(batch[0], evaluation_input, context, options, limits),)

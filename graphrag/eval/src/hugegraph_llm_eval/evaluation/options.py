@@ -25,10 +25,7 @@ from datetime import datetime
 from hugegraph_llm_eval.contracts.domain.evaluation import (
     MAX_CONCURRENCY,
     MAX_SAMPLES,
-    EvaluationCorrelation,
 )
-from hugegraph_llm_eval.contracts.domain.trace import SpanContextRef
-from hugegraph_llm_eval.contracts.identity import EvaluationRunId
 
 MAX_ATTEMPTS = 20
 
@@ -107,23 +104,16 @@ class CancellationToken:
 @dataclass(frozen=True, slots=True)
 class EvaluationOptions:
     request_key: str
-    attempt: int = 0
-    supersedes_id: EvaluationRunId | None = None
     deadline: datetime | None = None
     max_attempts: int = 3
     max_concurrency: int = 1
     max_samples: int = 1
     budget_usd: float | None = None
     retry_backoff_seconds: float = 0
-    trace_context: SpanContextRef | None = None
-    correlation: EvaluationCorrelation | None = None
     cancellation: CancellationToken = field(default_factory=CancellationToken)
 
     def __post_init__(self) -> None:
         _validate_request_key(self.request_key)
-        if self.attempt < 0:
-            msg = "attempt must be non-negative"
-            raise ValueError(msg)
         _validate_positive_counts(self.max_attempts, self.max_concurrency, self.max_samples)
         _validate_attempts(self.max_attempts)
         _validate_bounded("max_concurrency", self.max_concurrency, MAX_CONCURRENCY)

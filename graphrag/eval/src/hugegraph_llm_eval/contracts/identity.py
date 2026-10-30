@@ -65,14 +65,6 @@ class ArtifactId(ContentAddressedId):
     prefix = "artifact:"
 
 
-class ExecutionId(GeneratedId):
-    prefix = "execution:"
-
-
-class RunCaseId(GeneratedId):
-    prefix = "run-case:"
-
-
 class EvaluationInputId(ContentAddressedId):
     prefix = "evaluation-input:"
 

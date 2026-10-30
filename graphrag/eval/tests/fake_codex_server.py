@@ -81,6 +81,10 @@ for line in sys.stdin:
         send({"id": request_id, "result": {"userAgent": "fake-codex"}})
     elif method == "config/read":
         send({"id": request_id, "result": {"config": {"mcp_servers": {"user_mcp": {}}}, "origins": {}}})
+    elif method == "account/read":
+        kind = os.environ.get("FAKE_CODEX_ACCOUNT", "chatgpt")
+        account = None if kind == "none" else {"type": kind}
+        send({"id": request_id, "result": {"account": account, "requiresOpenaiAuth": True}})
     elif method == "thread/start":
         turns += 1
         send({"id": request_id, "result": {"model": "fake-model-resolved", "thread": {"id": f"thread-{turns}"}}})

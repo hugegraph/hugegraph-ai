@@ -131,7 +131,7 @@ class AttemptLoopJudge(ABC):
             started = self._monotonic()
             try:
                 outcome = self._attempt(request, timeout)
-            except Exception as exc:  # Provider transport and response parsing boundary.
+            except Exception as exc:
                 failure_detail = exc.failure if isinstance(exc, AttemptFailureError) else self._classify(exc)
                 attempts.append(
                     self._failed_attempt(

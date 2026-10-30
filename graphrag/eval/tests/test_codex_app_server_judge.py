@@ -186,7 +186,7 @@ def test_custom_features_preserve_safe_defaults_and_reject_tool_enablement(tmp_p
 
 
 def test_custom_mcp_servers_are_rejected_when_isolation_is_enabled(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="config.mcp_servers"):
+    with pytest.raises(ValueError, match=r"config\.mcp_servers"):
         make_judge(tmp_path, config={"mcp_servers": {"external": {"command": "unsafe"}}})
 
 
@@ -204,7 +204,7 @@ def test_mcp_isolation_fails_closed_when_config_cannot_be_read(tmp_path: Path) -
             raise RpcError("config unavailable")
 
     judge = make_judge(tmp_path)
-    with pytest.raises(RuntimeError, match="(?i)cannot verify"):
+    with pytest.raises(RuntimeError, match=r"(?i)cannot verify"):
         judge._disabled_mcp_servers(BrokenConnection(), 1.0)
 
 
@@ -223,6 +223,28 @@ def test_subscription_auth_mode_removes_ambient_api_key(monkeypatch, tmp_path: P
 
     assert "OPENAI_API_KEY" not in captured
     assert "OPENAI_BASE_URL" not in captured
+
+
+@pytest.mark.parametrize(
+    ("account", "code"),
+    (("none", "provider_not_authenticated"), ("apiKey", "provider_account_not_chatgpt")),
+)
+def test_subscription_mode_rejects_a_non_chatgpt_account(monkeypatch, tmp_path: Path, account: str, code: str) -> None:
+    monkeypatch.setenv("FAKE_CODEX_ACCOUNT", account)
+    with make_judge(tmp_path, auth_mode="subscription") as judge:
+        error = failed_judge(judge, "ok", attempts=3)
+
+    assert error.failure.code == code
+    assert error.failure.retryable is False
+    assert len(error.provenance.attempts) == 1
+
+
+def test_inherit_mode_accepts_any_account_without_reading_it(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FAKE_CODEX_ACCOUNT", "apiKey")
+    with make_judge(tmp_path) as judge:
+        judge.judge(cli_request(), ONCE)
+
+    assert "account/read" not in {entry["method"] for entry in requests(tmp_path)}
 
 
 def test_descriptor_changes_with_cli_version_and_effort(tmp_path: Path) -> None:

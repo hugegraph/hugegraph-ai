@@ -100,11 +100,7 @@ def _run_process(
 
 
 class ClaudeCodeJudge(AttemptLoopJudge):
-    """Runs each Judge call as one tool-free headless ``claude -p`` process.
-
-    Authenticates as the CLI does in your terminal; ``scrub_provider_env=True`` with
-    ``setting_sources=""`` forces the logged-in subscription.
-    """
+    """Runs each Judge call as one tool-free headless ``claude -p`` process."""
 
     def __init__(
         self,

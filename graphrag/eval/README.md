@@ -239,7 +239,7 @@ with CodexAppServerJudge(model="<a model your account can use>", effort="low", a
 
 | | `ClaudeCodeJudge` | `CodexAppServerJudge` |
 | --- | --- | --- |
-| Authentication | `claude` login or `CLAUDE_CODE_OAUTH_TOKEN` | `codex` ChatGPT login; `auth_mode="subscription"` ignores ambient OpenAI API-key/base-URL overrides |
+| Authentication | `claude` login or `CLAUDE_CODE_OAUTH_TOKEN` | `codex` ChatGPT login; `auth_mode="subscription"` fails unless the app-server reports a ChatGPT account |
 | Process | one `claude -p` per call | one long-lived `codex app-server`, started on first use |
 | Concurrency | any | calls share the process; the shared limiter still bounds them |
 | Cleanup | none | `close()`, a `with` block, or interpreter exit |
@@ -251,7 +251,9 @@ What to know before using them:
   environment and settings, so it uses whatever `claude` is signed in to: a
   subscription login, `CLAUDE_CODE_OAUTH_TOKEN`, or a gateway from
   `~/.claude/settings.json`. An exported `ANTHROPIC_API_KEY` is billed to the API, not
-  to the subscription. To force the subscription, use `auth_mode="subscription"`:
+  to the subscription: in `-p` mode a present key is always used
+  ([authentication precedence](https://code.claude.com/docs/en/authentication#authentication-precedence)).
+  To force the subscription, use `auth_mode="subscription"`:
   that removes `ANTHROPIC_*` and `CLAUDE_CODE_USE_*` from the child environment and
   ignores settings files. The lower-level `scrub_provider_env=True, setting_sources=""`
   combination remains available for compatibility. Without a login the call then fails
@@ -273,12 +275,14 @@ What to know before using them:
 - **Usage limits.** A subscription limit surfaces as the permanent failure
   `provider_usage_limit` and is not retried.
 - **Codex needs an explicit `model`**; the account default may be unavailable to
-  app-server clients. `auth_mode="inherit"` (default) preserves the CLI environment;
-  use `auth_mode="subscription"` to remove `OPENAI_API_KEY`, `OPENAI_BASE_URL`,
-  `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID` from the child process and select the
-  account saved by `codex login`. For API-key billing, use `openai_judge(...)` with an
-  explicit key and endpoint instead. This makes account/API switching explicit rather
-  than depending on ambient environment variables.
+  app-server clients. `auth_mode="inherit"` (default) uses whatever login the CLI has.
+  `auth_mode="subscription"` reads `account/read` once at startup and fails with the
+  permanent `provider_not_authenticated` (no login) or `provider_account_not_chatgpt`
+  (logged in with an API key) instead of billing an API key; it also removes
+  `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID` from the
+  child process. OpenAI recommends API keys for automation such as CI/CD
+  ([Codex authentication](https://developers.openai.com/codex/auth)); for API-key
+  billing use `openai_judge(...)` with an explicit key and endpoint.
 
 ## Input builders
 

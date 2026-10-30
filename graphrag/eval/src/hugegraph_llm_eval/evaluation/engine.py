@@ -116,7 +116,6 @@ def _run(
     return EvaluationRun(
         run_id=EvaluationRunId.new(),
         request_key=options.request_key,
-        attempt=1,
         definition_digest=canonical_digest(
             {
                 "items": [
@@ -133,8 +132,6 @@ def _run(
         status=EvaluationRunStatus.RUNNING,
         required_count=len(resolved),
         completed_required_count=0,
-        trace_context=options.trace_context,
-        correlation=options.correlation,
         created_at=now,
     )
 

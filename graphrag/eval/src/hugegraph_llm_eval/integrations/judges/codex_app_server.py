@@ -61,16 +61,8 @@ _STARTUP_TIMEOUT_SECONDS = 60.0
 _TRANSIENT_KINDS = frozenset({"serverOverloaded", "internalServerError", "flexUnavailable"})
 _TRANSIENT_PREFIXES = ("httpConnectionFailed", "responseStream")
 _DEFAULT_INSTRUCTIONS = "You are an evaluation judge. Do not use tools. Answer only with the requested JSON."
+_TOOL_FEATURES = ("plugins", "apps", "computer_use", "browser_use", "shell_tool", "unified_exec", "multi_agent")
 _DEFAULT_CONFIG: Mapping[str, JsonValue] = {
-    "features": {
-        "plugins": False,
-        "apps": False,
-        "computer_use": False,
-        "browser_use": False,
-        "shell_tool": False,
-        "unified_exec": False,
-        "multi_agent": False,
-    },
     "include_environment_context": False,
     "include_permissions_instructions": False,
     "include_apps_instructions": False,
@@ -92,11 +84,7 @@ class _ConnectionHolder:
 
 
 class CodexAppServerJudge(AttemptLoopJudge):
-    """Runs Judge calls as ephemeral threads on one shared ``codex app-server`` process.
-
-    The process starts on first use; stop it with ``close()`` or a ``with`` block.
-    ``model`` is required because the account default may be rejected by app-server.
-    """
+    """Runs Judge calls as ephemeral threads on one shared ``codex app-server`` process."""
 
     def __init__(
         self,
@@ -123,15 +111,13 @@ class CodexAppServerJudge(AttemptLoopJudge):
         features = provided.pop("features", {})
         if not isinstance(features, Mapping):
             raise ValueError("config.features must be a mapping")
-        unsafe_features = [
-            name for name, enabled in features.items() if name in _DEFAULT_CONFIG["features"] and enabled is True
-        ]
+        unsafe_features = [name for name, enabled in features.items() if name in _TOOL_FEATURES and enabled is True]
         if unsafe_features:
             raise ValueError(f"Codex judge cannot enable tool capabilities: {', '.join(sorted(unsafe_features))}")
         merged: dict[str, JsonValue] = {
             **_DEFAULT_CONFIG,
             **provided,
-            "features": {**_DEFAULT_CONFIG["features"], **features},
+            "features": {**dict.fromkeys(_TOOL_FEATURES, False), **features},
         }
         if merged.get("web_search") != "disabled":
             raise ValueError("Codex judge requires web_search to remain disabled")
@@ -194,11 +180,24 @@ class CodexAppServerJudge(AttemptLoopJudge):
         try:
             connection.request("initialize", {"clientInfo": {"name": "hugegraph-llm-eval", "version": "1"}}, timeout)
             connection.notify("initialized")
+            if self._auth_mode == "subscription":
+                self._require_chatgpt_account(connection, timeout)
             self._mcp_overrides = self._disabled_mcp_servers(connection, timeout)
         except BaseException:
             connection.close()
             raise
         return connection
+
+    def _require_chatgpt_account(self, connection: AppServerConnection, timeout: float) -> None:
+        account = connection.request("account/read", {"refreshToken": False}, timeout).get("account")
+        if not isinstance(account, dict):
+            raise AttemptFailureError(
+                failure(FailureCategory.PROVIDER_UNAVAILABLE, "provider_not_authenticated", False)
+            )
+        if account.get("type") != "chatgpt":
+            raise AttemptFailureError(
+                failure(FailureCategory.PROVIDER_UNAVAILABLE, "provider_account_not_chatgpt", False)
+            )
 
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -247,7 +246,9 @@ class CodexAppServerJudge(AttemptLoopJudge):
             connection.fire("thread/unsubscribe", {"threadId": thread_id})
 
     def _thread_params(self, system: str | None) -> dict[str, object]:
-        config = {**self._config, "mcp_servers": self._mcp_overrides} if self._disable_user_mcp_servers else self._config
+        config = (
+            {**self._config, "mcp_servers": self._mcp_overrides} if self._disable_user_mcp_servers else self._config
+        )
         return {
             "model": self.descriptor.model,
             "ephemeral": True,

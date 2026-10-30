@@ -48,11 +48,9 @@ from hugegraph_llm_eval.prompt_templates.context import (
 from hugegraph_llm_eval.prompt_templates.graph import (
     _ANSWER_RELEVANCE_PROMPT_ZH,
     _ENTITY_SEMANTIC_MATCH_PROMPT_ZH,
-    _EXTRACTION_FAITHFULNESS_PROMPT_ZH,
     _TRIPLE_SEMANTIC_MATCH_PROMPT_ZH,
     ANSWER_RELEVANCE_PROMPT,
     ENTITY_SEMANTIC_MATCH_PROMPT,
-    EXTRACTION_FAITHFULNESS_PROMPT,
     TRIPLE_SEMANTIC_MATCH_PROMPT,
 )
 
@@ -72,10 +70,6 @@ _PROMPT_REGISTRY: Final[dict[str, dict[str, str]]] = {
     "TRIPLE_SEMANTIC_MATCH_PROMPT": {
         "en": TRIPLE_SEMANTIC_MATCH_PROMPT,
         "zh": _TRIPLE_SEMANTIC_MATCH_PROMPT_ZH,
-    },
-    "EXTRACTION_FAITHFULNESS_PROMPT": {
-        "en": EXTRACTION_FAITHFULNESS_PROMPT,
-        "zh": _EXTRACTION_FAITHFULNESS_PROMPT_ZH,
     },
     "ANSWER_RELEVANCE_PROMPT": {"en": ANSWER_RELEVANCE_PROMPT, "zh": _ANSWER_RELEVANCE_PROMPT_ZH},
 }
@@ -158,29 +152,87 @@ def retrieval_judge_prompt(kind: str, language: str = "zh") -> str:
     return f"{historical}\n\n---\n\n{protocol}"
 
 
+_FAITHFULNESS_PROMPT_ZH: Final = """\
+你是知识图谱抽取质量的评审员。判断候选图中的每个顶点和每条边，是否被原始文本 source_text 忠实支持。
+
+输入是一条 JSON 消息：source_text 是唯一的证据；items 是候选项，顶点和边各自从 0 开始用 item_index 计数。顶点包含 label、name、properties、source_snippet；边包含 label、out_v、in_v、out_v_label、in_v_label、properties、source_snippet。
+
+判定规则：
+- 把每个顶点或边视为一个完整的图事实断言。只有 source_text 明确陈述完整断言，或无需引入外部事实即可无歧义地推出时，才判为忠实。
+- 断言中任一重要部分没有依据、属于过度推断，或与 source_text 矛盾，整项判为不忠实。
+- 顶点检查实体身份及其全部属性；边检查关系、两个端点的身份、方向及其全部属性。
+- 边是有方向的：out_v 是关系的起点（source），in_v 是终点（target）。关系必须按 out_v 到 in_v 的方向与 source_text 一致，方向相反判为不忠实。
+- 判断的是事实内容，不是字面措辞。不能仅因为 label（顶点 label、边 label、端点 label）没有在 source_text 中逐字出现就判为不忠实：边 label 只要对应 source_text 用其他说法陈述的同一关系（例如"总部位于"对应 LOCATED_IN）就算被支持；source_text 陈述的属性或数值被建模成独立的顶点或边时，只要对象、数值、单位与 source_text 一致，也算被支持。模式合法性由独立指标检查。
+- source_snippet 只是定位提示，不是证据；不得使用常识、外部知识或模式预期。source_text 为空或与该项无关时判为不忠实。
+
+输出要求：只返回一个 JSON 对象，包含 supported_vertex_indices、supported_edge_indices、unsupported_vertex_groups、unsupported_edge_groups 四个键，不得包含其他键或文本。
+- 每个顶点索引和每个边索引必须恰好出现一次：要么在对应的 supported_*_indices 中，要么在某一个 unsupported_*_groups 的 item_indices 中。忠实项不出现在任何 group 中。
+- 一个 group 包含 item_indices、error_categories、support_reason、error_reason、evidence_quote；原因和类别相同的不忠实项可以放进同一个 group。
+- error_categories 至少一个，只能从下面选择：unsupported_claim、numeric_mismatch、unit_mismatch、condition_loss、range_loss、temporal_mismatch、polarity_reversal、subject_scope_error。source_text 完全不支持该断言时使用 unsupported_claim；同一项可以同时返回多个类别。
+- support_reason 只写被 source_text 支持的部分，没有时为 null；error_reason 只写不支持、矛盾或错误的部分，不得把两类内容混写在同一字段。evidence_quote 是 source_text 中的原文摘录，没有则为 null。
+
+示例输入（省略了 properties、out_v_label、in_v_label 和 source_snippet）：
+{"source_text": "认证服务使用 OAuth 2.0 令牌。令牌存储在配置中心内。每 24 小时或 10,000 次请求轮换令牌。", "items": [
+  {"item_kind": "vertex", "item_index": 0, "label": "Component", "name": "认证服务"},
+  {"item_kind": "vertex", "item_index": 1, "label": "Specification", "name": "认证服务更换周期:2年"},
+  {"item_kind": "vertex", "item_index": 2, "label": "Component", "name": "日志服务"},
+  {"item_kind": "edge", "item_index": 0, "label": "HAS_SPEC", "out_v": "认证服务", "in_v": "令牌类型:OAuth1"},
+  {"item_kind": "edge", "item_index": 1, "label": "LOCATED_IN", "out_v": "令牌存储", "in_v": "配置中心"}
+]}
+
+示例输出：
+{"supported_vertex_indices": [0], "supported_edge_indices": [1],
+ "unsupported_vertex_groups": [
+  {"item_indices": [1], "error_categories": ["unsupported_claim", "temporal_mismatch"], "support_reason": null, "error_reason": "原文是每 24 小时或 10,000 次请求轮换令牌，没有每 2 年更换认证服务的说法；操作对象和时间间隔都没有依据。", "evidence_quote": "每 24 小时或 10,000 次请求轮换令牌"},
+  {"item_indices": [2], "error_categories": ["unsupported_claim"], "support_reason": null, "error_reason": "原文从未提到日志服务。", "evidence_quote": null}],
+ "unsupported_edge_groups": [
+  {"item_indices": [0], "error_categories": ["numeric_mismatch"], "support_reason": "原文确实说认证服务使用令牌。", "error_reason": "原文使用的是 OAuth 2.0，该项声称 OAuth1，与原文矛盾。", "evidence_quote": "认证服务使用 OAuth 2.0 令牌"}]}
+"""
+_FAITHFULNESS_PROMPT_EN: Final = """\
+You review the quality of a knowledge-graph extraction. Decide whether each candidate vertex and edge is faithfully supported by the original text, source_text.
+
+The input is one JSON message. source_text is the only evidence. items are the candidates; vertices and edges are each numbered from 0 by item_index. A vertex has label, name, properties and source_snippet. An edge has label, out_v, in_v, out_v_label, in_v_label, properties and source_snippet.
+
+Rules:
+- Treat each vertex or edge as one complete factual claim. Mark it faithful only when source_text states the whole claim explicitly, or entails it unambiguously without external facts.
+- If any material part of the claim lacks support, is over-extrapolated, or contradicts source_text, mark the whole item unsupported.
+- For a vertex, check the entity identity and every property. For an edge, check the relation, the identity of both endpoints, the direction, and every property.
+- An edge is directed: out_v is its source (start) and in_v its target (end). The relation must run from out_v to in_v exactly as source_text states it; a reversed edge is unsupported.
+- Judge the factual content, not the wording. Do not reject an item only because a label (vertex label, edge label or endpoint label) is not written literally in source_text. An edge label is supported when source_text states the same relation in other words (for example "headquartered in" for LOCATED_IN). A property or measurement that source_text states may be modelled as its own vertex or edge, and is supported as long as its object, value and unit agree with source_text. Schema legality is checked by a separate metric.
+- source_snippet is only a locator, not evidence. Do not use world knowledge or schema expectations. If source_text is empty or unrelated to the item, mark it unsupported.
+
+Output format: return only one JSON object with the four keys supported_vertex_indices, supported_edge_indices, unsupported_vertex_groups and unsupported_edge_groups, and no other keys or text.
+- Every vertex index and every edge index must appear exactly once: either in the matching supported_*_indices, or in the item_indices of exactly one unsupported_*_groups entry. Faithful items never appear in a group.
+- A group has item_indices, error_categories, support_reason, error_reason and evidence_quote. Unsupported items with the same categories and reasons may share one group.
+- error_categories needs at least one value, chosen only from: unsupported_claim, numeric_mismatch, unit_mismatch, condition_loss, range_loss, temporal_mismatch, polarity_reversal, subject_scope_error. Use unsupported_claim when source_text gives the claim no support at all. An item may have several categories.
+- support_reason covers only the part that source_text supports and is null when nothing is supported; error_reason covers only what is unsupported, contradicted or wrong. Never mix the two in one field. evidence_quote is a verbatim excerpt of source_text, or null.
+
+Example input (properties, out_v_label, in_v_label and source_snippet omitted):
+{"source_text": "The auth service uses OAuth 2.0 tokens. Token storage is located in the configuration center. Rotate tokens every 24 hours or 10,000 requests.", "items": [
+  {"item_kind": "vertex", "item_index": 0, "label": "Component", "name": "auth service"},
+  {"item_kind": "vertex", "item_index": 1, "label": "Specification", "name": "auth service replacement cycle: 2 years"},
+  {"item_kind": "vertex", "item_index": 2, "label": "Component", "name": "log service"},
+  {"item_kind": "edge", "item_index": 0, "label": "HAS_SPEC", "out_v": "auth service", "in_v": "token type: OAuth1"},
+  {"item_kind": "edge", "item_index": 1, "label": "LOCATED_IN", "out_v": "token storage", "in_v": "configuration center"}
+]}
+
+Example output:
+{"supported_vertex_indices": [0], "supported_edge_indices": [1],
+ "unsupported_vertex_groups": [
+  {"item_indices": [1], "error_categories": ["unsupported_claim", "temporal_mismatch"], "support_reason": null, "error_reason": "The text rotates tokens every 24 hours or 10,000 requests; it never says the auth service is replaced every 2 years, so both the action and the interval lack support.", "evidence_quote": "Rotate tokens every 24 hours or 10,000 requests"},
+  {"item_indices": [2], "error_categories": ["unsupported_claim"], "support_reason": null, "error_reason": "The text never mentions a log service.", "evidence_quote": null}],
+ "unsupported_edge_groups": [
+  {"item_indices": [0], "error_categories": ["numeric_mismatch"], "support_reason": "The text does say the auth service uses tokens.", "error_reason": "The text specifies OAuth 2.0 but the item claims OAuth1, which contradicts the source.", "evidence_quote": "The auth service uses OAuth 2.0 tokens"}]}
+"""
+
+_FAITHFULNESS_PROMPTS: Final = {"zh": _FAITHFULNESS_PROMPT_ZH, "en": _FAITHFULNESS_PROMPT_EN}
+
+
 def graph_judge_prompt(kind: str, language: str = "zh") -> str:
-    """Adapt Chinese graph-evaluation few-shot prompts to the current typed protocol."""
+    """Return the graph-evaluation judge prompt for the current typed protocol."""
     if kind != "faithfulness":
         raise ValueError(f"Unsupported graph judge prompt kind: {kind}")
-    historical = get_prompt("EXTRACTION_FAITHFULNESS_PROMPT", language)
-    protocol = (
-        "当前运行时协议覆盖上面的历史输出格式：下一条 JSON 中的 source_text 是证据，items 中的顶点和边"
-        "各自使用 item_index 计数。只返回以下紧凑分区："
-        '{"supported_vertex_indices":[0],"supported_edge_indices":[1],'
-        '"unsupported_vertex_groups":[{"item_indices":[2],"error_categories":["unsupported_claim"],'
-        '"support_reason":null,"error_reason":"原文未支持。","evidence_quote":null}],'
-        '"unsupported_edge_groups":[{"item_indices":[3],"error_categories":["condition_loss"],'
-        '"support_reason":"关系类型和端点有文本依据。","error_reason":"关系缺少适用条件。",'
-        '"evidence_quote":null}]}。'
-        "每个顶点和边索引必须恰好出现一次；不得返回 verdicts、idx、Yes/No 或其他键。"
-        "不忠实项必须返回一个或多个 error_categories，只能使用：unsupported_claim、numeric_mismatch、"
-        "unit_mismatch、condition_loss、range_loss、temporal_mismatch、polarity_reversal、"
-        "subject_scope_error。source_text 完全不支持该断言时使用 unsupported_claim；同一项可以同时返回多个类别。"
-        "每个不忠实项都必须同时返回 support_reason 和 error_reason；support_reason 只写被原文支持的部分，"
-        "没有支持部分时返回 null；error_reason 只写不支持、矛盾或错误的部分。不得把两类内容混写在同一字段。"
-        "忠实项不返回 error_categories 或 error_reason。"
-    )
-    return f"{historical}\n\n---\n\n{protocol}"
+    return _FAITHFULNESS_PROMPTS.get(language, _FAITHFULNESS_PROMPT_EN)
 
 
 _GRAPH_JUDGE_RUBRICS: Final[dict[str, dict[str, str]]] = {
