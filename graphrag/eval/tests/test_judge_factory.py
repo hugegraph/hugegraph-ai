@@ -48,9 +48,7 @@ def test_discriminated_config_makes_api_and_account_switching_explicit() -> None
     api = parse_judge_config(
         {"backend": "openai", "model": "gpt-eval", "api_key": "secret", "base_url": "https://api.example/v1"}
     )
-    claude = parse_judge_config(
-        {"backend": "claude-code", "model": "sonnet", "auth_mode": "subscription"}
-    )
+    claude = parse_judge_config({"backend": "claude-code", "model": "sonnet", "auth_mode": "subscription"})
     codex = parse_judge_config({"backend": "codex", "model": "gpt-codex", "auth_mode": "subscription"})
 
     assert isinstance(api, OpenAIJudgeConfig)
