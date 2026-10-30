@@ -69,6 +69,16 @@ from hugegraph_llm_eval.integrations.graph_extraction.evaluators.semantic import
 )
 from hugegraph_llm_eval.integrations.judges.claude_code import ClaudeCodeJudge
 from hugegraph_llm_eval.integrations.judges.codex_app_server import CodexAppServerJudge
+from hugegraph_llm_eval.integrations.judges.factory import (
+    AuthMode,
+    ClaudeCodeJudgeConfig,
+    CodexJudgeConfig,
+    JudgeConfig,
+    OpenAIJudgeConfig,
+    create_judge,
+    managed_judge,
+    parse_judge_config,
+)
 from hugegraph_llm_eval.integrations.judges.openai_client import OpenAIClientTransport, openai_judge
 from hugegraph_llm_eval.integrations.retrieval.evaluators.context_quality import (
     ContextPrecisionEvaluator,
@@ -98,9 +108,12 @@ except PackageNotFoundError:  # Source tree without an installed distribution.
 __all__ = [
     "AnswerCorrectnessEvaluator",
     "AnswerFaithfulnessEvaluator",
+    "AuthMode",
     "CancellationToken",
     "ClaudeCodeJudge",
+    "ClaudeCodeJudgeConfig",
     "CodexAppServerJudge",
+    "CodexJudgeConfig",
     "ContextEntityRecallEvaluator",
     "ContextPrecisionEvaluator",
     "ContextRelevancyEvaluator",
@@ -123,6 +136,7 @@ __all__ = [
     "InMemoryArtifactStore",
     "Judge",
     "JudgeCallError",
+    "JudgeConfig",
     "JudgeContent",
     "JudgeDescriptor",
     "JudgeMessage",
@@ -133,6 +147,7 @@ __all__ = [
     "MetricEvaluator",
     "NoiseSensitivityEvaluator",
     "OpenAIClientTransport",
+    "OpenAIJudgeConfig",
     "RecallAtKEvaluator",
     "RougeLEvaluator",
     "SchemaValidityEvaluator",
@@ -142,10 +157,13 @@ __all__ = [
     "aevaluate",
     "aevaluate_many",
     "answer_input",
+    "create_judge",
     "evaluate",
     "evaluate_many",
     "graph_extraction_input",
     "graph_review_input",
+    "managed_judge",
     "openai_judge",
+    "parse_judge_config",
     "retrieval_input",
 ]

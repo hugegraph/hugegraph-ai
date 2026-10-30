@@ -69,6 +69,21 @@ _DEFAULT_CONFIG: Mapping[str, JsonValue] = {
     "project_doc_max_bytes": 0,
     "web_search": "disabled",
 }
+_SUBSCRIPTION_ENV_NAMES = frozenset(
+    {
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "OPENAI_ORG_ID",
+        "OPENAI_PROJECT_ID",
+        "OPENAI_ORGANIZATION",
+        "OPENAI_PROJECT",
+        "CODEX_API_KEY",
+        "CODEX_ACCESS_TOKEN",
+        "OPENAI_FEDERATION_RULE_ID",
+        "OPENAI_IDENTITY_TOKEN_FILE",
+        "OPENAI_WORKLOAD_IDENTITY_CONTEXT",
+    }
+)
 
 
 class _ConnectionHolder:
@@ -105,28 +120,38 @@ class CodexAppServerJudge(AttemptLoopJudge):
         if call_timeout_seconds <= 0:
             msg = "call_timeout_seconds must be positive"
             raise ValueError(msg)
+        if auth_mode not in ("inherit", "subscription"):
+            msg = "auth_mode must be 'inherit' or 'subscription'"
+            raise ValueError(msg)
         provided = dict(config or {})
-        if disable_user_mcp_servers and "mcp_servers" in provided:
-            raise ValueError("config.mcp_servers cannot be set when disable_user_mcp_servers=True")
+        if "mcp_servers" in provided:
+            raise ValueError("config.mcp_servers cannot be set for an evaluation judge")
         features = provided.pop("features", {})
-        if not isinstance(features, Mapping):
-            raise ValueError("config.features must be a mapping")
-        unsafe_features = [name for name, enabled in features.items() if name in _TOOL_FEATURES and enabled is True]
+        if provided:
+            keys = ", ".join(sorted(provided))
+            raise ValueError(f"unsupported raw Codex config keys: {keys}; use typed options")
+        if not isinstance(features, Mapping) or not all(isinstance(name, str) for name in features):
+            raise ValueError("config.features must be a string-keyed mapping")
+        unknown_features = sorted(set(features) - set(_TOOL_FEATURES))
+        if unknown_features:
+            raise ValueError(f"unsupported Codex feature flags: {', '.join(unknown_features)}")
+        unsafe_features = [name for name, enabled in features.items() if enabled is not False]
         if unsafe_features:
             raise ValueError(f"Codex judge cannot enable tool capabilities: {', '.join(sorted(unsafe_features))}")
+        if not disable_user_mcp_servers:
+            msg = "disable_user_mcp_servers cannot be false for an evaluation judge"
+            raise ValueError(msg)
         merged: dict[str, JsonValue] = {
             **_DEFAULT_CONFIG,
-            **provided,
             "features": {**dict.fromkeys(_TOOL_FEATURES, False), **features},
         }
-        if merged.get("web_search") != "disabled":
-            raise ValueError("Codex judge requires web_search to remain disabled")
         configuration: JsonValue = {
             "cli_version": version if version is not None else cli_version(executable),
             "effort": effort,
             "auth_mode": auth_mode,
+            "route": "openai-chatgpt-account" if auth_mode == "subscription" else "inherited",
             "config": merged,
-            "disable_user_mcp_servers": disable_user_mcp_servers,
+            "disable_user_mcp_servers": True,
             "sandbox": "read-only",
             "sampling": "provider-controlled",
         }
@@ -140,7 +165,6 @@ class CodexAppServerJudge(AttemptLoopJudge):
         self._effort = effort
         self._config = merged
         self._auth_mode = auth_mode
-        self._disable_user_mcp_servers = disable_user_mcp_servers
         self._call_timeout = call_timeout_seconds
         self._spawn = spawn
         self._mcp_overrides: dict[str, JsonValue] = {}
@@ -182,7 +206,7 @@ class CodexAppServerJudge(AttemptLoopJudge):
             connection.notify("initialized")
             if self._auth_mode == "subscription":
                 self._require_chatgpt_account(connection, timeout)
-            self._mcp_overrides = self._disabled_mcp_servers(connection, timeout)
+            self._mcp_overrides = self._verified_isolation_overrides(connection, timeout)
         except BaseException:
             connection.close()
             raise
@@ -202,25 +226,29 @@ class CodexAppServerJudge(AttemptLoopJudge):
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
         if self._auth_mode == "subscription":
-            # Use the account stored by codex login, not ambient API-key overrides.
-            for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID", "OPENAI_PROJECT_ID"):
-                env.pop(name, None)
+            env = {key: value for key, value in env.items() if key.upper() not in _SUBSCRIPTION_ENV_NAMES}
         return env
 
-    def _disabled_mcp_servers(self, connection: AppServerConnection, timeout: float) -> dict[str, JsonValue]:
-        if not self._disable_user_mcp_servers:
-            return {}
+    def _verified_isolation_overrides(
+        self,
+        connection: AppServerConnection,
+        timeout: float,
+    ) -> dict[str, JsonValue]:
         try:
             result = connection.request("config/read", {"cwd": self._workdir, "includeLayers": False}, timeout)
         except RpcError as exc:
-            raise RuntimeError("Cannot verify that user MCP servers are disabled") from exc
+            raise RuntimeError("Cannot verify Codex provider and MCP isolation") from exc
         config = result.get("config")
         if not isinstance(config, dict):
-            raise RuntimeError("Codex app-server returned no effective configuration; cannot verify MCP isolation")
+            raise RuntimeError("Codex app-server returned no effective configuration; cannot verify isolation")
         servers = config.get("mcp_servers", {})
         if not isinstance(servers, dict):
             raise RuntimeError("Codex app-server returned an invalid MCP configuration")
         return {name: {"enabled": False} for name in servers}
+
+    def _disabled_mcp_servers(self, connection: AppServerConnection, timeout: float) -> dict[str, JsonValue]:
+        """Compatibility alias for the fail-closed isolation probe."""
+        return self._verified_isolation_overrides(connection, timeout)
 
     def _attempt(self, request: JudgeRequest[OutputT], timeout: float | None) -> AttemptOutcome:
         limit = self._call_timeout if timeout is None else min(timeout, self._call_timeout)
@@ -246,10 +274,8 @@ class CodexAppServerJudge(AttemptLoopJudge):
             connection.fire("thread/unsubscribe", {"threadId": thread_id})
 
     def _thread_params(self, system: str | None) -> dict[str, object]:
-        config = (
-            {**self._config, "mcp_servers": self._mcp_overrides} if self._disable_user_mcp_servers else self._config
-        )
-        return {
+        config = {**self._config, "mcp_servers": self._mcp_overrides}
+        params: dict[str, object] = {
             "model": self.descriptor.model,
             "ephemeral": True,
             "approvalPolicy": "never",
@@ -258,6 +284,10 @@ class CodexAppServerJudge(AttemptLoopJudge):
             "baseInstructions": system or _DEFAULT_INSTRUCTIONS,
             "config": config,
         }
+        if self._auth_mode == "subscription":
+            params["modelProvider"] = "openai"
+            config["openai_base_url"] = None
+        return params
 
     def _await_turn(
         self,

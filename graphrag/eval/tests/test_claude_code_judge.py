@@ -46,6 +46,18 @@ class FakeRunner:
         return outcome
 
 
+class FakeAuthStatusRunner:
+    def __init__(self, payload: dict | str | None = None, returncode: int = 0) -> None:
+        self.payload = {"loggedIn": True, "authMethod": "claude.ai"} if payload is None else payload
+        self.returncode = returncode
+        self.calls: list[SimpleNamespace] = []
+
+    def __call__(self, argv, *, env, cwd, timeout):
+        self.calls.append(SimpleNamespace(argv=list(argv), env=dict(env), cwd=cwd, timeout=timeout))
+        stdout = self.payload if isinstance(self.payload, str) else json.dumps(self.payload)
+        return subprocess.CompletedProcess(args=[], returncode=self.returncode, stdout=stdout, stderr="")
+
+
 def completed(payload: dict | str, returncode: int = 0) -> subprocess.CompletedProcess[str]:
     stdout = payload if isinstance(payload, str) else json.dumps(payload)
     return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr="")
@@ -75,7 +87,14 @@ def error(result: str, status: int | None = None) -> dict:
 
 
 def make_judge(runner: FakeRunner, **kwargs: Any) -> ClaudeCodeJudge:
-    return ClaudeCodeJudge(model="sonnet", version="2.1.0 (Claude Code)", runner=runner, **kwargs)
+    auth_status_runner = kwargs.pop("auth_status_runner", FakeAuthStatusRunner())
+    return ClaudeCodeJudge(
+        model="sonnet",
+        version="2.1.0 (Claude Code)",
+        runner=runner,
+        auth_status_runner=auth_status_runner,
+        **kwargs,
+    )
 
 
 def failed(judge: ClaudeCodeJudge, attempts: int = 1) -> JudgeCallError:
@@ -111,6 +130,7 @@ def test_command_line_disables_tools_and_settings_and_sends_the_prompt_on_stdin(
     assert argv[argv.index("--system-prompt") + 1] == "Judge strictly."
     assert json.loads(argv[argv.index("--json-schema") + 1])["properties"]["verdict"]["enum"] == ["yes", "no"]
     assert {"--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config"} <= set(argv)
+    assert "--bare" not in argv
     assert call.prompt == "Is the claim supported? [scenario:ok]"
     assert Path(call.cwd).is_dir()
 
@@ -149,7 +169,13 @@ def test_oversized_system_prompt_moves_to_stdin() -> None:
 
 
 def test_provider_variables_are_scrubbed_but_subscription_credentials_survive(monkeypatch) -> None:
-    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "CLAUDE_CODE_USE_BEDROCK"):
+    for name in (
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_MODEL",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
+    ):
         monkeypatch.setenv(name, "x")
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "token")
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", "/tmp/claude")
@@ -160,22 +186,49 @@ def test_provider_variables_are_scrubbed_but_subscription_credentials_survive(mo
 
     env = scrubbed.calls[0].env
     assert not [name for name in env if name.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_"))]
+    assert "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST" not in env
     assert (env["CLAUDE_CODE_OAUTH_TOKEN"], env["CLAUDE_CONFIG_DIR"]) == ("token", "/tmp/claude")
     assert inherited.calls[0].env["ANTHROPIC_BASE_URL"] == "x"
 
 
-def test_subscription_auth_mode_scrubs_provider_env_and_settings(monkeypatch) -> None:
+def test_subscription_auth_mode_verifies_account_and_scrubs_provider_env(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "api-key")
     monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "subscription-token")
     runner = FakeRunner(completed(success()))
+    status = FakeAuthStatusRunner()
 
-    judge = make_judge(runner, auth_mode="subscription")
+    judge = make_judge(runner, auth_mode="subscription", auth_status_runner=status)
     judge.judge(cli_request(), ONCE)
 
     call = runner.calls[0]
     assert not [name for name in call.env if name.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_"))]
+    assert call.env["CLAUDE_CODE_OAUTH_TOKEN"] == "subscription-token"
     assert call.argv[call.argv.index("--setting-sources") + 1] == ""
+    assert "--bare" not in call.argv
+    assert status.calls[0].argv == ["claude", "auth", "status"]
     assert judge.descriptor.configuration_digest != make_judge(FakeRunner()).descriptor.configuration_digest
+
+
+@pytest.mark.parametrize("method", ["api_key", "api_key_helper", "third_party"])
+def test_subscription_mode_rejects_non_subscription_auth(method: str) -> None:
+    status = FakeAuthStatusRunner({"loggedIn": True, "authMethod": method})
+    detail = failed(make_judge(FakeRunner(), auth_mode="subscription", auth_status_runner=status), attempts=3)
+
+    assert detail.failure.code == "provider_account_not_subscription"
+    assert detail.failure.retryable is False
+    assert len(status.calls) == 1
+
+
+def test_subscription_auth_status_is_cached() -> None:
+    runner = FakeRunner(completed(success()), completed(success()))
+    status = FakeAuthStatusRunner()
+    judge = make_judge(runner, auth_mode="subscription", auth_status_runner=status)
+
+    judge.judge(cli_request(), ONCE)
+    judge.judge(cli_request(), ONCE)
+
+    assert len(status.calls) == 1
 
 
 def test_json_in_result_text_is_accepted_when_structured_output_is_absent() -> None:
@@ -257,7 +310,6 @@ def test_non_json_output_from_a_failed_process_is_permanent() -> None:
 
 def test_missing_executable_is_permanent() -> None:
     judge = ClaudeCodeJudge(model="sonnet", executable="/definitely/not/claude", version="x")
-
     detail = failed(judge, attempts=3)
 
     assert detail.failure.code == "executable_not_found"
@@ -277,3 +329,5 @@ def test_invalid_settings_are_rejected_up_front() -> None:
         ClaudeCodeJudge(model="sonnet", version="x", call_timeout_seconds=0)
     with pytest.raises(ValueError, match="max_turns"):
         ClaudeCodeJudge(model="sonnet", version="x", max_turns=0)
+    with pytest.raises(ValueError, match="auth_mode"):
+        ClaudeCodeJudge(model="sonnet", version="x", auth_mode="invalid")  # type: ignore[arg-type]

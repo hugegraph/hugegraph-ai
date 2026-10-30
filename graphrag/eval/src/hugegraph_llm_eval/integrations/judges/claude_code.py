@@ -22,6 +22,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import weakref
 from collections.abc import Callable, Mapping, Sequence
@@ -45,24 +46,11 @@ from hugegraph_llm_eval.utils.clock import utc_now
 
 PROVIDER = "claude-code"
 _MAX_SYSTEM_PROMPT_BYTES = 100_000
+_AUTH_STATUS_TIMEOUT_SECONDS = 30.0
 _PROVIDER_ENV_PREFIXES = ("ANTHROPIC_", "CLAUDE_CODE_USE_")
+_PROVIDER_ENV_NAMES = frozenset({"CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST"})
+_SUBSCRIPTION_AUTH_METHODS = frozenset({"claude.ai", "oauth_token"})
 _USAGE_LIMIT_MARKERS = ("usage limit", "limit reached", "limit will reset")
-_PROTECTED_EXTRA_FLAGS = frozenset(
-    {
-        "--tools",
-        "--setting-sources",
-        "--strict-mcp-config",
-        "--no-session-persistence",
-        "--disable-slash-commands",
-        "--json-schema",
-        "--model",
-        "--output-format",
-        "--permission-mode",
-        "--dangerously-skip-permissions",
-        "--allow-dangerously-skip-permissions",
-        "--mcp-config",
-    }
-)
 
 
 class ProcessRunner(Protocol):
@@ -71,6 +59,17 @@ class ProcessRunner(Protocol):
         argv: Sequence[str],
         *,
         prompt: str,
+        env: Mapping[str, str],
+        cwd: str,
+        timeout: float,
+    ) -> "subprocess.CompletedProcess[str]": ...
+
+
+class AuthStatusRunner(Protocol):
+    def __call__(
+        self,
+        argv: Sequence[str],
+        *,
         env: Mapping[str, str],
         cwd: str,
         timeout: float,
@@ -88,6 +87,26 @@ def _run_process(
     return subprocess.run(
         list(argv),
         input=prompt,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        env=dict(env),
+        cwd=cwd,
+        timeout=timeout,
+    )
+
+
+def _run_auth_status(
+    argv: Sequence[str],
+    *,
+    env: Mapping[str, str],
+    cwd: str,
+    timeout: float,
+) -> "subprocess.CompletedProcess[str]":
+    return subprocess.run(
+        list(argv),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -117,6 +136,7 @@ class ClaudeCodeJudge(AttemptLoopJudge):
         version: str | None = None,
         clock: Callable[[], datetime] = utc_now,
         runner: ProcessRunner = _run_process,
+        auth_status_runner: AuthStatusRunner = _run_auth_status,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -126,9 +146,12 @@ class ClaudeCodeJudge(AttemptLoopJudge):
         if max_turns is not None and max_turns < 1:
             msg = "max_turns must be at least 1"
             raise ValueError(msg)
-        conflicts = sorted({arg.split("=", 1)[0] for arg in extra_args} & _PROTECTED_EXTRA_FLAGS)
-        if conflicts:
-            raise ValueError(f"extra_args cannot override controlled Claude CLI flags: {', '.join(conflicts)}")
+        if auth_mode not in ("inherit", "subscription"):
+            msg = "auth_mode must be 'inherit' or 'subscription'"
+            raise ValueError(msg)
+        if extra_args:
+            msg = "extra_args cannot override controlled Claude CLI flags; raw extra_args are not supported"
+            raise ValueError(msg)
         if auth_mode == "subscription":
             setting_sources = ""
             scrub_provider_env = True
@@ -136,10 +159,10 @@ class ClaudeCodeJudge(AttemptLoopJudge):
             "cli_version": version if version is not None else cli_version(executable),
             "effort": effort,
             "auth_mode": auth_mode,
+            "auth_verification": "claude-auth-status" if auth_mode == "subscription" else "inherited",
             "setting_sources": setting_sources,
             "scrub_provider_env": scrub_provider_env,
             "max_turns": max_turns,
-            "extra_args": list(extra_args),
             "tools": "disabled",
             "sampling": "provider-controlled",
         }
@@ -151,12 +174,15 @@ class ClaudeCodeJudge(AttemptLoopJudge):
         )
         self._executable = executable
         self._effort = effort
+        self._auth_mode = auth_mode
         self._setting_sources = setting_sources
         self._scrub_provider_env = scrub_provider_env
         self._max_turns = max_turns
-        self._extra_args = tuple(extra_args)
         self._call_timeout = call_timeout_seconds
         self._runner = runner
+        self._auth_status_runner = auth_status_runner
+        self._auth_lock = threading.Lock()
+        self._auth_verified = False
         self._workdir = tempfile.mkdtemp(prefix="hugegraph-llm-eval-claude-")
         weakref.finalize(self, shutil.rmtree, self._workdir, ignore_errors=True)
 
@@ -185,14 +211,50 @@ class ClaudeCodeJudge(AttemptLoopJudge):
             argv += ["--max-turns", str(self._max_turns)]
         if system is not None:
             argv += ["--system-prompt", system]
-        return [*argv, *self._extra_args]
+        return argv
 
     def _environment(self) -> dict[str, str]:
         if not self._scrub_provider_env:
             return dict(os.environ)
-        return {key: value for key, value in os.environ.items() if not key.startswith(_PROVIDER_ENV_PREFIXES)}
+        return {
+            key: value
+            for key, value in os.environ.items()
+            if not key.upper().startswith(_PROVIDER_ENV_PREFIXES) and key.upper() not in _PROVIDER_ENV_NAMES
+        }
+
+    def _verify_subscription(self) -> None:
+        if self._auth_mode != "subscription" or self._auth_verified:
+            return
+        with self._auth_lock:
+            if self._auth_verified:
+                return
+            completed = self._auth_status_runner(
+                [self._executable, "auth", "status"],
+                env=self._environment(),
+                cwd=self._workdir,
+                timeout=min(self._call_timeout, _AUTH_STATUS_TIMEOUT_SECONDS),
+            )
+            payload = _parse_payload(completed.stdout)
+            if completed.returncode == 1:
+                detail = failure(FailureCategory.PROVIDER_UNAVAILABLE, "provider_not_authenticated", False)
+                raise AttemptFailureError(detail)
+            if completed.returncode != 0 or payload is None:
+                detail = failure(FailureCategory.PROVIDER_UNAVAILABLE, "provider_auth_status_unavailable", False)
+                raise AttemptFailureError(detail)
+            method = payload.get("authMethod")
+            if payload.get("loggedIn") is False or method == "none":
+                detail = failure(FailureCategory.PROVIDER_UNAVAILABLE, "provider_not_authenticated", False)
+                raise AttemptFailureError(detail)
+            if not isinstance(method, str):
+                detail = failure(FailureCategory.PROVIDER_UNAVAILABLE, "provider_auth_status_unavailable", False)
+                raise AttemptFailureError(detail)
+            if method not in _SUBSCRIPTION_AUTH_METHODS:
+                detail = failure(FailureCategory.PROVIDER_UNAVAILABLE, "provider_account_not_subscription", False)
+                raise AttemptFailureError(detail)
+            self._auth_verified = True
 
     def _attempt(self, request: JudgeRequest[OutputT], timeout: float | None) -> AttemptOutcome:
+        self._verify_subscription()
         system, prompt = split_messages(request)
         if system is not None and len(system.encode("utf-8")) > _MAX_SYSTEM_PROMPT_BYTES:
             system, prompt = None, f"{system}\n\n{prompt}"

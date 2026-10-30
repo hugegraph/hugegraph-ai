@@ -15,12 +15,34 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Judge provider adapters."""
+"""Judge provider adapters and configuration-driven construction."""
 
+from hugegraph_llm_eval.integrations.judges.factory import (
+    AuthMode,
+    ClaudeCodeJudgeConfig,
+    CodexJudgeConfig,
+    JudgeConfig,
+    OpenAIJudgeConfig,
+    create_judge,
+    managed_judge,
+    parse_judge_config,
+)
 from hugegraph_llm_eval.integrations.judges.openai_compatible import (
     OpenAICompatibleJudge,
     OpenAICompatiblePricing,
     OpenAICompatibleSettings,
 )
 
-__all__ = ["OpenAICompatibleJudge", "OpenAICompatiblePricing", "OpenAICompatibleSettings"]
+__all__ = [
+    "AuthMode",
+    "ClaudeCodeJudgeConfig",
+    "CodexJudgeConfig",
+    "JudgeConfig",
+    "OpenAICompatibleJudge",
+    "OpenAICompatiblePricing",
+    "OpenAICompatibleSettings",
+    "OpenAIJudgeConfig",
+    "create_judge",
+    "managed_judge",
+    "parse_judge_config",
+]

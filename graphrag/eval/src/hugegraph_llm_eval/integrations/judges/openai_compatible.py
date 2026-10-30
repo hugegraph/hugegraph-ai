@@ -85,14 +85,18 @@ class OpenAICompatibleSettings(StrictModel):
 def _configuration_payload(
     settings: OpenAICompatibleSettings,
     pricing: OpenAICompatiblePricing,
+    transport: JsonValue | None = None,
 ) -> JsonValue:
-    return {
+    payload: dict[str, JsonValue] = {
         "generation": settings.model_dump(mode="json"),
         "pricing": {
             "input_usd_per_million": pricing.input_usd_per_million,
             "output_usd_per_million": pricing.output_usd_per_million,
         },
     }
+    if transport is not None:
+        payload["transport"] = transport
+    return payload
 
 
 def _structured_messages(
@@ -127,6 +131,7 @@ class OpenAICompatibleJudge(AttemptLoopJudge):
         pricing: OpenAICompatiblePricing,
         settings: OpenAICompatibleSettings,
         clock: Callable[[], datetime],
+        transport_configuration: JsonValue | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -137,7 +142,7 @@ class OpenAICompatibleJudge(AttemptLoopJudge):
         expected = JudgeDescriptor.create(
             provider=descriptor.provider,
             model=descriptor.model,
-            configuration=_configuration_payload(settings, pricing),
+            configuration=_configuration_payload(settings, pricing, transport_configuration),
         )
         if descriptor.configuration_digest != expected.configuration_digest:
             msg = "JudgeDescriptor configuration digest does not match OpenAI-compatible settings"
