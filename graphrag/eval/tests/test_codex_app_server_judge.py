@@ -266,3 +266,44 @@ def test_descriptor_changes_with_cli_version_and_effort(tmp_path: Path) -> None:
         )
         == 4
     )
+
+
+
+def test_user_hooks_and_config_are_not_inherited_into_codex_home(monkeypatch, tmp_path: Path) -> None:
+    source_home = tmp_path / "user-codex"
+    source_home.mkdir()
+    (source_home / "auth.json").write_text('{"tokens":"test-auth"}')
+    (source_home / "hooks.json").write_text('{"hooks":{"PreToolUse":[]}}')
+    (source_home / "config.toml").write_text('model_provider = "custom"')
+    monkeypatch.setenv("CODEX_HOME", str(source_home))
+
+    judge = CodexAppServerJudge(model="fake-model", version="codex-cli 0.0.0")
+    try:
+        child_env = judge._environment()
+        isolated_home = Path(child_env["CODEX_HOME"])
+        assert isolated_home != source_home
+        assert (isolated_home / "auth.json").read_text() == '{"tokens":"test-auth"}'
+        assert not (isolated_home / "hooks.json").exists()
+        assert not (isolated_home / "config.toml").exists()
+        assert (isolated_home / "auth.json").stat().st_mode & 0o777 == 0o600
+    finally:
+        judge.close()
+
+
+def test_subscription_environment_uses_isolated_codex_home_and_scrubs_api_keys(monkeypatch, tmp_path: Path) -> None:
+    source_home = tmp_path / "subscription-codex"
+    source_home.mkdir()
+    (source_home / "auth.json").write_text('{"tokens":"test-auth"}')
+    (source_home / "hooks.json").write_text('{"hooks":{"PreToolUse":[]}}')
+    monkeypatch.setenv("CODEX_HOME", str(source_home))
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
+
+    judge = CodexAppServerJudge(model="fake-model", version="codex-cli 0.0.0", auth_mode="subscription")
+    try:
+        child_env = judge._environment()
+        assert "OPENAI_API_KEY" not in child_env
+        assert Path(child_env["CODEX_HOME"]) != source_home
+        assert (Path(child_env["CODEX_HOME"]) / "auth.json").is_file()
+        assert not (Path(child_env["CODEX_HOME"]) / "hooks.json").exists()
+    finally:
+        judge.close()

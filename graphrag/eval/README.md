@@ -255,15 +255,22 @@ What to know before using them:
   ([authentication precedence](https://code.claude.com/docs/en/authentication#authentication-precedence)).
   To force the subscription, use `auth_mode="subscription"`:
   that removes `ANTHROPIC_*` and `CLAUDE_CODE_USE_*` from the child environment and
-  ignores settings files. The lower-level `scrub_provider_env=True, setting_sources=""`
-  combination remains available for compatibility. Without a login the call then fails
-  with the permanent error `provider_not_authenticated`.
-- **No tools.** Claude runs with `--tools ""` and rejects `extra_args` that conflict
-  with controlled safety/auth/schema flags. Codex runs ephemeral and read-only, with
-  approvals off and shell, apps, plugins and user MCP servers disabled. If Codex cannot
-  read the effective MCP configuration, the judge fails closed instead of continuing
-  without verifying isolation. Codex hooks from `~/.codex/hooks.json` still fire; they
-  cannot be switched off from the client.
+  ignores settings files. Before the first evaluation call it runs `claude auth status`
+  and only accepts `authMethod` values `claude.ai` or `oauth_token`; missing login,
+  API-key auth, or an unreadable status fail closed (`provider_not_authenticated`,
+  `provider_account_not_subscription`, or `provider_auth_status_unavailable`). The
+  lower-level `scrub_provider_env=True, setting_sources=""` combination remains
+  available for compatibility.
+- **No user hooks or tools.** Claude runs with `--tools ""` and does not support raw
+  `extra_args`. Codex runs ephemeral and read-only, with approvals off and shell, apps,
+  plugins and user MCP servers disabled. Each Codex judge gets a private `CODEX_HOME`:
+  only the file-backed `auth.json` is copied from the user home (with owner-only
+  permissions); `hooks.json`, `config.toml`, skills and plugins are not inherited.
+  This prevents user-global Codex hooks from executing during evaluation. Keyring-only
+  Codex authentication is not copied into the isolated home; use file-backed login or
+  an environment credential with `auth_mode="inherit"`. If Codex cannot read the
+  effective MCP configuration, the judge fails closed instead of continuing without
+  verifying isolation.
 - **Tokens, not cost.** Both report token counts and leave `cost_usd` empty. With
   `budget_usd` set, that unknown cost stops later samples and metrics, so leave the
   budget unset and bound a subscription run with `max_samples`, `max_concurrency` and

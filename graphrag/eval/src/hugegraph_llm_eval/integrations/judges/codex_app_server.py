@@ -21,6 +21,7 @@ import os
 import queue
 import shutil
 import tempfile
+from pathlib import Path
 import threading
 import time
 import weakref
@@ -171,6 +172,8 @@ class CodexAppServerJudge(AttemptLoopJudge):
         self._lock = threading.Lock()
         self._holder = _ConnectionHolder()
         self._workdir = tempfile.mkdtemp(prefix="hugegraph-llm-eval-codex-")
+        self._isolated_codex_home = Path(self._workdir) / "codex-home"
+        self._isolated_codex_home.mkdir(mode=0o700)
         weakref.finalize(self, shutil.rmtree, self._workdir, ignore_errors=True)
         weakref.finalize(self, self._holder.close)
 
@@ -224,9 +227,21 @@ class CodexAppServerJudge(AttemptLoopJudge):
             )
 
     def _environment(self) -> dict[str, str]:
+        """Use a private Codex home so user hooks and config cannot enter an eval run."""
         env = dict(os.environ)
+        source_home = Path(env.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+        auth_file = source_home / "auth.json"
+        if auth_file.is_file():
+            target_auth = self._isolated_codex_home / "auth.json"
+            shutil.copyfile(auth_file, target_auth)
+            try:
+                target_auth.chmod(0o600)
+            except OSError:
+                target_auth.unlink(missing_ok=True)
+                raise
         if self._auth_mode == "subscription":
             env = {key: value for key, value in env.items() if key.upper() not in _SUBSCRIPTION_ENV_NAMES}
+        env["CODEX_HOME"] = str(self._isolated_codex_home)
         return env
 
     def _verified_isolation_overrides(
