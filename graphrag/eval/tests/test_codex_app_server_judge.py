@@ -268,7 +268,6 @@ def test_descriptor_changes_with_cli_version_and_effort(tmp_path: Path) -> None:
     )
 
 
-
 def test_user_hooks_and_config_are_not_inherited_into_codex_home(monkeypatch, tmp_path: Path) -> None:
     source_home = tmp_path / "user-codex"
     source_home.mkdir()
