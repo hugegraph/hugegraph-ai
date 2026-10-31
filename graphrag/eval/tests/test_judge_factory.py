@@ -168,7 +168,8 @@ def test_codex_subscription_scrubs_every_known_api_override(monkeypatch) -> None
         judge.close()
 
     assert not set(names) & environment.keys()
-    assert environment["CODEX_HOME"] == "/tmp/codex-account"
+    assert environment["CODEX_HOME"] != "/tmp/codex-account"
+    assert environment["CODEX_HOME"].endswith("/codex-home")
 
 
 def test_codex_rejects_raw_routing_and_mcp_opt_out() -> None:
