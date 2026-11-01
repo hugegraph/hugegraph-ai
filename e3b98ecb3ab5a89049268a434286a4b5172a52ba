@@ -1,0 +1,110 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.8.2",
+  "base_commit_sha": "e3b98ecb3ab5a89049268a434286a4b5172a52ba",
+  "prompts": {
+    "3113864c03ea5b19": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_4be0ae6c-b30e-490b-978b-51ff965f6b7d",
+        "model": "GLM-5.3"
+      },
+      "human_author": "dark <jin@apache.org>",
+      "messages": [],
+      "total_additions": 12,
+      "total_deletions": 4,
+      "accepted_lines": 11,
+      "overriden_lines": 1,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/0ebd7ca82652d74d5bd1086edcd3cf91f74d8b407b23bf288fadc08535967ab8",
+      "token_usage": {
+        "input_tokens": 251937,
+        "output_tokens": 21254,
+        "cache_read_tokens": 146816,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    },
+    "4088b035e898f36b": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_f3fe2c8f-c378-4860-9542-255c10d91270",
+        "model": "deepseek-flash"
+      },
+      "human_author": "dark <jin@apache.org>",
+      "messages": [],
+      "total_additions": 857,
+      "total_deletions": 9,
+      "accepted_lines": 848,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/ddd2cd90d603f27abc74858b1ed6c7d7eafabbc0b799d16da613b8d658dccd2d",
+      "token_usage": {
+        "input_tokens": 32256295,
+        "output_tokens": 155722,
+        "cache_read_tokens": 31405952,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    },
+    "b96d0c1f35083bb6": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_cdf8acc6-70fc-4651-b436-ee4ec2bb7c83",
+        "model": "GLM-5.3-Flash"
+      },
+      "human_author": "dark <jin@apache.org>",
+      "messages": [],
+      "total_additions": 6505,
+      "total_deletions": 5212,
+      "accepted_lines": 5712,
+      "overriden_lines": 53,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/c92f47f06a48ea748d0a0479f16146626665ae473605009f157fb05f66d77e9f",
+      "token_usage": {
+        "input_tokens": 102380344,
+        "output_tokens": 295179,
+        "cache_read_tokens": 99510720,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    },
+    "be24284390e9d41f": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_ff31b55d-8a9f-48c0-bbac-f67f814ad37c",
+        "model": "GLM-5.3"
+      },
+      "human_author": "dark <jin@apache.org>",
+      "messages": [],
+      "total_additions": 715,
+      "total_deletions": 399,
+      "accepted_lines": 270,
+      "overriden_lines": 21,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/494957e44f66becaa4f816b38933142760eb5a6e11fd9a5b5f72ff11882db059",
+      "token_usage": {
+        "input_tokens": 23669487,
+        "output_tokens": 187024,
+        "cache_read_tokens": 21964544,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    },
+    "fbd0a7434a0e56c7": {
+      "agent_id": {
+        "tool": "known_human",
+        "id": "known_human_session",
+        "model": "unknown"
+      },
+      "human_author": "dark <jin@apache.org>",
+      "messages": [],
+      "total_additions": 252,
+      "total_deletions": 210,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_40de4e8ddd77a6": {
+      "author": "simon824"
+    }
+  }
+}
