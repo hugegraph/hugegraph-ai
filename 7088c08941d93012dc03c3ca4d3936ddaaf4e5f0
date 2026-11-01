@@ -1,0 +1,258 @@
+ontogeny/server/ontogeny/registry/compiled.py
+  b96d0c1f35083bb6 33,134-136
+ontogeny/server/ontogeny/builder_ops.py
+  b96d0c1f35083bb6 42,104-105,184,203,232
+ontogeny/server/ontogeny/api/schemas.py
+  b96d0c1f35083bb6 288-358
+ontogeny/web/src/components/AppShell.tsx
+  b96d0c1f35083bb6 47,82,110,480,768
+ontogeny/server/ontogeny/evolve/proposer.py
+  b96d0c1f35083bb6 30,38
+ontogeny/web/src/components/DataMountDialog.tsx
+  b96d0c1f35083bb6 50,99,119,247-260,339-340
+ontogeny/server/ontogeny/core/validator.py
+  b96d0c1f35083bb6 38-39,106-109,173-176,202-228,291-317,713,717
+ontogeny/server/ontogeny/errors.py
+  b96d0c1f35083bb6 22,131-132,134
+ontogeny/web/src/components/ErrorBanner.tsx
+  b96d0c1f35083bb6 48
+ontogeny/tests/fixtures/supplier-risk/data/docs/supplier-notes/globex-2026-02.md
+  b96d0c1f35083bb6 1-7
+ontogeny/server/ontogeny/documents/corpus.py
+  b96d0c1f35083bb6 1-142
+ontogeny/tests/fixtures/supplier-risk/ontology.yaml
+  b96d0c1f35083bb6 1-26
+ontogeny/web/src/components/ExtractionGraph.tsx
+  b96d0c1f35083bb6 1-129
+ontogeny/server/ontogeny/service.py
+  b96d0c1f35083bb6 43,216-218,562-569,687-688,1071-1075,1345,1352-1375,1400
+ontogeny/server/ontogeny/core/types.py
+  b96d0c1f35083bb6 127
+ontogeny/tests/test_documents_api.py
+  b96d0c1f35083bb6 1-272
+ontogeny/tests/test_documents_projection.py
+  b96d0c1f35083bb6 1-103
+ontogeny/web/src/i18n/zh.ts
+  b96d0c1f35083bb6 115,142,144,147,192-193,373,498,500,647,867-869,875-876,1244-1326
+ontogeny/server/ontogeny/registry/store.py
+  b96d0c1f35083bb6 50,155,225
+ontogeny/server/ontogeny/documents/engine.py
+  b96d0c1f35083bb6 1-1655
+ontogeny/server/ontogeny/stores/ddl.py
+  b96d0c1f35083bb6 46,70-71,77-78,153-154,170-172,191-193
+ontogeny/web/src/api/client.ts
+  b96d0c1f35083bb6 105-108,138
+ontogeny/web/src/App.test.tsx
+  b96d0c1f35083bb6 111
+ontogeny/extensions/doc-extract-agent/README.md
+  b96d0c1f35083bb6 1-91
+ontogeny/server/ontogeny/metrics.py
+  b96d0c1f35083bb6 93
+ontogeny/tools/doc_agent_openai.py
+  b96d0c1f35083bb6 1-88
+ontogeny/server/ontogeny/stores/repo.py
+  b96d0c1f35083bb6 38,304-379,471-480,496-587
+ontogeny/server/ontogeny/documents/tasks.py
+  b96d0c1f35083bb6 1-895
+ontogeny/web/src/pages/Access.test.tsx
+  b96d0c1f35083bb6 290
+ontogeny/web/src/i18n/en.ts
+  b96d0c1f35083bb6 115,142,192-193,373,498,500,648,868-870,876,1245-1327
+ontogeny/server/ontogeny/core/models.py
+  b96d0c1f35083bb6 18-22,36,64-83,85,88-89,100,143,149-167,181-182,211-222,711-718
+ontogeny/server/ontogeny/config.py
+  b96d0c1f35083bb6 61-66,113-117
+ontogeny/server/ontogeny/evolve/evalrunner.py
+  b96d0c1f35083bb6 266
+ontogeny/server/ontogeny/projection/worker.py
+  b96d0c1f35083bb6 130,133
+ontogeny/web/src/pages/ProposalDetail.tsx
+  b96d0c1f35083bb6 146
+ontogeny/tools/doc_agent_demo.py
+  b96d0c1f35083bb6 1-84
+ontogeny/tests/fixtures/supplier-risk/links/supplier-risk-note.yaml
+  b96d0c1f35083bb6 1-12
+ontogeny/web/src/pages/TypeDetail.tsx
+  b96d0c1f35083bb6 122
+ontogeny/server/ontogeny/cli.py
+  b96d0c1f35083bb6 236
+ontogeny/server/ontogeny/agent/models.py
+  b96d0c1f35083bb6 46
+ontogeny/web/src/components/FlowGraph.tsx
+  b96d0c1f35083bb6 172-180,313-325,513-529,583-593
+ontogeny/server/ontogeny/documents/schema.py
+  b96d0c1f35083bb6 1-329
+ontogeny/web/src/components/AgentDock.tsx
+  b96d0c1f35083bb6 130-135
+ontogeny/server/ontogeny/auth/service.py
+  b96d0c1f35083bb6 206,209,217,226
+ontogeny/server/ontogeny/evolve/models.py
+  b96d0c1f35083bb6 32
+ontogeny/web/src/index.css
+  b96d0c1f35083bb6 294,309-310,335-338,340-347,350-354,357-369
+ontogeny/extensions/doc-extract-agent/extension.yaml
+  b96d0c1f35083bb6 1-40
+ontogeny/tests/fixtures/supplier-risk/stores/suppliers.yaml
+  b96d0c1f35083bb6 1-10
+ontogeny/web/src/pages/ProposalDetail.test.tsx
+  b96d0c1f35083bb6 122,124,131-132
+ontogeny/tests/doc_fixtures.py
+  b96d0c1f35083bb6 1-161
+ontogeny/server/ontogeny/documents/binder.py
+  b96d0c1f35083bb6 1-518
+ontogeny/extensions/doc-extract-agent/ontogeny_ext_agent_extract/__init__.py
+  b96d0c1f35083bb6 1-39
+ontogeny/tests/test_documents_dsl.py
+  b96d0c1f35083bb6 1-107
+ontogeny/tests/test_documents_ingest.py
+  b96d0c1f35083bb6 1-462
+ontogeny/server/ontogeny/core/loader.py
+  b96d0c1f35083bb6 35,165,174-180,182
+ontogeny/web/src/pages/evolve/EvolveDemo.tsx
+  b96d0c1f35083bb6 224-225
+ontogeny/server/ontogeny/core/expr.py
+  b96d0c1f35083bb6 274,334
+ontogeny/server/ontogeny/evolve/promoter.py
+  b96d0c1f35083bb6 18,20,41,45,68,84,135-136,144,273,387,401
+ontogeny/tests/test_documents_agent.py
+  b96d0c1f35083bb6 1-178
+ontogeny/server/ontogeny/ext_host.py
+  b96d0c1f35083bb6 20
+ontogeny/web/src/pages/AgentConsole.tsx
+  b96d0c1f35083bb6 79,81-86
+ontogeny/server/ontogeny/core/kinds.py
+  b96d0c1f35083bb6 1-136
+ontogeny/tools/doc_agent_reference.py
+  b96d0c1f35083bb6 1-153
+ontogeny/tests/test_documents_tasks.py
+  b96d0c1f35083bb6 1-241
+ontogeny/web/src/components/ui/index.tsx
+  b96d0c1f35083bb6 41
+ontogeny/tests/test_documents_schema.py
+  b96d0c1f35083bb6 1-129
+ontogeny/server/ontogeny/demo/bootstrap.py
+  b96d0c1f35083bb6 41,110
+ontogeny/web/src/pages/documents/TaskConfigDialog.tsx
+  b96d0c1f35083bb6 1-262
+ontogeny/web/src/pages/Documents.tsx
+  b96d0c1f35083bb6 1-112
+ontogeny/tests/fixtures/supplier-risk/seed/01_suppliers.sql
+  b96d0c1f35083bb6 1-9
+ontogeny/server/ontogeny/stores/sync.py
+  b96d0c1f35083bb6 73,133-143
+ontogeny/web/src/components/textMetrics.ts
+  b96d0c1f35083bb6 38-39
+ontogeny/tests/fixtures/supplier-risk/README.md
+  b96d0c1f35083bb6 1-39
+ontogeny/web/src/pages/Documents.test.tsx
+  b96d0c1f35083bb6 1-195
+ontogeny/server/ontogeny/evolve/__init__.py
+  b96d0c1f35083bb6 19,22,25
+ontogeny/tests/fixtures/supplier-risk/objects/supplier-note.yaml
+  b96d0c1f35083bb6 1-44
+ontogeny/web/src/api/types.ts
+  b96d0c1f35083bb6 56,100-113,117-118,448-681
+ontogeny/server/ontogeny/core/__init__.py
+  b96d0c1f35083bb6 20,38-40,46
+ontogeny/server/ontogeny/api/routes_documents.py
+  b96d0c1f35083bb6 1-238
+ontogeny/web/src/api/client.test.ts
+  b96d0c1f35083bb6 40-41,51
+ontogeny/server/ontogeny/documents/models.py
+  b96d0c1f35083bb6 1-247
+ontogeny/web/src/pages/Access.tsx
+  b96d0c1f35083bb6 904
+ontogeny/server/ontogeny/api_factory.py
+  b96d0c1f35083bb6 88-90
+ontogeny/web/src/pages/documents/TasksTab.tsx
+  b96d0c1f35083bb6 1-822
+ontogeny/web/src/App.tsx
+  b96d0c1f35083bb6 61,114
+ontogeny/server/ontogeny/auth/models.py
+  b96d0c1f35083bb6 46
+ontogeny/server/ontogeny/telemetry/service.py
+  b96d0c1f35083bb6 39
+ontogeny/web/src/components/icons.tsx
+  b96d0c1f35083bb6 115-121
+ontogeny/web/src/pages/Dashboard.tsx
+  b96d0c1f35083bb6 43,292-294
+ontogeny/server/ontogeny/api/routes_data.py
+  b96d0c1f35083bb6 113
+ontogeny/web/src/api/queries.ts
+  b96d0c1f35083bb6 60,146-157,169-247
+ontogeny/server/ontogeny/documents/__init__.py
+  b96d0c1f35083bb6 1-25
+ontogeny/extensions/doc-extract-agent/ontogeny_ext_agent_extract/adapter.py
+  b96d0c1f35083bb6 1-287
+ontogeny/web/src/pages/evolve/ProposalModal.tsx
+  b96d0c1f35083bb6 216
+ontogeny/tests/fixtures/supplier-risk/data/docs/supplier-notes/note-format.md
+  b96d0c1f35083bb6 1-5
+ontogeny/web/src/pages/GraphExplorer.test.tsx
+  b96d0c1f35083bb6 55-58,61,67,69-70,75-81,90,93-94,104,109-110,124-138,145,147
+ontogeny/tests/test_documents_binder.py
+  b96d0c1f35083bb6 1-156
+ontogeny/server/ontogeny/action/outbox.py
+  b96d0c1f35083bb6 213
+ontogeny/server/ontogeny/agent/broker.py
+  b96d0c1f35083bb6 45,82-174,294,448,465,573
+ontogeny/server/ontogeny/functions/sandbox.py
+  b96d0c1f35083bb6 296
+ontogeny/tests/fixtures/supplier-risk/stores/supplier-docs.yaml
+  b96d0c1f35083bb6 1-16
+ontogeny/tests/fixtures/supplier-risk/objects/supplier.yaml
+  b96d0c1f35083bb6 1-36
+ontogeny/server/ontogeny/api/app.py
+  b96d0c1f35083bb6 48,113
+ontogeny/tests/fixtures/supplier-risk/projections/supplier-graph.yaml
+  b96d0c1f35083bb6 1-31
+ontogeny/web/src/components/FlowGraph.test.tsx
+  b96d0c1f35083bb6 98-102,114-127
+ontogeny/server/ontogeny/action/models.py
+  b96d0c1f35083bb6 42
+ontogeny/server/ontogeny/db.py
+  b96d0c1f35083bb6 54-60
+ontogeny/server/ontogeny/documents/skills.py
+  b96d0c1f35083bb6 1-113
+ontogeny/web/src/pages/GraphExplorer.tsx
+  b96d0c1f35083bb6 34,148-161,423-439
+ontogeny/server/ontogeny/api/routes_evolve.py
+  b96d0c1f35083bb6 146,190
+ontogeny/server/ontogeny/documents/protocol.py
+  b96d0c1f35083bb6 1-86
+ontogeny/tests/fixtures/supplier-risk/data/docs/supplier-notes/acme-2026-03.md
+  b96d0c1f35083bb6 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.8.2",
+  "base_commit_sha": "7088c08941d93012dc03c3ca4d3936ddaaf4e5f0",
+  "prompts": {
+    "b96d0c1f35083bb6": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_cdf8acc6-70fc-4651-b436-ee4ec2bb7c83",
+        "model": "GLM-5.3-Flash"
+      },
+      "human_author": "simon824 <simon824@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 10879,
+      "total_deletions": 1282,
+      "accepted_lines": 16201,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/a18f1bb4b9372857f54ab4eb6a68af2966d648a7b70317fd44836ac21a6f46c3",
+      "token_usage": {
+        "input_tokens": 126077793,
+        "output_tokens": 323506,
+        "cache_read_tokens": 123159744,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    }
+  },
+  "humans": {
+    "h_40de4e8ddd77a6": {
+      "author": "simon824"
+    }
+  }
+}
