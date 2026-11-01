@@ -1,0 +1,205 @@
+ontogeny/domains/chip-lifecycle/links/lot-tests.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/links/version-includes.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/functions/requirement-impact.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/links/version-lots.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/functions/analyze-yield-loss.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/agents/fab-copilot.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/customer.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/create-requirement.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/links/customer-failures.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/requirement.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/tools/doc_agent_fmea_module.py
+  b96d0c1f35083bb6 2-17
+ontogeny/tests/fixtures/supplier-risk/data/docs/supplier-notes/note-format.md
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/functions/analyze-field-failure.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/evals/lifecycle-flow-suite.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/record-failure-root-cause.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/create-design-module.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/stores/fab.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/start-lot.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/fixtures/supplier-risk/README.md
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/agents/product-copilot.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/complete-process-step.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/fixtures/supplier-risk/data/docs/supplier-notes/acme-2026-03.md
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/record-root-cause.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/projections/lifecycle-graph.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/fixtures/supplier-risk/projections/supplier-graph.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/raise-yield-alert.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/fixtures/supplier-risk/objects/supplier.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/doc_fixtures.py
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/open-field-failure.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/record-wafer-test.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/ontology.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/agents/cqe-copilot.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/wafer-test.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/tapeout.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/wafer-lot.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/fixtures/supplier-risk/links/supplier-risk-note.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/tapeout-version.yaml
+  b96d0c1f35083bb6 1-15
+README.md
+  5a9b9407ce6e4ca1 167-175
+  h_40de4e8ddd77a6 1,14
+ontogeny/tests/fixtures/supplier-risk/objects/supplier-note.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/reassign-step.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/policies/default.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tools/doc_agent_demo.py
+  b96d0c1f35083bb6 2-17
+ontogeny/domains/chip-lifecycle/layout.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tools/doc_agent_openai.py
+  b96d0c1f35083bb6 2-17
+ontogeny/domains/chip-lifecycle/policies/lifecycle.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/stores/chip-docs.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/links/requirement-modules.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/CASE.md
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/change-requirement.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/links/step-equipment.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/README.md
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/hold-lot.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/fmea-note.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/links/design-fmea-notes.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/fixtures/supplier-risk/stores/supplier-docs.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/process-step.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/data/docs/fmea-io-esd-dsg201.md
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/functions/yield-pareto.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/raise-surge-alert.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/design-module.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/field-failure.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/fixtures/supplier-risk/stores/suppliers.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/actions/create-tapeout-version.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tools/doc_agent_reference.py
+  b96d0c1f35083bb6 2-17
+ontogeny/domains/chip-lifecycle/actions/retract-wafer-test.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/links/lot-steps.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/domains/chip-lifecycle/objects/equipment.yaml
+  b96d0c1f35083bb6 1-15
+ontogeny/tests/fixtures/supplier-risk/data/docs/supplier-notes/globex-2026-02.md
+  b96d0c1f35083bb6 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.8.2",
+  "base_commit_sha": "0e0b6aba37aa9eaac5f6f03983718c1e27de59d8",
+  "prompts": {
+    "5a9b9407ce6e4ca1": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_b552e10b-8bf5-4afe-a8aa-dd340db0dc6c",
+        "model": "GLM-5.3-Flash"
+      },
+      "human_author": "simon824 <simon824@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 14,
+      "total_deletions": 9,
+      "accepted_lines": 9,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/c5a853d04050b45f23b169b1b8b6a2b3ae3e0706b146b2ca1967a612d2eea751",
+      "token_usage": {
+        "input_tokens": 1044850,
+        "output_tokens": 18204,
+        "cache_read_tokens": 986624,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    },
+    "b96d0c1f35083bb6": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_cdf8acc6-70fc-4651-b436-ee4ec2bb7c83",
+        "model": "GLM-5.3"
+      },
+      "human_author": "simon824 <simon824@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 1069,
+      "total_deletions": 60,
+      "accepted_lines": 1009,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/89e2409c8e4ad52d49096d5af812c94366ae3b8c75d4db1a63f427fc38bbb957",
+      "token_usage": {
+        "input_tokens": 237737422,
+        "output_tokens": 402936,
+        "cache_read_tokens": 233433280,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    },
+    "fbd0a7434a0e56c7": {
+      "agent_id": {
+        "tool": "known_human",
+        "id": "known_human_session",
+        "model": "unknown"
+      },
+      "human_author": "simon824 <simon824@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 8,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_40de4e8ddd77a6": {
+      "author": "simon824"
+    }
+  }
+}
