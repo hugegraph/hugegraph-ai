@@ -1,0 +1,323 @@
+ontogeny/tests/test_policy_validation_comments.py
+  b96d0c1f35083bb6 1-61
+ontogeny/server/ontogeny/evolve/agent_eval.py
+  b96d0c1f35083bb6 1-119
+ontogeny/tests/test_evolve_rollback.py
+  b96d0c1f35083bb6 1-162
+ontogeny/server/ontogeny/stores/sync.py
+  b96d0c1f35083bb6 32-33,35,94-95,112-114,194,196,199-203,213-252,255-256,258-259,286-287,289,316-339
+ontogeny/tests/test_source_snapshot_and_native_values.py
+  b96d0c1f35083bb6 1-88,91,93-96,98-99,101,103,105-166,168-171,173-177,179-187,189,191-193,195-196,198,200-207
+ontogeny/tests/test_source_sync_regressions.py
+  b96d0c1f35083bb6 1-79,82-83,85-87,89-90,92-97,100-101,103,106-113,117,119,121,124,126,129-133,137-150,152-176
+ontogeny/server/ontogeny/api_factory.py
+  b96d0c1f35083bb6 67,81-92,94,96-170
+ontogeny/tests/test_deploy.py
+  b96d0c1f35083bb6 27,29-33,78-118,142-143,205,213-306
+ontogeny/web/src/pages/ObjectsBrowser.test.tsx
+  b96d0c1f35083bb6 83-97
+ontogeny/tests/test_postgres_object_keys.py
+  b96d0c1f35083bb6 1-57,61,63-64,67,78-81,85-90,94,99,101-103,105,107,109-111,117,120,123,125-126,131,133-134,143-148
+ontogeny/tests/test_marked_filter_permissions.py
+  b96d0c1f35083bb6 1-26,28,32-33,35-37,39-41,43-48,50-51,53-56,58-60,63-64,66,68-72,74-76,78-83
+ontogeny/tests/test_agent_identity_and_run_claim.py
+  b96d0c1f35083bb6 1-37,40,45-46,49-52,56,58,60-63,68,71-72,75-78,80-83,85-102,104-120,122-130,132-138
+ontogeny/web/src/i18n/en.ts
+  b96d0c1f35083bb6 1061-1062,1069,1083,1085
+ontogeny/server/ontogeny/db.py
+  b96d0c1f35083bb6 61-63,70,77,106-115,123-139
+ontogeny/server/ontogeny/functions/child.py
+  b96d0c1f35083bb6 122-123
+ontogeny/tests/test_agent_atomicity.py
+  b96d0c1f35083bb6 1-35,38-39,41,43-47,49-57,59,62-63,65,67-68,70-80,82-90,92-124,126-136,139-140,143-145,147-149,151,153-175,178-188,191,193-194,197,199-200,202-205,207-215,218,220-221,224,226
+ontogeny/tests/test_projection_hugegraph.py
+  b96d0c1f35083bb6 84-85,177-178,180-184,374-375,775-776,791-792,798-800
+ontogeny/extensions/graph-hugegraph/ontogeny_ext_hugegraph/adapter.py
+  b96d0c1f35083bb6 27,32-34,161,164-178,553-554,556-564
+ontogeny/tests/test_function_batch_stdout.py
+  b96d0c1f35083bb6 1-28,30-45,47-55,57-59,62-66
+ontogeny/tests/test_restart.py
+  b96d0c1f35083bb6 35,99-115
+ontogeny/tests/test_postgres_id_sequence.py
+  b96d0c1f35083bb6 1-36,39-44,48-55
+ontogeny/docs/en/usage/08-quickstart.md
+  b96d0c1f35083bb6 7-9,12-14,17,20-24,28,34-35
+ontogeny/tests/test_action_revision_preconditions.py
+  b96d0c1f35083bb6 1-63
+scripts/tests/test_python_floors.py
+  b96d0c1f35083bb6 20,29-46
+ontogeny/tools/headless_check.py
+  b96d0c1f35083bb6 301,308-309,311
+README.md
+  b96d0c1f35083bb6 1,5-6,8,10,12,14-19,21,23,25-26,28,30-33,35,37-52,54-59,62-65,67,69-83,86,88,90-91,95-97,99-101,103,105-107,110,112,114-116,118,120,122-127,129,131,133-138,140,142-144,146-156,158,160,162-173,179,184-185,215-216,220-221,224-226,228-232
+ontogeny/tests/test_agent_engine.py
+  b96d0c1f35083bb6 101-104,338-346,382,399-400,410
+ontogeny/web/src/pages/AgentConsole.test.tsx
+  b96d0c1f35083bb6 203-225
+ontogeny/docs/zh/architecture/02-ontology-model-and-dsl.md
+  b96d0c1f35083bb6 26-38,78
+ontogeny/web/src/api/client.test.ts
+  b96d0c1f35083bb6 98-134
+ontogeny/deploy/compose.postgres.yaml
+  b96d0c1f35083bb6 1-42
+ontogeny/tests/test_agent_eval.py
+  b96d0c1f35083bb6 26,28,30-31,33-34,104-187
+ontogeny/tests/test_service_schema_commit.py
+  b96d0c1f35083bb6 1-63,65-97,99-107,109,111-112,114-131,133-138,140-141,143-151,153-158,160-187,189-205
+ontogeny/web/src/i18n/zh.ts
+  b96d0c1f35083bb6 1060-1061,1068,1082,1084
+ontogeny/server/ontogeny/core/validator.py
+  b96d0c1f35083bb6 33,46,186-195,368-369,375-380,395-402,417,429-434,582-585,714,761-762
+ontogeny/tests/test_action_id_sequence.py
+  b96d0c1f35083bb6 1-26,29-32,34-42,45-51,53-58,60-64,67,69-72,74-75,77-78
+ontogeny/tests/test_property_name_mapping.py
+  b96d0c1f35083bb6 1-37,42,45-46,49-50,55,63-64,67,75,79-84,86-88,90-92,96-97,99-116,118,124,130,132-137,140,146,148-149,152-153,157,163,165,167,169,172-175,181-182,184-185,187-188,190,192-196,198,203-214,217,219,222-224
+ontogeny/tests/test_stores.py
+  b96d0c1f35083bb6 264-265
+ontogeny/docs/zh/usage/12-reference.md
+  b96d0c1f35083bb6 12-16,19-21,29-32,36-37,40,56-57,67-68,82,94-99
+ontogeny/tests/test_documents_tasks.py
+  b96d0c1f35083bb6 144-147,156-157,159
+ontogeny/tests/test_agent_approval.py
+  b96d0c1f35083bb6 40,68-69,105-113,192,194-233,349-357
+ontogeny/server/ontogeny/core/expr.py
+  b96d0c1f35083bb6 37,277,378-379
+ontogeny/docs/zh/architecture/04-actions-and-functions.md
+  b96d0c1f35083bb6 45-50,73-76
+ontogeny/tests/test_governance_fixes.py
+  b96d0c1f35083bb6 345,347
+ontogeny/docs/zh/architecture/03-data-and-derivation.md
+  b96d0c1f35083bb6 22-24,28-40,45,49-54,57-59
+ontogeny/tests/test_outbox_lifespan.py
+  b96d0c1f35083bb6 1-46,48-57,59-66,69,72-75,78,80-86,88-95,97-105,107-147
+ontogeny/server/ontogeny/functions/sandbox.py
+  b96d0c1f35083bb6 38,41,76-79,256-259,274-279,358
+ontogeny/server/ontogeny/policy/engine.py
+  b96d0c1f35083bb6 54-55,78-122,125-126,144-145,276-281
+ontogeny/tests/test_auth_identity.py
+  b96d0c1f35083bb6 217-218,223-229,235-239,241-242,244-246,248-259,262,269-369
+.gitignore
+  b96d0c1f35083bb6 225
+ontogeny/server/ontogeny/projection/worker.py
+  b96d0c1f35083bb6 97-98
+ontogeny/tests/conftest.py
+  b96d0c1f35083bb6 116-129
+ontogeny/tests/test_derived_dependencies.py
+  b96d0c1f35083bb6 1-29,31-34,36-39,41-42,45-46,48,50,53-57,59-61,63-71,73-76,78-81,83-85,87-88,91-98,100-101,103
+ontogeny/server/ontogeny/auth/service.py
+  b96d0c1f35083bb6 38-39,44,51-85,94-101,141,161,212,314-315,329-330,334-336,338-344,352-355
+ontogeny/tests/test_domain_table_conflicts.py
+  b96d0c1f35083bb6 1-216
+ontogeny/web/src/components/FilterBuilder.tsx
+  b96d0c1f35083bb6 61,68-76
+ontogeny/server/ontogeny/stores/repo.py
+  b96d0c1f35083bb6 26,29,31,34-35,42-48,78-99,103-107,111-152,170,176,187,192-195,199,201,218-220,226-231,248-253,295-301,307,313-317,337,339,363,368-369,375,390,488,494-498,503,505-506,511-512,518-525,528,535,542,551,556-557,559,561,563-568,739-744,770-773,779,800-801
+ontogeny/server/ontogeny/registry/store.py
+  b96d0c1f35083bb6 29,155-177,248-250,257
+ontogeny/tests/test_declarative_http_streaming.py
+  b96d0c1f35083bb6 1-122
+ontogeny/server/ontogeny/api/routes_agent.py
+  b96d0c1f35083bb6 37,83,90,117,156-163,170-172,188,225,227-228,236-241,254
+ontogeny/tests/test_required_source_values.py
+  b96d0c1f35083bb6 1-30,32,34,36-37,41,44,46,49-53,55-58,60,62,64-66
+ontogeny/tests/test_pr380_data.py
+  b96d0c1f35083bb6 148,150,154,159-162
+ontogeny/tests/test_approval_marked_policy.py
+  b96d0c1f35083bb6 1-33,37-40,43-50,52-54,57-62,64-65,67,69-74,77-85,89-95,98-105,107-109,111-116,118,121,123,126-138,141,143,146-151
+ontogeny/server/ontogeny/functions/derivation.py
+  b96d0c1f35083bb6 40-43,46,52-61,99,110-114,120-128,130-138,146-157,159,161-162,164-173,178-180,184,191,193,198,210-215,217,220,224-234,237,239
+ontogeny/tests/test_engine_functions.py
+  b96d0c1f35083bb6 258-259,262-263,271,276,330-368
+ontogeny/tests/test_hugegraph_delete_idempotent.py
+  b96d0c1f35083bb6 1-59
+ontogeny/server/ontogeny/engine/service.py
+  b96d0c1f35083bb6 25,27,36-37,50-72,74,77,127
+ontogeny/server/ontogeny/api/routes_objects.py
+  b96d0c1f35083bb6 271,286,409
+ontogeny/server/ontogeny/api/app.py
+  b96d0c1f35083bb6 88-92
+ontogeny/web/tests-integration/globalSetup.ts
+  b96d0c1f35083bb6 35,43,53-58,60-62,64-85,88-99,101,103,105-109
+ontogeny/tests/test_policy_comments.py
+  b96d0c1f35083bb6 1-68
+ontogeny/tests/test_postgres_watermark_sync.py
+  b96d0c1f35083bb6 1-42,44-46,48-50,52-58,60-68,70-75,78-88,90-108
+ontogeny/tests/test_graph_algorithm_api.py
+  b96d0c1f35083bb6 1-29
+ontogeny/server/ontogeny/functions/declarative.py
+  b96d0c1f35083bb6 60,237-253,350,360-368,370-382
+ontogeny/web/src/pages/ontology/draft.test.tsx
+  b96d0c1f35083bb6 1-149
+ontogeny/web/src/pages/Access.test.tsx
+  b96d0c1f35083bb6 43,106-118,120-168,253-274,332
+ontogeny/server/ontogeny/agent/models.py
+  b96d0c1f35083bb6 55-57,124,130
+ontogeny/daemon.sh
+  b96d0c1f35083bb6 33-37,48,51,64,110-114
+ontogeny/tests/test_primary_key_marking.py
+  b96d0c1f35083bb6 1-35,38,42,46-52,55-64,66,68-86,88-90,92-95,97-99,101-103
+ontogeny/tests/test_declarative_http_references.py
+  b96d0c1f35083bb6 1-186
+ontogeny/tests/test_agent.py
+  b96d0c1f35083bb6 180-183
+ontogeny/tests/test_agent_session_ownership.py
+  b96d0c1f35083bb6 1-129
+ontogeny/server/ontogeny/action/models.py
+  b96d0c1f35083bb6 30,45-53,76-77,80-82,107,113,116-124
+ontogeny/tests/test_function_ecosystem.py
+  b96d0c1f35083bb6 47
+ontogeny/docs/zh/usage/10-function-editor.md
+  b96d0c1f35083bb6 9,15,22
+ontogeny/server/ontogeny/cli.py
+  b96d0c1f35083bb6 239-241,260,263
+ontogeny/web/vitest.integration.config.ts
+  b96d0c1f35083bb6 36-37
+ontogeny/deploy/Dockerfile
+  b96d0c1f35083bb6 21,50,69
+ontogeny/server/ontogeny/action/runtime.py
+  b96d0c1f35083bb6 30,34,48,56,104-130,190,197-198,200-204,210,234,255-259,263,272-273,283-284,292-300,307-313,318,321,324-326,328-329,332-333,343-344,383,386-389,403-406,434-439,442,449-454,458-463,465,467-472,477-479,481-486,488-490,500-503,567-595,615-620
+ontogeny/server/ontogeny/service.py
+  b96d0c1f35083bb6 26,193-195,251,524-565,567-579,583,585-592,604,723-724,736,738,1100-1105,1124-1132,1489-1493,1495,1502-1503
+ontogeny/README.md
+  b96d0c1f35083bb6 3-5,9,40,43,49-50,53,56,63-97,101,164,193-196
+ontogeny/tests/test_typed_json_storage.py
+  b96d0c1f35083bb6 1-64,66-74,76,78-88,90-91,93-114,116-134,136-152,154-174
+ontogeny/web/src/components/FilterBuilder.test.tsx
+  b96d0c1f35083bb6 68-70,80-82
+ontogeny/tests/test_schema_evolution.py
+  b96d0c1f35083bb6 201-202,211
+ontogeny/web/src/pages/Access.tsx
+  b96d0c1f35083bb6 284,318,410,426,791
+ontogeny/server/ontogeny/action/outbox.py
+  b96d0c1f35083bb6 21-23,35,38,75,78,89,107,160,163,168-196,199-204,209-224,228-235,251-252
+ontogeny/server/ontogeny/stores/sources.py
+  b96d0c1f35083bb6 35,86,89-137,139-142,144-152
+ontogeny/docs/zh/architecture/05-agent-governance.md
+  b96d0c1f35083bb6 66-67
+ontogeny/web/src/pages/AgentConsole.tsx
+  b96d0c1f35083bb6 71,139,192-196,201-202,211-212,224-225,399,540-541
+ontogeny/web/src/pages/OntologyExplorer.test.tsx
+  b96d0c1f35083bb6 174-179
+ontogeny/server/ontogeny/documents/tasks.py
+  b96d0c1f35083bb6 484-486
+ontogeny/deploy/compose.graph.yaml
+  b96d0c1f35083bb6 1-28
+ontogeny/docs/en/usage/10-function-editor.md
+  b96d0c1f35083bb6 8,14,21
+ontogeny/tests/test_projection.py
+  b96d0c1f35083bb6 91,114
+ontogeny/tests/test_agent_governance.py
+  b96d0c1f35083bb6 37,96-111,115,119,130-131,133,137-138,143,145-146,181,184,276,283
+ontogeny/tests/test_action_plan_and_projection_events.py
+  b96d0c1f35083bb6 1-37,40-41,45-49,51-53,55-57,59-61,63-66,68-73,75-77,79-81,83,85-106,108-112,115-122,125
+ontogeny/tests/test_declarative_functions.py
+  b96d0c1f35083bb6 142-145,461,476,513,519,527-528
+ontogeny/tests/test_composite_snapshot_sync.py
+  b96d0c1f35083bb6 1-174
+ontogeny/tests/test_outbox_receipts.py
+  b96d0c1f35083bb6 1-246
+ontogeny/tests/test_action_idempotency_scope.py
+  b96d0c1f35083bb6 1-29,34-44,50-65,68-181,183-196
+ontogeny/web/src/api/client.ts
+  b96d0c1f35083bb6 125-126,142-147,195-201
+ontogeny/tests/test_sandbox_frames_and_sort.py
+  b96d0c1f35083bb6 1-93,96-110,114-120,124-133,135,138-140,142,144,146-149,151,153,155-172,176-178
+ontogeny/server/ontogeny/mcp_server.py
+  b96d0c1f35083bb6 273-290,292-293,309-313,318,323,327-331,335,483
+ontogeny/tests/test_mcp.py
+  b96d0c1f35083bb6 90-94,196-200,206,231,239-243,269
+ontogeny/tests/test_hugegraph_dialect_detection.py
+  b96d0c1f35083bb6 1-112
+ontogeny/web/src/components/FlowGraph.test.tsx
+  b96d0c1f35083bb6 78-106
+ontogeny/server/ontogeny/agent/broker.py
+  b96d0c1f35083bb6 34,80,82-86,88-89,138-139,156,162,179-199,211-212,215-242,269,276-277,291-293,297-301,321-322,350-352,359-360,418-421,438-477,490-493,495-504,509,524-526,528-542,691-692,764-767,791-794,868,922,955-961
+ontogeny/docs/en/architecture/02-ontology-model-and-dsl.md
+  b96d0c1f35083bb6 25-37,77
+ontogeny/web/src/api/auth.tsx
+  b96d0c1f35083bb6 47,55,69,72,76-79,86,92,98-99,105,108-110,119-124,126,129,132
+ontogeny/server/ontogeny/config.py
+  b96d0c1f35083bb6 35,91
+ontogeny/tests/test_builder_atomicity.py
+  b96d0c1f35083bb6 1-36,39-45,48-60,63-74,77-91,93-102,105-126,128-150,152-162,165-211,214-219,221-224,226-227,229-233
+ontogeny/tests/test_required_function_derived.py
+  b96d0c1f35083bb6 1-37,42-56,58,63,67-68,70-71,74-77,80-81,86-87,89,91-98,101-103,105,107
+ontogeny/server/ontogeny/evolve/evalrunner.py
+  b96d0c1f35083bb6 192,198-199,204,206-207,210,214,218-221
+ontogeny/server/ontogeny/evolve/promoter.py
+  b96d0c1f35083bb6 30,175-177,326-336,339-353,356-386
+ontogeny/docs/en/architecture/05-agent-governance.md
+  b96d0c1f35083bb6 61-62
+ontogeny/web/src/App.tsx
+  b96d0c1f35083bb6 40,44-45,90-92,100-110,112,182
+ontogeny/tests/test_action_effect_order.py
+  b96d0c1f35083bb6 1-42,44,47-48,50,52-53,57-63,65-68,70-71,73-75,79-81,83,85-90,92,95-97,99,102-106,108-112,117-120,122,125-131,133,135-137,141-142,144-156,158-159,162-163,166-169,171-172,175-176
+ontogeny/docs/zh/README.md
+  b96d0c1f35083bb6 17,22,24,67
+ontogeny/tests/test_object_live_uniqueness.py
+  b96d0c1f35083bb6 1-42,44-46,48-58,62-69,71-73,75-100,104,106-107,109-120,122-123,125-129,131-134,137,139-150,152-169,171-172,174,176-186,188-192,194-198
+ontogeny/docs/en/architecture/04-actions-and-functions.md
+  b96d0c1f35083bb6 44-49,73-76
+ontogeny/docs/en/README.md
+  b96d0c1f35083bb6 16,21,23,54
+ontogeny/server/ontogeny/stores/ddl.py
+  b96d0c1f35083bb6 23-24,30,40,46,51,85-116,150-152,175-177,188-201,258-265
+ontogeny/tests/pg_agent_plugin.py
+  b96d0c1f35083bb6 1-67
+ontogeny/server/ontogeny/builder_ops.py
+  b96d0c1f35083bb6 27-28,30-32,36-37,47-54,56-162,164-172,225,373
+ontogeny/tests/test_auth_postgres_concurrency.py
+  b96d0c1f35083bb6 1-105
+ontogeny/server/ontogeny/core/function_entry.py
+  b96d0c1f35083bb6 1-48
+ontogeny/docs/zh/usage/08-quickstart.md
+  b96d0c1f35083bb6 8-10,13-15,18,21-25,29,35-36
+.github/workflows/ontogeny.yml
+  b96d0c1f35083bb6 85-87,95-152
+ontogeny/docs/en/architecture/03-data-and-derivation.md
+  b96d0c1f35083bb6 21-23,27-39,44,48-53,56-58
+ontogeny/compose.yaml
+  b96d0c1f35083bb6 18,20-22,24-25,36,38-40,43-45
+ontogeny/web/src/components/AppShell.tsx
+  b96d0c1f35083bb6 405
+ontogeny/web/src/pages/ObjectsBrowser.tsx
+  b96d0c1f35083bb6 159
+ontogeny/web/src/pages/ontology/draft.tsx
+  b96d0c1f35083bb6 69,88-92,94,98-100,102-103,105,110,221-226,266-269,273-274,279,281,283-284,288,298-299,302,305,307,317-321,325-326,341,349,354,361,369,393,405-407,417,424-428,433,439,441,449,452,455-456,462,465,469,474-475,484
+ontogeny/tests/test_hugegraph_live_smoke.py
+  b96d0c1f35083bb6 1-20,22-34,36,38,40-46,49-50,52,71,76-77
+ontogeny/web/src/components/FlowGraph.tsx
+  b96d0c1f35083bb6 152-158,371,629,634-635,637-640
+ontogeny/tests/test_derivation_retry.py
+  b96d0c1f35083bb6 1-46,48-53,55-57,59-62,65-66,68-70,72-77,79-89,91,93-99,101,103-110,112-115,118,120-125,128-133,135-137,139-141,144-147,149-157,160-161,163-167,169-170
+ontogeny/docs/en/usage/12-reference.md
+  b96d0c1f35083bb6 11-15,18-20,28-31,35-36,39,55-56,66-67,81,93-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.8.2",
+  "base_commit_sha": "41033e44c4d69c306ab3646cfa4ba71914f537da",
+  "prompts": {
+    "b96d0c1f35083bb6": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_cdf8acc6-70fc-4651-b436-ee4ec2bb7c83",
+        "model": "GLM-5.3"
+      },
+      "human_author": "simon824 <simon824@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 14999,
+      "total_deletions": 5965,
+      "accepted_lines": 8807,
+      "overriden_lines": 627,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/388b4929fff1199288165d66bf803e9b8f824dfdb27991eaba5cbd53833cadb6",
+      "token_usage": {
+        "input_tokens": 205233510,
+        "output_tokens": 380233,
+        "cache_read_tokens": 201330432,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    }
+  }
+}
