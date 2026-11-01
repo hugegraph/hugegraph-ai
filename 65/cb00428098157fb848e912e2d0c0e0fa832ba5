@@ -1,0 +1,138 @@
+ontogeny/docs/zh/architecture/00-kind-taxonomy.md
+  b96d0c1f35083bb6 1-78
+ontogeny/docs/zh/usage/08-quickstart.md
+  b96d0c1f35083bb6 18,27-61
+ontogeny/docs/en/architecture/06-rsi-self-evolution.md
+  b96d0c1f35083bb6 7,16,40,66,126,128
+ontogeny/docs/zh/architecture/02-ontology-model-and-dsl.md
+  b96d0c1f35083bb6 8,12-24,65
+ontogeny/docs/en/usage/08-quickstart.md
+  b96d0c1f35083bb6 17,26-60
+ontogeny/pyproject.toml
+  b96d0c1f35083bb6 25-26,28
+ontogeny/docs/en/architecture/03-data-and-derivation.md
+  b96d0c1f35083bb6 13,53-70
+ontogeny/tools/bench_query.py
+  b96d0c1f35083bb6 112
+ontogeny/docs/en/README.md
+  b96d0c1f35083bb6 43
+ontogeny/docs/en/architecture/01-overall-architecture.md
+  b96d0c1f35083bb6 15-16,20,22,27,40,43,48,54,56-70,72-73,75,79,84,111,131
+.gitignore
+  b96d0c1f35083bb6 226,239-243
+pyproject.toml
+  b96d0c1f35083bb6 131
+scripts/ci.py
+  b96d0c1f35083bb6 32,39
+ontogeny/docs/en/usage/09-ui-tour.md
+  b96d0c1f35083bb6 7,44-49
+ontogeny/docs/zh/usage/09-ui-tour.md
+  b96d0c1f35083bb6 8,45-50
+ontogeny/tests/e2e_server.py
+  b96d0c1f35083bb6 49
+AGENTS.md
+  b96d0c1f35083bb6 48
+README.md
+  b96d0c1f35083bb6 5-6,16,26,88,103
+ontogeny/web/src/pages/dashboard/ArchBoard.tsx
+  b96d0c1f35083bb6 40-45,61,63,65,127,131-137,225-238,240-244,246-251,253-260,262-295
+ontogeny/docs/zh/architecture/04-actions-and-functions.md
+  b96d0c1f35083bb6 8
+ontogeny/docs/en/architecture/04-actions-and-functions.md
+  b96d0c1f35083bb6 7
+ontogeny/docs/en/architecture/07-boundaries-and-quality.md
+  b96d0c1f35083bb6 25
+ontogeny/README.md
+  2eeb05009226aefb 15
+  b96d0c1f35083bb6 117-125,136,139-142,157
+  6876a09d6670275e 4-5,23
+ontogeny/docs/en/usage/12-reference.md
+  b96d0c1f35083bb6 33,56,69,82
+docs/quality/ci.md
+  b96d0c1f35083bb6 16-17,85
+ontogeny/docs/zh/README.md
+  b96d0c1f35083bb6 44,54-65
+.github/workflows/ci.yml
+  b96d0c1f35083bb6 45,59,138-145,172
+ontogeny/tests/test_kind_registry.py
+  b96d0c1f35083bb6 1-115
+ontogeny/docs/zh/architecture/03-data-and-derivation.md
+  b96d0c1f35083bb6 14,54-71
+ontogeny/web/src/pages/dashboard/kindVisuals.ts
+  b96d0c1f35083bb6 1-59,62-130
+ontogeny/docs/en/architecture/05-agent-governance.md
+  b96d0c1f35083bb6 7
+ontogeny/tests/test_expr.py
+  b96d0c1f35083bb6 37,92-93,104-105,112
+ontogeny/docs/zh/architecture/01-overall-architecture.md
+  b96d0c1f35083bb6 15-16,20,27,40,43,48,54,56-70,72-73,75,79,84,111,131
+ontogeny/docs/en/architecture/02-ontology-model-and-dsl.md
+  b96d0c1f35083bb6 7,11-23,64
+ontogeny/web/tests-integration/api.e2e.test.ts
+  b96d0c1f35083bb6 43,48,70-74,77-82,90,92,95,97-100,102,106-107,109,114,116,120,122,124,128-129,131,136,138,140,143,145,153,165-166,168-169,174-176,180-181,183,185,194,205-206,208,216,230
+scripts/tests/test_ci.py
+  b96d0c1f35083bb6 121-127,137
+ontogeny/docs/en/architecture/00-kind-taxonomy.md
+  b96d0c1f35083bb6 1-78
+ontogeny/docs/zh/architecture/06-rsi-self-evolution.md
+  b96d0c1f35083bb6 8,17,41,67,127,129
+ontogeny/docs/zh/architecture/05-agent-governance.md
+  b96d0c1f35083bb6 8
+ontogeny/docs/zh/architecture/07-boundaries-and-quality.md
+  b96d0c1f35083bb6 26
+ontogeny/docs/zh/usage/12-reference.md
+  b96d0c1f35083bb6 34,57,70,83
+.github/workflows/ontogeny.yml
+  b96d0c1f35083bb6 1-115
+ontogeny/web/src/pages/dashboard/ArchBoard.test.tsx
+  b96d0c1f35083bb6 1-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.8.2",
+  "base_commit_sha": "65cb00428098157fb848e912e2d0c0e0fa832ba5",
+  "prompts": {
+    "2eeb05009226aefb": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_9044ad90-2d7f-456e-b540-db2c67cc9795",
+        "model": "GLM-5.3"
+      },
+      "human_author": "simon824 <simon824@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 24,
+      "accepted_lines": 3,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/899de8d4f7d1123a51b46d8a964f5e16c6671b0ef2eb879adb8efafddaef8fdc",
+      "token_usage": {
+        "input_tokens": 470355583,
+        "output_tokens": 519291,
+        "cache_read_tokens": 457915520,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    },
+    "b96d0c1f35083bb6": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_cdf8acc6-70fc-4651-b436-ee4ec2bb7c83",
+        "model": "GLM-5.3-Flash"
+      },
+      "human_author": "simon824 <simon824@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1232,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/e4611dca6aa55f7d062c5c01163967d2a85401015f62fd7c297862c5f2ac6461",
+      "token_usage": {
+        "input_tokens": 126077793,
+        "output_tokens": 323506,
+        "cache_read_tokens": 123159744,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    }
+  }
+}
