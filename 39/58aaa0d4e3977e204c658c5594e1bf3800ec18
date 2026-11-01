@@ -1,0 +1,48 @@
+ontogeny/README.md
+  b96d0c1f35083bb6 4-5,65
+  6876a09d6670275e 64
+ontogeny/docs/zh/architecture/06-rsi-self-evolution.md
+  b96d0c1f35083bb6 94
+ontogeny/tools/headless_check.py
+  b96d0c1f35083bb6 278-280,288,301,308-309,311,408
+ontogeny/tests/test_pr380_security.py
+  b96d0c1f35083bb6 123,164
+ontogeny/tests/test_llm.py
+  b96d0c1f35083bb6 172,189,220,300
+ontogeny/docs/en/usage/10-function-editor.md
+  b96d0c1f35083bb6 25
+ontogeny/docs/zh/usage/10-function-editor.md
+  b96d0c1f35083bb6 26
+ontogeny/tests/test_engine_functions.py
+  b96d0c1f35083bb6 334-366
+ontogeny/docs/en/architecture/06-rsi-self-evolution.md
+  b96d0c1f35083bb6 93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.8.2",
+  "base_commit_sha": "3958aaa0d4e3977e204c658c5594e1bf3800ec18",
+  "prompts": {
+    "b96d0c1f35083bb6": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_cdf8acc6-70fc-4651-b436-ee4ec2bb7c83",
+        "model": "GLM-5.3"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 15019,
+      "total_deletions": 5985,
+      "accepted_lines": 166,
+      "overriden_lines": 0,
+      "messages_url": "https://gitai.gz.cvte.cn/cas/95cf8901060cfb7a295993594993bb078f6ec21e382162ed07100f5cff90ce9d",
+      "token_usage": {
+        "input_tokens": 214238829,
+        "output_tokens": 386660,
+        "cache_read_tokens": 209958720,
+        "cache_creation_tokens": 0,
+        "total_cost": 0.0
+      }
+    }
+  }
+}
