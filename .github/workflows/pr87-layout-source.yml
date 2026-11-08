@@ -14,9 +14,9 @@ jobs:
         with:
           ref: f5af4dfb7b4aa0f764293c2d9791292f7c2a17bc
           persist-credentials: false
-      - name: Archive exact reviewed tree
+      - name: Archive exact reviewed tree including export-ignored tests
         run: |
-          git archive --format=tar.gz HEAD > "$RUNNER_TEMP/pr87-source.tar.gz"
+          git ls-files -z | tar --null -T - -czf "$RUNNER_TEMP/pr87-source.tar.gz"
           git ls-tree -r HEAD > "$RUNNER_TEMP/pr87-source-manifest.txt"
       - uses: actions/upload-artifact@v7
         with:
