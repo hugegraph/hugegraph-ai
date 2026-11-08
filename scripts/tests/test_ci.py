@@ -113,6 +113,25 @@ class TestCISelection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assert_modules([path], {"sdk", "llm"})
 
+    def test_eval_changes_keep_isolated_distribution(self):
+        for path in (
+            "hugegraph-llm-sdk/eval/src/hugegraph_llm_eval/api.py",
+            "hugegraph-llm-sdk/eval/README.md",
+            "hugegraph-llm-sdk/eval/pyproject.toml",
+            "hugegraph-llm-sdk/eval/tests/test_samples.py",
+            "hugegraph-llm-sdk/eval/examples/basic.py",
+            ".github/workflows/hugegraph-llm-eval.yml",
+        ):
+            with self.subTest(path=path):
+                self.assert_modules([path], {"eval"})
+
+    def test_nested_package_changes_do_not_hide_parent_changes(self):
+        self.assert_modules(
+            ["hugegraph-llm-sdk/eval/README.md", "hugegraph-llm-sdk/src/hugegraph_llm_sdk/api.py"],
+            {"sdk", "eval", "llm"},
+        )
+        self.assert_modules(["hugegraph-llm-sdk/evaluation.py"], {"sdk", "llm"})
+
     def test_full_runtimes_cover_python_312_through_314(self):
         for module in ci.MODULES:
             with self.subTest(module=module):
@@ -127,7 +146,7 @@ class TestCISelection(unittest.TestCase):
     def test_shared_config_and_workflows_do_not_skip_tests(self):
         for path in ("pyproject.toml", "scripts/ci.py", ".github/actions/setup-python-env/action.yml"):
             with self.subTest(path=path):
-                self.assert_modules([path], {"client", "sdk", "llm", "mcp"})
+                self.assert_modules([path], {"client", "sdk", "eval", "llm", "mcp"})
         self.assert_modules([".github/workflows/hugegraph-llm.yml"], {"llm"})
 
     def test_dependency_review_requires_dependency_changes(self):
@@ -138,6 +157,7 @@ class TestCISelection(unittest.TestCase):
         for path in (
             "hugegraph-llm/pyproject.toml",
             "hugegraph-llm-sdk/pyproject.toml",
+            "hugegraph-llm-sdk/eval/pyproject.toml",
             "hugegraph-python-client/pyproject.toml",
             "hugegraph-mcp/pyproject.toml",
             "hugegraph-ml/pyproject.toml",

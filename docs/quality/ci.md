@@ -11,9 +11,10 @@ in the job summary. A failed diff or preflight fails CI rather than skipping tes
 | Module README/docs, including examples and data files | Owning module, preserving documentation/example contracts |
 | Python client | Client plus downstream LLM and MCP |
 | Standalone LLM SDK | SDK plus downstream LLM compatibility tests |
+| Standalone LLM eval SDK | Eval |
 | LLM | LLM |
 | MCP | MCP |
-| Root dependency/release configuration or shared CI setup | Client, SDK, LLM and MCP |
+| Root dependency/release configuration or shared CI setup | Client, SDK, Eval, LLM and MCP |
 | Module CI workflow | That module and its downstream consumers |
 | Docker configuration or LLM image build script | LLM |
 | Archive exclusions (`.gitattributes`) | Client archive installation guard and downstream LLM/MCP |
@@ -25,6 +26,11 @@ nested configurations that may change Ruff/type-check behavior.
 Dependency review runs for dependency changes on same-repository PRs; its token
 restrictions for fork PRs are unchanged. Deleted files and both sides of a rename
 participate in selection.
+
+The nested `hugegraph-llm-sdk/eval/` package is selected by the longest matching
+module path. Eval-only changes do not select the extraction SDK or application;
+changes to both packages select both suites. The SDK distribution smoke also
+checks the built wheel and sdist for accidentally bundled eval sources.
 
 SDK changes run the SDK distribution contracts and downstream LLM adapter tests,
 without selecting unrelated client/MCP suites. The SDK workflow builds outside
