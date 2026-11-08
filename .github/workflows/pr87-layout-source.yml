@@ -4,24 +4,37 @@ on:
     branches: [chore/pr87-layout-check-20261108]
     paths: [.github/workflows/pr87-layout-source.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  source:
+  stage:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: f5af4dfb7b4aa0f764293c2d9791292f7c2a17bc
           persist-credentials: false
-      - name: Archive exact reviewed tree including export-ignored tests
-        run: |
-          git ls-files -z | tar --null -T - -czf "$RUNNER_TEMP/pr87-source.tar.gz"
-          git ls-tree -r HEAD > "$RUNNER_TEMP/pr87-source-manifest.txt"
-      - uses: actions/upload-artifact@v7
+      - name: Keep migration script outside checkout
+        run: cp .github/pr87-layout-apply.py "$RUNNER_TEMP/pr87-layout-apply.py"
+      - uses: actions/checkout@v6
         with:
-          name: pr87-layout-source
-          retention-days: 2
-          path: |
-            ${{ runner.temp }}/pr87-source.tar.gz
-            ${{ runner.temp }}/pr87-source-manifest.txt
+          ref: f5af4dfb7b4aa0f764293c2d9791292f7c2a17bc
+          persist-credentials: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Reproduce and verify locally tested tree
+        run: |
+          python "$RUNNER_TEMP/pr87-layout-apply.py"
+          git add -A
+          git diff --cached --check
+          test "$(git write-tree)" = 195ab5a692fab63876bb9ebcb57497c9eb61d162
+          python -m unittest discover -s scripts/tests -v
+          python scripts/version.py check
+      - name: Publish temporary validated tree only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'refactor(eval): nest standalone SDK under hugegraph-llm-sdk'
+          git push origin HEAD:refs/heads/chore/pr87-layout-result-20261108
+          git rev-parse HEAD
+          git rev-parse HEAD^{tree}
