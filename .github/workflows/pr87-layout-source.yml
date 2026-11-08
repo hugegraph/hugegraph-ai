@@ -1,0 +1,27 @@
+name: PR 87 layout validation source
+on:
+  push:
+    branches: [chore/pr87-layout-check-20261108]
+    paths: [.github/workflows/pr87-layout-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: f5af4dfb7b4aa0f764293c2d9791292f7c2a17bc
+          persist-credentials: false
+      - name: Archive exact reviewed tree
+        run: |
+          git archive --format=tar.gz HEAD > "$RUNNER_TEMP/pr87-source.tar.gz"
+          git ls-tree -r HEAD > "$RUNNER_TEMP/pr87-source-manifest.txt"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pr87-layout-source
+          retention-days: 2
+          path: |
+            ${{ runner.temp }}/pr87-source.tar.gz
+            ${{ runner.temp }}/pr87-source-manifest.txt
