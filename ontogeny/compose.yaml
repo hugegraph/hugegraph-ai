@@ -1,0 +1,52 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and
+# limitations under the License.
+
+# ontogeny deployment: API + UI with persistent SQLite demo data.
+#
+#   docker compose up -d
+#   docker compose -f compose.yaml -f deploy/compose.postgres.yaml up -d
+#   docker compose -f compose.yaml -f deploy/compose.graph.yaml up -d
+#
+# The optional overrides wire the app to Postgres or an independently configured
+# HugeGraph server; see README.md for their required environment variables.
+
+name: ontogeny
+
+services:
+  ontogeny:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: ontogeny:local
+    ports:
+      - "${ONTOGENY_BIND_HOST:-127.0.0.1}:${ONTOGENY_PORT:-8000}:8000"
+    environment:
+      ONTOGENY_ADMIN_USER: ${ONTOGENY_ADMIN_USER:-admin}
+      ONTOGENY_ADMIN_PASSWORD: ${ONTOGENY_ADMIN_PASSWORD:-}
+      ONTOGENY_DATA_DIR: /data
+      # point the assistant / RSI proposer at any OpenAI-compatible Ollama host
+      ONTOGENY_LLM_BASE_URL: ${ONTOGENY_LLM_BASE_URL:-}
+      ONTOGENY_LLM_MODEL: ${ONTOGENY_LLM_MODEL:-qwen3:27b}
+      ONTOGENY_WEBHOOK_ALLOWLIST: ${ONTOGENY_WEBHOOK_ALLOWLIST:-}
+      # compose.postgres.yaml explicitly replaces this DSN:
+      ONTOGENY_DB_DSN: ${ONTOGENY_DB_DSN:-sqlite+aiosqlite:////data/ontogeny.db}
+    volumes:
+      - ontogeny-data:/data
+    restart: unless-stopped
+
+volumes:
+  ontogeny-data:

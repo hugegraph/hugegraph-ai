@@ -1,7 +1,9 @@
-# hugegraph-ai
+# hugegraph-ai (Ontogeny)
 
 [![License](https://img.shields.io/badge/license-Apache%202-0E78BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue)](https://deepwiki.com/apache/hugegraph-ai)
+[![Ontogeny Backend](https://img.shields.io/badge/ontogeny-pytest%20661%20passed-brightgreen.svg)](./ontogeny/README.md)
+[![Ontogeny Frontend](https://img.shields.io/badge/ontogeny-vitest%20261%20passed-brightgreen.svg)](./ontogeny/README.md)
 
 `hugegraph-ai` integrates [HugeGraph](https://github.com/apache/hugegraph) with artificial intelligence capabilities, providing comprehensive support for developers to build AI-powered graph applications.
 
@@ -9,6 +11,7 @@ Contributor workflows: [CI selection and full validation](docs/quality/ci.md), [
 
 ## ✨ Key Features
 
+- **[Ontogeny](./ontogeny/README.md)**: A self-improving, agent-ready operational ontology platform — pairing a semantic layer (objects, relations) with a kinetic layer (actions, policies) in Git-managed YAML, served through one governed, auditable API and a human-AI collaborative console
 - **[LLM/GraphRAG](./hugegraph-llm/README.md#graphrag)**: Build intelligent question-answering systems with graph-enhanced retrieval
 - **[Knowledge Graph Construction](./hugegraph-llm/README.md#knowledge-graph-construction)**: Automated graph building from text using LLMs
 - **[HugeGraph-LLM SDK](./hugegraph-llm-sdk/README.md)**: Design schemas and extract reviewed property graphs in your own Python project, without a UI or database service
@@ -81,6 +84,24 @@ python -m hugegraph_llm.demo.rag_demo.app
 
 The source launcher binds to `127.0.0.1` by default and warns when a non-loopback `--host` is selected.
 
+### Ontogeny demo
+
+Ontogeny is an independently installed module requiring Python 3.12+. To try its
+chip lifecycle example with Docker:
+
+```bash
+cd ontogeny
+docker compose up -d
+docker compose exec ontogeny cat /data/admin-bootstrap-password  # first boot's owner-only credential
+```
+
+Compose binds this demo to `127.0.0.1:8000` by default. Open **http://localhost:8000** and sign in as `admin`. Set
+`ONTOGENY_ADMIN_PASSWORD` before starting Compose to choose the initial password.
+See the [module guide](./ontogeny/README.md) for source installation and configuration.
+
+
+![Ontogeny console](./ontogeny/docs/en/img/qs-dashboard.png)
+
 ### Basic Usage Examples
 
 > [!NOTE]
@@ -140,6 +161,18 @@ Python client for HugeGraph operations, distributed as `hugegraph-python` (`uv p
 - **CRUD Operations**: Create, read, update, delete graph data
 - **Gremlin Queries**: Execute graph traversal queries
 - **REST API**: Complete HugeGraph REST API coverage
+
+### [ontogeny](./ontogeny/README.md)
+
+A self-improving, agent-ready operational ontology platform — pairing a semantic
+layer (objects, relations) with a kinetic layer (actions, policies) in Git-managed
+YAML:
+
+- **Self-Evolution (RSI)**: Observe → mutate (LLM-generated DSL diffs) → select (deterministic eval suites) → release (auto-merge / PR / canary); machine proposals travel the same Git channel as humans
+- **Object Queries**: One query API over the live ontology, with optional projection onto Apache HugeGraph for deep-graph queries
+- **Actions & Policies**: A single auditable write gate with approval workflows and full audit trails
+- **Agent/MCP Sessions**: Agents read and write through a governed MCP surface, sharing the same policy plane and audit trail as humans
+- **Independent Runtime**: Installs standalone (Python 3.12+) without the other modules; see the [architecture and usage guides](./ontogeny/docs/en/README.md) for details
 
 ## 📚 Learn More
 
