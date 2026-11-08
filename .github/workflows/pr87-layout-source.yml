@@ -30,11 +30,13 @@ jobs:
           test "$(git write-tree)" = 195ab5a692fab63876bb9ebcb57497c9eb61d162
           python -m unittest discover -s scripts/tests -v
           python scripts/version.py check
-      - name: Publish temporary validated tree only
+      - name: Stage non-workflow source changes
         run: |
+          git restore --source=HEAD --staged --worktree .github/workflows/hugegraph-llm-eval.yml .github/workflows/hugegraph-llm-sdk.yml
+          git diff --cached --quiet -- .github/workflows
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'refactor(eval): nest standalone SDK under hugegraph-llm-sdk'
+          git commit -m 'refactor(eval): stage standalone SDK relocation sources'
           git push origin HEAD:refs/heads/chore/pr87-layout-result-20261108
           git rev-parse HEAD
           git rev-parse HEAD^{tree}
