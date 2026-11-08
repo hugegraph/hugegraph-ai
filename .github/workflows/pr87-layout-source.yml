@@ -6,37 +6,16 @@ on:
 permissions:
   contents: write
 jobs:
-  stage:
+  cleanup:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
-      - name: Keep migration script outside checkout
-        run: cp .github/pr87-layout-apply.py "$RUNNER_TEMP/pr87-layout-apply.py"
-      - uses: actions/checkout@v6
-        with:
-          ref: f5af4dfb7b4aa0f764293c2d9791292f7c2a17bc
           persist-credentials: true
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - name: Reproduce and verify locally tested tree
+      - name: Remove only temporary branches created for this migration
         run: |
-          python "$RUNNER_TEMP/pr87-layout-apply.py"
-          git add -A
-          git diff --cached --check
-          test "$(git write-tree)" = 195ab5a692fab63876bb9ebcb57497c9eb61d162
-          python -m unittest discover -s scripts/tests -v
-          python scripts/version.py check
-      - name: Stage non-workflow source changes
-        run: |
-          git restore --source=HEAD --staged --worktree .github/workflows/hugegraph-llm-eval.yml .github/workflows/hugegraph-llm-sdk.yml
-          git diff --cached --quiet -- .github/workflows
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'refactor(eval): stage standalone SDK relocation sources'
-          git push origin HEAD:refs/heads/chore/pr87-layout-result-20261108
-          git rev-parse HEAD
-          git rev-parse HEAD^{tree}
+          test "$(git ls-remote origin refs/heads/feat/eval-sdk | cut -f1)" = 50e3ce128f3689fabadb9a8fe8aacbca4f98f922
+          test "$(git ls-remote origin refs/heads/chore/pr87-layout-result-20261108 | cut -f1)" = d7bbe3df316c97298449e78aa191e001739e189b
+          test "$(git ls-remote origin refs/heads/chore/pr87-layout-check-20261108 | cut -f1)" = "$GITHUB_SHA"
+          git push origin --delete chore/pr87-layout-result-20261108 chore/pr87-layout-check-20261108
