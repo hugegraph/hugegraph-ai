@@ -131,8 +131,11 @@ async def join_env(tmp_path):
         CREATE TABLE items (item_id TEXT PRIMARY KEY, name TEXT);
         CREATE TABLE container_items (container_id TEXT, item_id TEXT);
         INSERT INTO containers VALUES ('C-1', 'Crate');
+        INSERT INTO containers VALUES ('C-2', 'Bin');
         INSERT INTO items VALUES ('I-1', 'Bolt');
         INSERT INTO items VALUES ('I-2', 'Nut');
+        INSERT INTO items VALUES ('I-3', 'Washer');
+        INSERT INTO items VALUES ('I-4', 'Screw');
         """
     )
     con.commit()
@@ -207,6 +210,75 @@ class TestQuery:
         async with join_env["maker"]() as s:
             items = await q.links(s, "container", "C-1", "container-items", SUPER)
         assert [i["item_id"] for i in items] == ["I-2"]
+
+    async def test_link_expansion_batches_fk_reads(self, env, monkeypatch):
+        """A page-wide expansion reads the FK edge set once, not once per object."""
+        q, repo = env["query"], env["repo"]
+        async with env["maker"]() as s:
+            baseline = await q.query(s, "equipment", SUPER)
+            expected = {}
+            for obj in baseline["objects"]:
+                rows = await q.links(s, "equipment", obj["equipment_id"], "step-equipment", SUPER)
+                expected[obj["equipment_id"]] = sorted(r["step_id"] for r in rows)
+
+            calls = []
+
+            async def forbidden(*args, **kwargs):
+                raise AssertionError("per-object fk_linked_ids must not run for list expansion")
+
+            real_pairs = repo.fk_link_pairs
+
+            async def counting_pairs(*args, **kwargs):
+                calls.append(1)
+                return await real_pairs(*args, **kwargs)
+
+            monkeypatch.setattr(repo, "fk_linked_ids", forbidden)
+            monkeypatch.setattr(repo, "fk_link_pairs", counting_pairs)
+            out = await q.query(s, "equipment", SUPER, links=["step-equipment"])
+
+        expanded = out["links"]["step-equipment"]
+        assert {pid: sorted(o["step_id"] for o in rows) for pid, rows in expanded.items()} == expected
+        assert calls == [1]
+
+    async def test_link_expansion_batches_join_reads(self, join_env, monkeypatch):
+        """The join-table link is read as one edge set, not per page object."""
+        import datetime as dt
+
+        q, repo = join_env["query"], join_env["repo"]
+        fixed_at = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+        async with join_env["maker"]() as s:
+            await repo.link_add(s, "container-items", "C-1", "I-2", fixed_at)
+            await repo.link_add(s, "container-items", "C-1", "I-1", fixed_at)
+            await repo.link_add(s, "container-items", "C-2", "I-3", fixed_at)
+            # Dangling target: both the per-object and the batched path must
+            # drop it during assembly.
+            await repo.link_add(s, "container-items", "C-2", "I-404", fixed_at)
+            await s.commit()
+
+        async with join_env["maker"]() as s:
+            # Baseline on the same snapshot: per-object link reads.
+            containers = await q.query(s, "container", SUPER)
+            expected = {}
+            for obj in containers["objects"]:
+                rows = await q.links(s, "container", obj["container_id"], "container-items", SUPER)
+                expected[obj["container_id"]] = sorted(r["item_id"] for r in rows)
+
+            calls = []
+            real_members = repo.link_members
+
+            async def counting_members(session, link_name, *, src_id=None, dst_id=None, at=None):
+                assert src_id is None and dst_id is None, "list expansion must read the whole edge set"
+                calls.append(1)
+                return await real_members(session, link_name, src_id=src_id, dst_id=dst_id, at=at)
+
+            monkeypatch.setattr(repo, "link_members", counting_members)
+            out = await q.query(s, "container", SUPER, links=["container-items"])
+
+        expanded = out["links"]["container-items"]
+        actual = {cid: sorted(item["item_id"] for item in items) for cid, items in expanded.items()}
+        assert actual == expected
+        assert expected == {"C-1": ["I-1", "I-2"], "C-2": ["I-3"]}
+        assert calls == [1]
 
     async def test_aggregate(self, env):
         q = env["query"]
