@@ -91,13 +91,18 @@ class QueryService:
         out = assemble_row(self.compiled, object_type, props)
         return self.policy.mask(object_type, out, principal)
 
-    async def _assemble_many(self, session, object_type: str, ids: list[str], principal: dict) -> list[dict]:
-        rows = await self.repo.get_many(session, object_type, ids)
-        by_pk = {}
+    async def _assemble_map(self, session, object_type: str, ids: list[str], principal: dict) -> dict[str, dict]:
+        """Assemble every distinct id once, keyed by string primary key."""
+        unique = list(dict.fromkeys(ids))
+        if not unique:
+            return {}
+        rows = await self.repo.get_many(session, object_type, unique)
         pk = self.compiled.objects[object_type].spec.primaryKey[0]
-        for r in rows:
-            by_pk[str(r.get(pk))] = r
-        return [self.assemble(object_type, by_pk[i], principal) for i in ids if i in by_pk]
+        return {str(r.get(pk)): self.assemble(object_type, r, principal) for r in rows}
+
+    async def _assemble_many(self, session, object_type: str, ids: list[str], principal: dict) -> list[dict]:
+        by_pk = await self._assemble_map(session, object_type, ids, principal)
+        return [by_pk[i] for i in ids if i in by_pk]
 
     # ----------------------------------------------------------------- query
 
@@ -134,19 +139,30 @@ class QueryService:
         }
         if links:
             pk = self.compiled.objects[object_type].spec.primaryKey[0]
+            page_ids = [str(obj[pk]) for obj in objects]
             expanded = {}
             for link_name in links:
-                if link_name not in self.compiled.links:
+                lnk = self.compiled.links.get(link_name)
+                if lnk is None:
                     raise NotFoundError(f"unknown link {link_name!r}")
-                lnk = self.compiled.links[link_name]
-                other = lnk.spec.target if lnk.spec.source == object_type else lnk.spec.source
-                bucket: dict[str, list[dict]] = {}
-                for obj in objects:
-                    ids = await self._linked_ids(
-                        session, link_name, str(obj[pk]), from_source=lnk.spec.source == object_type
-                    )
-                    bucket[str(obj[pk])] = await self._assemble_many(session, other, ids, principal)
-                expanded[link_name] = bucket
+                from_source = lnk.spec.source == object_type
+                other = lnk.spec.target if from_source else lnk.spec.source
+                # One read of the whole edge set per link, grouped in memory.
+                # The old path issued two round trips per page object (one
+                # ``_linked_ids`` plus one ``_assemble_many``); a page of 100
+                # objects over 3 links cost ~600 queries.
+                pairs = await self._all_link_pairs(session, link_name)
+                grouped: dict[str, list[str]] = {pid: [] for pid in page_ids}
+                for src_id, dst_id in pairs:
+                    anchor = src_id if from_source else dst_id
+                    if anchor in grouped:
+                        grouped[anchor].append(dst_id if from_source else src_id)
+                assembled = await self._assemble_map(
+                    session, other, [i for ids in grouped.values() for i in ids], principal
+                )
+                expanded[link_name] = {
+                    pid: [assembled[i] for i in ids if i in assembled] for pid, ids in grouped.items()
+                }
             result["links"] = expanded
         return result
 
@@ -201,6 +217,17 @@ class QueryService:
             dst_id=obj_id if not from_source else None,
         )
         return [dst if from_source else src for src, dst in members]
+
+    async def _all_link_pairs(self, session, link_name: str) -> list[tuple[str, str]]:
+        """Every ``(source_id, target_id)`` edge of a link in one read.
+
+        Used by list queries to expand links for a whole page at once; the
+        per-object ``_linked_ids`` path remains for single-object reads.
+        """
+        lnk = self.compiled.links[link_name]
+        if isinstance(lnk.spec.join, ForeignKeyJoin):
+            return await self.repo.fk_link_pairs(session, link_name)
+        return await self.repo.link_members(session, link_name)
 
     async def links(
         self,
