@@ -80,7 +80,7 @@ def _match(rel: str, cfg: DocumentCfg) -> bool:
 
 
 def _selector_root(root: Path, selector: str | None) -> Path:
-    """``source.table`` selects a subdirectory (or a glob under the root)."""
+    """``source.table`` selects a file, subdirectory or glob under the root."""
     if not selector:
         return root
     candidate = root / selector
@@ -94,8 +94,10 @@ def _selector_root(root: Path, selector: str | None) -> Path:
 def scan(root: Path, cfg: DocumentCfg, selector: str | None = None, *, store_name: str) -> list[ScannedDocument]:
     base = _selector_root(root, selector)
     globs = [selector] if selector and any(ch in selector for ch in "*?[") else None
+    selected_file = root / selector if selector and globs is None else None
+    paths = [selected_file] if selected_file is not None and selected_file.is_file() else sorted(base.rglob("*"))
     out: list[ScannedDocument] = []
-    for path in sorted(base.rglob("*")):
+    for path in paths:
         if not path.is_file():
             continue
         rel = path.relative_to(base).as_posix()
