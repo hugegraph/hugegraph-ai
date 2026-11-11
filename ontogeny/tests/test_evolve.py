@@ -219,6 +219,26 @@ class TestEvalRunner:
         # overall suite green (queries included)
         assert report["passed"] is True
 
+    async def test_empty_and_coverage_only_suites_do_not_pass(self, env):
+        from ontogeny.core.models import CoverageCfg
+
+        base = env["compiled"].eval_suites["lifecycle-flow-suite"]
+        cases = []
+        for coverage in (None, CoverageCfg(objects=["wafer-lot"])):
+            suite = base.model_copy(deep=True)
+            suite.spec.queries = []
+            suite.spec.replays = []
+            suite.spec.agents = []
+            suite.spec.coverage = coverage
+            cases.append(suite)
+
+        async with env["maker"]() as s:
+            reports = [await env["runner"].run(s, suite) for suite in cases]
+
+        assert all(report["cases"] == [] for report in reports)
+        assert all(report["passed"] is False for report in reports)
+        assert all(report["error"] == "no executable eval cases" for report in reports)
+
     async def test_replay_sees_derived_properties_on_both_revision_states(self, env):
         from ontogeny.core.models import PropertyDef, Rule
 
