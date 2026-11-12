@@ -174,7 +174,7 @@ class TelemetryService:
         # 2) filters referencing fields that are not properties (schema gap);
         #    error queries carry the strongest signal here, so no error filter
         qrows = (await session.execute(select(TelemetryQueryRow).where(TelemetryQueryRow.ts >= since))).scalars()
-        unmapped: dict[tuple[str, str], int] = {}
+        unmapped: dict[tuple[str, str], dict[str, Any]] = {}
         hot: dict[tuple[str, str], dict] = {}
         unmapped_min = int(th.get("unmapped_filter_min", 5))
         hot_min = int(th.get("hot_query_min", 3))
@@ -182,19 +182,45 @@ class TelemetryService:
             for field in _filter_fields(q.filter):
                 obj = self.compiled.objects.get(q.object_type)
                 if obj is not None and field not in obj.spec.properties and not field.startswith("_"):
-                    unmapped[(q.object_type, field)] = unmapped.get((q.object_type, field), 0) + 1
+                    key = (q.object_type, field)
+                    entry = unmapped.setdefault(
+                        key,
+                        {
+                            "count": 0,
+                            "principals": set(),
+                            "error_count": 0,
+                            "non_error_count": 0,
+                            "first_seen": q.ts,
+                            "last_seen": q.ts,
+                        },
+                    )
+                    entry["count"] += 1
+                    if q.principal_hash:
+                        entry["principals"].add(q.principal_hash)
+                    entry["error_count" if q.error else "non_error_count"] += 1
+                    entry["first_seen"] = min(entry["first_seen"], q.ts)
+                    entry["last_seen"] = max(entry["last_seen"], q.ts)
             # hot queries: a recurring filter that RETURNS data is a regression
             # candidate for the eval suite (direction C: eval-case-synth)
             if not q.error and q.n_results and q.filter and isinstance(q.filter, dict) and q.filter:
                 key = (q.object_type, json.dumps(q.filter, sort_keys=True, ensure_ascii=True, default=str))
                 entry = hot.setdefault(key, {"object_type": q.object_type, "filter": q.filter, "count": 0})
                 entry["count"] += 1
-        for (object_type, field), count in sorted(unmapped.items()):
-            if count >= unmapped_min:
+        for (object_type, field), entry in sorted(unmapped.items()):
+            if entry["count"] >= unmapped_min:
                 created.append(
                     {
                         "kind": "unmapped_filter_field",
-                        "evidence": {"object_type": object_type, "field": field, "count": count},
+                        "evidence": {
+                            "object_type": object_type,
+                            "field": field,
+                            "count": entry["count"],
+                            "distinct_principals": len(entry["principals"]),
+                            "error_count": entry["error_count"],
+                            "non_error_count": entry["non_error_count"],
+                            "first_seen": entry["first_seen"].isoformat(),
+                            "last_seen": entry["last_seen"].isoformat(),
+                        },
                     }
                 )
         for entry in sorted(hot.values(), key=lambda e: (-e["count"], e["object_type"]))[:5]:

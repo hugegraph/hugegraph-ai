@@ -137,6 +137,25 @@ class TestTelemetry:
         assert "unmapped_filter_field" in kinds
         assert any(s.kind == "unmapped_filter_field" and s.evidence["field"] == "shift" for s in sigs)
 
+    async def test_unmapped_field_signal_contains_anonymized_usage_evidence(self, env):
+        tel = env["telemetry"]
+        async with env["maker"]() as s:
+            filt = {"field": "shift", "op": "eq", "value": "DAY"}
+            await tel.record_query(s, "wafer-lot", {"id": "u1"}, filt, 2.0, 1)
+            await tel.record_query(s, "wafer-lot", {"id": "u1"}, filt, 3.0, 0, error=True)
+            await tel.record_query(s, "wafer-lot", {"id": "u2"}, filt, 4.0, 2)
+            await tel.record_query(s, "wafer-lot", None, filt, 1.0, 2)
+            signals = await tel.aggregate_signals(s, thresholds={"unmapped_filter_min": 4})
+
+        signal = next(sig for sig in signals if sig["kind"] == "unmapped_filter_field")
+        evidence = signal["evidence"]
+        assert evidence["count"] == 4
+        assert evidence["distinct_principals"] == 2
+        assert evidence["error_count"] == 1
+        assert evidence["non_error_count"] == 3
+        assert evidence["first_seen"] <= evidence["last_seen"]
+        assert "u1" not in str(evidence) and "u2" not in str(evidence)
+
     async def test_aggregate_is_idempotent_within_window(self, env):
         """The window is rolling, so without dedup every run re-detects the same
         finding and the feed fills with identical rows (observed: 7 copies of
@@ -169,7 +188,7 @@ class TestDiagnoseAndPropose:
                 await tel.record_query(
                     s,
                     "wafer-lot",
-                    {"id": "x"},
+                    {"id": f"user-{_}"},
                     filt={"field": "shift", "op": "eq", "value": "DAY"},
                     latency_ms=2.0,
                     n_results=3,
@@ -186,6 +205,38 @@ class TestDiagnoseAndPropose:
         assert proposal["mutations"] == [
             {"mutation": "add-optional-property", "object": "wafer-lot", "prop": "shift", "type": "string"}
         ]
+
+    async def test_single_principal_unmapped_signal_is_informational(self, env):
+        tel = env["telemetry"]
+        async with env["maker"]() as s:
+            for _ in range(6):
+                await tel.record_query(
+                    s, "wafer-lot", {"id": "same"}, {"field": "shift", "op": "eq", "value": "DAY"}, 2.0, 1
+                )
+            await s.commit()
+            signals = await tel.aggregate_signals(s)
+
+        assert any(sig["kind"] == "unmapped_filter_field" for sig in signals)
+        gaps = diagnose(
+            [EvolveSignalRow(kind=sig["kind"], evidence=sig["evidence"]) for sig in signals], env["compiled"]
+        )
+        assert not any(gap.get("kind") == "add-optional-property" and gap.get("prop") == "shift" for gap in gaps)
+
+    def test_unmapped_signal_is_ignored_when_schema_is_stale_or_target_missing(self, env):
+        from ontogeny.evolve.diagnoser import diagnose
+
+        evidence = {
+            "object_type": "wafer-lot",
+            "field": "lot_id",
+            "count": 6,
+            "distinct_principals": 2,
+            "error_count": 1,
+            "non_error_count": 5,
+        }
+        existing = EvolveSignalRow(kind="unmapped_filter_field", evidence=evidence)
+        missing = EvolveSignalRow(kind="unmapped_filter_field", evidence={**evidence, "object_type": "no-such-object"})
+        assert not any(gap.get("prop") == "lot_id" for gap in diagnose([existing], env["compiled"]))
+        assert diagnose([missing], env["compiled"]) == []
 
     def test_enum_widen_gap(self, env):
         gap = enum_widen_gap("wafer-lot", "status", "BLOCKED", env["compiled"])
@@ -1419,10 +1470,9 @@ class TestDirectionD:
         gaps = diagnose(sigs, env["compiled"])
         clusters = [g for g in gaps if g["kind"] == "cluster"]
         assert clusters and clusters[0]["object"] == "requirement"
-        assert len(clusters[0]["context"]) == 2  # the two informational signals
-        # the concrete gap about the same object carries the cluster as context
-        unmapped = [g for g in gaps if g.get("prop") == "channel"]
-        assert unmapped and unmapped[0].get("context")
+        assert len(clusters[0]["context"]) == 3  # two informational signals plus the insufficient-evidence finding
+        # the insufficient-evidence finding is represented in the cluster
+        assert any(item["evidence"].get("field") == "channel" for item in clusters[0]["context"])
 
 
 class TestDirectionE:
@@ -1737,7 +1787,7 @@ class TestDirectionF:
         tel = sc.telemetry
         async with sc.sessionmaker() as s:
             for _ in range(6):
-                await tel.record_query(s, "wafer-lot", {"id": "u"}, {"urgency": "HIGH"}, 1.0, 0)
+                await tel.record_query(s, "wafer-lot", {"id": f"u-{_}"}, {"urgency": "HIGH"}, 1.0, 0)
             await s.commit()
         r = await c.post("/api/v1/evolve/cycle")
         assert r.status_code == 200
