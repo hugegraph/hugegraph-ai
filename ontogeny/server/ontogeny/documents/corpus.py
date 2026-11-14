@@ -26,7 +26,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import mimetypes
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
@@ -91,6 +91,20 @@ def _selector_root(root: Path, selector: str | None) -> Path:
     return root
 
 
+def _scanned_document(path: Path, rel: str, size: int, store_name: str) -> ScannedDocument:
+    data = path.read_bytes()
+    # identity is (path, content): two identical files are two documents,
+    # and a file that moves is a different document (its old row retracts)
+    legacy_id = hashlib.sha256(rel.encode("utf-8") + b"\0" + data).hexdigest()
+    # Domain separation avoids collisions between different stores without
+    # making identity dependent on a deployment's absolute root path.
+    doc_id = hashlib.sha256(
+        b"ontogeny-document-v2\0" + store_name.encode("utf-8") + b"\0" + bytes.fromhex(legacy_id)
+    ).hexdigest()
+    media = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return ScannedDocument(doc_id, path, rel, size, media, legacy_id)
+
+
 def scan(root: Path, cfg: DocumentCfg, selector: str | None = None, *, store_name: str) -> list[ScannedDocument]:
     base = _selector_root(root, selector)
     globs = [selector] if selector and any(ch in selector for ch in "*?[") else None
@@ -104,18 +118,43 @@ def scan(root: Path, cfg: DocumentCfg, selector: str | None = None, *, store_nam
                 continue
         elif not _match(rel, cfg):
             continue
-        data = path.read_bytes()
-        # identity is (path, content): two identical files are two documents,
-        # and a file that moves is a different document (its old row retracts)
-        legacy_id = hashlib.sha256(rel.encode("utf-8") + b"\0" + data).hexdigest()
-        # Domain separation avoids collisions between different stores without
-        # making identity dependent on a deployment's absolute root path.
-        doc_id = hashlib.sha256(
-            b"ontogeny-document-v2\0" + store_name.encode("utf-8") + b"\0" + bytes.fromhex(legacy_id)
-        ).hexdigest()
-        media = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        out.append(ScannedDocument(doc_id, path, rel, len(data), media, legacy_id))
+        out.append(_scanned_document(path, rel, path.stat().st_size, store_name))
     return out
+
+
+def scan_incremental(
+    root: Path,
+    cfg: DocumentCfg,
+    selector: str | None = None,
+    *,
+    store_name: str,
+    previous: dict[str, tuple[tuple[int, int, int], ScannedDocument]] | None = None,
+) -> tuple[list[ScannedDocument], dict[str, tuple[tuple[int, int, int], ScannedDocument]]]:
+    """Discover files while reusing content hashes for unchanged file metadata."""
+    base = _selector_root(root, selector)
+    globs = [selector] if selector and any(ch in selector for ch in "*?[") else None
+    previous = previous or {}
+    scanned: list[ScannedDocument] = []
+    current: dict[str, tuple[tuple[int, int, int], ScannedDocument]] = {}
+    for path in sorted(base.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(base).as_posix()
+        if globs is not None:
+            if not any(fnmatch(rel, g) or fnmatch(path.name, g) for g in globs):
+                continue
+        elif not _match(rel, cfg):
+            continue
+        stat = path.stat()
+        signature = (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        cached = previous.get(rel)
+        if cached is not None and cached[0] == signature:
+            item = replace(cached[1], path=path, size=stat.st_size)
+        else:
+            item = _scanned_document(path, rel, stat.st_size, store_name)
+        scanned.append(item)
+        current[rel] = (signature, item)
+    return scanned, current
 
 
 def is_text(path: Path) -> bool:
