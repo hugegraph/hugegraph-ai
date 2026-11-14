@@ -26,13 +26,15 @@ import datetime as _dt
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import and_, func, select, tuple_, update
+from sqlalchemy import and_, case, func, or_, select, tuple_, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import ColumnElement
 
 from ..errors import ConflictError, NotFoundError, PolicyDeniedError, RuleRejectedError, StoreError
 from .ddl import ensure_tables, live_index_name, object_table
+
+SYNC_UPSERT_BATCH_SIZE = 100
 
 
 def utcnow() -> _dt.datetime:
@@ -364,47 +366,135 @@ class ObjectRepository:
         props: dict[str, Any],
         ts: _dt.datetime,
     ) -> str:
+        return (await self.sync_upsert_many(session, object_type, [(props, ts)]))[0]
+
+    async def sync_upsert_many(
+        self,
+        session,
+        object_type: str,
+        rows: list[tuple[dict[str, Any], _dt.datetime]],
+    ) -> list[str]:
         """Ownership-aware upsert used by the sync engine.
 
         - insert: seeds every provided property (ontology-owned included)
         - update: overwrites ONLY source-owned properties; carries the rest forward
+
+        Current rows are fetched and locked in bounded key batches. Version
+        closures and new versions are then written in batches, preserving the
+        source-row order and the per-row outcome contract.
         """
+        if not rows:
+            return []
+        if len(rows) > SYNC_UPSERT_BATCH_SIZE:
+            outcomes = []
+            for offset in range(0, len(rows), SYNC_UPSERT_BATCH_SIZE):
+                outcomes.extend(
+                    await self.sync_upsert_many(session, object_type, rows[offset : offset + SYNC_UPSERT_BATCH_SIZE])
+                )
+            return outcomes
+
         t = self._table(object_type)
-        props = self._to_columns(object_type, props)
         pk_cols = self._pk_cols(object_type)
-        missing = [c for c in pk_cols if props.get(c) is None]
-        if missing:
-            raise StoreError(f"sync row missing primary key {missing}")
-        props.update(dict(zip(pk_cols, self._key_values(object_type, [props[c] for c in pk_cols]), strict=True)))
-        where = _and(t.c._valid_to.is_(None), *[t.c[c] == props[c] for c in pk_cols])
-        current = (await session.execute(select(t).where(where).limit(1).with_for_update())).mappings().first()
+        property_cols = self._prop_cols(object_type)
+        materialized_cols = self._materialized_cols(object_type)
+        stored_cols = list(dict.fromkeys([*property_cols, *materialized_cols]))
+        normalized: list[tuple[tuple[Any, ...], dict[str, Any], _dt.datetime]] = []
+        for source_props, row_ts in rows:
+            props = self._to_columns(object_type, source_props)
+            missing = [c for c in pk_cols if props.get(c) is None]
+            if missing:
+                raise StoreError(f"sync row missing primary key {missing}")
+            key = self._key_values(object_type, [props[c] for c in pk_cols])
+            props.update(dict(zip(pk_cols, key, strict=True)))
+            normalized.append((key, props, row_ts))
 
-        if current is None:
-            values = {c: props.get(c) for c in self._prop_cols(object_type) if c in props}
-            values.update({"_rev": 1, "_valid_from": ts, "_valid_to": None, "_synced_at": ts})
-            await self._insert_current(session, t, object_type, values)
-            return "inserted"
-
-        changes = {
-            c: props[c]
-            for c in self._prop_cols(object_type)
-            if c in props
-            and props[c] != current.get(c)
-            and self.compiled.owner(object_type, self._un_col(object_type, c)) == "source"
+        keys = list(dict.fromkeys(key for key, _, _ in normalized))
+        pk_expr = tuple_(*[t.c[c] for c in pk_cols])
+        stmt = select(t).where(t.c._valid_to.is_(None), pk_expr.in_(keys)).with_for_update()
+        current_rows = (await session.execute(stmt)).mappings().all()
+        states: dict[tuple[Any, ...], dict[str, Any]] = {
+            tuple(row[c] for c in pk_cols): {"row": dict(row), "persisted": True} for row in current_rows
         }
-        if not changes:
-            # touch _synced_at only (no new version)
-            await session.execute(update(t).where(where).values(_synced_at=ts))
-            return "noop"
 
-        ts = _next_version_time(current["_valid_from"], ts)
-        await session.execute(update(t).where(where).values(_valid_to=ts))
-        merged = {c: current.get(c) for c in self._prop_cols(object_type)}
-        merged.update({c: current.get(c) for c in self._materialized_cols(object_type)})
-        merged.update(changes)
-        merged.update({"_rev": current["_rev"] + 1, "_valid_from": ts, "_valid_to": None, "_synced_at": ts})
-        await session.execute(t.insert().values(**merged))
-        return "updated"
+        # A persisted version may receive a sync timestamp and later be closed
+        # again in the same source batch. Keep both changes keyed to that exact
+        # version, while newly-created versions can be updated in memory.
+        db_updates: dict[tuple[Any, ...], dict[str, Any]] = {}
+        inserted: list[dict[str, Any]] = []
+        outcomes: list[str] = []
+        for key, props, row_ts in normalized:
+            state = states.get(key)
+            if state is None:
+                version = {col: props.get(col) for col in stored_cols}
+                version.update({"_rev": 1, "_valid_from": row_ts, "_valid_to": None, "_synced_at": row_ts})
+                inserted.append(version)
+                states[key] = {"row": version, "persisted": False}
+                outcomes.append("inserted")
+                continue
+
+            current = state["row"]
+            changes = {
+                col: props[col]
+                for col in property_cols
+                if col in props
+                and props[col] != current.get(col)
+                and self.compiled.owner(object_type, self._un_col(object_type, col)) == "source"
+            }
+            if not changes:
+                current["_synced_at"] = row_ts
+                if state["persisted"]:
+                    identity = (*key, current["_valid_from"])
+                    db_updates.setdefault(identity, {})["_synced_at"] = row_ts
+                outcomes.append("noop")
+                continue
+
+            version_ts = _next_version_time(current["_valid_from"], row_ts)
+            if state["persisted"]:
+                identity = (*key, current["_valid_from"])
+                db_updates.setdefault(identity, {})["_valid_to"] = version_ts
+            else:
+                current["_valid_to"] = version_ts
+
+            version = {col: current.get(col) for col in stored_cols}
+            version.update(changes)
+            version.update(
+                {"_rev": current["_rev"] + 1, "_valid_from": version_ts, "_valid_to": None, "_synced_at": version_ts}
+            )
+            inserted.append(version)
+            states[key] = {"row": version, "persisted": False}
+            outcomes.append("updated")
+
+        if db_updates:
+            conditions = []
+            valid_to_cases = []
+            synced_at_cases = []
+            for identity, changes in db_updates.items():
+                key, valid_from = identity[:-1], identity[-1]
+                condition = _and(
+                    *[t.c[col] == value for col, value in zip(pk_cols, key, strict=True)],
+                    t.c._valid_from == valid_from,
+                )
+                conditions.append(condition)
+                if "_valid_to" in changes:
+                    valid_to_cases.append((condition, changes["_valid_to"]))
+                if "_synced_at" in changes:
+                    synced_at_cases.append((condition, changes["_synced_at"]))
+            values = {}
+            if valid_to_cases:
+                values["_valid_to"] = case(*valid_to_cases, else_=t.c._valid_to)
+            if synced_at_cases:
+                values["_synced_at"] = case(*synced_at_cases, else_=t.c._synced_at)
+            await session.execute(update(t).where(or_(*conditions)).values(**values))
+
+        # Inserts go through _insert_current rather than a single bulk INSERT:
+        # a new business key has no live row to lock, so a concurrent create can
+        # still collide on the partial unique index. _insert_current wraps each
+        # write in a dialect-appropriate savepoint and converts the unique
+        # violation into ConflictError, keeping the surrounding transaction
+        # usable (the concurrent-create test relies on this contract).
+        for version in inserted:
+            await self._insert_current(session, t, object_type, version)
+        return outcomes
 
     async def apply_extracted(
         self,
@@ -585,6 +675,49 @@ class ObjectRepository:
         ).scalar_one_or_none()
         if current is not None:
             await session.execute(update(t).where(where).values(_valid_to=_next_version_time(current, ts)))
+
+    async def archive_many(
+        self, session, object_type: str, obj_ids: Iterable[Any], ts: _dt.datetime
+    ) -> list[tuple[Any, ...]]:
+        """Archive live objects with bounded key reads and updates."""
+        t = self._table(object_type)
+        pk_cols = self._pk_cols(object_type)
+        keys = list(dict.fromkeys(self._key_values(object_type, obj_id) for obj_id in obj_ids))
+        archived: list[tuple[Any, ...]] = []
+        for offset in range(0, len(keys), SYNC_UPSERT_BATCH_SIZE):
+            batch = keys[offset : offset + SYNC_UPSERT_BATCH_SIZE]
+            key_predicate = (
+                t.c[pk_cols[0]].in_([key[0] for key in batch])
+                if len(pk_cols) == 1
+                else tuple_(*[t.c[col] for col in pk_cols]).in_(batch)
+            )
+            current_rows = (
+                await session.execute(
+                    select(*[t.c[col] for col in pk_cols], t.c._valid_from)
+                    .where(t.c._valid_to.is_(None), key_predicate)
+                    .with_for_update()
+                )
+            ).all()
+            if not current_rows:
+                continue
+            cases = []
+            conditions = []
+            for row in current_rows:
+                key = tuple(row[: len(pk_cols)])
+                valid_from = row[len(pk_cols)]
+                condition = _and(
+                    *[t.c[col] == value for col, value in zip(pk_cols, key, strict=True)],
+                    t.c._valid_from == valid_from,
+                )
+                conditions.append(condition)
+                cases.append((condition, _next_version_time(valid_from, ts)))
+                archived.append(key)
+            await session.execute(
+                update(t)
+                .where(or_(*conditions), t.c._valid_to.is_(None))
+                .values(_valid_to=case(*cases, else_=t.c._valid_to))
+            )
+        return archived
 
     # ------------------------------------------------------------------ links
 
