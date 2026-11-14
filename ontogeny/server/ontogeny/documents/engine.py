@@ -782,11 +782,7 @@ spec:
         for offset in range(0, len(removed), 400):
             batch = removed[offset : offset + 400]
             assertions.extend(
-                (
-                    await session.execute(
-                        select(ExtractAssertionRow).where(ExtractAssertionRow.doc_id.in_(batch))
-                    )
-                )
+                (await session.execute(select(ExtractAssertionRow).where(ExtractAssertionRow.doc_id.in_(batch))))
                 .scalars()
                 .all()
             )
@@ -845,19 +841,19 @@ spec:
             ).all()
             origins.update((row.object_type, row.object_id) for row in rows)
 
-        by_type: dict[str, list[str]] = {}
+        # archive_many lives in the stores batching PR; use per-row archive
+        # here so this change stays independent of that not-yet-merged work.
         for object_type, object_id in origins:
-            by_type.setdefault(object_type, []).append(object_id)
-        for object_type, object_ids in by_type.items():
-            archived_keys = await self.sc.repo.archive_many(session, object_type, object_ids, ts)
-            for key in archived_keys:
-                object_id = str(key[0])
-                session.add(
-                    OutboxRow(
-                        object_type=object_type, object_id=object_id, op="archive", payload={"origin": "document"}
-                    )
+            current = await self.sc.repo.get(session, object_type, object_id)
+            if current is None:
+                continue
+            await self.sc.repo.archive(session, object_type, object_id, ts)
+            session.add(
+                OutboxRow(
+                    object_type=object_type, object_id=str(object_id), op="archive", payload={"origin": "document"}
                 )
-                archived += 1
+            )
+            archived += 1
         await session.commit()
         return archived
 
