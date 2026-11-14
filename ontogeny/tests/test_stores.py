@@ -25,7 +25,7 @@ import sqlite3
 import pytest
 import pytest_asyncio
 import yaml
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from ontogeny.config import Settings
 from ontogeny.core import load_package
@@ -177,6 +177,51 @@ class TestSync:
             lots, _ = await repo.query(s, "wafer-lot", filt={"field": "site", "op": "eq", "value": "fab-site-a"})
             assert [r["lot_id"] for r in lots] == ["LOT-1"]
             assert isinstance(lots[0]["started_at"], dt.datetime)
+
+    async def test_sync_upsert_many_batches_reads_and_preserves_versions(self, env):
+        repo = env["repo"]
+        ts0 = dt.datetime(2026, 9, 18, 8, tzinfo=dt.UTC)
+        first_rows = [
+            ({"lot_id": f"BATCH-{i:03d}", "version_id": "TO-A0", "qty_wafers": i}, ts0)
+            for i in range(125)
+        ]
+        first_rows.append(({"lot_id": "BATCH-000", "version_id": "TO-A0", "qty_wafers": 777}, ts0))
+        async with env["maker"]() as session:
+            outcomes = await repo.sync_upsert_many(session, "wafer-lot", first_rows)
+            await session.commit()
+        assert outcomes.count("inserted") == 125
+        assert outcomes.count("updated") == 1
+
+        statement_count = 0
+
+        def count_batch_reads(_conn, _cursor, statement, _params, _context, _many):
+            nonlocal statement_count
+            sql = statement.upper()
+            if sql.lstrip().startswith("SELECT") and "ONTOGENY_OBJ_WAFER_LOT" in sql and " IN " in sql:
+                statement_count += 1
+
+        ts1 = ts0 + dt.timedelta(seconds=1)
+        changed_rows = [
+            ({"lot_id": f"BATCH-{i:03d}", "version_id": "TO-A0", "qty_wafers": i + 1}, ts1)
+            for i in range(125)
+        ]
+        async with env["maker"]() as session:
+            bind = session.sync_session.get_bind()
+            event.listen(bind, "before_cursor_execute", count_batch_reads)
+            try:
+                changed = await repo.sync_upsert_many(session, "wafer-lot", changed_rows)
+                await session.commit()
+            finally:
+                event.remove(bind, "before_cursor_execute", count_batch_reads)
+
+        assert changed == ["updated"] * 125
+        assert statement_count == 2
+        async with env["maker"]() as session:
+            historical = await repo.get(session, "wafer-lot", "BATCH-000", at=ts0)
+            current = await repo.get(session, "wafer-lot", "BATCH-000")
+        assert historical["qty_wafers"] == 0
+        assert current["qty_wafers"] == 1
+        assert current["_rev"] == 3
 
     async def test_enum_domain_violation_quarantined(self, env):
         con = sqlite3.connect(env["src"])
