@@ -19,18 +19,72 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
+import pytest
 from doc_fixtures import add_note
 
 from ontogeny.api import build_app
+from ontogeny.documents import corpus
+from ontogeny.documents.models import DocumentRow
 
 ADMIN = {"X-Ontogeny-Principal": json.dumps({"id": "doc-admin", "is_admin": True})}
 
 
 async def _client(sc):
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=build_app(sc)), base_url="http://test", headers=ADMIN)
+
+
+async def test_document_listing_reuses_hashes_and_refreshes_new_files(doc_context, monkeypatch):
+    sc, pkg, _ = doc_context
+    await sc.documents.list_documents("supplier-docs")
+    scanned_paths = []
+    scan_file = corpus._scanned_document
+
+    def track_scan(path, rel, size, store_name):
+        scanned_paths.append(rel)
+        return scan_file(path, rel, size, store_name)
+
+    monkeypatch.setattr(corpus, "_scanned_document", track_scan)
+    await sc.documents.list_documents("supplier-docs")
+    assert scanned_paths == []
+
+    add_note(pkg, "cache-new.md", "Acme Components", "2026-07-01", "LOW", "Cache invalidation check")
+    listed = await sc.documents.list_documents("supplier-docs")
+    assert scanned_paths == ["cache-new.md"]
+    assert "cache-new.md" in {doc["name"] for doc in listed["documents"]}
+
+
+async def test_document_listing_serializes_with_removal(doc_context, monkeypatch):
+    sc, _, _ = doc_context
+    listed = await sc.documents.list_documents("supplier-docs")
+    doc_id = listed["documents"][0]["id"]
+    scan_started = asyncio.Event()
+    continue_scan = asyncio.Event()
+    scan_documents = sc.documents._scan_documents
+
+    async def pause_after_scan(*args):
+        scanned = await scan_documents(*args)
+        scan_started.set()
+        await continue_scan.wait()
+        return scanned
+
+    monkeypatch.setattr(sc.documents, "_scan_documents", pause_after_scan)
+    listing = asyncio.create_task(sc.documents.list_documents("supplier-docs"))
+    await asyncio.wait_for(scan_started.wait(), timeout=5)
+    removal = asyncio.create_task(sc.documents.remove_document(doc_id))
+    try:
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(removal), timeout=0.05)
+    finally:
+        continue_scan.set()
+    await listing
+    await removal
+    async with sc.sessionmaker() as session:
+        document = await session.get(DocumentRow, doc_id)
+    assert document.status == "removed"
 
 
 async def test_api_corpus_ingest_runs_and_review(doc_context):

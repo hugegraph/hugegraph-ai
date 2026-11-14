@@ -30,10 +30,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, tuple_
 
 from ..action.models import OutboxRow, RevisionRow
 from ..core.models import DocumentCfg, ExtractCfg, ExtractedJoin
@@ -74,6 +75,7 @@ class DocumentService:
     def __init__(self, sc) -> None:
         self.sc = sc
         self._locks: dict[str, Any] = {}
+        self._scan_cache: dict[str, tuple[tuple[str, str, str, tuple[str, ...]], dict]] = {}
         from .tasks import TaskService
 
         self.tasks = TaskService(self)
@@ -577,20 +579,14 @@ spec:
                 if _valid(value) and (prop in values or current.get(self.compiled.col(prop)) == value)
             }
         )
+        assertion_pairs = set()
+        assertions = []
         for prop, value in supported.items():
             docs = bound.sources.get(prop) or bound.docs or {doc_id}
             for source_doc in docs:
                 ev = evidence.get(prop)
-                await session.execute(
-                    delete(ExtractAssertionRow).where(
-                        ExtractAssertionRow.doc_id == source_doc,
-                        ExtractAssertionRow.kind == "object",
-                        ExtractAssertionRow.object_type == bound.object_type,
-                        ExtractAssertionRow.object_id == bound.object_id,
-                        ExtractAssertionRow.prop == prop,
-                    )
-                )
-                session.add(
+                assertion_pairs.add((source_doc, prop))
+                assertions.append(
                     ExtractAssertionRow(
                         run_id=run_id,
                         doc_id=source_doc,
@@ -604,6 +600,19 @@ spec:
                         created_object=bool(created and (created_by in (None, source_doc))),
                     )
                 )
+        assertion_pairs = list(assertion_pairs)
+        for offset in range(0, len(assertion_pairs), 300):
+            batch = assertion_pairs[offset : offset + 300]
+            await session.execute(
+                delete(ExtractAssertionRow).where(
+                    tuple_(ExtractAssertionRow.doc_id, ExtractAssertionRow.prop).in_(batch),
+                    ExtractAssertionRow.kind == "object",
+                    ExtractAssertionRow.object_type == bound.object_type,
+                    ExtractAssertionRow.object_id == bound.object_id,
+                )
+            )
+        if assertions:
+            session.add_all(assertions)
         return outcome
 
     async def _candidate(
@@ -768,80 +777,81 @@ spec:
             return 0
         ts = utcnow()
         archived = 0
-        for doc_id in removed:
-            links = (
+        removed = list(dict.fromkeys(removed))
+        assertions = []
+        for offset in range(0, len(removed), 400):
+            batch = removed[offset : offset + 400]
+            assertions.extend(
                 (
                     await session.execute(
-                        select(ExtractAssertionRow).where(
-                            ExtractAssertionRow.doc_id == doc_id, ExtractAssertionRow.kind == "link"
-                        )
+                        select(ExtractAssertionRow).where(ExtractAssertionRow.doc_id.in_(batch))
                     )
                 )
                 .scalars()
                 .all()
             )
-            for row in links:
+
+        touched: set[tuple[str, str]] = set()
+        for row in assertions:
+            if row.kind == "link":
                 value = row.value or {}
                 await self.sc.repo.link_retract(
-                    session, row.object_type, str(value.get("src")), str(value.get("dst")), doc_id, ts
+                    session, row.object_type, str(value.get("src")), str(value.get("dst")), row.doc_id, ts
                 )
-                await session.delete(row)
-            fields = (
-                (
-                    await session.execute(
-                        select(ExtractAssertionRow).where(
-                            ExtractAssertionRow.doc_id == doc_id, ExtractAssertionRow.kind == "object"
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            touched: set[tuple[str, str]] = set()
-            for row in fields:
+            elif row.kind == "object":
                 touched.add((row.object_type, row.object_id))
-                await session.delete(row)
-            for object_type, object_id in touched:
-                remaining = (
-                    (
-                        await session.execute(
-                            select(ExtractAssertionRow).where(
-                                ExtractAssertionRow.object_type == object_type,
-                                ExtractAssertionRow.object_id == object_id,
-                            )
-                        )
+
+        for offset in range(0, len(removed), 400):
+            batch = removed[offset : offset + 400]
+            await session.execute(delete(ExtractAssertionRow).where(ExtractAssertionRow.doc_id.in_(batch)))
+
+        remaining: set[tuple[str, str]] = set()
+        touched_keys = list(touched)
+        for offset in range(0, len(touched_keys), 300):
+            batch = touched_keys[offset : offset + 300]
+            rows = (
+                await session.execute(
+                    select(ExtractAssertionRow.object_type, ExtractAssertionRow.object_id).where(
+                        tuple_(ExtractAssertionRow.object_type, ExtractAssertionRow.object_id).in_(batch)
                     )
-                    .scalars()
-                    .all()
                 )
-                if remaining:
-                    continue
-                # no action ever touched it, so an extraction-created object
-                # with no evidence left is exactly what the corpus created
-                acted = (
-                    (
-                        await session.execute(
-                            select(RevisionRow).where(
-                                RevisionRow.object_type == object_type,
-                                RevisionRow.object_id == object_id,
-                                RevisionRow.action.notin_(("ingest.extract", "ingest.confirm")),
-                            )
-                        )
+            ).all()
+            remaining.update((row.object_type, row.object_id) for row in rows)
+
+        eligible = list(touched - remaining)
+        acted: set[tuple[str, str]] = set()
+        for offset in range(0, len(eligible), 300):
+            batch = eligible[offset : offset + 300]
+            rows = (
+                await session.execute(
+                    select(RevisionRow.object_type, RevisionRow.object_id).where(
+                        tuple_(RevisionRow.object_type, RevisionRow.object_id).in_(batch),
+                        RevisionRow.action.notin_(("ingest.extract", "ingest.confirm")),
                     )
-                    .scalars()
-                    .first()
                 )
-                if acted is not None:
-                    continue
-                origin = await session.get(ExtractOriginRow, (object_type, object_id))
-                if origin is None:
-                    # created outside the corpus (SQL, an action, a human):
-                    # removing a document must never archive it
-                    continue
-                current = await self.sc.repo.get(session, object_type, object_id)
-                if current is None:
-                    continue
-                await self.sc.repo.archive(session, object_type, object_id, ts)
+            ).all()
+            acted.update((row.object_type, row.object_id) for row in rows)
+
+        without_actions = list(set(eligible) - acted)
+        origins: set[tuple[str, str]] = set()
+        for offset in range(0, len(without_actions), 300):
+            batch = without_actions[offset : offset + 300]
+            rows = (
+                await session.execute(
+                    select(ExtractOriginRow.object_type, ExtractOriginRow.object_id).where(
+                        tuple_(ExtractOriginRow.object_type, ExtractOriginRow.object_id).in_(batch)
+                    )
+                )
+            ).all()
+            origins.update((row.object_type, row.object_id) for row in rows)
+
+        by_type: dict[str, list[str]] = {}
+        for object_type, object_id in origins:
+            by_type.setdefault(object_type, []).append(object_id)
+        for object_type, object_ids in by_type.items():
+            archived_keys = await self.sc.repo.archive_many(session, object_type, object_ids, ts)
+            for key in archived_keys:
+                object_id = str(key[0])
                 session.add(
                     OutboxRow(
                         object_type=object_type, object_id=object_id, op="archive", payload={"origin": "document"}
@@ -1291,10 +1301,19 @@ spec:
         }
 
     async def _scan_documents(self, store, cfg, root, targets) -> list[corpus.ScannedDocument]:
-        from dataclasses import replace
-
         store_name = store.metadata.name
-        scanned = corpus.scan(root, cfg, self._selector(store, targets), store_name=store_name)
+        selector = self._selector(store, targets) or ""
+        identity = (str(root.resolve()), cfg.model_dump_json(), selector, tuple(targets))
+        cached = self._scan_cache.get(store_name)
+        previous = cached[1] if cached is not None and cached[0] == identity else None
+        scanned, current = corpus.scan_incremental(
+            root,
+            cfg,
+            selector or None,
+            store_name=store_name,
+            previous=previous,
+        )
+        self._scan_cache[store_name] = (identity, current)
         async with self.sc.sessionmaker() as session:
             existing = set(
                 (await session.execute(select(DocumentRow.id).where(DocumentRow.store == store_name))).scalars().all()
@@ -1317,6 +1336,10 @@ spec:
         The corpus must be visible before the first run -- otherwise the UI
         shows an empty source until someone guesses to press "extract".
         """
+        async with self._lock(store_name):
+            return await self._scan_corpus(store_name)
+
+    async def _scan_corpus(self, store_name: str) -> int:
         store = self.store(store_name)
         cfg = self._cfg(store)
         root = self._root(store)
@@ -1329,38 +1352,39 @@ spec:
 
     async def list_documents(self, store_name: str) -> dict[str, Any]:
         self.store(store_name)
-        await self.scan_corpus(store_name)
-        async with self.sc.sessionmaker() as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(DocumentRow)
-                        .where(DocumentRow.store == store_name)
-                        .order_by(DocumentRow.last_seen_at.desc())
+        async with self._lock(store_name):
+            await self._scan_corpus(store_name)
+            async with self.sc.sessionmaker() as session:
+                rows = (
+                    (
+                        await session.execute(
+                            select(DocumentRow)
+                            .where(DocumentRow.store == store_name)
+                            .order_by(DocumentRow.last_seen_at.desc())
+                        )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-        return {
-            "store": store_name,
-            "documents": [
-                {
-                    "id": r.id,
-                    "path": r.path,
-                    "name": Path(r.path).name,
-                    "media_type": r.media_type,
-                    "size": r.size,
-                    "status": r.status,
-                    "chunk_count": r.chunk_count,
-                    "error": r.error,
-                    "first_seen_at": r.first_seen_at.isoformat() if r.first_seen_at else None,
-                    "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
-                    "extracted_at": r.extracted_at.isoformat() if r.extracted_at else None,
-                }
-                for r in rows
-            ],
-        }
+            return {
+                "store": store_name,
+                "documents": [
+                    {
+                        "id": r.id,
+                        "path": r.path,
+                        "name": Path(r.path).name,
+                        "media_type": r.media_type,
+                        "size": r.size,
+                        "status": r.status,
+                        "chunk_count": r.chunk_count,
+                        "error": r.error,
+                        "first_seen_at": r.first_seen_at.isoformat() if r.first_seen_at else None,
+                        "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
+                        "extracted_at": r.extracted_at.isoformat() if r.extracted_at else None,
+                    }
+                    for r in rows
+                ],
+            }
 
     async def list_runs(self, store_name: str | None = None, limit: int = 30) -> dict[str, Any]:
         async with self.sc.sessionmaker() as session:
