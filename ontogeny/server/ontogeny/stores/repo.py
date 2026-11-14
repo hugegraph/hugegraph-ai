@@ -389,9 +389,7 @@ class ObjectRepository:
             outcomes = []
             for offset in range(0, len(rows), SYNC_UPSERT_BATCH_SIZE):
                 outcomes.extend(
-                    await self.sync_upsert_many(
-                        session, object_type, rows[offset : offset + SYNC_UPSERT_BATCH_SIZE]
-                    )
+                    await self.sync_upsert_many(session, object_type, rows[offset : offset + SYNC_UPSERT_BATCH_SIZE])
                 )
             return outcomes
 
@@ -412,11 +410,7 @@ class ObjectRepository:
 
         keys = list(dict.fromkeys(key for key, _, _ in normalized))
         pk_expr = tuple_(*[t.c[c] for c in pk_cols])
-        stmt = (
-            select(t)
-            .where(t.c._valid_to.is_(None), pk_expr.in_(keys))
-            .with_for_update()
-        )
+        stmt = select(t).where(t.c._valid_to.is_(None), pk_expr.in_(keys)).with_for_update()
         current_rows = (await session.execute(stmt)).mappings().all()
         states: dict[tuple[Any, ...], dict[str, Any]] = {
             tuple(row[c] for c in pk_cols): {"row": dict(row), "persisted": True} for row in current_rows
@@ -492,8 +486,14 @@ class ObjectRepository:
                 values["_synced_at"] = case(*synced_at_cases, else_=t.c._synced_at)
             await session.execute(update(t).where(or_(*conditions)).values(**values))
 
-        if inserted:
-            await session.execute(t.insert(), inserted)
+        # Inserts go through _insert_current rather than a single bulk INSERT:
+        # a new business key has no live row to lock, so a concurrent create can
+        # still collide on the partial unique index. _insert_current wraps each
+        # write in a dialect-appropriate savepoint and converts the unique
+        # violation into ConflictError, keeping the surrounding transaction
+        # usable (the concurrent-create test relies on this contract).
+        for version in inserted:
+            await self._insert_current(session, t, object_type, version)
         return outcomes
 
     async def apply_extracted(

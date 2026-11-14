@@ -181,10 +181,7 @@ class TestSync:
     async def test_sync_upsert_many_batches_reads_and_preserves_versions(self, env):
         repo = env["repo"]
         ts0 = dt.datetime(2026, 9, 18, 8, tzinfo=dt.UTC)
-        first_rows = [
-            ({"lot_id": f"BATCH-{i:03d}", "version_id": "TO-A0", "qty_wafers": i}, ts0)
-            for i in range(125)
-        ]
+        first_rows = [({"lot_id": f"BATCH-{i:03d}", "version_id": "TO-A0", "qty_wafers": i}, ts0) for i in range(125)]
         first_rows.append(({"lot_id": "BATCH-000", "version_id": "TO-A0", "qty_wafers": 777}, ts0))
         async with env["maker"]() as session:
             outcomes = await repo.sync_upsert_many(session, "wafer-lot", first_rows)
@@ -202,8 +199,7 @@ class TestSync:
 
         ts1 = ts0 + dt.timedelta(seconds=1)
         changed_rows = [
-            ({"lot_id": f"BATCH-{i:03d}", "version_id": "TO-A0", "qty_wafers": i + 1}, ts1)
-            for i in range(125)
+            ({"lot_id": f"BATCH-{i:03d}", "version_id": "TO-A0", "qty_wafers": i + 1}, ts1) for i in range(125)
         ]
         async with env["maker"]() as session:
             bind = session.sync_session.get_bind()
