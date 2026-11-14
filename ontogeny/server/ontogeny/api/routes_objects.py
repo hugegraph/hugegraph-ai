@@ -79,19 +79,20 @@ def register(r: APIRouter, sc: ServiceContext) -> None:
                 for index, (name, info) in enumerate(objects.items()):
                     table = info["table"]
                     parameter = f"object_name_{index}"
+                    # CAST gives the parameter a type: a bare bind in a SELECT
+                    # list has no column context, which PostgreSQL refuses to
+                    # infer ("could not determine data type of parameter").
                     branches.append(
-                        f'SELECT :{parameter} AS object_name, COUNT(*) AS row_count FROM "{table}"'
+                        f'SELECT CAST(:{parameter} AS TEXT) AS object_name, COUNT(*) AS row_count FROM "{table}"'
                     )
                     params[parameter] = name
                 try:
                     async with sc.sessionmaker() as session:
-                        rows = (
-                            await session.execute(text(" UNION ALL ".join(branches)), params)
-                        ).all()
+                        rows = (await session.execute(text(" UNION ALL ".join(branches)), params)).all()
                     for row in rows:
                         objects[row.object_name]["rows"] = int(row.row_count)
                 except Exception:
-                    for name, info in objects.items():
+                    for info in objects.values():
                         try:
                             async with sc.sessionmaker() as session:
                                 row = await session.execute(text(f'SELECT COUNT(*) FROM "{info["table"]}"'))
