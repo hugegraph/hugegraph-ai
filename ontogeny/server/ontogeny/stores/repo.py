@@ -26,13 +26,15 @@ import datetime as _dt
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import and_, func, select, tuple_, update
+from sqlalchemy import and_, case, func, or_, select, tuple_, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import ColumnElement
 
 from ..errors import ConflictError, NotFoundError, PolicyDeniedError, RuleRejectedError, StoreError
 from .ddl import ensure_tables, live_index_name, object_table
+
+ARCHIVE_BATCH_SIZE = 400
 
 
 def utcnow() -> _dt.datetime:
@@ -585,6 +587,54 @@ class ObjectRepository:
         ).scalar_one_or_none()
         if current is not None:
             await session.execute(update(t).where(where).values(_valid_to=_next_version_time(current, ts)))
+
+    async def archive_many(
+        self, session, object_type: str, obj_ids: Iterable[Any], ts: _dt.datetime
+    ) -> list[tuple[Any, ...]]:
+        """Archive live objects with bounded key reads and updates.
+
+        Returns the business keys that were actually archived (the first element
+        is the object id), so the caller can count and record them without a
+        second read per object.
+        """
+        t = self._table(object_type)
+        pk_cols = self._pk_cols(object_type)
+        keys = list(dict.fromkeys(self._key_values(object_type, obj_id) for obj_id in obj_ids))
+        archived: list[tuple[Any, ...]] = []
+        for offset in range(0, len(keys), ARCHIVE_BATCH_SIZE):
+            batch = keys[offset : offset + ARCHIVE_BATCH_SIZE]
+            key_predicate = (
+                t.c[pk_cols[0]].in_([key[0] for key in batch])
+                if len(pk_cols) == 1
+                else tuple_(*[t.c[col] for col in pk_cols]).in_(batch)
+            )
+            current_rows = (
+                await session.execute(
+                    select(*[t.c[col] for col in pk_cols], t.c._valid_from)
+                    .where(t.c._valid_to.is_(None), key_predicate)
+                    .with_for_update()
+                )
+            ).all()
+            if not current_rows:
+                continue
+            cases = []
+            conditions = []
+            for row in current_rows:
+                key = tuple(row[: len(pk_cols)])
+                valid_from = row[len(pk_cols)]
+                condition = _and(
+                    *[t.c[col] == value for col, value in zip(pk_cols, key, strict=True)],
+                    t.c._valid_from == valid_from,
+                )
+                conditions.append(condition)
+                cases.append((condition, _next_version_time(valid_from, ts)))
+                archived.append(key)
+            await session.execute(
+                update(t)
+                .where(or_(*conditions), t.c._valid_to.is_(None))
+                .values(_valid_to=case(*cases, else_=t.c._valid_to))
+            )
+        return archived
 
     # ------------------------------------------------------------------ links
 

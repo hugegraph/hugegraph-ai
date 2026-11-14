@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +74,6 @@ class DocumentService:
     def __init__(self, sc) -> None:
         self.sc = sc
         self._locks: dict[str, Any] = {}
-        self._scan_cache: dict[str, tuple[tuple[str, str, str, tuple[str, ...]], dict]] = {}
         from .tasks import TaskService
 
         self.tasks = TaskService(self)
@@ -782,11 +780,7 @@ spec:
         for offset in range(0, len(removed), 400):
             batch = removed[offset : offset + 400]
             assertions.extend(
-                (
-                    await session.execute(
-                        select(ExtractAssertionRow).where(ExtractAssertionRow.doc_id.in_(batch))
-                    )
-                )
+                (await session.execute(select(ExtractAssertionRow).where(ExtractAssertionRow.doc_id.in_(batch))))
                 .scalars()
                 .all()
             )
@@ -1301,19 +1295,10 @@ spec:
         }
 
     async def _scan_documents(self, store, cfg, root, targets) -> list[corpus.ScannedDocument]:
+        from dataclasses import replace
+
         store_name = store.metadata.name
-        selector = self._selector(store, targets) or ""
-        identity = (str(root.resolve()), cfg.model_dump_json(), selector, tuple(targets))
-        cached = self._scan_cache.get(store_name)
-        previous = cached[1] if cached is not None and cached[0] == identity else None
-        scanned, current = corpus.scan_incremental(
-            root,
-            cfg,
-            selector or None,
-            store_name=store_name,
-            previous=previous,
-        )
-        self._scan_cache[store_name] = (identity, current)
+        scanned = corpus.scan(root, cfg, self._selector(store, targets), store_name=store_name)
         async with self.sc.sessionmaker() as session:
             existing = set(
                 (await session.execute(select(DocumentRow.id).where(DocumentRow.store == store_name))).scalars().all()
@@ -1336,10 +1321,6 @@ spec:
         The corpus must be visible before the first run -- otherwise the UI
         shows an empty source until someone guesses to press "extract".
         """
-        async with self._lock(store_name):
-            return await self._scan_corpus(store_name)
-
-    async def _scan_corpus(self, store_name: str) -> int:
         store = self.store(store_name)
         cfg = self._cfg(store)
         root = self._root(store)
@@ -1352,39 +1333,38 @@ spec:
 
     async def list_documents(self, store_name: str) -> dict[str, Any]:
         self.store(store_name)
-        async with self._lock(store_name):
-            await self._scan_corpus(store_name)
-            async with self.sc.sessionmaker() as session:
-                rows = (
-                    (
-                        await session.execute(
-                            select(DocumentRow)
-                            .where(DocumentRow.store == store_name)
-                            .order_by(DocumentRow.last_seen_at.desc())
-                        )
+        await self.scan_corpus(store_name)
+        async with self.sc.sessionmaker() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(DocumentRow)
+                        .where(DocumentRow.store == store_name)
+                        .order_by(DocumentRow.last_seen_at.desc())
                     )
-                    .scalars()
-                    .all()
                 )
-            return {
-                "store": store_name,
-                "documents": [
-                    {
-                        "id": r.id,
-                        "path": r.path,
-                        "name": Path(r.path).name,
-                        "media_type": r.media_type,
-                        "size": r.size,
-                        "status": r.status,
-                        "chunk_count": r.chunk_count,
-                        "error": r.error,
-                        "first_seen_at": r.first_seen_at.isoformat() if r.first_seen_at else None,
-                        "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
-                        "extracted_at": r.extracted_at.isoformat() if r.extracted_at else None,
-                    }
-                    for r in rows
-                ],
-            }
+                .scalars()
+                .all()
+            )
+        return {
+            "store": store_name,
+            "documents": [
+                {
+                    "id": r.id,
+                    "path": r.path,
+                    "name": Path(r.path).name,
+                    "media_type": r.media_type,
+                    "size": r.size,
+                    "status": r.status,
+                    "chunk_count": r.chunk_count,
+                    "error": r.error,
+                    "first_seen_at": r.first_seen_at.isoformat() if r.first_seen_at else None,
+                    "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
+                    "extracted_at": r.extracted_at.isoformat() if r.extracted_at else None,
+                }
+                for r in rows
+            ],
+        }
 
     async def list_runs(self, store_name: str | None = None, limit: int = 30) -> dict[str, Any]:
         async with self.sc.sessionmaker() as session:
