@@ -102,7 +102,7 @@ def scan(root: Path, cfg: DocumentCfg, selector: str | None = None, *, store_nam
         if globs is not None:
             if not any(fnmatch(rel, g) or fnmatch(path.name, g) for g in globs):
                 continue
-        elif not _match(rel, cfg):
+        elif not _match(path.relative_to(root).as_posix(), cfg):
             continue
         data = path.read_bytes()
         # identity is (path, content): two identical files are two documents,
