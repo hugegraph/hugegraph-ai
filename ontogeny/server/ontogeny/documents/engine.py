@@ -120,7 +120,7 @@ class DocumentService:
         if not root:
             raise DocumentError("prompt_file requires ONTOGENY_PACKAGE_ROOT")
         path = (Path(root) / cfg.prompt_file).resolve()
-        if not str(path).startswith(str(Path(root).resolve())):
+        if not path.is_relative_to(Path(root).resolve()):
             raise DocumentError("prompt_file must stay inside the package root")
         if not path.is_file():
             raise DocumentError(f"prompt_file not found: {cfg.prompt_file}")
