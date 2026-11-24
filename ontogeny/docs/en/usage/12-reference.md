@@ -63,6 +63,16 @@ CLI database commands use `ONTOGENY_DB_DSN` or `--db`; they do not infer the run
 
 Other groups: **audit** (/audit/revisions) · **evolve** (/evolve/signals · aggregate · diagnose · proposals[/eval|promote]) · **assistant** (/assistant/chat, grounding + propose modes) · **admin** (llm/status · publish · sync/{t} · outbox/dispatch · derive · projection/rebuild · **domains[/import] (zip ontology package import)**) · **subscriptions** (SSE). The complete list is at `/docs` (OpenAPI).
 
+**Object change subscriptions (SSE)**
+
+`GET /api/v1/subscriptions/objects/{object_type}` is an authenticated, best-effort live notification feed, not a durable event log. Normal messages contain identifiers only; read current values through the authorized query API.
+
+Each subscriber has a bounded queue. If it overflows, the server discards that subscriber's incomplete backlog, emits the named SSE event `resync_required` with data `{"reason":"subscriber_overflow"}`, and ends the stream. Other subscribers continue independently. Register an explicit listener for this event: EventSource's default `onmessage` handler does not receive named events.
+
+On this event, invalidate cached state. Re-establish the subscription before fetching a fresh snapshot, and process or buffer notifications arriving during the fetch so changes during recovery are not missed. If another overflow occurs, repeat recovery. Resynchronize after other connection interruptions too: this endpoint does not implement Last-Event-ID replay. Automatic reconnection alone does not recover missed notifications.
+
+The outbox SSE receipt records dispatch to the broker, not acknowledgement by each remote subscriber. The resync signal does not promise lossless delivery or recover every intermediate historical state.
+
 The normal `serve`/ASGI factory runs an outbox dispatch tick about every second and drains derivations. This does not schedule source synchronization: `sync.schedule` is declarative, and repeated source pulls require an external scheduler calling the CLI or admin sync endpoint. Manual `/api/v1/admin/outbox/dispatch` remains available and shares the background loop’s process lock.
 
 **Outbox upgrade:** Stop all old dispatcher processes before upgrading. Start the new version only after the old workers have stopped; startup adds the pending columns and indexes, and the first dispatch reconciles pending state with existing receipts transactionally, including after a rollback. Do not run old and new dispatchers against the same database at the same time. Keep one server process per database; dispatch and replay coordination is in-process.

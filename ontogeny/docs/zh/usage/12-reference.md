@@ -64,6 +64,16 @@ CLI 数据库命令使用 `ONTOGENY_DB_DSN` 或 `--db`，不会根据运行中�
 
 其余组：**audit**（/audit/revisions）· **evolve**（/evolve/signals · aggregate · diagnose · proposals[/eval|promote]）· **assistant**（/assistant/chat，grounding + propose 模式）· **admin**（llm/status · publish · sync/{t} · outbox/dispatch · derive · projection/rebuild · **domains[/import]（zip 本体包导入）**）· **subscriptions**（SSE）。完整清单以 `/docs`（OpenAPI）为准。
 
+**对象变更订阅（SSE）**
+
+`GET /api/v1/subscriptions/objects/{object_type}` 是需要认证的尽力而为实时通知接口，不是持久事件日志。正常通知仅包含标识符；完整状态必须通过有权限检查的查询接口读取。
+
+每个订阅者使用有界队列。队列溢出时，服务端丢弃该订阅者已不完整的积压通知，发送命名 SSE 事件 `resync_required`，数据为 `{"reason":"subscriber_overflow"}`，随后结束流。其他订阅者不受阻塞。客户端必须显式监听这个事件；EventSource 的默认 `onmessage` 不会收到命名事件。
+
+收到 `resync_required` 事件后应使缓存失效，先重新建立订阅，再读取当前状态快照，并处理或缓存查询期间到达的通知，避免恢复期间的变更遗漏。如果再次溢出，需要重新执行恢复。其他连接中断后也应重新同步：接口没有实现 Last-Event-ID 重放，自动重连本身不能恢复遗漏通知。
+
+Outbox 的 SSE 回执仅表示向 broker 派发，不是每个远端订阅者的确认。本机制不承诺无损投递，也不能恢复每一个历史中间状态。
+
 正常 `serve`/ASGI factory 会约每秒处理一次 outbox 并 drain 派生任务；这不等于定时拉取源库。`sync.schedule` 只是声明，周期性源同步需外部调度器调用 CLI 或管理员同步端点。仍可手动调用 `/api/v1/admin/outbox/dispatch`，它与后台循环共用进程内锁。
 
 **Outbox 升级：**升级前停止所有旧版本派发进程，确认停止后再启动新版本。启动时会补充待处理列和索引；首次派发在同一事务中根据现有回执校对待处理状态，回退旧版后再次升级也会重新校对。不要让新旧派发进程同时访问同一数据库。每个数据库只运行一个服务进程；派发与重放在进程内协调。
