@@ -160,13 +160,12 @@ def selector_covers(root: Path, path: Path, selector: str | None) -> bool:
 def _excluded_subtree(root: Path, directory: Path, cfg: DocumentCfg) -> bool:
     if directory == root:
         return False
-    rel = directory.relative_to(root).as_posix()
+    prefix = directory.relative_to(root).as_posix() + "/"
     for pattern in cfg.exclude:
-        prefix, _, suffix = pattern.rpartition("/")
-        if (
-            prefix
-            and suffix in {"*", "**"}
-            and (fnmatch(rel, prefix) or (prefix.startswith("**/") and fnmatch(rel, prefix[3:])))
+        # fnmatch lets a trailing '*' consume slashes, so a match on the
+        # directory prefix also excludes every file below it.
+        if pattern.endswith("*") and (
+            fnmatch(prefix, pattern) or (pattern.startswith("**/") and fnmatch(prefix, pattern[3:]))
         ):
             return True
     return False
@@ -176,7 +175,20 @@ def _selected_paths(
     root: Path, cfg: DocumentCfg, selector: str | None, unreadable: set[Path]
 ) -> Iterator[tuple[Path, str, stat_result]]:
     glob = selector if selector and _is_glob(selector) else None
+    glob_prefix = root
+    if glob:
+        # Patterns without a directory component also match basenames.
+        # Only literal components before the first wildcard can prune a walk.
+        for part in glob.split("/")[:-1]:
+            if _is_glob(part):
+                break
+            glob_prefix /= part
     literal = root
+
+    def can_contain_matches(directory: Path) -> bool:
+        return (directory.is_relative_to(glob_prefix) or glob_prefix.is_relative_to(directory)) and not (
+            _excluded_subtree(root, directory, cfg)
+        )
 
     def record_walk_error(error: OSError) -> None:
         failed = Path(error.filename) if error.filename else literal
@@ -194,9 +206,9 @@ def _selected_paths(
         base, paths = literal.parent, [literal]
     elif S_ISDIR(mode):
         base, paths = literal, []
-        if not _excluded_subtree(root, literal, cfg):
+        if can_contain_matches(literal):
             for folder, dirs, names in literal.walk(on_error=record_walk_error):
-                dirs[:] = [name for name in dirs if not _excluded_subtree(root, folder / name, cfg)]
+                dirs[:] = [name for name in dirs if can_contain_matches(folder / name)]
                 paths.extend(folder / name for name in names)
     else:
         return

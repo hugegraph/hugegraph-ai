@@ -18,11 +18,12 @@
 """Glob selectors must narrow the store's configured corpus."""
 
 import os
+from pathlib import Path
 
 import pytest
 
 from ontogeny.core.models import DocumentCfg
-from ontogeny.documents.corpus import scan
+from ontogeny.documents.corpus import scan, scan_incremental
 
 
 @pytest.mark.parametrize("selector", ["*.md", "nested/*.md"])
@@ -62,3 +63,37 @@ def test_subdirectory_excludes_do_not_prune_the_corpus_root(tmp_path, monkeypatc
     monkeypatch.setattr(os, "scandir", reject_nested_walk)
     cfg = DocumentCfg(exclude=["*/**"])
     assert [doc.rel for doc in scan(tmp_path, cfg, store_name="docs")] == ["keep.md"]
+
+
+@pytest.mark.parametrize(
+    ("selector", "exclude", "unreadable"),
+    [
+        ("public/*.md", [], False),
+        ("public/[a-z]*/readable.md", [], False),
+        ("*.md", ["notes/private*"], False),
+        ("*.md", ["**/notes/private*"], False),
+        ("*.md", ["private*"], True),
+        ("*.md", ["notes/private*/secret.md"], True),
+        ("*/private-data/*.md", [], True),
+        ("*.md", [], True),
+    ],
+)
+def test_coverage_only_counts_subtrees_that_might_match(tmp_path, monkeypatch, selector, exclude, unreadable):
+    blocked = tmp_path / "notes" / "private-data"
+    blocked.mkdir(parents=True)
+    (blocked / "unknown.md").write_text("unreadable")
+    readable = tmp_path / "public" / "nested" / "readable.md"
+    readable.parent.mkdir(parents=True)
+    readable.write_text("readable")
+    scandir = os.scandir
+
+    def deny_blocked(path):
+        if Path(path) == blocked:
+            raise PermissionError(13, "Permission denied", path)
+        return scandir(path)
+
+    monkeypatch.setattr(os, "scandir", deny_blocked)
+    docs, _, failed = scan_incremental(tmp_path, DocumentCfg(exclude=exclude), selector, store_name="docs")
+    expected = [] if selector == "*/private-data/*.md" else [readable]
+    assert [doc.path for doc in docs] == expected
+    assert failed == ({blocked} if unreadable else set())
