@@ -95,7 +95,7 @@ def _is_glob(selector: str) -> bool:
 
 def resolve_selector(root: Path, selector: str | None, registered_paths: Iterable[str] = ()) -> str | None:
     """Keep legacy logical table names while honoring paths known to the catalog."""
-    if not selector or not selector.replace("-", "_").isidentifier():
+    if not selector or _is_glob(selector) or Path(selector).name != selector:
         return selector
     candidate = root / selector
     try:
