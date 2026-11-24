@@ -422,7 +422,7 @@ async def test_unverified_new_corpus_does_not_retract_previous_evidence(doc_cont
             sc.compiled.objects["supplier-note"].spec.backing.source.table = "."
             partial = await sc.sync("supplier-note")
             assert (partial["documents"], partial["archived"]) == (1, 0)
-            assert partial["gaps"]
+            assert partial["scan_error"]
             other.unlink()
 
     runs = await _rows(sc, ExtractRunRow)
@@ -466,16 +466,19 @@ async def test_ingest_continues_past_unreadable_subdirectory(doc_context, monkey
     with monkeypatch.context() as patch:
         patch.setattr(os, "scandir", deny_private)
         result = await sc.sync("supplier-note")
+        preview = await sc.documents.ingest("supplier-docs", dry_run=True)
 
     assert (result["documents"], result["archived"]) == (2, 1)
     assert bool(attempts) is (not excluded)
     run = next(r for r in await _rows(sc, ExtractRunRow) if r.id == result["run_id"])
     assert run.status == "ok"
+    assert result["scan_error"] == preview["scan_error"] == run.error
     if excluded:
         assert run.error is None
     else:
         assert "could not read 1 selected file or directory paths" in run.error
-        assert run.error in result["gaps"]
+        assert run.error not in result["gaps"]
+        assert run.error not in preview["gaps"]
     assert await _note(sc, "Acme Components") is not None
     assert await _note(sc, "Globex Materials") is None
     assert await _note(sc, "Initech Fasteners") is not None

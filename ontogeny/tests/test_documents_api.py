@@ -20,7 +20,9 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
+import os
 from pathlib import Path
 
 import httpx
@@ -64,6 +66,37 @@ async def test_unreadable_selector_fails_sync_and_preview_and_records_only_real_
         assert run["status"] == "error"
         assert run["error"] == sync.json()["message"] == preview.json()["message"]
         assert run["finished_at"]
+
+
+@pytest.mark.parametrize("entire_selector", [False, True])
+async def test_document_listing_reports_incomplete_scan(doc_context, monkeypatch, entire_selector):
+    sc, pkg, _ = doc_context
+    selected = pkg / "data" / "docs" / "supplier-notes"
+    blocked = selected if entire_selector else selected / "private"
+    blocked.mkdir(exist_ok=True)
+    note = blocked / "previously-seen.md"
+    note.write_text("Registered before the directory became unreadable.")
+    scandir = os.scandir
+
+    def deny_scandir(path):
+        if path in (blocked, str(blocked)):
+            raise PermissionError(errno.EACCES, "cannot list directory", str(blocked))
+        return scandir(path)
+
+    async with await _client(sc) as client:
+        url = "/api/v1/admin/documents?store=supplier-docs"
+        initial = await client.get(url)
+        assert initial.status_code == 200
+        assert initial.json()["scan_complete"] is True
+        (selected / "newly-discovered.md").write_text("Still readable when only the nested scan fails.")
+        monkeypatch.setattr(os, "scandir", deny_scandir)
+
+        listing = await client.get(url)
+        assert listing.status_code == 200
+        assert listing.json()["scan_complete"] is False
+        active = {d["name"] for d in listing.json()["documents"] if d["status"] == "active"}
+        assert note.name in active
+        assert ("newly-discovered.md" in active) is not entire_selector
 
 
 @pytest.mark.parametrize(
@@ -171,6 +204,7 @@ async def test_document_listing_returns_snapshot_during_extraction(doc_context, 
             add_note(pkg, "new-during-ingest.md", "Acme Components", "2026-07-01", "LOW")
             response = await asyncio.wait_for(client.get("/api/v1/admin/documents?store=supplier-docs"), timeout=2)
             assert response.status_code == 200
+            assert response.json()["scan_complete"] is None
             assert {doc["name"] for doc in response.json()["documents"]} == {
                 "acme-2026-03.md",
                 "globex-2026-02.md",
@@ -181,6 +215,7 @@ async def test_document_listing_returns_snapshot_during_extraction(doc_context, 
             await ingest
         refreshed = await client.get("/api/v1/admin/documents?store=supplier-docs")
         assert refreshed.status_code == 200
+        assert refreshed.json()["scan_complete"] is True
         assert "new-during-ingest.md" in {doc["name"] for doc in refreshed.json()["documents"]}
 
 
@@ -395,6 +430,35 @@ async def test_api_task_create_run_edit_confirm(doc_context):
             rows, total = await sc.repo.query(session, "supplier-note", limit=10)
         assert total == 1
         assert rows[0]["risk_level"] == "MEDIUM"
+
+
+async def test_document_tasks_report_unreadable_uploads_without_drafting_partial_batch(doc_context, monkeypatch):
+    sc, pkg, _ = doc_context
+    blocked = pkg / "data" / "docs" / "supplier-notes" / "unreadable.md"
+    read_bytes = Path.read_bytes
+
+    def deny_read(path):
+        if path == blocked:
+            raise PermissionError(errno.EACCES, "cannot read document", str(blocked))
+        return read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", deny_read)
+    async with await _client(sc) as client:
+        url = "/api/v1/admin/documents/tasks"
+        readable = {"name": "readable.md", "content": "A readable upload."}
+        denied = {"name": blocked.name, "content": "An unreadable upload."}
+        response = await client.post(url, json={"store": "supplier-docs", "files": [readable, denied]})
+        assert response.status_code == 422
+        assert response.json()["code"] == "DOCUMENT_TASK_ERROR"
+        assert "could not read uploaded documents" in response.json()["message"]
+        assert "supplier-notes/unreadable.md" in response.json()["message"]
+        listing = await client.get(url + "?store=supplier-docs")
+        assert listing.json()["tasks"] == []
+
+        response = await client.post(url, json={"store": "supplier-docs", "files": [readable]})
+        assert response.status_code == 200, response.text
+        assert response.json()["scan_complete"] is False
+        assert len(response.json()["tasks"]) == 1
 
 
 async def test_api_task_from_existing_document(doc_context):

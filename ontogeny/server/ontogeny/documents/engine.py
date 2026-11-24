@@ -981,7 +981,8 @@ spec:
             "candidates": 0,
             "quarantined": 0,
             "archived": 0,
-            "gaps": [scan_error] if scan_error else [],
+            "gaps": [],
+            "scan_error": scan_error,
             "dry_run": dry_run,
         }
 
@@ -1104,7 +1105,7 @@ spec:
                         packets.append((row, row.graph or {}))
                 outcome = await self._bind(session, run, packets, schema)
                 summary["objects"] = len(outcome.objects)
-                summary["gaps"] = list(dict.fromkeys([*summary["gaps"], *outcome.gaps]))[:50]
+                summary["gaps"] = list(dict.fromkeys(outcome.gaps))[:50]
 
                 for reject in outcome.rejected:
                     from ..stores.sync import QuarantineRow
@@ -1313,7 +1314,7 @@ spec:
                 "links": len(outcome.links),
                 "candidates": len(outcome.candidates),
                 "quarantined": len(outcome.rejected),
-                "gaps": list(dict.fromkeys([*summary["gaps"], *outcome.gaps]))[:50],
+                "gaps": list(dict.fromkeys(outcome.gaps))[:50],
                 "preview": {
                     "objects": [b.payload() for b in list(outcome.objects.values())[:200]],
                     "links": [b.payload() for b in list(outcome.links.values())[:200]],
@@ -1416,6 +1417,10 @@ spec:
         The corpus must be visible before the first run -- otherwise the UI
         shows an empty source until someone guesses to press "extract".
         """
+        count, _ = await self._refresh_corpus(store_name)
+        return count
+
+    async def _refresh_corpus(self, store_name: str) -> tuple[int, set[Path]]:
         async with self._lock(store_name):
             store = self.store(store_name)
             cfg = self._cfg(store)
@@ -1423,7 +1428,7 @@ spec:
             targets = self.object_types(store_name)
             scanned, selector, unreadable = await self._scan_documents(store, cfg, root, targets)
             if unreadable and not scanned:
-                return 0
+                return 0, unreadable
             async with self.sc.sessionmaker() as session:
                 await self._sync_documents(
                     session,
@@ -1435,15 +1440,17 @@ spec:
                     unreadable=unreadable,
                 )
                 await session.commit()
-            return len(scanned)
+            return len(scanned), unreadable
 
     async def list_documents(self, store_name: str) -> dict[str, Any]:
         self.store(store_name)
         # Refreshing writes to the catalog. While ingest owns or is waiting
         # for the store lock, serve the last committed rows without queuing a
         # refresh behind a potentially slow external extractor.
+        scan_complete = None
         if not self._pending_ingests[store_name]:
-            await self.scan_corpus(store_name)
+            _, unreadable = await self._refresh_corpus(store_name)
+            scan_complete = not unreadable
         async with self.sc.sessionmaker() as session:
             rows = (
                 (
@@ -1458,6 +1465,7 @@ spec:
             )
         return {
             "store": store_name,
+            "scan_complete": scan_complete,
             "documents": [
                 {
                     "id": r.id,
