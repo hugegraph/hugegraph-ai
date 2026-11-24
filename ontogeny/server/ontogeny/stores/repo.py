@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import datetime as _dt
 from collections.abc import Iterable
+from itertools import batched
 from typing import Any
 
 from sqlalchemy import and_, case, func, or_, select, tuple_, update
@@ -31,10 +32,11 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import ColumnElement
 
-from ..errors import ConflictError, NotFoundError, PolicyDeniedError, RuleRejectedError, StoreError
+from ..errors import ConflictError, NotFoundError, PolicyDeniedError, RuleRejectedError, StoreError, TypeMismatchError
 from .ddl import ensure_tables, live_index_name, object_table
 
 SYNC_UPSERT_BATCH_SIZE = 100
+_LINK_MEMBER_BATCH_SIZE = 500
 
 
 def utcnow() -> _dt.datetime:
@@ -961,3 +963,86 @@ class ObjectRepository:
         where = _and(self._current_where(tgt_obj, at), fk_col.is_not(None))
         rows = (await session.execute(select(fk_col, pk_col).where(where))).all()
         return [(str(r[0]), str(r[1])) for r in rows]
+
+    def _link_id_candidates(self, endpoint: str, oid: str) -> tuple[str, ...]:
+        # Join and extracted edges store endpoint IDs as text. Keep matching
+        # exact legacy spellings as well as the type's canonical ID.
+        if len(self.compiled.objects[endpoint].spec.primaryKey) != 1:
+            return (oid,)
+        try:
+            (key,) = self._key_values(endpoint, oid)
+        except TypeMismatchError:
+            return (oid,)
+        candidates = (oid, str(key))
+        if isinstance(key, _dt.datetime):
+            candidates += (key.isoformat(),)
+        return tuple(dict.fromkeys(candidates))
+
+    async def link_members_by_ids(
+        self,
+        session,
+        link_name: str,
+        ids: Iterable[str],
+        *,
+        from_source: bool,
+        at: _dt.datetime | None = None,
+    ) -> dict[str, list[str]]:
+        """Read edges only for the requested anchors, in bounded SQL batches."""
+        grouped: dict[str, list[str]] = {oid: [] for oid in ids}
+        if not grouped:
+            return grouped
+
+        from ..core.models import ForeignKeyJoin
+        from .ddl import link_table
+
+        spec = self.compiled.links[link_name].spec
+        join = spec.join
+        if isinstance(join, ForeignKeyJoin):
+            ((target_key, _source_key),) = join.keys.items()
+            target, fk_prop = target_key.split(".", 1)
+            table = self._table(target)
+            pk_prop = self.compiled.objects[target].spec.primaryKey[0]
+            fk_col = table.c[self.compiled.col(fk_prop)]
+            pk_col = table.c[self.compiled.col(pk_prop)]
+            anchor_col, other_col = (fk_col, pk_col) if from_source else (pk_col, fk_col)
+            anchor_prop = fk_prop if from_source else pk_prop
+            ptype = self.compiled.objects[target].spec.properties[anchor_prop].ptype()
+            valid = self._current_where(target, at)
+
+            def normalize(value):
+                key = ptype.coerce(value, prop=anchor_prop)
+                if isinstance(key, _dt.datetime) and key.tzinfo is None:
+                    return key.replace(tzinfo=_dt.UTC)
+                return key
+
+            aliases: dict[Any, list[str]] = {}
+            for oid in grouped:
+                key = oid if from_source else self._key_values(target, oid)[0]
+                aliases.setdefault(normalize(key), []).append(oid)
+        else:
+            table = link_table(self.compiled, link_name)
+            anchor_col, other_col = (
+                (table.c.src_id, table.c.dst_id) if from_source else (table.c.dst_id, table.c.src_id)
+            )
+            valid = (
+                table.c._valid_to.is_(None)
+                if at is None
+                else and_(table.c._valid_from <= at, (table.c._valid_to.is_(None)) | (table.c._valid_to > at))
+            )
+            endpoint = spec.source if from_source else spec.target
+            aliases = {}
+            for oid in grouped:
+                for key in self._link_id_candidates(endpoint, oid):
+                    aliases.setdefault(key, []).append(oid)
+            normalize = str
+
+        for batch in batched(aliases, _LINK_MEMBER_BATCH_SIZE):
+            stmt = select(anchor_col, other_col).where(_and(valid, anchor_col.in_(batch)))
+            for anchor, other in (await session.execute(stmt)).all():
+                if other is not None:
+                    for oid in aliases.get(normalize(anchor), ()):
+                        grouped[oid].append(str(other))
+        if isinstance(join, ForeignKeyJoin):
+            return grouped
+        # An edge can exist under both of an anchor's stored spellings.
+        return {oid: list(dict.fromkeys(members)) for oid, members in grouped.items()}
