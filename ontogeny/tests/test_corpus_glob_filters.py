@@ -17,6 +17,8 @@
 
 """Glob selectors must narrow the store's configured corpus."""
 
+import os
+
 import pytest
 
 from ontogeny.core.models import DocumentCfg
@@ -45,3 +47,18 @@ def test_glob_still_limits_matching_files(tmp_path):
     (tmp_path / "keep.md").write_text("keep")
     (tmp_path / "skip.txt").write_text("skip")
     assert [doc.rel for doc in scan(tmp_path, DocumentCfg(), "*.md", store_name="docs")] == ["keep.md"]
+
+
+def test_subdirectory_excludes_do_not_prune_the_corpus_root(tmp_path, monkeypatch):
+    (tmp_path / "keep.md").write_text("keep")
+    nested = tmp_path / "private"
+    nested.mkdir()
+    scandir = os.scandir
+
+    def reject_nested_walk(path):
+        assert path not in (nested, str(nested))
+        return scandir(path)
+
+    monkeypatch.setattr(os, "scandir", reject_nested_walk)
+    cfg = DocumentCfg(exclude=["*/**"])
+    assert [doc.rel for doc in scan(tmp_path, cfg, store_name="docs")] == ["keep.md"]

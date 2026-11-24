@@ -85,6 +85,8 @@ A bare `source.table` name such as `fmea-notes` or `schema.table` selects the sa
 
 An unchanged file keeps the same ID when listed or scanned for an individual object type. Omission by a filter alone or a file access error leaves the entry active. Ingest logs how many active entries it retained outside the scan or could not verify as removed. Cleanup can still retract evidence from a registered file that disappears within the current selector or an old version whose selected path has new content. A full store scan also retires entries left behind when its corpus root changes. To deliberately retract an excluded file, use the document removal action.
 
+If discovery encounters unreadable paths, ingest processes the readable documents and reports the incomplete scan in `gaps`. Cleanup preserves records under unreadable paths. Retiring records from a previous corpus root requires a complete scan. If access errors prevent reading any selected documents, sync returns `DOCUMENT_ERROR` and records a failed run for non-preview requests.
+
 ## 12.5 Frontend routes
 
 | Route | Page |

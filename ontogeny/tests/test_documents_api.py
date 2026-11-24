@@ -38,6 +38,34 @@ async def _client(sc):
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=build_app(sc)), base_url="http://test", headers=ADMIN)
 
 
+async def test_unreadable_selector_fails_sync_and_preview_and_records_only_real_run(doc_context, monkeypatch):
+    sc, pkg, _ = doc_context
+    selected = pkg / "data" / "docs" / "supplier-notes"
+    stat = Path.stat
+
+    def deny_stat(self, *args, **kwargs):
+        if self == selected:
+            raise PermissionError("cannot inspect selected directory")
+        return stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", deny_stat)
+    async with await _client(sc) as client:
+        preview = await client.post("/api/v1/admin/documents/ingest", json={"store": "supplier-docs", "dry_run": True})
+        assert preview.status_code == 422
+        assert preview.json()["code"] == "DOCUMENT_ERROR"
+        runs = await client.get("/api/v1/admin/documents/runs?store=supplier-docs")
+        assert runs.json()["runs"] == []
+
+        sync = await client.post("/api/v1/admin/sync/supplier-note")
+        assert sync.status_code == 422
+        assert sync.json()["code"] == "DOCUMENT_ERROR"
+        runs = await client.get("/api/v1/admin/documents/runs?store=supplier-docs")
+        [run] = runs.json()["runs"]
+        assert run["status"] == "error"
+        assert run["error"] == sync.json()["message"] == preview.json()["message"]
+        assert run["finished_at"]
+
+
 @pytest.mark.parametrize(
     ("selector", "names"),
     [
