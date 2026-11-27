@@ -27,6 +27,7 @@ import yaml
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ontogeny.core import load_package
+from ontogeny.errors import BaselineViolationError
 from ontogeny.evolve import ProposalRow
 
 PROPERTY = "rollback-probe"
@@ -160,3 +161,27 @@ async def test_successful_postmerge_eval_cleans_only_its_own_backup(client):
     assert PROPERTY in sc.compiled.objects["requirement"].spec.properties
     assert not Path(result["rollback_dir"]).exists()
     assert (previous_backup / "recovery.txt").read_text() == "keep for another pending recovery"
+
+
+async def test_t3_promotion_persists_awaiting_human_before_reraising(client):
+    _c, sc = client
+    async with sc.sessionmaker() as session:
+        proposal = ProposalRow(
+            gap_kind="policy",
+            rationale="T3 persistence regression",
+            diff=[{"mutation": "policy-loosen", "target": "complete-process-step"}],
+        )
+        session.add(proposal)
+        await session.commit()
+        proposal_id = proposal.id
+
+    with pytest.raises(BaselineViolationError):
+        await sc.evolve_promote(proposal_id)
+
+    async with sc.sessionmaker() as session:
+        persisted = await session.get(ProposalRow, proposal_id)
+
+    assert persisted is not None
+    assert persisted.status == "awaiting_human"
+    assert persisted.tier == "t3-human-only"
+    assert persisted.eval_report is None

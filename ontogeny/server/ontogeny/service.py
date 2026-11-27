@@ -43,7 +43,7 @@ from .core.loader import load_package
 from .db import init_schema, make_engine, make_sessionmaker
 from .documents import models as _document_models  # noqa: F401  (registers tables before create_all)
 from .engine import QueryService
-from .errors import DSLValidationError, NotFoundError, OOError, StoreError
+from .errors import BaselineViolationError, DSLValidationError, NotFoundError, OOError, StoreError
 from .evolve import Promoter
 from .evolve.evalrunner import EvalRunner
 from .ext_host import ExtensionHost
@@ -1474,7 +1474,13 @@ class ServiceContext:
             if p is None:
                 raise NotFoundError(f"proposal {proposal_id} not found")
             pre_green = bool(p.eval_report and p.eval_report.get("passed"))
-            result = await self.promoter.promote(s, p, self.package_root, eval_report=p.eval_report)
+            try:
+                result = await self.promoter.promote(s, p, self.package_root, eval_report=p.eval_report)
+            except BaselineViolationError:
+                # T3 changes are deliberately reported as errors, but the
+                # awaiting_human state is itself the durable governance record.
+                await s.commit()
+                raise
             await s.commit()
         if result.get("status") == "promoted":
             await self.reload()  # hot-swap the compiled snapshot (new schema is live)
