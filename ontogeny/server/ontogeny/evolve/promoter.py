@@ -51,6 +51,10 @@ BASELINE_MUTATIONS = {
     "destructive-migration",
 }
 
+# These mutation kinds are intentionally human-applied until a mechanical
+# applier exists. Every other kind must pass through apply_mutations().
+MANUAL_MUTATIONS = {"adjust-rule-threshold"}
+
 
 def _iso_week(d: _dt.datetime) -> str:
     year, week, _ = d.isocalendar()
@@ -232,14 +236,25 @@ class Promoter:
         try:
             candidate = apply_mutations(load_package(branch), proposal.diff)
             write_package(candidate)
-        except DSLValidationError:
-            # mutation kinds with no mechanical applier (rule tuning etc.) are
-            # applied by a human inside the branch -- that is exactly what T1/T2 mean
+        except DSLValidationError as exc:
+            if not proposal.diff or not all(m.get("mutation") in MANUAL_MUTATIONS for m in proposal.diff):
+                shutil.rmtree(branch)
+                proposal.status = "rejected"
+                proposal.rejected_reason = str(exc)
+                return {
+                    "status": "rejected",
+                    "tier": tier,
+                    "reason": f"invalid mutation: {exc}",
+                }
+            # Known mutation kinds with no mechanical applier are applied by a
+            # human inside the branch.
             manual = True
             candidate = load_package(branch)
         report = validate(candidate)
         if not report.ok:
+            shutil.rmtree(branch)
             proposal.status = "rejected"
+            proposal.rejected_reason = "candidate failed validation"
             return {
                 "status": "rejected",
                 "reason": "candidate failed validation",

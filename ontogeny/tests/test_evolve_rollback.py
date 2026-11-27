@@ -160,3 +160,55 @@ async def test_successful_postmerge_eval_cleans_only_its_own_backup(client):
     assert PROPERTY in sc.compiled.objects["requirement"].spec.properties
     assert not Path(result["rollback_dir"]).exists()
     assert (previous_backup / "recovery.txt").read_text() == "keep for another pending recovery"
+
+
+async def test_t1_invalid_mechanical_mutation_is_rejected_and_branch_cleaned(client):
+    _c, sc = client
+    async with sc.sessionmaker() as session:
+        proposal = ProposalRow(
+            gap_kind="invalid",
+            rationale="invalid target regression",
+            diff=[
+                {
+                    "mutation": "add-optional-property",
+                    "object": "non-existent-object",
+                    "prop": "urgency",
+                    "type": "string",
+                }
+            ],
+        )
+        session.add(proposal)
+        await session.commit()
+        proposal_id = proposal.id
+
+    async with sc.sessionmaker() as session:
+        proposal = await session.get(ProposalRow, proposal_id)
+        result = await sc.promoter.promote(session, proposal, sc.package_root, force_tier="t1-pr")
+        await session.commit()
+
+    assert result["status"] == "rejected"
+    assert result["reason"].startswith("invalid mutation:")
+    assert proposal.status == "rejected"
+    assert not Path(f"{sc.package_root}.proposal-{proposal_id}").exists()
+
+
+async def test_t1_known_manual_mutation_keeps_manual_application_fallback(client):
+    _c, sc = client
+    async with sc.sessionmaker() as session:
+        proposal = ProposalRow(
+            gap_kind="rule-drift",
+            rationale="manual mutation regression",
+            diff=[{"mutation": "adjust-rule-threshold", "action": "complete-process-step"}],
+        )
+        session.add(proposal)
+        await session.commit()
+        proposal_id = proposal.id
+
+    async with sc.sessionmaker() as session:
+        proposal = await session.get(ProposalRow, proposal_id)
+        result = await sc.promoter.promote(session, proposal, sc.package_root, force_tier="t1-pr")
+        await session.commit()
+
+    assert result["status"] == "awaiting_human"
+    assert result["manual_application"] is True
+    assert Path(result["branch"]).exists()
